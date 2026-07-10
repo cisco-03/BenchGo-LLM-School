@@ -1,0 +1,557 @@
+# CHANGELOG - Carnet de Notes BenchGo
+
+## 2026-07-10 — Fix boucle infinie de réessai + Système d'aide du professeur + Validation des points
+
+### Contexte
+Lors d'un test `node runner.js all --profile=STANDARD` sur le Tier 3 (Collège), le modèle échouait sur l'exercice `info` (erreur `élèves is not defined`) et le runner relançait indéfiniment le même exercice (jusqu'à 12 itérations). L'utilisateur a demandé : (1) limiter à un seul réessai par exercice, (2) qu'après l'échec définitif le système demande à l'utilisateur s'il faut comptabiliser les points, (3) qu'un système d'aide du professeur propose un indice au modèle en rattrapage, et (4) que le score final stipule « avec aide et rattrapage ».
+
+### Actions entreprises
+
+**1. `runner.js` — Limite de réessai par exercice (`MAX_TASK_RETRIES = 1`)**
+- Remplacement du tableau `evalResults` par `evalResultsMap` (objet indexé par `taskId`).
+- Suivi par exercice : `taskRetryMap` (compteur de réessais), `taskNetPoints` (points nets), `taskLastError` (erreur précédente).
+- 1er échec : pénalité appliquée, exercice conservé pour un réessai.
+- 2ème échec (`retryCount > MAX_TASK_RETRIES`) : abandon de l'élève (`🏳️ L'élève déclare avoir terminé`), exercice retiré de la file (`permanentlyFailedIds`).
+- La boucle `while` se termine dès que tous les exercices sont résolus ou définitivement échoués.
+
+**2. `runner.js` — Système d'aide du professeur**
+- Au début de chaque itération de rattrapage, prompt séparé au modèle : `Voulez-vous un indice ? (AIDE_OUI/AIDE_NON)`.
+- Si accepté : un indice (champ `hint` du JSON du tier, ou indice généré depuis l'erreur) est inclus dans le prompt de réessai.
+- Suivi via `taskHelpUsed` et `taskHelpOffered` (proposé une seule fois par exercice).
+
+**3. `runner.js` — Validation manuelle des points**
+- Après un échec définitif, `askYesNo()` demande : `Comptabiliser la pénalité de -X points pour l'exercice Y ?`
+- Si refus : la pénalité est annulée (`tierScore += pts`).
+- En mode non-TTY : annulation automatique (sécurité).
+
+**4. Annotations de score « avec aide et rattrapage »**
+- `runner.js` : `printScorecard` et `buildScorecardReport` affichent `[avec aide (N), avec rattrapage (N)]` par tier.
+- Score global CLI et Markdown : `⚠ Score obtenu avec aide (N) et rattrapage (N)`.
+- `report-generator.js` : `buildTierReport` accepte un paramètre `stats` et annote `*(avec aide)*` / `*(rattrapage)*` par exercice et `(avec aide (N), avec rattrapage (N))` au niveau du tier.
+
+**5. `tiers/tier3_standard.json` — Champs `hint`**
+- Ajout d'indices pour les 10 exercices (math, français, histoire, SVT, info + 5 algo).
+- Les indices guident sans donner la réponse.
+
+### Fichiers modifiés
+- `runner.js`
+- `report-generator.js`
+- `tiers/tier3_standard.json`
+
+### Voir aussi
+- `issues-fixes/2026-07-10-boucle-infinie-reessai-aide-professeur.md`
+
+## 2026-07-10 — Raccourcissement des noms de rapports + heure explicite dans le fichier
+
+### Contexte
+Les noms de rapports exportés devenaient très longs et illisibles : le nom complet du modèle
+renvoyé par LM Studio (chemin style HuggingFace `org/repo/fichier.gguf`) était recopié tel quel,
+avec le nom de base répété (ex. `empero-ai/qwythos-9b-claude-mythos-5-1m-gguf/qwythos-9b-claude-mythos-5-1m-mtp-q4_k_m.gguf`).
+De plus, le nom de fichier ne portait aucune heure, rendant impossible de distinguer plusieurs runs
+d'une même journée ni de retrouver le fichier de log associé.
+
+### Actions entreprises
+
+**1. `report-generator.js` — nouvelle fonction `shortenModelName()`**
+- Découpe le chemin HF/LM Studio (`org/repo/fichier.gguf`) en segments.
+- Retire l'extension `.gguf` et le suffixe de dépôt `-gguf` (convention HF).
+- Supprime un segment s'il est un préfixe (aligné sur un séparateur) d'un segment plus précis
+  qui le suit, ce qui élimine la répétition du nom de base :
+  - `empero-ai/qwythos-9b-claude-mythos-5-1m-gguf/qwythos-9b-claude-mythos-5-1m-mtp-q4_k_m.gguf`
+    → `empero-ai_qwythos-9b-claude-mythos-5-1m-mtp-q4_k_m`
+  - `deepseek/deepseek-r1-distill-qwen-14b` → `deepseek-r1-distill-qwen-14b`
+- Laisse intact les noms sans répétition (`mistralai/ministral-3-14b-reasoning`
+  → `mistralai_ministral-3-14b-reasoning`) et les noms simples (`gpt-4o`).
+- `runner.js` importe désormais `shortenModelName` au lieu de `sanitizeFilename` pour le nom de fichier.
+
+**2. `runner.js` — heure explicite + ancrage du log**
+- Le nom de fichier inclut désormais l'heure locale `HH-MM-SS` :
+  `rapport_v3_<modeleCourt>_<profil>[_tierN]_<HH-MM-SS>.md`.
+- Le dossier jour utilise la **date locale** (au lieu de l'UTC via `toISOString`) pour rester
+  cohérent avec l'heure du fichier et l'en-tête du rapport (évite un décalage d'un jour près de minuit).
+- L'en-tête Markdown du rapport indique désormais `**Log :** <nom_du_log>` (basename du fichier de
+  log), et la console affiche côte à côte le chemin du rapport et celui du log à la sauvegarde —
+  on retrouve ainsi le log associé à chaque rapport.
+
+### Fichiers modifiés
+- `report-generator.js` (nouvelle fonction `shortenModelName`, export mis à jour)
+- `runner.js` (import, génération du nom de fichier + date locale, en-tête log, affichage log)
+
+### Validation
+- `node --check` sur `report-generator.js` et `runner.js` → OK
+- Test `shortenModelName()` sur 8 cas réels (doublon `empero-ai/...gguf/...gguf`, `deepseek/deepseek-...`,
+  noms sans répétition, `gpt-4o`, `null`) → tous PASS
+- Le nom complet du modèle reste conservé dans l'en-tête H1 du rapport
+  (`# Rapport d'Évaluation V3 — <nomComplet>`), donc aucune information perdue.
+
+---
+
+## 2026-07-10 — Fix stripTS cassant les ternaires + Tableau des Scores CLI
+
+### Contexte
+Deux problèmes identifiés lors d'un test du modèle `qwythos-9b` (profil LIGHT) :
+1. **Tableau des scores absent du CLI** : lors du passage d'un tier au suivant, les points du tier précédent disparaissaient de l'affichage. Aucun récapitulatif persistant ni total d'école n'était présenté.
+2. **`stripTS` cassait les ternaires** : la règle 8 (regex) supprimait par erreur la branche `: valeur` des opérateurs ternaires (`cond ? a : b` → `cond ? a`), provoquant des `SyntaxError: Unexpected token`. Ce bug affectait tous les tiers — confirmé sur `operationsDeBase` (tier 0, `: null` → `Unexpected token '}'`) et `remplacerLettre` (tier 3, `: mot[i]` → `Unexpected token ')'`).
+
+### Actions entreprises
+
+**1. Fix `parsing-utils.js` — remplacement de la règle 8 regex par un scanner contextuel**
+- Nouvelle fonction `stripTypeAnnotations()` qui parcourt le code caractère par caractère en suivant :
+  - L'état des chaînes (`"`, `'`, `` ` ``) et commentaires (`//`, `/* */`)
+  - La profondeur des crochets `()`, `[]`, `{}`
+  - Le compteur d'opérateurs ternaires `?` non appairés
+- **Stripping conditionnel** : ne supprime `: Type` que dans les listes de paramètres (entre `()`) et après `let`/`const`/`var`
+- **Protection explicite** : ne touche PAS aux ternaires (`?` non appairé → `:`), littéraux objet (`{ key: value }`), labels `case`/`default`
+- L'ancienne regex `/([)\w\]])\s*:\s*[a-zA-Z_$]...(?=[,)=;\n])/g` supprimée
+
+**2. Tableau des Scores persistant dans le CLI (`runner.js`)**
+- Ajout d'un `tierScorecard[]` accumulant les résultats de chaque tier complété
+- Après chaque tier : affichage d'un **tableau de score en cours** (EN COURS) montrant toutes les classes passées avec leurs points, pourcentage, note et statut
+- En fin de run : affichage d'un **tableau final** (FINAL) avec le total de l'école
+- Le tableau final est également ajouté au rapport Markdown exporté (`buildScorecardReport()`)
+- Fonctions utilitaires : `getClassName()` (extrait le nom de classe depuis `CLASSE_NAMES`), `printScorecard()` (rendu CLI), `buildScorecardReport()` (rendu Markdown)
+
+### Fichiers modifiés
+- `parsing-utils.js` (nouvelle fonction `stripTypeAnnotations` + règle 8 remplacée)
+- `runner.js` (scorecard CLI + rapport Markdown + fonctions utilitaires)
+
+### Validation
+- 13 tests de régression : ternaires (`: null`, `: mot[i]`, avec/sans parenthèses), littéraux objet, annotations TS (params, return, var, interface, export, génériques) — **tous OK**
+- `node --check` sur `parsing-utils.js` et `runner.js` — **OK**
+- Test visuel du tableau des scores (4 tiers simulés) — rendu correct
+- Voir `issues-fixes/2026-07-10-stripts-casse-ternaires.md` pour le détail du bug
+
+---
+
+## 2026-07-09 — Santé Globale, Évaluation 5 Axes et Classe 6 (Doctorat)
+
+### Contexte
+Le benchmark manquait d'une gestion plus humaine des échecs (un modèle faisant de légères erreurs après un excellent départ était éliminé immédiatement). De plus, l'évaluation se limitait à la correction fonctionnelle simple. L'objectif était d'intégrer des tests d'endurance de contexte (mémoire), de rapidité d'exécution, de robustesse face aux injections de prompts, et de respect strict des contraintes.
+
+### Actions entreprises
+
+**1. Système de Santé Globale (Global Life Score)**
+- Remplacement du score local d'élimination par une Santé Globale accumulée sur tous les Tiers.
+- Le modèle commence à 0 PV. Ses succès lui accordent des points (créant un buffer protecteur), et ses échecs en retirent.
+- Une valeur inférieure ou égale à `-100` PV provoque l'arrêt immédiat et l'élimination définitive du benchmark.
+
+**2. Mesures Inférence, Exécution et Verbosité (Axes 1 & 3)**
+- Intégration de `performance.now()` dans `runner.js` pour chronométrer et afficher le temps d'inférence de l'API.
+- Ajout d'une pénalité de verbosité (`-15 pts`) si le modèle produit un texte bavard non technique plus long que 4x le code utile.
+- Ajout de `performance.now()` dans `vm-sandbox.js` pour mesurer la durée d'exécution.
+- Implémentation du mot-clé `maxTimeMs` dans `task-evaluator.js` : si le code met trop de temps (ex: algorithme sous-optimal), la validation échoue.
+
+**3. Classe 6 / Tier 6 "Expertise & Résistance" (Axes 2, 4, 5)**
+- Création de `tiers/tier6_master.json` contenant 4 tâches avancées :
+  - `trier_tableau` (Axe 5) : Tri d'éléments sans l'instruction native `.sort()`.
+  - `memoire_longue` (Axe 2) : Restitution d'un mot de passe planqué dans un long Lorem Ipsum (Needle in a Haystack).
+  - `calcul_robuste` (Axe 4) : Détecter et ignorer une tentative d'injection de prompt hostile.
+  - `optimisation_extreme` (Axe 3) : Résoudre un problème algorithmique sous une limite stricte de 35 millisecondes.
+- Configuration du Tier 6 dans `config.js` pour les profils `STANDARD`, `EXPERT`, `DOCTORAT`, et `FRONTIER`.
+
+**4. Documentation de la Gamification**
+- Création de `Docs/Apps-Fonctions/gamification-sante.md` décrivant les règles du système (seuil de validation à 70%, Santé Globale, mode élimination).
+
+### Fichiers modifiés
+- `runner.js`
+- `config.js`
+- `vm-sandbox.js`
+- `task-evaluator.js`
+- `tiers/tier6_master.json` (nouveau)
+- `Docs/Apps-Fonctions/gamification-sante.md` (nouveau)
+- `Memories-BenchGo/issues-fixes/2026-07-09-sante-globale-tier6-5-axes.md` (nouveau)
+
+---
+
+## 2026-07-08 — Support modèles cloud + profil FRONTIER + Tier 4
+
+### Contexte
+L'utilisateur souhaitait benchmarker des modèles cloud frontier (GPT-4o, Claude, Gemini, Llama 405B…)
+avec des exercices beaucoup plus difficiles que les tiers existants. Le système ne supportait jusqu'ici
+que LM Studio en local.
+
+### Actions entreprises
+
+**1. `cloud-client.js` — nouveau module client cloud (6 fournisseurs)**
+- Supporte 6 providers : `openai`, `groq`, `together`, `openrouter`, `mistral` (OpenAI-compatible) + `anthropic` (format natif Messages API)
+- Même interface que `lm-studio-client.js` : `queryLLM(prompt, difficulty, tierId, isMandatory, spinner, options)`
+- Clé API lue depuis `process.env.<PROVIDER>_API_KEY` ou `--api-key=...`
+- Streaming SSE géré pour les deux formats (OpenAI delta + Anthropic text_delta)
+- Avertissement si la clé est passée en argument CLI (visible dans le gestionnaire de tâches)
+
+**2. `config.js` — profil FRONTIER + 3 nouveaux args CLI**
+- Nouveau profil `FRONTIER` : tiers 0-4 tous obligatoires, label "Post-Doctorat"
+- `CLASSE_NAMES.FRONTIER` : Classe-0-PostDoc1 … Classe-4-Frontier
+- Nouveaux args CLI : `--provider=<nom>`, `--model=<nom>`, `--api-key=<clé>`
+- Si `--provider` est passé sans `--profile` → défaut automatique sur FRONTIER
+
+**3. `runner.js` — routing LM Studio / Cloud**
+- Import dual : `queryLLMLocal` (LM Studio) + `queryLLMCloud` (cloud)
+- `isCloudMode` détecté depuis `--provider`
+- En mode cloud : pas d'auto-détection via `/v1/models`, rattrapage désactivé (coût par appel)
+- Affichage dédié : Mode CLOUD, fournisseur, modèle
+- `runTierAttempt` reçoit `queryFn` + `providerConfig` (routing transparent)
+
+**4. `tiers/tier4_frontier.json` — Tier 4 pour modèles frontier**
+- 6 exercices de niveau doctoral/recherche, 25 évaluations au total
+- [4-A] LRU Cache O(1) avec éviction (Map + doubly linked list)
+- [4-B] Deep Clone sécurisé — références circulaires (WeakMap), Date, tableaux imbriqués
+- [4-C] Async pool avec concurrence limitée — custom evaluator avec mesure réelle de concurrence
+- [4-D] Parser d'expressions arithmétiques — précédence + parenthèses, eval() interdit
+- [4-E] Trie (arbre de préfixes) — inserer/chercher/commencePar/suggestions
+- [4-F] Dijkstra — plus court chemin pondéré, Infinity pour nœuds déconnectés
+
+**5. `custom-evaluators.js` — evaluateAsyncConcurrencyLimit**
+- 2 scénarios : 5 tâches / max 2 (vérifie ordre + maxObserved ≤ 2), 1 tâche / max 3
+
+**6. `tier-loader.js` — chaîne de fallback FRONTIER**
+- `FRONTIER → DOCTORAT → EXPERT → STANDARD → LIGHT`
+
+### Commandes (voir README pour le détail complet)
+```bash
+# OpenAI
+$env:OPENAI_API_KEY = "sk-..."
+node runner.js all --provider=openai --model=gpt-4o
+
+# Anthropic
+$env:ANTHROPIC_API_KEY = "sk-ant-..."
+node runner.js all --provider=anthropic --model=claude-opus-4-5
+
+# Groq (gratuit, très rapide)
+$env:GROQ_API_KEY = "gsk_..."
+node runner.js all --provider=groq --model=llama-3.1-70b-versatile
+
+# OpenRouter (accès universel, facturation centralisée)
+$env:OPENROUTER_API_KEY = "sk-or-..."
+node runner.js all --provider=openrouter --model=anthropic/claude-opus-4 --profile=FRONTIER
+```
+
+### Fichiers modifiés
+- `cloud-client.js` (nouveau)
+- `tiers/tier4_frontier.json` (nouveau)
+- `config.js` (profil FRONTIER + CLASSE_NAMES + parseCliArgs)
+- `runner.js` (routing dual + mode cloud)
+- `custom-evaluators.js` (evaluateAsyncConcurrencyLimit)
+- `tier-loader.js` (fallback FRONTIER)
+
+### Validation
+- `node --check` : cloud-client.js, config.js, runner.js, custom-evaluators.js, tier-loader.js → OK
+- `loadTiers('FRONTIER')` : charge tiers 0,1,2,3,4 → OK (tier4 via tier4_frontier.json)
+- `PROFILES.FRONTIER.mandatory` : [0,1,2,3,4] → OK
+- tier4_frontier.json : 6 tâches, 25 évaluations → OK
+
+---
+
+## Note de nommage
+
+- Le projet est en version BenchGo V3.
+- Les fichiers sources sont désormais à la racine de `benchmark-v3/` (le nom `benchmark-v2` est abandonné).
+
+## 2026-07-08 — Architecture scolaire : exercices par profil + prompts anglais + DOCTORAT
+
+### Contexte
+Le modèle `mistralai/ministral-3-14b-reasoning` renvoyait ses codes sous forme d'objets imbriqués
+`{code:"...", description:"..."}` au lieu de strings directes, causant des scores 0/16 sur tous
+les tiers 2 et 3. Par ailleurs, les prompts en français contenaient le mot "Renverse" (faux ami
+pour "renvoie"), pouvant dérouter les petits modèles.
+
+L'utilisateur a aussi exprimé la vision fondatrice : **chaque profil = une école, chaque tier =
+une classe, avec des exercices différents à chaque croisement** — comme dans le système scolaire
+réel.
+
+### Actions entreprises
+
+**1. Fix runner.js — extraction objet imbriqué**
+- Si `parsedObj[task.id]` est un objet, extraction automatique de `.code`, `.solution` ou `.fonction`
+- Résout le bug 0/16 sur les modèles reasoning qui surstructurent leur réponse JSON
+
+**2. Affichage du profil dans le statut de chaque tier**
+- `OBLIGATOIRE [profil LIGHT]` et `OPTIONNEL pour LIGHT (BYPASS autorisé)`
+- Applicable aux 4 profils
+
+**3. Prompts 100% anglais sur les 4 tiers**
+- Suppression de "Renverse" → `Return your answers`
+- Instruction explicite : `Each value must be a plain code string`
+- Apostrophes manquantes corrigées dans tier2 et tier3
+- Aucune contrainte de langue imposée au modèle
+
+**4. Profil DOCTORAT (> 30B) ajouté dans config.js**
+- Label : `DOCTORAT — Thèse (> 30B paramètres)`
+- Détection automatique : paramSize > 30 → DOCTORAT
+- Tiers obligatoires : 0,1,2,3 (identique à EXPERT en attendant tier4/tier5)
+- Labels scolaires sur tous les profils : Maternelle / Préparatoire / Université / Thèse
+
+**5. Architecture scolaire — exercices différents par profil ET par classe**
+- `tier-loader.js` refactorisé : charge `tier{N}_{profile}.json` avec fallback chain
+  automatique (DOCTORAT→EXPERT→STANDARD→LIGHT)
+- Anciens fichiers renommés : `tier{N}_easy/medium/hard/expert.json` → `tier{N}_light.json`
+- 8 nouveaux fichiers créés pour STANDARD et EXPERT (4 tiers × 2 profils) :
+
+| Fichier | École | Classes |
+|---|---|---|
+| `tier0_light.json` | Maternelle | addition, parité, inverser, max, voyelles |
+| `tier1_light.json` | CP | filtrer pairs, capitaliser, doublons, débogage, fréquence |
+| `tier2_light.json` | CE1 | validation parenthèses, debounce, aplatir, allSettled, async |
+| `tier3_light.json` | CE2 | PowerShell, FloodFill, middleware, SQL, retry, pollution |
+| `tier0_standard.json` | 6ème | FizzBuzz, Fibonacci, palindrome, factorielle, tri bulles |
+| `tier1_standard.json` | 4ème | groupBy, aplatir profond, memoize, débogage reduce, chunk |
+| `tier2_standard.json` | 2nde | pipeline, throttle, binary search, retry délai, débogage |
+| `tier3_standard.json` | BTS | rate limiter, JWT, assainirSQL, Observable, anti-pollution |
+| `tier0_expert.json` | Licence 1 | curry, deep equal, compose, BST, debounce immediat |
+| `tier1_expert.json` | Licence 2 | priority queue, EventEmitter, zip, BFS fix, proxy manuel |
+| `tier2_expert.json` | L3/M1 | pool async, Subject réactif, memoAsync, race fix, circuit breaker |
+| `tier3_expert.json` | Master 2 | PowerShell, FloodFill, middleware, SQL, retry, pollution |
+
+DOCTORAT utilise les fichiers EXPERT par fallback automatique (tier4/5 à créer).
+
+### Fichiers modifiés
+- `runner.js` (extraction objet imbriqué + affichage profil)
+- `config.js` (profil DOCTORAT + labels scolaires + détection > 30B)
+- `tier-loader.js` (chargement par profil avec fallback chain)
+- `tiers/tier0_light.json` (renommé depuis tier0_easy.json)
+- `tiers/tier1_light.json` (renommé depuis tier1_medium.json)
+- `tiers/tier2_light.json` (renommé depuis tier2_hard.json)
+- `tiers/tier3_light.json` (renommé depuis tier3_expert.json + prompts anglais)
+- `tiers/tier0_standard.json` (nouveau)
+- `tiers/tier1_standard.json` (nouveau)
+- `tiers/tier2_standard.json` (nouveau)
+- `tiers/tier3_standard.json` (nouveau)
+- `tiers/tier0_expert.json` (nouveau)
+- `tiers/tier1_expert.json` (nouveau)
+- `tiers/tier2_expert.json` (nouveau)
+- `tiers/tier3_expert.json` (nouveau)
+- `Admin/Tasks1.md` (commandes renommées avec métaphore scolaire)
+
+### Validation
+- `node --check` sur runner.js, config.js, tier-loader.js : OK
+- `loadTiers('LIGHT'|'STANDARD'|'EXPERT'|'DOCTORAT')` : tous chargent les bons fichiers
+- Test complet `ministral-3-14b-reasoning` en LIGHT : 51/64 (80%), score obligatoire 100%
+- Test complet en STANDARD : 52/64 (81%), score obligatoire 94%
+
+## 2026-07-07 — URGENT : restauration complète du dossier `benchmark-v2/` disparu
+
+### Contexte
+Le dossier technique `benchmark-v2/` (runner + 10 modules + tiers JSON) avait entièrement
+disparu du disque suite au renommage/déplacement du projet vers `Local-LLM-Benchmark-V3`, sans
+qu'aucun dépôt Git n'existe pour le récupérer. Détecté suite à `MODULE_NOT_FOUND` au lancement.
+
+### Action entreprise
+Récupération via l'historique local de VS Code (snapshots de sauvegarde indépendants de Git) pour
+6 modules + 4 fichiers `tiers/*.json`, et reconstruction manuelle des 5 modules restants
+(`logger.js`, `progress-bar.js`, `parsing-utils.js`, `tier-loader.js`, `report-generator.js`)
+d'après leur usage documenté. Voir le détail complet dans
+`issues-fixes/2026-07-07-dossier-benchmark-v2-disparu.md`.
+
+### Résultat
+- Les 11 fichiers `.js` et 4 fichiers `tiers/*.json` sont validés syntaxiquement.
+- `node benchmark-v2/runner.js` s'exécute à nouveau sans erreur.
+- **Action requise côté utilisateur** : initialiser Git si absent, committer, et repousser le
+  dépôt public (celui-ci a été publié sans ce dossier).
+
+### Fichiers modifiés
+- `benchmark-v2/` (dossier recréé intégralement — 11 fichiers `.js` + 4 fichiers `tiers/*.json`)
+- `Memories-BenchGo/issues-fixes/2026-07-07-dossier-benchmark-v2-disparu.md`
+
+## 2026-07-07 — Rattrapage interactif (LIGHT/STANDARD) + garde-fou contexte 16384
+
+### Contexte
+Besoin exprimé: ajouter une seance de rattrapage interactive pour les profils LIGHT et STANDARD
+afin de laisser une deuxieme chance sur les tiers en echec, et eviter les depassements de
+fenetre de contexte quand LM Studio est configure a 16384 tokens.
+
+### Action entreprise
+
+**1. Rattrapage interactif dans `runner.js`**
+- Ajout d'une question utilisateur en console apres un tier en echec (profils LIGHT/STANDARD):
+  `Voulez-vous lancer une seance de rattrapage pour le Tier X ? [o/N]`
+- Maximum d'une tentative supplementaire par tier (`MAX_RATTRAPAGE_ATTEMPTS = 1`).
+- En cas de deux tentatives, le score retenu est le meilleur des deux.
+- En session non interactive (pas de TTY), le rattrapage est ignore avec warning explicite.
+
+**2. Budget de contexte configurable**
+- `config.js`: support du nouvel argument CLI `--context-limit=16384` (ou autre valeur positive).
+- `runner.js`: affichage + log du budget applique (fallback par defaut a `16384`).
+- `lm-studio-client.js`:
+  - Estimation des tokens d'entree (`~4 caracteres/token`).
+  - Calcul d'un `max_tokens` dynamique pour la sortie en respectant la limite de contexte.
+  - Echec explicite si le prompt d'entree est estime trop proche de la limite.
+
+### Resultat
+- Les profils LIGHT/STANDARD peuvent faire un rattrapage interactif au moment opportun.
+- Le risque de requetes hors budget contexte est controle avant l'appel API.
+- Le benchmark reste compatible avec la configuration LM Studio a 16384 tokens.
+
+### Fichiers modifies
+- `benchmark-v2/runner.js`
+- `benchmark-v2/config.js`
+- `benchmark-v2/lm-studio-client.js`
+- `Memories-BenchGo/CHANGELOG.md`
+- `Memories-BenchGo/README.md`
+- `Memories-BenchGo/architecture/benchmark-v2.md`
+
+### Validation
+- Verification syntaxique: `node --check` sur les 3 modules modifies.
+- Verification outillage VS Code: aucune erreur detectee sur les fichiers modifies.
+
+## 2026-07-07 — Extension des tiers (débogage/async/sécurité) + fix barre de progression
+
+### Contexte
+Constat : les modèles LIGHT (< 3B) n'avaient que 3 tâches obligatoires par tier (0 et 1), pas
+assez pour bien discriminer leurs capacités. Demande d'ajout de 3 nouvelles familles d'épreuves
+transverses à tous les tiers : **débogage de code existant**, **programmation asynchrone
+complexe** (Promise.allSettled, retry, erreurs partielles) et **sécurité applicative** (anti-XSS,
+anti-injection SQL, anti prototype-pollution). Egalement signalé : la barre de progression CLI
+(`ProgressBar`) restait visuellement figée pendant la phase d'évaluation.
+
+### Action entreprise
+
+**1. Barre de progression CLI** — voir `issues-fixes/2026-07-07-barre-progression-figee.md`.
+Ajout de `sleep()` + `await` entre les updates dans la boucle d'évaluation de `runner.js` pour
+laisser le terminal repeindre chaque frame.
+
+**2. Infrastructure d'évaluation asynchrone** :
+- `vm-sandbox.js` : ajout de `setTimeout`/`clearTimeout` au sandbox (nécessaire pour tester du
+  code avec retry/backoff sans crasher).
+- `task-evaluator.js` : `evaluateTask()` devient `async`, `await evaluator(...)` pour le type
+  `custom` (permet des évaluateurs custom réellement asynchrones).
+- `runner.js` : `await evaluateTask(...)`.
+- `custom-evaluators.js` : ajout de 4 évaluateurs — `evaluateAsyncPartialErrors`,
+  `evaluateAsyncSequentialProcessing`, `evaluateAsyncRetryLogic`, `evaluateCloudflareMiddleware` —
+  et de 2 helpers réutilisables : `exposerFonctionVM()` (définit le code étudiant en VM puis
+  expose la fonction pour un appel/await depuis l'hôte) et `avecTimeout()` (garde-fou contre les
+  blocages).
+- **Bug corrigé au passage** : le test `exec` existant de `tache_3c` (middleware Cloudflare)
+  échouait TOUJOURS, même avec une réponse parfaite, à cause d'une Promise jamais résolue en
+  exécution VM synchrone. Remplacé par `evaluateCloudflareMiddleware` (voir
+  `issues-fixes/2026-07-07-test-async-middleware-toujours-echec.md`).
+
+**3. Nouvelles épreuves par tier** (chaque fichier JSON de `tiers/` mis à jour : prompt + tasks) :
+
+| Tier | Tâches avant | Tâches après | Évaluations avant | Évaluations après | Nouvelles épreuves |
+|---|---|---|---|---|---|
+| 0 (EASY) | 3 | 5 | 7 | 12 | 0-D débogage (max avec tableau négatif), 0-E anti-XSS (textContent) |
+| 1 (MEDIUM) | 3 | 5 | 10 | 17 | 1-D débogage (doublons mal dédupliqués), 1-E échappement HTML anti-XSS |
+| 2 (HARD) | 3 | 5 | 10 | 14 | 2-D async avancé (Promise.allSettled), 2-E débogage (forEach+async cassé) |
+| 3 (EXPERT) | 3 | 6 | 9 | 16 | 3-D anti-injection SQL, 3-E retry async avec backoff, 3-F débogage (prototype pollution) |
+
+### Résultat
+- Les modèles LIGHT disposent maintenant de 2 épreuves supplémentaires sur chacun de leurs 2 tiers
+  obligatoires (0 et 1), soit davantage d'occasions de démontrer leurs capacités.
+- Couverture élargie sur 3 axes demandés : débogage, async complexe, sécurité applicative.
+- Chaque nouvelle épreuve validée manuellement (code correct → passe, code buggé/vulnérable →
+  échoue) via des scripts de test temporaires avant intégration définitive.
+- Barre de progression CLI anime désormais visiblement en temps réel.
+
+### Fichiers modifiés
+- `benchmark-v2/runner.js`
+- `benchmark-v2/vm-sandbox.js`
+- `benchmark-v2/task-evaluator.js`
+- `benchmark-v2/custom-evaluators.js`
+- `benchmark-v2/tiers/tier0_easy.json`
+- `benchmark-v2/tiers/tier1_medium.json`
+- `benchmark-v2/tiers/tier2_hard.json`
+- `benchmark-v2/tiers/tier3_expert.json`
+
+### Notes techniques
+- Nouveau pattern standard pour tester du code async : `exposerFonctionVM()` + `await` depuis
+  l'hôte, jamais via `type: "exec"` (voir issue-fix dédiée).
+- `setTimeout`/`clearTimeout` ajoutés au sandbox VM référencent directement les timers Node réels
+  de l'hôte (les fonctions étudiantes qui les utilisent continuent de fonctionner sans crasher).
+
+---
+
+## 2026-07-08 — Retravail des tiers + fix stripTS + export rapports classés
+
+### Contexte
+Les modèles LLM de niveau standard échouaient systématiquement au Tier 0. Analyse des rapports
+de test : la cause racine était double. (1) `stripTS()` ne supprimait pas `export`/`import` ni
+les types de retour de fonction avec génériques contenant des accolades (`Promise<{...}>`), ni
+les assertions non-null (`!` postfix) — provoquant `"Unexpected token 'export'"` sur des codes
+parfaitement corrects. (2) Le Tier 0 était trop difficile (DOM, XSS, débogage subtil) pour être
+un niveau "très très facile".
+
+### Action entreprise
+
+**1. Fix critique `parsing-utils.js` — `stripTS()` réécrit** :
+- Suppression des imports ES modules (`import ... from '...'`)
+- Suppression du mot-clé `export` / `export default`
+- Nouveau parser par compteur de profondeur (`{}`, `<>`) pour les types de retour avec génériques
+  (ex: `Promise<{ succes: any[], echecs: string[] }>`)
+- Suppression des assertions non-null TypeScript (`stack.pop()!` → `stack.pop()`)
+- Suppression des types de fonction en paramètre (`paramName: (args) => ReturnType`)
+
+**2. Fix `vm-sandbox.js` et `custom-evaluators.js` — `const`/`let` au top-level** :
+- Conversion automatique `const`/`let` → `var` avant exécution VM (sinon les fonctions déclarées
+  avec `const fn = ...` n'étaient pas accessibles via `ctx[fnName]`)
+
+**3. Retravail complet des 4 tiers** :
+- **Tier 0** (très très facile) : addition, parité, inversion chaîne, max tableau, compter voyelles
+- **Tier 1** (un peu plus élevé) : filtrer pairs, capitaliser, supprimer doublons, débogage compteur mots, fréquence caractères
+- **Tier 2** (cran au-dessus) : validation parenthèses, debounce, aplatir tableau, Promise.allSettled, débogage async
+- **Tier 3** (le plus complexe, gros modèles 20-30B) : PowerShell rollback, Flood Fill, middleware Cloudflare, SQL paramétrée, retry async, prototype pollution
+- Noms de fonctions alignés entre tiers et évaluateurs : `remplirMatrice`, `chargerEnParallele`, `traiterSequentiellement`, `middleware`, `validerParentheses`
+
+**4. Export des rapports classés dans `Export-Rapports/`** :
+- Structure : `Export-Rapports/<YYYY-MM-DD>/<PROFIL>/<fichier>.md`
+- `runner.js` modifié pour créer automatiquement les sous-dossiers et sauvegarder au bon endroit
+- Migration des 4 anciens rapports vers la nouvelle structure
+
+### Résultat
+- Les modèles standard devraient maintenant pouvoir passer le Tier 0 (exercices très faciles)
+- Le code TypeScript avec `export` et types génériques est correctement strippé et exécuté
+- Les rapports sont organisés par date et profil pour éviter de se mélanger les pinceaux
+
+### Fichiers modifiés
+- `parsing-utils.js` (stripTS réécrit + nouvelle fonction `stripReturnTypeAnnotation`)
+- `vm-sandbox.js` (conversion const/let → var)
+- `custom-evaluators.js` (conversion const/let → var + noms de fonctions alignés)
+- `tiers/tier0_easy.json` (exercices fondamentaux JS)
+- `tiers/tier1_medium.json` (manipulation de données)
+- `tiers/tier2_hard.json` (algorithmes intermédiaires + async)
+- `tiers/tier3_expert.json` (sécurité + algorithmes avancés)
+- `runner.js` (export rapports classés par date/profil)
+
+### Validation
+- Tests `stripTS()` avec 6 cas couvrant export, types génériques, async, imports, non-null
+- Tous les évaluateurs custom testés avec codes de référence (FloodFill, async, middleware, retry)
+- Vérification syntaxique `node -c` sur tous les fichiers modifiés
+- Chargement des 4 tiers validé via `loadTiers()`
+
+---
+
+## 2026-07-07 — Refactorisation complète du runner.js
+
+### Contexte
+Le fichier `benchmark-v2/runner.js` atteignait **1243 lignes**, devenant difficile à maintenir et déboguer.
+
+### Action entreprise
+Décomposition en **10 modules spécialisés** avec noms explicites :
+
+| Module | Lignes | Responsabilité |
+|--------|--------|----------------|
+| `config.js` | 106 | Constantes API, profils, parsing CLI |
+| `progress-bar.js` | 141 | UI console (ProgressBar, Spinner, letterGrade) |
+| `parsing-utils.js` | 61 | Extraction JSON/regex, suppression TypeScript |
+| `vm-sandbox.js` | 45 | Sandbox VM, exécution de code isolée |
+| `custom-evaluators.js` | 318 | 5 évaluateurs spécialisés (GeoJSON, React, Flood Fill, PowerShell, Python) |
+| `task-evaluator.js` | 55 | Moteur d'évaluation des tâches |
+| `lm-studio-client.js` | 105 | Client API LM Studio avec streaming SSE |
+| `tier-loader.js` | 29 | Chargement des fichiers tier JSON |
+| `report-generator.js` | 41 | Génération rapports Markdown |
+| `runner.js` (refactorisé) | 225 | Orchestration principale uniquement |
+
+### Résultat
+- **Réduction de 82%** du fichier principal (1243 → 225 lignes)
+- Architecture modulaire facilitant maintenance et tests
+- Chaque module a une responsabilité unique (SRP)
+- Syntaxe vérifiée pour tous les fichiers
+
+### Documentation créée
+- Ce dossier `Memories-BenchGo/` comme centre de mémoire
+- Documentation d'architecture dans `architecture/benchmark-v2.md`
+- Détails de la refactorisation dans `refactorisations/2026-07-07-runner-modularisation.md`
+
+### Notes techniques
+- Le dossier `tiers/` contient uniquement des JSON de configuration, aucune modification requise
+- Toutes les dépendances circulaires ont été évitées
+- Le module `custom-evaluators.js` est le plus volumineux car il contient la logique métier complexe des évaluations

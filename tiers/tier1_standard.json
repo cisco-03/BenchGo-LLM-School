@@ -1,0 +1,166 @@
+{
+  "tier": 1,
+  "title": "Tier 1 — 5ème (Collège)",
+  "difficulty": "MEDIUM",
+  "mandatory_for": [
+    "STANDARD"
+  ],
+  "optional_for": [],
+  "prompt": "You are taking a TIER 1 technical evaluation for STANDARD models.\n\nSolve 5 JavaScript exercises inspired by a middle school curriculum (5ème).\n\nReturn your answers in Markdown using headers for the exercise IDs and code blocks for the JavaScript functions.\n\n[EXERCISE Math]\nWrite a JavaScript function \"aireRectangle(longueur, largeur)\" that returns the area of the rectangle.\n\n[EXERCISE Francais]\nWrite a JavaScript function \"remplacerA(mot)\" that replaces all 'e' characters in the string with 'a'.\n\n[EXERCISE Physique]\nWrite a JavaScript function \"vitesse(distance, temps)\" that returns distance divided by time. Return 0 if time is 0.\n\n[EXERCISE Anglais]\nWrite a JavaScript function \"traduireAnimal(mot)\" that translates \"chien\" to \"dog\", \"chat\" to \"cat\", and returns \"unknown\" for anything else.\n\n[EXERCISE Info]\nWrite a JavaScript function \"creerEleve(nom, age)\" that returns an object { nom: nom, age: age, classe: '5eme' }.\n\nExpected Markdown format:\n### tache_X\n```javascript\nfunction solution() { ... }\n```",
+  "tasks": [
+    {
+      "id": "math",
+      "label": "Maths : Aire",
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Rectangle",
+          "setup": "",
+          "call": "aireRectangle(5, 2)",
+          "assert": "result === 10"
+        }
+      ],
+      "points": 8
+    },
+    {
+      "id": "francais",
+      "label": "Français : Remplacer",
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "e vers a",
+          "setup": "",
+          "call": "remplacerA('cheval')",
+          "assert": "result === 'chaval'"
+        }
+      ],
+      "points": 8
+    },
+    {
+      "id": "physique",
+      "label": "Physique : Vitesse",
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Calcul",
+          "setup": "",
+          "call": "vitesse(100, 2)",
+          "assert": "result === 50"
+        },
+        {
+          "type": "exec",
+          "description": "Temps 0",
+          "setup": "",
+          "call": "vitesse(10, 0)",
+          "assert": "result === 0"
+        }
+      ],
+      "points": 8
+    },
+    {
+      "id": "anglais",
+      "label": "Anglais : Dico",
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "chien",
+          "setup": "",
+          "call": "traduireAnimal('chien')",
+          "assert": "result === 'dog'"
+        },
+        {
+          "type": "exec",
+          "description": "Autre",
+          "setup": "",
+          "call": "traduireAnimal('oiseau')",
+          "assert": "result === 'unknown'"
+        }
+      ],
+      "points": 8
+    },
+    {
+      "id": "info",
+      "label": "Info : Objet élève",
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Création",
+          "setup": "",
+          "call": "creerEleve('Bob', 12)",
+          "assert": "result.nom === 'Bob' && result.age === 12 && result.classe === '5eme'"
+        }
+      ],
+      "points": 8
+    },
+    {
+      "id": "algo_facile_1_tier1",
+      "label": "Algorithmique - Variables et Types",
+      "points": 10,
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Retourne basique",
+          "setup": "",
+          "call": "true",
+          "assert": "result === true"
+        }
+      ]
+    },
+    {
+      "id": "algo_facile_2_tier1",
+      "label": "Algorithmique - Opérations de base",
+      "points": 10,
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Vérification",
+          "setup": "",
+          "call": "true",
+          "assert": "result === true"
+        }
+      ]
+    },
+    {
+      "id": "algo_moyen_1_tier1",
+      "label": "Algorithmique - Conditions et Boucles",
+      "points": 10,
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Logique moyenne",
+          "setup": "",
+          "call": "true",
+          "assert": "result === true"
+        }
+      ]
+    },
+    {
+      "id": "algo_difficile_1_tier1",
+      "label": "Algorithmique - Structures de Données",
+      "points": 15,
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Logique difficile",
+          "setup": "",
+          "call": "true",
+          "assert": "result === true"
+        }
+      ]
+    },
+    {
+      "id": "algo_defi_tier1",
+      "label": "Algorithmique - Défi d'Optimisation",
+      "points": 15,
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Défi",
+          "setup": "",
+          "call": "true",
+          "assert": "result === true"
+        }
+      ]
+    }
+  ]
+}

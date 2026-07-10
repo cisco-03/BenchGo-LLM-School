@@ -1,0 +1,176 @@
+{
+  "tier": 3,
+  "title": "Tier 3 — 3ème (Collège)",
+  "difficulty": "MEDIUM",
+  "mandatory_for": [],
+  "optional_for": [
+    "STANDARD"
+  ],
+  "prompt": "You are taking a TIER 3 technical evaluation for STANDARD models.\n\nSolve 5 JavaScript exercises inspired by a middle school curriculum (3ème).\n\nReturn your answers in Markdown using headers for the exercise IDs and code blocks for the JavaScript functions.\n\n[EXERCISE Math]\nWrite a JavaScript function \"resoudreEquation(a, b)\" that solves a*x + b = 0 and returns x. Return null if a is 0.\n\n[EXERCISE Francais]\nWrite a JavaScript function \"compterVoyelles(phrase)\" that counts the number of vowels (a, e, i, o, u, y) ignoring case.\n\n[EXERCISE Histoire]\nWrite a JavaScript function \"trierAnnees(annees)\" that sorts an array of numbers (years) in ascending order.\n\n[EXERCISE SVT]\nWrite a JavaScript function \"estADN(chaine)\" that returns true if the string only contains 'A', 'T', 'C', or 'G' (uppercase), false otherwise.\n\n[EXERCISE Info]\nWrite a JavaScript function \"bonsEleves(eleves)\" that takes an array of objects like {nom: 'X', moyenne: 12} and returns an array of names for students with moyenne >= 10.\n\nExpected Markdown format:\n### tache_X\n```javascript\nfunction solution() { ... }\n```",
+  "tasks": [
+    {
+      "id": "math",
+      "label": "Maths : Équation 1er degré",
+      "hint": "L'équation a*x + b = 0 donne x = -b/a quand a ≠ 0. Retournez null si a = 0.",
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "2x - 4 = 0",
+          "setup": "",
+          "call": "resoudreEquation(2, -4)",
+          "assert": "result === 2"
+        },
+        {
+          "type": "exec",
+          "description": "a = 0",
+          "setup": "",
+          "call": "resoudreEquation(0, 5)",
+          "assert": "result === null"
+        }
+      ],
+      "points": 8
+    },
+    {
+      "id": "francais",
+      "label": "Français : Voyelles",
+      "hint": "Parcourez chaque caractère et comptez les voyelles (a, e, i, o, u, y). Utilisez toLowerCase() pour ignorer la casse.",
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Compte",
+          "setup": "",
+          "call": "compterVoyelles('Chat')",
+          "assert": "result === 1"
+        }
+      ],
+      "points": 8
+    },
+    {
+      "id": "histoire",
+      "label": "Histoire : Tri",
+      "hint": "Utilisez la méthode .sort((a, b) => a - b) sur le tableau d'années pour trier en ordre croissant.",
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Ascendant",
+          "setup": "",
+          "call": "trierAnnees([1945, 1789, 1515])",
+          "assert": "JSON.stringify(result) === '[1515,1789,1945]'"
+        }
+      ],
+      "points": 8
+    },
+    {
+      "id": "svt",
+      "label": "SVT : ADN",
+      "hint": "Vérifiez que chaque caractère de la chaîne est 'A', 'T', 'C' ou 'G'. Une expression régulière /^[ATCG]+$/ peut aider.",
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Vrai",
+          "setup": "",
+          "call": "estADN('ATCG')",
+          "assert": "result === true"
+        },
+        {
+          "type": "exec",
+          "description": "Faux",
+          "setup": "",
+          "call": "estADN('ATXG')",
+          "assert": "result === false"
+        }
+      ],
+      "points": 8
+    },
+    {
+      "id": "info",
+      "label": "Info : Filtrer objets",
+      "hint": "La fonction prend un tableau d'objets {nom, moyenne}. Utilisez .filter(e => e.moyenne >= 10) puis .map(e => e.nom). Le paramètre doit s'appeler 'eleves'.",
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Filtre > 10",
+          "setup": "",
+          "call": "bonsEleves([{nom: 'Lia', moyenne: 12}, {nom: 'Bob', moyenne: 8}])",
+          "assert": "JSON.stringify(result) === '[\"Lia\"]'"
+        }
+      ],
+      "points": 8
+    },
+    {
+      "id": "algo_facile_1_tier3",
+      "label": "Algorithmique - Variables et Types",
+      "points": 10,
+      "hint": "Déclarez une variable et retournez sa valeur. Le type de la variable doit correspondre à ce qui est demandé.",
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Retourne basique",
+          "setup": "",
+          "call": "true",
+          "assert": "result === true"
+        }
+      ]
+    },
+    {
+      "id": "algo_facile_2_tier3",
+      "label": "Algorithmique - Opérations de base",
+      "points": 10,
+      "hint": "Utilisez les opérateurs arithmétiques (+, -, *, /, %) pour calculer le résultat demandé.",
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Vérification",
+          "setup": "",
+          "call": "true",
+          "assert": "result === true"
+        }
+      ]
+    },
+    {
+      "id": "algo_moyen_1_tier3",
+      "label": "Algorithmique - Conditions et Boucles",
+      "points": 10,
+      "hint": "Utilisez une boucle (for/while) et une condition (if/else) pour parcourir et filtrer les éléments selon le critère demandé.",
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Logique moyenne",
+          "setup": "",
+          "call": "true",
+          "assert": "result === true"
+        }
+      ]
+    },
+    {
+      "id": "algo_difficile_1_tier3",
+      "label": "Algorithmique - Structures de Données",
+      "points": 15,
+      "hint": "Manipulez des tableaux ou objets imbriqués. Pensez à .reduce(), .map() ou des boucles imbriquées selon le besoin.",
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Logique difficile",
+          "setup": "",
+          "call": "true",
+          "assert": "result === true"
+        }
+      ]
+    },
+    {
+      "id": "algo_defi_tier3",
+      "label": "Algorithmique - Défi d'Optimisation",
+      "points": 15,
+      "hint": "Cherchez une solution efficace (complexité O(n) ou O(n log n)). Évitez les boucles imbriquées inutiles (O(n²)).",
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Défi",
+          "setup": "",
+          "call": "true",
+          "assert": "result === true"
+        }
+      ]
+    }
+  ]
+}

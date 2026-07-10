@@ -1,0 +1,201 @@
+{
+  "tier": 2,
+  "title": "Tier 2 — CE1",
+  "difficulty": "EASY",
+  "mandatory_for": [],
+  "optional_for": [
+    "LIGHT"
+  ],
+  "prompt": "You are taking a TIER 2 technical evaluation.\n\nSolve 5 basic JavaScript exercises.\n\nReturn your answers in Markdown using headers for the exercise IDs and code blocks for the JavaScript functions.\n\n[EXERCISE 2-A: String length]\nWrite a JavaScript function \"longueurChaine(chaine)\" that returns the length of the string.\n\n[EXERCISE 2-B: First element]\nWrite a JavaScript function \"premierElement(tableau)\" that returns the first element of the array. Return undefined if the array is empty.\n\n[EXERCISE 2-C: Is even]\nWrite a JavaScript function \"estPair(n)\" that returns true if the number is even, false otherwise. Use the modulo operator.\n\n[EXERCISE 2-D: Uppercase]\nWrite a JavaScript function \"enMajuscules(chaine)\" that converts the string to uppercase and returns it.\n\n[EXERCISE 2-E: Push element]\nWrite a JavaScript function \"ajouterALaFin(tableau, element)\" that adds the element to the end of the array and returns the modified array.\n\nExpected Markdown format:\n### tache_X\n```javascript\nfunction solution() { ... }\n```",
+  "tasks": [
+    {
+      "id": "tache_2a",
+      "label": "Longueur chaîne",
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Chaîne normale",
+          "setup": "",
+          "call": "longueurChaine('test')",
+          "assert": "result === 4"
+        },
+        {
+          "type": "exec",
+          "description": "Chaîne vide",
+          "setup": "",
+          "call": "longueurChaine('')",
+          "assert": "result === 0"
+        }
+      ],
+      "points": 8
+    },
+    {
+      "id": "tache_2b",
+      "label": "Premier élément",
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Tableau non vide",
+          "setup": "",
+          "call": "premierElement([5, 6, 7])",
+          "assert": "result === 5"
+        },
+        {
+          "type": "exec",
+          "description": "Tableau vide",
+          "setup": "",
+          "call": "premierElement([])",
+          "assert": "result === undefined"
+        }
+      ],
+      "points": 8
+    },
+    {
+      "id": "tache_2c",
+      "label": "Est pair",
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Pair",
+          "setup": "",
+          "call": "estPair(8)",
+          "assert": "result === true"
+        },
+        {
+          "type": "exec",
+          "description": "Impair",
+          "setup": "",
+          "call": "estPair(3)",
+          "assert": "result === false"
+        },
+        {
+          "type": "exec",
+          "description": "Zéro",
+          "setup": "",
+          "call": "estPair(0)",
+          "assert": "result === true"
+        }
+      ],
+      "points": 8
+    },
+    {
+      "id": "tache_2d",
+      "label": "En majuscules",
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Minuscules",
+          "setup": "",
+          "call": "enMajuscules('hello')",
+          "assert": "result === 'HELLO'"
+        },
+        {
+          "type": "exec",
+          "description": "Déjà majuscules",
+          "setup": "",
+          "call": "enMajuscules('WORLD')",
+          "assert": "result === 'WORLD'"
+        },
+        {
+          "type": "exec",
+          "description": "Vide",
+          "setup": "",
+          "call": "enMajuscules('')",
+          "assert": "result === ''"
+        }
+      ],
+      "points": 8
+    },
+    {
+      "id": "tache_2e",
+      "label": "Ajouter à la fin",
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Tableau non vide",
+          "setup": "",
+          "call": "ajouterALaFin([1, 2], 3)",
+          "assert": "Array.isArray(result) && result.length === 3 && result[2] === 3"
+        },
+        {
+          "type": "exec",
+          "description": "Tableau vide",
+          "setup": "",
+          "call": "ajouterALaFin([], 'a')",
+          "assert": "Array.isArray(result) && result.length === 1 && result[0] === 'a'"
+        }
+      ],
+      "points": 8
+    },
+    {
+      "id": "algo_facile_1_tier2",
+      "label": "Algorithmique - Variables et Types",
+      "points": 10,
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Retourne basique",
+          "setup": "",
+          "call": "true",
+          "assert": "result === true"
+        }
+      ]
+    },
+    {
+      "id": "algo_facile_2_tier2",
+      "label": "Algorithmique - Opérations de base",
+      "points": 10,
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Vérification",
+          "setup": "",
+          "call": "true",
+          "assert": "result === true"
+        }
+      ]
+    },
+    {
+      "id": "algo_moyen_1_tier2",
+      "label": "Algorithmique - Conditions et Boucles",
+      "points": 10,
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Logique moyenne",
+          "setup": "",
+          "call": "true",
+          "assert": "result === true"
+        }
+      ]
+    },
+    {
+      "id": "algo_difficile_1_tier2",
+      "label": "Algorithmique - Structures de Données",
+      "points": 15,
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Logique difficile",
+          "setup": "",
+          "call": "true",
+          "assert": "result === true"
+        }
+      ]
+    },
+    {
+      "id": "algo_defi_tier2",
+      "label": "Algorithmique - Défi d'Optimisation",
+      "points": 15,
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Défi",
+          "setup": "",
+          "call": "true",
+          "assert": "result === true"
+        }
+      ]
+    }
+  ]
+}

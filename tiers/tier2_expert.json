@@ -1,0 +1,181 @@
+{
+  "tier": 2,
+  "title": "Tier 2 — Concurrence, Réactivité et Optimisation",
+  "difficulty": "HARD",
+  "mandatory_for": [
+    "EXPERT",
+    "DOCTORAT"
+  ],
+  "optional_for": [],
+  "prompt": "You are taking a TIER 2 EXPERT evaluation — concurrency, reactive programming and optimization.\n\nSolve 5 JavaScript exercises. Return your answers in Markdown using headers for the exercise IDs and code blocks for the JavaScript functions.\n\n[2-A] Async function executerEnPool(taches, concurrence) — executes an array of async task functions with a concurrency limit. Returns an array of results in original order.\nExample: executerEnPool([()=>fetchA(), ()=>fetchB(), ()=>fetchC()], 2) runs max 2 at a time.\n\n[2-B] Function creerSubject() — a reactive Subject (like RxJS): has next(val), error(err), complete(), and subscribe({next, error, complete}). Multicasts to all subscribers.\n\n[2-C] Function memoiserAsync(fn) — memoize an async function. Concurrent calls with the same args while the first is pending should wait for the same Promise, not trigger duplicate calls.\n\n[2-D] Debugging — fix the following async race condition:\nasync function chargerUtilisateur(id) {\n  let resultat = null;\n  fetch('/api/user/' + id).then(r => r.json()).then(data => { resultat = data; });\n  return resultat;\n}\nBug: returns null because it doesn't await the fetch.\n\n[2-E] Function creerCircuitBreaker(fn, seuil, delaiResetMs) — circuit breaker pattern: after seuil consecutive failures, trips open and rejects all calls for delaiResetMs ms, then moves to half-open.\n\nExpected strict response format:\n{\n  \"tache_2a\": \"async function executerEnPool(taches, concurrence) { ... }\",\n  \"tache_2b\": \"function creerSubject() { ... }\",\n  \"tache_2c\": \"function memoiserAsync(fn) { ... }\",\n  \"tache_2d\": \"async function chargerUtilisateur(id) { ... }\",\n  \"tache_2e\": \"function creerCircuitBreaker(fn, seuil, delaiResetMs) { ... }\"\n}",
+  "tasks": [
+    {
+      "id": "tache_2a",
+      "label": "Pool de concurrence async",
+      "evaluations": [
+        {
+          "type": "custom",
+          "method": "evaluateAsyncPartialErrors",
+          "description": "gestion des échecs partiels en pool"
+        }
+      ],
+      "points": 8
+    },
+    {
+      "id": "tache_2b",
+      "label": "Subject réactif (multicast)",
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "multicast vers plusieurs abonnés",
+          "setup": "var s=creerSubject(); var a=[],b=[]; s.subscribe({next:function(v){a.push(v);},error:function(){},complete:function(){}}); s.subscribe({next:function(v){b.push(v);},error:function(){},complete:function(){}}); s.next(1); s.next(2);",
+          "call": "a.length===2 && b.length===2 && a[0]===1",
+          "assert": "result === true"
+        },
+        {
+          "type": "exec",
+          "description": "complete notifie tous les abonnés",
+          "setup": "var s=creerSubject(); var done=0; s.subscribe({next:function(){},error:function(){},complete:function(){done++;}}); s.subscribe({next:function(){},error:function(){},complete:function(){done++;}}); s.complete();",
+          "call": "done",
+          "assert": "result === 2"
+        }
+      ],
+      "points": 8
+    },
+    {
+      "id": "tache_2c",
+      "label": "Mémoïsation async anti-duplication",
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "retourne le bon résultat",
+          "setup": "var fn=memoiserAsync(async function(x){ return x*2; });",
+          "call": "fn(5).then ? 'ok' : 'fail'",
+          "assert": "result === 'ok'"
+        },
+        {
+          "type": "exec",
+          "description": "appels concurrents partagent la même Promise",
+          "setup": "var calls=0; var fn=memoiserAsync(async function(x){ calls++; return x; }); fn(1); fn(1);",
+          "call": "calls",
+          "assert": "result === 1"
+        }
+      ],
+      "points": 8
+    },
+    {
+      "id": "tache_2d",
+      "label": "Débogage : race condition async",
+      "evaluations": [
+        {
+          "type": "pattern",
+          "description": "utilise await",
+          "required": [
+            "await"
+          ],
+          "forbidden": []
+        },
+        {
+          "type": "pattern",
+          "description": "utilise async",
+          "required": [
+            "async"
+          ],
+          "forbidden": []
+        }
+      ],
+      "points": 8
+    },
+    {
+      "id": "tache_2e",
+      "label": "Circuit Breaker",
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "appel normal réussit",
+          "setup": "var cb=creerCircuitBreaker(async function(){ return 'ok'; }, 3, 1000);",
+          "call": "cb().then ? 'promise' : 'fail'",
+          "assert": "result === 'promise'"
+        },
+        {
+          "type": "exec",
+          "description": "s'ouvre après seuil d'échecs",
+          "setup": "var calls=0; var cb=creerCircuitBreaker(async function(){ throw new Error('fail'); }, 2, 10000); cb().catch(function(){}); cb().catch(function(){});",
+          "call": "cb().then(function(){ return 'ok'; }).catch(function(e){ return e.message; })",
+          "assert": "result && result.then ? true : false"
+        }
+      ],
+      "points": 8
+    },
+    {
+      "id": "algo_facile_1_tier2",
+      "label": "Algorithmique - Variables et Types",
+      "points": 10,
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Retourne basique",
+          "setup": "",
+          "call": "true",
+          "assert": "result === true"
+        }
+      ]
+    },
+    {
+      "id": "algo_facile_2_tier2",
+      "label": "Algorithmique - Opérations de base",
+      "points": 10,
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Vérification",
+          "setup": "",
+          "call": "true",
+          "assert": "result === true"
+        }
+      ]
+    },
+    {
+      "id": "algo_moyen_1_tier2",
+      "label": "Algorithmique - Conditions et Boucles",
+      "points": 10,
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Logique moyenne",
+          "setup": "",
+          "call": "true",
+          "assert": "result === true"
+        }
+      ]
+    },
+    {
+      "id": "algo_difficile_1_tier2",
+      "label": "Algorithmique - Structures de Données",
+      "points": 15,
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Logique difficile",
+          "setup": "",
+          "call": "true",
+          "assert": "result === true"
+        }
+      ]
+    },
+    {
+      "id": "algo_defi_tier2",
+      "label": "Algorithmique - Défi d'Optimisation",
+      "points": 15,
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Défi",
+          "setup": "",
+          "call": "true",
+          "assert": "result === true"
+        }
+      ]
+    }
+  ]
+}

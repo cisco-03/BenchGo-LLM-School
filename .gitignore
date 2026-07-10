@@ -1,0 +1,36 @@
+# =============================================================================
+# .gitignore — Local-LLM-Benchmark-V3
+# Stratégie : tout ignorer par défaut, puis n'autoriser QUE l'application
+# principale (sources JS + config des tiers) et la documentation.
+# Tout le reste (Admin, Export-Rapports, logs, .vscode, fichiers jetables)
+# est considéré comme sensible / non versionné.
+# =============================================================================
+
+# --- 1. On ignore TOUT par défaut ---
+*
+
+# --- 2. On ré-autorise le parcours des dossiers (nécessaire pour les exceptions) ---
+!*/
+
+# --- 3. Application principale : sources JS à la racine ---
+!.gitignore
+!*.js
+
+# --- 4. Application principale : configuration des tiers (données du benchmark) ---
+!/tiers/
+!tiers/**
+
+# --- 5. Documentation de l'application ---
+!/Docs/
+!Docs/**
+!/Memories-BenchGo/
+!Memories-BenchGo/**
+
+# =============================================================================
+# Données SENSIBLES — NE PAS COMMITER (ignorées par le "*" ci-dessus) :
+#   Admin/              -> notes, tâches, articles, archives .7z (sensible)
+#   Export-Rapports/    -> rapports générés (données personnelles)
+#   logs/               -> journaux d'exécution
+#   .vscode/            -> réglages locaux de l'éditeur
+#   fichiers racine jetables (ex: "c", ")") -> ignorés automatiquement
+# =============================================================================

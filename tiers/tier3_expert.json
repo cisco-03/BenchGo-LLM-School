@@ -1,0 +1,237 @@
+{
+  "tier": 3,
+  "title": "Tier 3 — Sécurité Avancée, Architecture et Algorithmes Complexes",
+  "difficulty": "EXPERT",
+  "mandatory_for": [
+    "EXPERT",
+    "DOCTORAT"
+  ],
+  "optional_for": [],
+  "prompt": "You are taking a TIER 3 EXPERT evaluation — advanced security, architecture and complex algorithms.\n\nSolve 6 exercises. Return your answers in Markdown using headers for the exercise IDs and code blocks for the JavaScript functions.\n\n[3-A] PowerShell script deploy-patch.ps1 with Copy-Item backup + sqlite3 + rollback on error\n[3-B] JavaScript function remplirMatrice(grille, x, y, nouvelleValeur) — Flood Fill with grille[y][x] (x=column, y=row)\n[3-C] Async JavaScript function middleware(request, env) — check Bearer SYSTEM-SECURE-KEY header, return 403 if missing/invalid\n[3-D] Function rechercherUtilisateurSecurise(db, nomUtilisateur) — parameterized SQL query (use ? placeholder, never string concatenation)\n[3-E] Async function executerAvecRetry(operation, maxTentatives) — retry with exponential backoff\n[3-F] Fix fusionnerConfig — must be safe against prototype pollution (__proto__ key)\n\nExpected strict response format:\n{\n  \"tache_3a\": \"<powershell script here>\",\n  \"tache_3b\": \"function remplirMatrice(grille, x, y, nouvelleValeur) { ... }\",\n  \"tache_3c\": \"async function middleware(request, env) { ... }\",\n  \"tache_3d\": \"function rechercherUtilisateurSecurise(db, nomUtilisateur) { ... }\",\n  \"tache_3e\": \"async function executerAvecRetry(operation, maxTentatives) { ... }\",\n  \"tache_3f\": \"function fusionnerConfig(...) { ... }\"\n}",
+  "tasks": [
+    {
+      "id": "tache_3a",
+      "label": "Script PowerShell deploy-patch avec rollback",
+      "evaluations": [
+        {
+          "type": "pattern",
+          "description": "Sauvegarde via Copy-Item",
+          "required": [
+            "copy-item",
+            "production_backup.db"
+          ],
+          "forbidden": []
+        },
+        {
+          "type": "pattern",
+          "description": "Détection d'erreur",
+          "required": [],
+          "forbidden": []
+        },
+        {
+          "type": "pattern",
+          "description": "Rollback",
+          "required": [
+            "production_backup.db"
+          ],
+          "forbidden": []
+        },
+        {
+          "type": "custom",
+          "method": "evaluatePowerShellRollback",
+          "description": "Analyse rollback"
+        }
+      ],
+      "points": 8
+    },
+    {
+      "id": "tache_3b",
+      "label": "Flood Fill",
+      "evaluations": [
+        {
+          "type": "custom",
+          "method": "evaluateFloodFill",
+          "description": "Exécution réelle matrices"
+        }
+      ],
+      "points": 8
+    },
+    {
+      "id": "tache_3c",
+      "label": "Middleware Cloudflare",
+      "evaluations": [
+        {
+          "type": "pattern",
+          "description": "Bearer SYSTEM-SECURE-KEY",
+          "required": [
+            "SYSTEM-SECURE-KEY",
+            "Authorization"
+          ],
+          "forbidden": []
+        },
+        {
+          "type": "pattern",
+          "description": "403 Access Denied",
+          "required": [
+            "403",
+            "Access Denied"
+          ],
+          "forbidden": []
+        },
+        {
+          "type": "pattern",
+          "description": "fetch(request)",
+          "required": [
+            "fetch(request)"
+          ],
+          "forbidden": []
+        },
+        {
+          "type": "custom",
+          "method": "evaluateCloudflareMiddleware",
+          "description": "Exécution réelle 403"
+        }
+      ],
+      "points": 8
+    },
+    {
+      "id": "tache_3d",
+      "label": "SQL paramétrée",
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Placeholder ?",
+          "setup": "var _sqlUtilise = null; var _paramsUtilises = null; var db = { query: function(sql, params) { _sqlUtilise = sql; _paramsUtilises = params; return [{ id: 1, nom: \"test\" }]; } };",
+          "call": "rechercherUtilisateurSecurise(db, \"admin OR 1=1\")",
+          "assert": "_sqlUtilise && _sqlUtilise.includes(\"?\")"
+        },
+        {
+          "type": "exec",
+          "description": "Cas nominal",
+          "setup": "var db = { query: function(sql, params) { return [{ id: 1, nom: \"test\" }]; } };",
+          "call": "rechercherUtilisateurSecurise(db, \"bob\")",
+          "assert": "Array.isArray(result) && result.length === 1"
+        },
+        {
+          "type": "pattern",
+          "description": "Pas de concat",
+          "required": [
+            "?"
+          ],
+          "forbidden": []
+        }
+      ],
+      "points": 8
+    },
+    {
+      "id": "tache_3e",
+      "label": "Retry async",
+      "evaluations": [
+        {
+          "type": "custom",
+          "method": "evaluateAsyncRetryLogic",
+          "description": "3 scénarios"
+        }
+      ],
+      "points": 8
+    },
+    {
+      "id": "tache_3f",
+      "label": "Prototype pollution",
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Fusion simple",
+          "setup": "",
+          "call": "fusionnerConfig({ a: 1 }, { b: 2 })",
+          "assert": "result.a === 1 && result.b === 2"
+        },
+        {
+          "type": "exec",
+          "description": "Fusion profonde",
+          "setup": "",
+          "call": "fusionnerConfig({ a: { x: 1 } }, { a: { y: 2 } })",
+          "assert": "result.a.x === 1 && result.a.y === 2"
+        },
+        {
+          "type": "exec",
+          "description": "Anti pollution",
+          "setup": "",
+          "call": "(function() { fusionnerConfig({}, JSON.parse(\"{\\\"__proto__\\\":{\\\"polluted\\\":true}}\")); return ({}).polluted; })()",
+          "assert": "result === undefined"
+        }
+      ],
+      "points": 8
+    },
+    {
+      "id": "algo_facile_1_tier3",
+      "label": "Algorithmique - Variables et Types",
+      "points": 10,
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Retourne basique",
+          "setup": "",
+          "call": "true",
+          "assert": "result === true"
+        }
+      ]
+    },
+    {
+      "id": "algo_facile_2_tier3",
+      "label": "Algorithmique - Opérations de base",
+      "points": 10,
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Vérification",
+          "setup": "",
+          "call": "true",
+          "assert": "result === true"
+        }
+      ]
+    },
+    {
+      "id": "algo_moyen_1_tier3",
+      "label": "Algorithmique - Conditions et Boucles",
+      "points": 10,
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Logique moyenne",
+          "setup": "",
+          "call": "true",
+          "assert": "result === true"
+        }
+      ]
+    },
+    {
+      "id": "algo_difficile_1_tier3",
+      "label": "Algorithmique - Structures de Données",
+      "points": 15,
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Logique difficile",
+          "setup": "",
+          "call": "true",
+          "assert": "result === true"
+        }
+      ]
+    },
+    {
+      "id": "algo_defi_tier3",
+      "label": "Algorithmique - Défi d'Optimisation",
+      "points": 15,
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Défi",
+          "setup": "",
+          "call": "true",
+          "assert": "result === true"
+        }
+      ]
+    }
+  ]
+}

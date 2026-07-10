@@ -1,0 +1,159 @@
+{
+  "tier": 0,
+  "title": "Tier 0 — 6ème (Collège)",
+  "difficulty": "EASY",
+  "mandatory_for": [
+    "STANDARD"
+  ],
+  "optional_for": [],
+  "prompt": "You are taking a TIER 0 technical evaluation for STANDARD models.\n\nSolve 5 JavaScript exercises inspired by a middle school curriculum (6ème).\n\nReturn your answers in Markdown using headers for the exercise IDs and code blocks for the JavaScript functions.\n\n[EXERCISE Math]\nWrite a JavaScript function \"additionner(tab)\" that takes an array of numbers and returns their sum.\n\n[EXERCISE Francais]\nWrite a JavaScript function \"majuscule(mot)\" that returns the word with its first letter in uppercase.\n\n[EXERCISE Geo]\nWrite a JavaScript function \"capitale(pays)\" that returns \"Paris\" if pays is \"France\", \"Madrid\" if pays is \"Espagne\", and \"Inconnu\" otherwise.\n\n[EXERCISE Histoire]\nWrite a JavaScript function \"anneeDecouverteAmerique()\" that simply returns the number 1492.\n\n[EXERCISE Info]\nWrite a JavaScript function \"bonjour(nom)\" that returns the string \"Bonjour \" followed by the name and \" !\".\n\nExpected Markdown format:\n### tache_X\n```javascript\nfunction solution() { ... }\n```",
+  "tasks": [
+    {
+      "id": "math",
+      "label": "Mathématiques : Addition",
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Somme",
+          "setup": "",
+          "call": "additionner([1, 2, 3])",
+          "assert": "result === 6"
+        }
+      ],
+      "points": 8
+    },
+    {
+      "id": "francais",
+      "label": "Français : Majuscule",
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Première lettre",
+          "setup": "",
+          "call": "majuscule('chat')",
+          "assert": "result === 'Chat'"
+        }
+      ],
+      "points": 8
+    },
+    {
+      "id": "geo",
+      "label": "Géographie : Capitale",
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "France",
+          "setup": "",
+          "call": "capitale('France')",
+          "assert": "result === 'Paris'"
+        },
+        {
+          "type": "exec",
+          "description": "Autre",
+          "setup": "",
+          "call": "capitale('Toto')",
+          "assert": "result === 'Inconnu'"
+        }
+      ],
+      "points": 8
+    },
+    {
+      "id": "histoire",
+      "label": "Histoire : 1492",
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Année",
+          "setup": "",
+          "call": "anneeDecouverteAmerique()",
+          "assert": "result === 1492"
+        }
+      ],
+      "points": 8
+    },
+    {
+      "id": "info",
+      "label": "Informatique : Bonjour",
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Formatage",
+          "setup": "",
+          "call": "bonjour('Alice')",
+          "assert": "result === 'Bonjour Alice !'"
+        }
+      ],
+      "points": 8
+    },
+    {
+      "id": "algo_facile_1_tier0",
+      "label": "Algorithmique - Variables et Types",
+      "points": 10,
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Retourne basique",
+          "setup": "",
+          "call": "true",
+          "assert": "result === true"
+        }
+      ]
+    },
+    {
+      "id": "algo_facile_2_tier0",
+      "label": "Algorithmique - Opérations de base",
+      "points": 10,
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Vérification",
+          "setup": "",
+          "call": "true",
+          "assert": "result === true"
+        }
+      ]
+    },
+    {
+      "id": "algo_moyen_1_tier0",
+      "label": "Algorithmique - Conditions et Boucles",
+      "points": 10,
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Logique moyenne",
+          "setup": "",
+          "call": "true",
+          "assert": "result === true"
+        }
+      ]
+    },
+    {
+      "id": "algo_difficile_1_tier0",
+      "label": "Algorithmique - Structures de Données",
+      "points": 15,
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Logique difficile",
+          "setup": "",
+          "call": "true",
+          "assert": "result === true"
+        }
+      ]
+    },
+    {
+      "id": "algo_defi_tier0",
+      "label": "Algorithmique - Défi d'Optimisation",
+      "points": 15,
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Défi",
+          "setup": "",
+          "call": "true",
+          "assert": "result === true"
+        }
+      ]
+    }
+  ]
+}

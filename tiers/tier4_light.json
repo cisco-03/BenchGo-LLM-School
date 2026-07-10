@@ -1,0 +1,194 @@
+{
+  "tier": 4,
+  "title": "Tier 4 — CM1",
+  "difficulty": "EASY",
+  "mandatory_for": [],
+  "optional_for": [
+    "LIGHT"
+  ],
+  "prompt": "You are taking a TIER 4 technical evaluation.\n\nSolve 5 basic JavaScript exercises.\n\nReturn your answers in Markdown using headers for the exercise IDs and code blocks for the JavaScript functions.\n\n[EXERCISE 4-A: Max in array]\nWrite a JavaScript function \"trouverMaximum(tableau)\" that takes an array of numbers and returns the largest.\n\n[EXERCISE 4-B: Reverse string]\nWrite a JavaScript function \"inverserChaine(chaine)\" that returns the reversed string.\n\n[EXERCISE 4-C: Count vowels]\nWrite a JavaScript function \"compterVoyelles(chaine)\" that counts the number of vowels (a, e, i, o, u) in a string. Case-insensitive. Do not count 'y'.\n\n[EXERCISE 4-D: Filter positive]\nWrite a JavaScript function \"filtrerPositifs(tableau)\" that returns a new array containing only the strictly positive numbers (> 0) from the input array.\n\n[EXERCISE 4-E: Repeat string]\nWrite a JavaScript function \"repeterChaine(chaine, n)\" that repeats the string n times and returns the result. If n <= 0, return an empty string.\n\nExpected Markdown format:\n### tache_X\n```javascript\nfunction solution() { ... }\n```",
+  "tasks": [
+    {
+      "id": "tache_4a",
+      "label": "Maximum",
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Tableau positif",
+          "setup": "",
+          "call": "trouverMaximum([3, 7, 2])",
+          "assert": "result === 7"
+        },
+        {
+          "type": "exec",
+          "description": "Tableau négatif",
+          "setup": "",
+          "call": "trouverMaximum([-5, -2, -8])",
+          "assert": "result === -2"
+        }
+      ],
+      "points": 8
+    },
+    {
+      "id": "tache_4b",
+      "label": "Inverser",
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Mot normal",
+          "setup": "",
+          "call": "inverserChaine('abc')",
+          "assert": "result === 'cba'"
+        },
+        {
+          "type": "exec",
+          "description": "Vide",
+          "setup": "",
+          "call": "inverserChaine('')",
+          "assert": "result === ''"
+        }
+      ],
+      "points": 8
+    },
+    {
+      "id": "tache_4c",
+      "label": "Voyelles",
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Avec voyelles",
+          "setup": "",
+          "call": "compterVoyelles('bonjour')",
+          "assert": "result === 3"
+        },
+        {
+          "type": "exec",
+          "description": "Majuscules",
+          "setup": "",
+          "call": "compterVoyelles('AEIOU')",
+          "assert": "result === 5"
+        },
+        {
+          "type": "exec",
+          "description": "Sans voyelles",
+          "setup": "",
+          "call": "compterVoyelles('xyz')",
+          "assert": "result === 0"
+        }
+      ],
+      "points": 8
+    },
+    {
+      "id": "tache_4d",
+      "label": "Filtrer positifs",
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Mixte",
+          "setup": "",
+          "call": "filtrerPositifs([-1, 0, 1, 2])",
+          "assert": "JSON.stringify(result) === '[1,2]'"
+        },
+        {
+          "type": "exec",
+          "description": "Que négatifs",
+          "setup": "",
+          "call": "filtrerPositifs([-1, -2])",
+          "assert": "JSON.stringify(result) === '[]'"
+        }
+      ],
+      "points": 8
+    },
+    {
+      "id": "tache_4e",
+      "label": "Répéter",
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Répète 3",
+          "setup": "",
+          "call": "repeterChaine('a', 3)",
+          "assert": "result === 'aaa'"
+        },
+        {
+          "type": "exec",
+          "description": "Répète 0",
+          "setup": "",
+          "call": "repeterChaine('a', 0)",
+          "assert": "result === ''"
+        }
+      ],
+      "points": 8
+    },
+    {
+      "id": "algo_facile_1_tier4",
+      "label": "Algorithmique - Variables et Types",
+      "points": 10,
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Retourne basique",
+          "setup": "",
+          "call": "true",
+          "assert": "result === true"
+        }
+      ]
+    },
+    {
+      "id": "algo_facile_2_tier4",
+      "label": "Algorithmique - Opérations de base",
+      "points": 10,
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Vérification",
+          "setup": "",
+          "call": "true",
+          "assert": "result === true"
+        }
+      ]
+    },
+    {
+      "id": "algo_moyen_1_tier4",
+      "label": "Algorithmique - Conditions et Boucles",
+      "points": 10,
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Logique moyenne",
+          "setup": "",
+          "call": "true",
+          "assert": "result === true"
+        }
+      ]
+    },
+    {
+      "id": "algo_difficile_1_tier4",
+      "label": "Algorithmique - Structures de Données",
+      "points": 15,
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Logique difficile",
+          "setup": "",
+          "call": "true",
+          "assert": "result === true"
+        }
+      ]
+    },
+    {
+      "id": "algo_defi_tier4",
+      "label": "Algorithmique - Défi d'Optimisation",
+      "points": 15,
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Défi",
+          "setup": "",
+          "call": "true",
+          "assert": "result === true"
+        }
+      ]
+    }
+  ]
+}

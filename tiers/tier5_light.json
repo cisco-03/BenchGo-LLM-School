@@ -1,0 +1,187 @@
+{
+  "tier": 5,
+  "title": "Tier 5 — CM2",
+  "difficulty": "EASY",
+  "mandatory_for": [],
+  "optional_for": [
+    "LIGHT"
+  ],
+  "prompt": "You are taking a TIER 5 technical evaluation.\n\nSolve 5 JavaScript exercises.\n\nReturn your answers in Markdown using headers for the exercise IDs and code blocks for the JavaScript functions.\n\n[EXERCISE 5-A: Remove duplicates]\nWrite a JavaScript function \"supprimerDoublons(tableau)\" that removes duplicate elements from an array and returns the new array.\n\n[EXERCISE 5-B: Capitalize words]\nWrite a JavaScript function \"capitaliserMots(phrase)\" that capitalizes the first letter of each word in a string and returns the new string. Assume words are separated by single spaces.\n\n[EXERCISE 5-C: Character frequency]\nWrite a JavaScript function \"frequenceCaracteres(chaine)\" that returns an object where keys are characters and values are the number of times they appear in the string.\n\n[EXERCISE 5-D: Filter even numbers]\nWrite a JavaScript function \"filtrerPairs(tableau)\" that returns a new array containing only the even numbers from the input array.\n\n[EXERCISE 5-E: Longest string]\nWrite a JavaScript function \"chaineLaPlusLongue(tableau)\" that takes an array of strings and returns the longest string. If the array is empty, return an empty string.\n\nExpected Markdown format:\n### tache_X\n```javascript\nfunction solution() { ... }\n```",
+  "tasks": [
+    {
+      "id": "tache_5a",
+      "label": "Doublons",
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Avec doublons",
+          "setup": "",
+          "call": "supprimerDoublons([1, 2, 2, 3])",
+          "assert": "JSON.stringify(result) === '[1,2,3]'"
+        },
+        {
+          "type": "exec",
+          "description": "Sans doublons",
+          "setup": "",
+          "call": "supprimerDoublons([1, 2])",
+          "assert": "JSON.stringify(result) === '[1,2]'"
+        }
+      ],
+      "points": 8
+    },
+    {
+      "id": "tache_5b",
+      "label": "Capitaliser",
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Phrase normale",
+          "setup": "",
+          "call": "capitaliserMots('bonjour le monde')",
+          "assert": "result === 'Bonjour Le Monde'"
+        },
+        {
+          "type": "exec",
+          "description": "Un mot",
+          "setup": "",
+          "call": "capitaliserMots('test')",
+          "assert": "result === 'Test'"
+        }
+      ],
+      "points": 8
+    },
+    {
+      "id": "tache_5c",
+      "label": "Fréquence",
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Mot simple",
+          "setup": "",
+          "call": "frequenceCaracteres('aba')",
+          "assert": "result['a'] === 2 && result['b'] === 1"
+        },
+        {
+          "type": "exec",
+          "description": "Vide",
+          "setup": "",
+          "call": "frequenceCaracteres('')",
+          "assert": "Object.keys(result).length === 0"
+        }
+      ],
+      "points": 8
+    },
+    {
+      "id": "tache_5d",
+      "label": "Filtrer pairs",
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Mixte",
+          "setup": "",
+          "call": "filtrerPairs([1, 2, 3, 4])",
+          "assert": "JSON.stringify(result) === '[2,4]'"
+        },
+        {
+          "type": "exec",
+          "description": "Que impairs",
+          "setup": "",
+          "call": "filtrerPairs([1, 3])",
+          "assert": "JSON.stringify(result) === '[]'"
+        }
+      ],
+      "points": 8
+    },
+    {
+      "id": "tache_5e",
+      "label": "Plus longue",
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Tableau normal",
+          "setup": "",
+          "call": "chaineLaPlusLongue(['a', 'abc', 'ab'])",
+          "assert": "result === 'abc'"
+        },
+        {
+          "type": "exec",
+          "description": "Vide",
+          "setup": "",
+          "call": "chaineLaPlusLongue([])",
+          "assert": "result === ''"
+        }
+      ],
+      "points": 8
+    },
+    {
+      "id": "algo_facile_1_tier5",
+      "label": "Algorithmique - Variables et Types",
+      "points": 10,
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Retourne basique",
+          "setup": "",
+          "call": "true",
+          "assert": "result === true"
+        }
+      ]
+    },
+    {
+      "id": "algo_facile_2_tier5",
+      "label": "Algorithmique - Opérations de base",
+      "points": 10,
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Vérification",
+          "setup": "",
+          "call": "true",
+          "assert": "result === true"
+        }
+      ]
+    },
+    {
+      "id": "algo_moyen_1_tier5",
+      "label": "Algorithmique - Conditions et Boucles",
+      "points": 10,
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Logique moyenne",
+          "setup": "",
+          "call": "true",
+          "assert": "result === true"
+        }
+      ]
+    },
+    {
+      "id": "algo_difficile_1_tier5",
+      "label": "Algorithmique - Structures de Données",
+      "points": 15,
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Logique difficile",
+          "setup": "",
+          "call": "true",
+          "assert": "result === true"
+        }
+      ]
+    },
+    {
+      "id": "algo_defi_tier5",
+      "label": "Algorithmique - Défi d'Optimisation",
+      "points": 15,
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Défi",
+          "setup": "",
+          "call": "true",
+          "assert": "result === true"
+        }
+      ]
+    }
+  ]
+}

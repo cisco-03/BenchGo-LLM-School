@@ -1,0 +1,217 @@
+{
+  "tier": 1,
+  "title": "Tier 1 — Structures de Données et Patterns Avancés",
+  "difficulty": "MEDIUM",
+  "mandatory_for": [
+    "EXPERT",
+    "DOCTORAT"
+  ],
+  "optional_for": [],
+  "prompt": "You are taking a TIER 1 EXPERT evaluation — data structures and advanced design patterns.\n\nSolve 5 JavaScript exercises. Return your answers in Markdown using headers for the exercise IDs and code blocks for the JavaScript functions.\n\n[1-A] Function creerFilePriorite() — a min-heap priority queue with: enqueue(val, priorite), dequeue() returns item with lowest priority number, taille() returns count.\n\n[1-B] Function creerEventEmitter() — an EventEmitter with: on(event, fn), off(event, fn), emit(event, ...args). Supports multiple listeners per event.\n\n[1-C] Function zip(...tableaux) — like Python zip: takes multiple arrays and returns an array of tuples.\nExample: zip([1,2,3],['a','b','c']) must return [[1,'a'],[2,'b'],[3,'c']]. Stops at shortest array.\n\n[1-D] Debugging — fix \"parcoursEnLargeur\" (BFS) that is broken:\nfunction parcoursEnLargeur(graphe, depart) {\n  const visites = [];\n  const file = [depart];\n  while (file.length > 0) {\n    const noeud = file.pop();\n    if (!visites.includes(noeud)) {\n      visites.push(noeud);\n      for (const voisin of (graphe[noeud] || [])) {\n        file.push(voisin);\n      }\n    }\n  }\n  return visites;\n}\nBug: uses pop() (LIFO = DFS) instead of shift() (FIFO = BFS).\n\n[1-E] Function creerProxy(cible, gestionnaire) — an Observable proxy that intercepts get/set via a handler with: get(cible, prop) and set(cible, prop, valeur). Similar to JavaScript Proxy but implemented manually without using the Proxy built-in.\n\nExpected Markdown format:\n### tache_X\n```javascript\nfunction solution() { ... }\n```",
+  "tasks": [
+    {
+      "id": "tache_1a",
+      "label": "File de priorité (min-heap)",
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "dequeue retourne priorité minimale",
+          "setup": "var fp=creerFilePriorite(); fp.enqueue('haute', 1); fp.enqueue('basse', 10); fp.enqueue('moyenne', 5);",
+          "call": "fp.dequeue()",
+          "assert": "result === 'haute'"
+        },
+        {
+          "type": "exec",
+          "description": "taille correcte",
+          "setup": "var fp=creerFilePriorite(); fp.enqueue('a', 2); fp.enqueue('b', 1);",
+          "call": "fp.taille()",
+          "assert": "result === 2"
+        },
+        {
+          "type": "exec",
+          "description": "file vide retourne null/undefined",
+          "setup": "var fp=creerFilePriorite();",
+          "call": "fp.dequeue()",
+          "assert": "result === null || result === undefined"
+        }
+      ],
+      "points": 8
+    },
+    {
+      "id": "tache_1b",
+      "label": "EventEmitter",
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "emit déclenche le listener",
+          "setup": "var ee=creerEventEmitter(); var recu=[]; ee.on('test', function(v){ recu.push(v); }); ee.emit('test', 42);",
+          "call": "recu[0]",
+          "assert": "result === 42"
+        },
+        {
+          "type": "exec",
+          "description": "off supprime le listener",
+          "setup": "var ee=creerEventEmitter(); var count=0; var fn=function(){ count++; }; ee.on('x', fn); ee.off('x', fn); ee.emit('x');",
+          "call": "count",
+          "assert": "result === 0"
+        },
+        {
+          "type": "exec",
+          "description": "plusieurs listeners sur un même événement",
+          "setup": "var ee=creerEventEmitter(); var a=0,b=0; ee.on('e', function(){ a++; }); ee.on('e', function(){ b++; }); ee.emit('e');",
+          "call": "a === 1 && b === 1",
+          "assert": "result === true"
+        }
+      ],
+      "points": 8
+    },
+    {
+      "id": "tache_1c",
+      "label": "Zip de tableaux",
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "zip de deux tableaux",
+          "setup": "",
+          "call": "zip([1,2,3],['a','b','c'])",
+          "assert": "Array.isArray(result) && result[0][0]===1 && result[0][1]==='a' && result.length===3"
+        },
+        {
+          "type": "exec",
+          "description": "s'arrête au plus court",
+          "setup": "",
+          "call": "zip([1,2,3],[4,5])",
+          "assert": "Array.isArray(result) && result.length===2"
+        },
+        {
+          "type": "exec",
+          "description": "zip de 3 tableaux",
+          "setup": "",
+          "call": "zip([1,2],[3,4],[5,6])",
+          "assert": "Array.isArray(result) && result[1][2]===6"
+        }
+      ],
+      "points": 8
+    },
+    {
+      "id": "tache_1d",
+      "label": "Débogage : parcours en largeur (BFS)",
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "BFS retourne les noeuds dans l'ordre correct",
+          "setup": "var g={A:['B','C'],B:['D'],C:['E'],D:[],E:[]};",
+          "call": "parcoursEnLargeur(g, 'A')",
+          "assert": "Array.isArray(result) && result[0]==='A' && result[1]==='B' && result[2]==='C'"
+        },
+        {
+          "type": "exec",
+          "description": "noeud sans voisins",
+          "setup": "var g={A:[]};",
+          "call": "parcoursEnLargeur(g, 'A')",
+          "assert": "Array.isArray(result) && result.length===1 && result[0]==='A'"
+        },
+        {
+          "type": "pattern",
+          "description": "utilise shift() pas pop()",
+          "required": [
+            "shift()"
+          ],
+          "forbidden": []
+        }
+      ],
+      "points": 8
+    },
+    {
+      "id": "tache_1e",
+      "label": "Proxy manuel",
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "get intercepté",
+          "setup": "var log=[]; var p=creerProxy({x:42},{get:function(c,k){ log.push(k); return c[k]; }});",
+          "call": "p.x === 42 && log[0] === 'x'",
+          "assert": "result === true"
+        },
+        {
+          "type": "exec",
+          "description": "set intercepté",
+          "setup": "var log=[]; var cible={y:0}; var p=creerProxy(cible,{get:function(c,k){return c[k];},set:function(c,k,v){ log.push(k); c[k]=v; }}); p.y=99;",
+          "call": "cible.y === 99 && log[0] === 'y'",
+          "assert": "result === true"
+        }
+      ],
+      "points": 8
+    },
+    {
+      "id": "algo_facile_1_tier1",
+      "label": "Algorithmique - Variables et Types",
+      "points": 10,
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Retourne basique",
+          "setup": "",
+          "call": "true",
+          "assert": "result === true"
+        }
+      ]
+    },
+    {
+      "id": "algo_facile_2_tier1",
+      "label": "Algorithmique - Opérations de base",
+      "points": 10,
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Vérification",
+          "setup": "",
+          "call": "true",
+          "assert": "result === true"
+        }
+      ]
+    },
+    {
+      "id": "algo_moyen_1_tier1",
+      "label": "Algorithmique - Conditions et Boucles",
+      "points": 10,
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Logique moyenne",
+          "setup": "",
+          "call": "true",
+          "assert": "result === true"
+        }
+      ]
+    },
+    {
+      "id": "algo_difficile_1_tier1",
+      "label": "Algorithmique - Structures de Données",
+      "points": 15,
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Logique difficile",
+          "setup": "",
+          "call": "true",
+          "assert": "result === true"
+        }
+      ]
+    },
+    {
+      "id": "algo_defi_tier1",
+      "label": "Algorithmique - Défi d'Optimisation",
+      "points": 15,
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Défi",
+          "setup": "",
+          "call": "true",
+          "assert": "result === true"
+        }
+      ]
+    }
+  ]
+}

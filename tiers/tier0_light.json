@@ -1,0 +1,166 @@
+{
+  "tier": 0,
+  "title": "Tier 0 — Maternelle",
+  "difficulty": "EASY",
+  "mandatory_for": [
+    "LIGHT"
+  ],
+  "optional_for": [],
+  "prompt": "You are taking a TIER 0 technical evaluation — the simplest level.\n\nSolve 5 basic JavaScript exercises (no TypeScript, no frameworks). Write each requested function.\n\nReturn your answers in Markdown using headers for the exercise IDs and code blocks for the JavaScript functions.\n\n[EXERCISE 0-A: Return text]\nWrite a JavaScript function \"direBonjour()\" that takes no parameters and returns the string \"Bonjour\".\n\n[EXERCISE 0-B: Return boolean]\nWrite a JavaScript function \"retournerVrai()\" that takes no parameters and returns the boolean true.\n\n[EXERCISE 0-C: Return number]\nWrite a JavaScript function \"retourner42()\" that takes no parameters and returns the number 42.\n\n[EXERCISE 0-D: Addition]\nWrite a JavaScript function \"additionner(a, b)\" that takes two numbers and returns their sum.\n\n[EXERCISE 0-E: Identity function]\nWrite a JavaScript function \"identite(x)\" that takes one parameter and returns it exactly as it is.\n\nExpected Markdown format:\n### tache_X\n```javascript\nfunction solution() { ... }\n```",
+  "tasks": [
+    {
+      "id": "tache_0a",
+      "label": "Retourner 'Bonjour'",
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Retourne Bonjour",
+          "setup": "",
+          "call": "direBonjour()",
+          "assert": "result === 'Bonjour'"
+        }
+      ],
+      "points": 8
+    },
+    {
+      "id": "tache_0b",
+      "label": "Retourner true",
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Retourne true",
+          "setup": "",
+          "call": "retournerVrai()",
+          "assert": "result === true"
+        }
+      ],
+      "points": 8
+    },
+    {
+      "id": "tache_0c",
+      "label": "Retourner 42",
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Retourne 42",
+          "setup": "",
+          "call": "retourner42()",
+          "assert": "result === 42"
+        }
+      ],
+      "points": 8
+    },
+    {
+      "id": "tache_0d",
+      "label": "Additionner a et b",
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Addition positive",
+          "setup": "",
+          "call": "additionner(2, 3)",
+          "assert": "result === 5"
+        },
+        {
+          "type": "exec",
+          "description": "Addition négative",
+          "setup": "",
+          "call": "additionner(-1, 1)",
+          "assert": "result === 0"
+        }
+      ],
+      "points": 8
+    },
+    {
+      "id": "tache_0e",
+      "label": "Identité",
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Identité string",
+          "setup": "",
+          "call": "identite('test')",
+          "assert": "result === 'test'"
+        },
+        {
+          "type": "exec",
+          "description": "Identité number",
+          "setup": "",
+          "call": "identite(99)",
+          "assert": "result === 99"
+        }
+      ],
+      "points": 8
+    },
+    {
+      "id": "algo_facile_1_tier0",
+      "label": "Algorithmique - Variables et Types",
+      "points": 10,
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Retourne basique",
+          "setup": "",
+          "call": "true",
+          "assert": "result === true"
+        }
+      ]
+    },
+    {
+      "id": "algo_facile_2_tier0",
+      "label": "Algorithmique - Opérations de base",
+      "points": 10,
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Vérification",
+          "setup": "",
+          "call": "true",
+          "assert": "result === true"
+        }
+      ]
+    },
+    {
+      "id": "algo_moyen_1_tier0",
+      "label": "Algorithmique - Conditions et Boucles",
+      "points": 10,
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Logique moyenne",
+          "setup": "",
+          "call": "true",
+          "assert": "result === true"
+        }
+      ]
+    },
+    {
+      "id": "algo_difficile_1_tier0",
+      "label": "Algorithmique - Structures de Données",
+      "points": 15,
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Logique difficile",
+          "setup": "",
+          "call": "true",
+          "assert": "result === true"
+        }
+      ]
+    },
+    {
+      "id": "algo_defi_tier0",
+      "label": "Algorithmique - Défi d'Optimisation",
+      "points": 15,
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Défi",
+          "setup": "",
+          "call": "true",
+          "assert": "result === true"
+        }
+      ]
+    }
+  ]
+}

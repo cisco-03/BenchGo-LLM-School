@@ -1,0 +1,152 @@
+{
+  "tier": 5,
+  "title": "Tier 5 — 1ère (Lycée)",
+  "difficulty": "MEDIUM",
+  "mandatory_for": [],
+  "optional_for": [
+    "STANDARD"
+  ],
+  "prompt": "You are taking a TIER 5 technical evaluation for STANDARD models.\n\nSolve 5 JavaScript exercises inspired by a high school curriculum (1ère).\n\nReturn your answers in Markdown using headers for the exercise IDs and code blocks for the JavaScript functions.\n\n[EXERCISE Math]\nWrite a JavaScript function \"moyennePonderee(notes)\" that takes an array of {valeur, coeff} objects and returns the weighted average. Return 0 if array is empty.\n\n[EXERCISE Francais]\nWrite a JavaScript function \"frequenceMots(phrase)\" that returns an object with the count of each word in the string. Assume space separation.\n\n[EXERCISE SVT]\nWrite a JavaScript function \"transcrireADN(adn)\" that converts 'A'->'U', 'T'->'A', 'C'->'G', 'G'->'C' (ADN to ARN).\n\n[EXERCISE Histoire]\nWrite a JavaScript function \"grouperParEpoque(evenements)\" that takes an array of {nom, epoque} and returns an object grouping names by 'epoque'.\n\n[EXERCISE Info]\nWrite a JavaScript class \"FeuTricolore\" with a method \"passerAuSuivant()\" that cycles a 'couleur' property through 'rouge' -> 'vert' -> 'orange' -> 'rouge'. Constructor starts at 'rouge'.\n\nExpected strict response format:\n{\n  \"math\": \"function moyennePonderee(...) { ... }\",\n  \"francais\": \"function frequenceMots(...) { ... }\",\n  \"svt\": \"function transcrireADN(...) { ... }\",\n  \"histoire\": \"function grouperParEpoque(...) { ... }\",\n  \"info\": \"class FeuTricolore { ... }\"\n}",
+  "tasks": [
+    {
+      "id": "math",
+      "label": "Maths : Moyenne pondérée",
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Calcul",
+          "setup": "",
+          "call": "moyennePonderee([{valeur: 10, coeff: 2}, {valeur: 20, coeff: 1}])",
+          "assert": "Math.abs(result - 13.33) < 0.1 || result === 40/3"
+        }
+      ],
+      "points": 8
+    },
+    {
+      "id": "francais",
+      "label": "Français : Fréquence",
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Mots",
+          "setup": "",
+          "call": "frequenceMots('le chat le')",
+          "assert": "result['le'] === 2 && result['chat'] === 1"
+        }
+      ],
+      "points": 8
+    },
+    {
+      "id": "svt",
+      "label": "SVT : Transcription ARN",
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "ATCG",
+          "setup": "",
+          "call": "transcrireADN('ATCG')",
+          "assert": "result === 'UAGC'"
+        }
+      ],
+      "points": 8
+    },
+    {
+      "id": "histoire",
+      "label": "Histoire : GroupBy Époque",
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Groupement",
+          "setup": "",
+          "call": "grouperParEpoque([{nom: 'WW2', epoque: 'XXe'}, {nom: 'WW1', epoque: 'XXe'}, {nom: 'Cesar', epoque: 'Antiquite'}])",
+          "assert": "result['XXe'].length === 2 && result['Antiquite'].length === 1"
+        }
+      ],
+      "points": 8
+    },
+    {
+      "id": "info",
+      "label": "Info : Machine à états",
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Cycle",
+          "setup": "const f = new FeuTricolore(); f.passerAuSuivant();",
+          "call": "f.couleur",
+          "assert": "result === 'vert'"
+        }
+      ],
+      "points": 8
+    },
+    {
+      "id": "algo_facile_1_tier5",
+      "label": "Algorithmique - Variables et Types",
+      "points": 10,
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Retourne basique",
+          "setup": "",
+          "call": "true",
+          "assert": "result === true"
+        }
+      ]
+    },
+    {
+      "id": "algo_facile_2_tier5",
+      "label": "Algorithmique - Opérations de base",
+      "points": 10,
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Vérification",
+          "setup": "",
+          "call": "true",
+          "assert": "result === true"
+        }
+      ]
+    },
+    {
+      "id": "algo_moyen_1_tier5",
+      "label": "Algorithmique - Conditions et Boucles",
+      "points": 10,
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Logique moyenne",
+          "setup": "",
+          "call": "true",
+          "assert": "result === true"
+        }
+      ]
+    },
+    {
+      "id": "algo_difficile_1_tier5",
+      "label": "Algorithmique - Structures de Données",
+      "points": 15,
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Logique difficile",
+          "setup": "",
+          "call": "true",
+          "assert": "result === true"
+        }
+      ]
+    },
+    {
+      "id": "algo_defi_tier5",
+      "label": "Algorithmique - Défi d'Optimisation",
+      "points": 15,
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Défi",
+          "setup": "",
+          "call": "true",
+          "assert": "result === true"
+        }
+      ]
+    }
+  ]
+}

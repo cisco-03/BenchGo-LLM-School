@@ -1,0 +1,159 @@
+{
+  "tier": 2,
+  "title": "Tier 2 — 4ème (Collège)",
+  "difficulty": "MEDIUM",
+  "mandatory_for": [
+    "STANDARD"
+  ],
+  "optional_for": [],
+  "prompt": "You are taking a TIER 2 technical evaluation for STANDARD models.\n\nSolve 5 JavaScript exercises inspired by a middle school curriculum (4ème).\n\nReturn your answers in Markdown using headers for the exercise IDs and code blocks for the JavaScript functions.\n\n[EXERCISE Math]\nWrite a JavaScript function \"pythagore(coteA, coteB)\" that computes the hypotenuse using the Pythagorean theorem (sqrt(A^2 + B^2)).\n\n[EXERCISE Francais]\nWrite a JavaScript function \"conjuguerJe(verbe)\" that takes a regular \"-er\" verb (like \"chanter\") and returns it conjugated with \"je \" in present tense (e.g. \"je chante\"). Just replace \"er\" with \"e\".\n\n[EXERCISE Chimie]\nWrite a JavaScript function \"melanger(couleur1, couleur2)\" that returns \"vert\" if the colors are \"bleu\" and \"jaune\" (in any order), and \"marron\" otherwise.\n\n[EXERCISE Geo]\nWrite a JavaScript function \"compterPays(tableau)\" that returns the length of the array.\n\n[EXERCISE React]\nWrite a JavaScript function \"SimpleComponent(props)\" that simulates a React component by returning a string like \"<div>{titre}</div>\" where {titre} is replaced by props.titre.\n\nExpected Markdown format:\n### tache_X\n```javascript\nfunction solution() { ... }\n```",
+  "tasks": [
+    {
+      "id": "math",
+      "label": "Maths : Pythagore",
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "3,4 -> 5",
+          "setup": "",
+          "call": "pythagore(3, 4)",
+          "assert": "result === 5"
+        }
+      ],
+      "points": 8
+    },
+    {
+      "id": "francais",
+      "label": "Français : Conjugaison",
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "chanter",
+          "setup": "",
+          "call": "conjuguerJe('chanter')",
+          "assert": "result === 'je chante'"
+        }
+      ],
+      "points": 8
+    },
+    {
+      "id": "chimie",
+      "label": "Chimie : Couleurs",
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Bleu et Jaune",
+          "setup": "",
+          "call": "melanger('jaune', 'bleu')",
+          "assert": "result === 'vert'"
+        },
+        {
+          "type": "exec",
+          "description": "Autre",
+          "setup": "",
+          "call": "melanger('rouge', 'jaune')",
+          "assert": "result === 'marron'"
+        }
+      ],
+      "points": 8
+    },
+    {
+      "id": "geo",
+      "label": "Géo : Tableau",
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Length",
+          "setup": "",
+          "call": "compterPays(['FR', 'ES', 'IT'])",
+          "assert": "result === 3"
+        }
+      ],
+      "points": 8
+    },
+    {
+      "id": "react",
+      "label": "React : Composant HTML",
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Template",
+          "setup": "",
+          "call": "SimpleComponent({titre: 'Hello'})",
+          "assert": "result === '<div>Hello</div>'"
+        }
+      ],
+      "points": 8
+    },
+    {
+      "id": "algo_facile_1_tier2",
+      "label": "Algorithmique - Variables et Types",
+      "points": 10,
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Retourne basique",
+          "setup": "",
+          "call": "true",
+          "assert": "result === true"
+        }
+      ]
+    },
+    {
+      "id": "algo_facile_2_tier2",
+      "label": "Algorithmique - Opérations de base",
+      "points": 10,
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Vérification",
+          "setup": "",
+          "call": "true",
+          "assert": "result === true"
+        }
+      ]
+    },
+    {
+      "id": "algo_moyen_1_tier2",
+      "label": "Algorithmique - Conditions et Boucles",
+      "points": 10,
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Logique moyenne",
+          "setup": "",
+          "call": "true",
+          "assert": "result === true"
+        }
+      ]
+    },
+    {
+      "id": "algo_difficile_1_tier2",
+      "label": "Algorithmique - Structures de Données",
+      "points": 15,
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Logique difficile",
+          "setup": "",
+          "call": "true",
+          "assert": "result === true"
+        }
+      ]
+    },
+    {
+      "id": "algo_defi_tier2",
+      "label": "Algorithmique - Défi d'Optimisation",
+      "points": 15,
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Défi",
+          "setup": "",
+          "call": "true",
+          "assert": "result === true"
+        }
+      ]
+    }
+  ]
+}

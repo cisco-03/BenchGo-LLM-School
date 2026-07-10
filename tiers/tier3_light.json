@@ -1,0 +1,201 @@
+{
+  "tier": 3,
+  "title": "Tier 3 — CE2",
+  "difficulty": "EASY",
+  "mandatory_for": [],
+  "optional_for": [
+    "LIGHT"
+  ],
+  "prompt": "You are taking a TIER 3 technical evaluation.\n\nSolve 5 basic JavaScript exercises.\n\nReturn your answers in Markdown using headers for the exercise IDs and code blocks for the JavaScript functions.\n\n[EXERCISE 3-A: Last element]\nWrite a JavaScript function \"dernierElement(tableau)\" that returns the last element of the array. Return undefined if the array is empty.\n\n[EXERCISE 3-B: Count to N]\nWrite a JavaScript function \"compterJusqua(n)\" that returns an array of numbers from 1 to n. If n < 1, return an empty array.\n\n[EXERCISE 3-C: Replace letter]\nWrite a JavaScript function \"remplacerLettre(mot, ancienne, nouvelle)\" that replaces all occurrences of 'ancienne' letter with 'nouvelle' in the word and returns the new word.\n\n[EXERCISE 3-D: Sum array]\nWrite a JavaScript function \"sommeTableau(tableau)\" that returns the sum of all numbers in the array. Return 0 if the array is empty.\n\n[EXERCISE 3-E: Contains 'a']\nWrite a JavaScript function \"contientA(mot)\" that returns true if the word contains the letter 'a' (case-insensitive), false otherwise.\n\nExpected Markdown format:\n### tache_X\n```javascript\nfunction solution() { ... }\n```",
+  "tasks": [
+    {
+      "id": "tache_3a",
+      "label": "Dernier élément",
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Tableau",
+          "setup": "",
+          "call": "dernierElement([1, 2, 3])",
+          "assert": "result === 3"
+        },
+        {
+          "type": "exec",
+          "description": "Tableau 1 élém",
+          "setup": "",
+          "call": "dernierElement([5])",
+          "assert": "result === 5"
+        },
+        {
+          "type": "exec",
+          "description": "Tableau vide",
+          "setup": "",
+          "call": "dernierElement([])",
+          "assert": "result === undefined"
+        }
+      ],
+      "points": 8
+    },
+    {
+      "id": "tache_3b",
+      "label": "Compter jusqu'à N",
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "N=3",
+          "setup": "",
+          "call": "compterJusqua(3)",
+          "assert": "JSON.stringify(result) === '[1,2,3]'"
+        },
+        {
+          "type": "exec",
+          "description": "N=0",
+          "setup": "",
+          "call": "compterJusqua(0)",
+          "assert": "JSON.stringify(result) === '[]'"
+        }
+      ],
+      "points": 8
+    },
+    {
+      "id": "tache_3c",
+      "label": "Remplacer lettre",
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Remplacement normal",
+          "setup": "",
+          "call": "remplacerLettre('papa', 'p', 'm')",
+          "assert": "result === 'mama'"
+        },
+        {
+          "type": "exec",
+          "description": "Pas de match",
+          "setup": "",
+          "call": "remplacerLettre('test', 'z', 'a')",
+          "assert": "result === 'test'"
+        }
+      ],
+      "points": 8
+    },
+    {
+      "id": "tache_3d",
+      "label": "Somme tableau",
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Nombres",
+          "setup": "",
+          "call": "sommeTableau([1, 2, 3, 4])",
+          "assert": "result === 10"
+        },
+        {
+          "type": "exec",
+          "description": "Vide",
+          "setup": "",
+          "call": "sommeTableau([])",
+          "assert": "result === 0"
+        }
+      ],
+      "points": 8
+    },
+    {
+      "id": "tache_3e",
+      "label": "Contient 'a'",
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Avec a minuscule",
+          "setup": "",
+          "call": "contientA('chat')",
+          "assert": "result === true"
+        },
+        {
+          "type": "exec",
+          "description": "Avec A majuscule",
+          "setup": "",
+          "call": "contientA('Arbre')",
+          "assert": "result === true"
+        },
+        {
+          "type": "exec",
+          "description": "Sans a",
+          "setup": "",
+          "call": "contientA('chien')",
+          "assert": "result === false"
+        }
+      ],
+      "points": 8
+    },
+    {
+      "id": "algo_facile_1_tier3",
+      "label": "Algorithmique - Variables et Types",
+      "points": 10,
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Retourne basique",
+          "setup": "",
+          "call": "true",
+          "assert": "result === true"
+        }
+      ]
+    },
+    {
+      "id": "algo_facile_2_tier3",
+      "label": "Algorithmique - Opérations de base",
+      "points": 10,
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Vérification",
+          "setup": "",
+          "call": "true",
+          "assert": "result === true"
+        }
+      ]
+    },
+    {
+      "id": "algo_moyen_1_tier3",
+      "label": "Algorithmique - Conditions et Boucles",
+      "points": 10,
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Logique moyenne",
+          "setup": "",
+          "call": "true",
+          "assert": "result === true"
+        }
+      ]
+    },
+    {
+      "id": "algo_difficile_1_tier3",
+      "label": "Algorithmique - Structures de Données",
+      "points": 15,
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Logique difficile",
+          "setup": "",
+          "call": "true",
+          "assert": "result === true"
+        }
+      ]
+    },
+    {
+      "id": "algo_defi_tier3",
+      "label": "Algorithmique - Défi d'Optimisation",
+      "points": 15,
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Défi",
+          "setup": "",
+          "call": "true",
+          "assert": "result === true"
+        }
+      ]
+    }
+  ]
+}

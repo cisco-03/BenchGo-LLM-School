@@ -1,0 +1,159 @@
+{
+  "tier": 4,
+  "title": "Tier 4 — 2nde (Lycée)",
+  "difficulty": "MEDIUM",
+  "mandatory_for": [],
+  "optional_for": [
+    "STANDARD"
+  ],
+  "prompt": "You are taking a TIER 4 technical evaluation for STANDARD models.\n\nSolve 5 JavaScript exercises inspired by a high school curriculum (2nde).\n\nReturn your answers in Markdown using headers for the exercise IDs and code blocks for the JavaScript functions.\n\n[EXERCISE Math]\nWrite a JavaScript function \"discriminant(a, b, c)\" that computes the delta (b^2 - 4ac) of a quadratic equation.\n\n[EXERCISE Francais]\nWrite a JavaScript function \"estPalindrome(mot)\" that returns true if the word reads the same backward.\n\n[EXERCISE Physique]\nWrite a JavaScript function \"celsiusToFahrenheit(c)\" that converts Celsius to Fahrenheit using (C * 9/5) + 32.\n\n[EXERCISE Langues]\nWrite a JavaScript function \"traduire(mot, langue)\" that supports mot 'bonjour'. If langue is 'EN', return 'hello'. If 'ES', return 'hola'. Otherwise return '?'\n\n[EXERCISE React]\nWrite a JavaScript function \"ButtonComponent(props)\" that returns a string \"<button onClick={props.onClick}>{props.label}</button>\".\n\nExpected Markdown format:\n### tache_X\n```javascript\nfunction solution() { ... }\n```",
+  "tasks": [
+    {
+      "id": "math",
+      "label": "Maths : Discriminant",
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Delta",
+          "setup": "",
+          "call": "discriminant(1, -3, 2)",
+          "assert": "result === 1"
+        }
+      ],
+      "points": 8
+    },
+    {
+      "id": "francais",
+      "label": "Français : Palindrome",
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "radar",
+          "setup": "",
+          "call": "estPalindrome('radar')",
+          "assert": "result === true"
+        }
+      ],
+      "points": 8
+    },
+    {
+      "id": "physique",
+      "label": "Physique : Conversion",
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "0°C",
+          "setup": "",
+          "call": "celsiusToFahrenheit(0)",
+          "assert": "result === 32"
+        }
+      ],
+      "points": 8
+    },
+    {
+      "id": "langues",
+      "label": "Langues : Switch",
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "ES",
+          "setup": "",
+          "call": "traduire('bonjour', 'ES')",
+          "assert": "result === 'hola'"
+        },
+        {
+          "type": "exec",
+          "description": "IT",
+          "setup": "",
+          "call": "traduire('bonjour', 'IT')",
+          "assert": "result === '?'"
+        }
+      ],
+      "points": 8
+    },
+    {
+      "id": "react",
+      "label": "React : Button Component",
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "HTML Button",
+          "setup": "const props = {label: 'OK', onClick: 'myFn'};",
+          "call": "ButtonComponent(props)",
+          "assert": "result === '<button onClick={myFn}>OK</button>' || result === '<button onClick=\"myFn\">OK</button>'"
+        }
+      ],
+      "points": 8
+    },
+    {
+      "id": "algo_facile_1_tier4",
+      "label": "Algorithmique - Variables et Types",
+      "points": 10,
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Retourne basique",
+          "setup": "",
+          "call": "true",
+          "assert": "result === true"
+        }
+      ]
+    },
+    {
+      "id": "algo_facile_2_tier4",
+      "label": "Algorithmique - Opérations de base",
+      "points": 10,
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Vérification",
+          "setup": "",
+          "call": "true",
+          "assert": "result === true"
+        }
+      ]
+    },
+    {
+      "id": "algo_moyen_1_tier4",
+      "label": "Algorithmique - Conditions et Boucles",
+      "points": 10,
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Logique moyenne",
+          "setup": "",
+          "call": "true",
+          "assert": "result === true"
+        }
+      ]
+    },
+    {
+      "id": "algo_difficile_1_tier4",
+      "label": "Algorithmique - Structures de Données",
+      "points": 15,
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Logique difficile",
+          "setup": "",
+          "call": "true",
+          "assert": "result === true"
+        }
+      ]
+    },
+    {
+      "id": "algo_defi_tier4",
+      "label": "Algorithmique - Défi d'Optimisation",
+      "points": 15,
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Défi",
+          "setup": "",
+          "call": "true",
+          "assert": "result === true"
+        }
+      ]
+    }
+  ]
+}

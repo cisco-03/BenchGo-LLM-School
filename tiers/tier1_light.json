@@ -1,0 +1,201 @@
+{
+  "tier": 1,
+  "title": "Tier 1 — CP",
+  "difficulty": "EASY",
+  "mandatory_for": [
+    "LIGHT"
+  ],
+  "optional_for": [],
+  "prompt": "You are taking a TIER 1 technical evaluation.\n\nSolve 5 basic JavaScript exercises.\n\nReturn your answers in Markdown using headers for the exercise IDs and code blocks for the JavaScript functions.\n\n[EXERCISE 1-A: Subtraction]\nWrite a JavaScript function \"soustraire(a, b)\" that subtracts b from a and returns the result.\n\n[EXERCISE 1-B: Greater than 10]\nWrite a JavaScript function \"superieurA10(n)\" that returns true if n is strictly greater than 10, false otherwise.\n\n[EXERCISE 1-C: Concatenate]\nWrite a JavaScript function \"concatener(mot1, mot2)\" that returns the two words separated by a single space.\n\n[EXERCISE 1-D: Is empty string]\nWrite a JavaScript function \"estVide(chaine)\" that returns true if the string is empty (\"\"), false otherwise.\n\n[EXERCISE 1-E: Multiply by 2]\nWrite a JavaScript function \"multiplierPar2(n)\" that multiplies the given number by 2 and returns it.\n\nExpected Markdown format:\n### tache_X\n```javascript\nfunction solution() { ... }\n```",
+  "tasks": [
+    {
+      "id": "tache_1a",
+      "label": "Soustraire b de a",
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Soustraction simple",
+          "setup": "",
+          "call": "soustraire(5, 3)",
+          "assert": "result === 2"
+        },
+        {
+          "type": "exec",
+          "description": "Soustraction négative",
+          "setup": "",
+          "call": "soustraire(3, 5)",
+          "assert": "result === -2"
+        }
+      ],
+      "points": 8
+    },
+    {
+      "id": "tache_1b",
+      "label": "Supérieur à 10",
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Plus grand que 10",
+          "setup": "",
+          "call": "superieurA10(15)",
+          "assert": "result === true"
+        },
+        {
+          "type": "exec",
+          "description": "Égal à 10",
+          "setup": "",
+          "call": "superieurA10(10)",
+          "assert": "result === false"
+        },
+        {
+          "type": "exec",
+          "description": "Plus petit que 10",
+          "setup": "",
+          "call": "superieurA10(5)",
+          "assert": "result === false"
+        }
+      ],
+      "points": 8
+    },
+    {
+      "id": "tache_1c",
+      "label": "Concaténer mots",
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Deux mots normaux",
+          "setup": "",
+          "call": "concatener('Hello', 'World')",
+          "assert": "result === 'Hello World'"
+        }
+      ],
+      "points": 8
+    },
+    {
+      "id": "tache_1d",
+      "label": "Chaîne vide",
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Chaîne vide",
+          "setup": "",
+          "call": "estVide('')",
+          "assert": "result === true"
+        },
+        {
+          "type": "exec",
+          "description": "Chaîne avec espace",
+          "setup": "",
+          "call": "estVide(' ')",
+          "assert": "result === false"
+        },
+        {
+          "type": "exec",
+          "description": "Chaîne normale",
+          "setup": "",
+          "call": "estVide('abc')",
+          "assert": "result === false"
+        }
+      ],
+      "points": 8
+    },
+    {
+      "id": "tache_1e",
+      "label": "Multiplier par 2",
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Positif",
+          "setup": "",
+          "call": "multiplierPar2(4)",
+          "assert": "result === 8"
+        },
+        {
+          "type": "exec",
+          "description": "Zéro",
+          "setup": "",
+          "call": "multiplierPar2(0)",
+          "assert": "result === 0"
+        },
+        {
+          "type": "exec",
+          "description": "Négatif",
+          "setup": "",
+          "call": "multiplierPar2(-3)",
+          "assert": "result === -6"
+        }
+      ],
+      "points": 8
+    },
+    {
+      "id": "algo_facile_1_tier1",
+      "label": "Algorithmique - Variables et Types",
+      "points": 10,
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Retourne basique",
+          "setup": "",
+          "call": "true",
+          "assert": "result === true"
+        }
+      ]
+    },
+    {
+      "id": "algo_facile_2_tier1",
+      "label": "Algorithmique - Opérations de base",
+      "points": 10,
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Vérification",
+          "setup": "",
+          "call": "true",
+          "assert": "result === true"
+        }
+      ]
+    },
+    {
+      "id": "algo_moyen_1_tier1",
+      "label": "Algorithmique - Conditions et Boucles",
+      "points": 10,
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Logique moyenne",
+          "setup": "",
+          "call": "true",
+          "assert": "result === true"
+        }
+      ]
+    },
+    {
+      "id": "algo_difficile_1_tier1",
+      "label": "Algorithmique - Structures de Données",
+      "points": 15,
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Logique difficile",
+          "setup": "",
+          "call": "true",
+          "assert": "result === true"
+        }
+      ]
+    },
+    {
+      "id": "algo_defi_tier1",
+      "label": "Algorithmique - Défi d'Optimisation",
+      "points": 15,
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Défi",
+          "setup": "",
+          "call": "true",
+          "assert": "result === true"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,298 @@
+{
+  "tier": 4,
+  "title": "Tier 4 — Algorithmes Avancés & Architecture (Niveau Frontier)",
+  "difficulty": "FRONTIER",
+  "mandatory_for": [
+    "FRONTIER"
+  ],
+  "optional_for": [],
+  "prompt": "You are taking a TIER 4 FRONTIER evaluation — advanced algorithms and software architecture.\n\nSolve 6 exercises. Return your answers in Markdown using headers for the exercise IDs and code blocks for the JavaScript functions.\n\n[4-A] JavaScript class LRUCache(capacite) — get(cle): returns stored value or -1 if not found; put(cle, valeur): inserts and evicts the LRU entry when full. Must use Map internally for O(1) operations on both get and put.\n[4-B] JavaScript function clonageSecurise(obj) — deep clone that handles circular references (use a WeakMap), nested objects, arrays, and Date objects. Returns a fully independent copy without throwing on circular refs.\n[4-C] Async JavaScript function executerAvecConcurrence(taches, maxConcurrence) — executes an array of async functions with AT MOST maxConcurrence tasks running simultaneously. Returns an array of results in the original task order.\n[4-D] JavaScript function evaluerExpression(expr) — evaluates an arithmetic string expression supporting +, -, *, /, and parentheses with correct operator precedence. Must NOT use eval(). Returns a number.\n[4-E] JavaScript class Trie — prefix tree with four methods: inserer(mot), chercher(mot) (exact match → boolean), commencePar(prefixe) (→ boolean), suggestions(prefixe) (→ array of all words with that prefix).\n[4-F] JavaScript function dijkstra(graphe, depart) — Dijkstra shortest path algorithm. graphe format: { A: { B: 4, C: 2 }, B: { D: 1 }, ... }. Returns an object { A: 0, B: 3, ... } with Infinity for unreachable nodes.\n\nExpected strict response format:\n{\n  \"tache_4a\": \"class LRUCache { constructor(capacite) { ... } get(cle) { ... } put(cle, valeur) { ... } }\",\n  \"tache_4b\": \"function clonageSecurise(obj) { ... }\",\n  \"tache_4c\": \"async function executerAvecConcurrence(taches, maxConcurrence) { ... }\",\n  \"tache_4d\": \"function evaluerExpression(expr) { ... }\",\n  \"tache_4e\": \"class Trie { constructor() { ... } inserer(mot) { ... } chercher(mot) { ... } commencePar(prefixe) { ... } suggestions(prefixe) { ... } }\",\n  \"tache_4f\": \"function dijkstra(graphe, depart) { ... }\"\n}",
+  "tasks": [
+    {
+      "id": "tache_4a",
+      "label": "LRU Cache O(1) avec éviction",
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "get/put basiques",
+          "setup": "",
+          "call": "(function() { var c = new LRUCache(2); c.put(1,1); c.put(2,2); return c.get(1); })()",
+          "assert": "result === 1"
+        },
+        {
+          "type": "exec",
+          "description": "Éviction du LRU après get",
+          "setup": "",
+          "call": "(function() { var c = new LRUCache(2); c.put(1,1); c.put(2,2); c.get(1); c.put(3,3); return c.get(2); })()",
+          "assert": "result === -1"
+        },
+        {
+          "type": "exec",
+          "description": "La nouvelle entrée est accessible après éviction",
+          "setup": "",
+          "call": "(function() { var c = new LRUCache(2); c.put(1,1); c.put(2,2); c.get(1); c.put(3,3); return c.get(3); })()",
+          "assert": "result === 3"
+        },
+        {
+          "type": "exec",
+          "description": "Clé absente retourne -1",
+          "setup": "",
+          "call": "(function() { var c = new LRUCache(1); return c.get(99); })()",
+          "assert": "result === -1"
+        },
+        {
+          "type": "exec",
+          "description": "Mise à jour d'une clé existante",
+          "setup": "",
+          "call": "(function() { var c = new LRUCache(2); c.put(1,1); c.put(1,42); return c.get(1); })()",
+          "assert": "result === 42"
+        }
+      ],
+      "points": 8
+    },
+    {
+      "id": "tache_4b",
+      "label": "Deep Clone sécurisé (circulaire + Date)",
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Objet simple — indépendance de la copie",
+          "setup": "",
+          "call": "(function() { var o = { a: 1 }; var c = clonageSecurise(o); c.a = 99; return o.a; })()",
+          "assert": "result === 1"
+        },
+        {
+          "type": "exec",
+          "description": "Objet imbriqué profond",
+          "setup": "",
+          "call": "(function() { var o = { x: { y: { z: 42 } } }; var c = clonageSecurise(o); return c.x.y.z; })()",
+          "assert": "result === 42"
+        },
+        {
+          "type": "exec",
+          "description": "Référence circulaire — ne plante pas",
+          "setup": "",
+          "call": "(function() { var o = { nom: 'racine' }; o.self = o; var c = clonageSecurise(o); return c.nom; })()",
+          "assert": "result === 'racine'"
+        },
+        {
+          "type": "exec",
+          "description": "Tableau profondément indépendant",
+          "setup": "",
+          "call": "(function() { var o = { arr: [1,2,3] }; var c = clonageSecurise(o); c.arr.push(4); return o.arr.length; })()",
+          "assert": "result === 3"
+        },
+        {
+          "type": "exec",
+          "description": "Date préservée et indépendante",
+          "setup": "",
+          "call": "(function() { var d = new Date(2024,0,1); var o = { d: d }; var c = clonageSecurise(o); return c.d instanceof Date && c.d.getFullYear() === 2024; })()",
+          "assert": "result === true"
+        }
+      ],
+      "points": 8
+    },
+    {
+      "id": "tache_4c",
+      "label": "Pool async avec concurrence limitée",
+      "evaluations": [
+        {
+          "type": "custom",
+          "method": "evaluateAsyncConcurrencyLimit",
+          "description": "Limite de concurrence respectée + résultats en ordre"
+        }
+      ],
+      "points": 8
+    },
+    {
+      "id": "tache_4d",
+      "label": "Parser d'expressions arithmétiques (sans eval)",
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Précédence * sur +",
+          "setup": "",
+          "call": "evaluerExpression('2+3*4')",
+          "assert": "result === 14"
+        },
+        {
+          "type": "exec",
+          "description": "Parenthèses modifient la précédence",
+          "setup": "",
+          "call": "evaluerExpression('(2+3)*4')",
+          "assert": "result === 20"
+        },
+        {
+          "type": "exec",
+          "description": "Division et soustraction",
+          "setup": "",
+          "call": "evaluerExpression('10/2-3')",
+          "assert": "result === 2"
+        },
+        {
+          "type": "exec",
+          "description": "Nombre seul avec espaces",
+          "setup": "",
+          "call": "evaluerExpression(' 100 ')",
+          "assert": "result === 100"
+        },
+        {
+          "type": "pattern",
+          "description": "eval() interdit (sécurité — pas d'exécution de code arbitraire)",
+          "required": [],
+          "forbidden": [
+            "eval("
+          ]
+        }
+      ],
+      "points": 8
+    },
+    {
+      "id": "tache_4e",
+      "label": "Trie — arbre de préfixes avec suggestions",
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Chercher un mot inséré → true",
+          "setup": "",
+          "call": "(function() { var t = new Trie(); t.inserer('bonjour'); return t.chercher('bonjour'); })()",
+          "assert": "result === true"
+        },
+        {
+          "type": "exec",
+          "description": "Chercher un préfixe seul → false",
+          "setup": "",
+          "call": "(function() { var t = new Trie(); t.inserer('bonjour'); return t.chercher('bon'); })()",
+          "assert": "result === false"
+        },
+        {
+          "type": "exec",
+          "description": "commencePar → true pour un préfixe existant",
+          "setup": "",
+          "call": "(function() { var t = new Trie(); t.inserer('bonjour'); return t.commencePar('bon'); })()",
+          "assert": "result === true"
+        },
+        {
+          "type": "exec",
+          "description": "commencePar → false pour un préfixe absent",
+          "setup": "",
+          "call": "(function() { var t = new Trie(); t.inserer('bonjour'); return t.commencePar('xyz'); })()",
+          "assert": "result === false"
+        },
+        {
+          "type": "exec",
+          "description": "suggestions retourne tous les mots avec le préfixe",
+          "setup": "",
+          "call": "(function() { var t = new Trie(); ['bonsoir','bonjour','bonbon','chat'].forEach(function(m){ t.inserer(m); }); var s = t.suggestions('bon'); return s.length === 3 && s.includes('bonsoir') && s.includes('bonjour') && s.includes('bonbon'); })()",
+          "assert": "result === true"
+        }
+      ],
+      "points": 8
+    },
+    {
+      "id": "tache_4f",
+      "label": "Dijkstra — plus court chemin pondéré",
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Graphe classique 4 nœuds (A→B=3, A→C=2, A→D=4)",
+          "setup": "",
+          "call": "(function() { var d = dijkstra({ A:{B:4,C:2}, B:{D:1}, C:{B:1,D:5}, D:{} }, 'A'); return d.A === 0 && d.B === 3 && d.C === 2 && d.D === 4; })()",
+          "assert": "result === true"
+        },
+        {
+          "type": "exec",
+          "description": "Nœud déconnecté → Infinity",
+          "setup": "",
+          "call": "(function() { var d = dijkstra({ A:{B:1}, B:{}, C:{} }, 'A'); return d.C === Infinity || d.C === undefined || d.C === null; })()",
+          "assert": "result === true"
+        },
+        {
+          "type": "exec",
+          "description": "Nœud de départ — distance 0 à lui-même",
+          "setup": "",
+          "call": "(function() { var d = dijkstra({ A:{} }, 'A'); return d.A; })()",
+          "assert": "result === 0"
+        },
+        {
+          "type": "exec",
+          "description": "Chemin indirect plus court que direct",
+          "setup": "",
+          "call": "(function() { var d = dijkstra({ A:{B:10,C:1}, C:{B:2}, B:{} }, 'A'); return d.B; })()",
+          "assert": "result === 3"
+        }
+      ],
+      "points": 8
+    },
+    {
+      "id": "algo_facile_1_tier4",
+      "label": "Algorithmique - Variables et Types",
+      "points": 10,
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Retourne basique",
+          "setup": "",
+          "call": "true",
+          "assert": "result === true"
+        }
+      ]
+    },
+    {
+      "id": "algo_facile_2_tier4",
+      "label": "Algorithmique - Opérations de base",
+      "points": 10,
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Vérification",
+          "setup": "",
+          "call": "true",
+          "assert": "result === true"
+        }
+      ]
+    },
+    {
+      "id": "algo_moyen_1_tier4",
+      "label": "Algorithmique - Conditions et Boucles",
+      "points": 10,
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Logique moyenne",
+          "setup": "",
+          "call": "true",
+          "assert": "result === true"
+        }
+      ]
+    },
+    {
+      "id": "algo_difficile_1_tier4",
+      "label": "Algorithmique - Structures de Données",
+      "points": 15,
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Logique difficile",
+          "setup": "",
+          "call": "true",
+          "assert": "result === true"
+        }
+      ]
+    },
+    {
+      "id": "algo_defi_tier4",
+      "label": "Algorithmique - Défi d'Optimisation",
+      "points": 15,
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Défi",
+          "setup": "",
+          "call": "true",
+          "assert": "result === true"
+        }
+      ]
+    }
+  ]
+}
