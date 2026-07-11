@@ -5,6 +5,52 @@
 - Le projet est en version BenchGo V3.
 - Les fichiers sources sont désormais à la racine de `benchmark-v3/` (le nom `benchmark-v2` est abandonné).
 
+## 2026-07-11 — Cumul des scores multi-écoles + quota + bonus optionnel
+
+### Contexte
+L'utilisateur enchaînait des évaluations séparées (Primaire en `LIGHT`, puis Collège-Lycée en `STANDARD`) mais chaque run affichait son propre résultat final sans **additionner** les points ni afficher le **total cumulé** : « tu me dis pas combien ça fait de points au total ». Demande associée : mettre un **quota de points par école**, accorder un **petit bonus** aux exercices optionnels réussis (récompense généreuse), et maintenir le système de **pénalité** sur les échecs répétés.
+
+### Actions entreprises
+- **Nouveau module `score-ledger.js`** : carnet de scores persistant par modèle (`Export-Rapports/.carnet/<modeleCourt>.json`, hors-git). Conserve la **meilleure tentative par école** (pct le plus élevé). Fournit le calcul du grand total cumulé et l'affichage du **BILAN GLOBAL** (console + markdown).
+- **`config.js`** : ajout de `OPTIONAL_BONUS_PCT = 0.20` (20 % des points de base).
+- **`runner.js` — Bonus optionnel** : sur le succès d'un exercice d'un tier **optionnel**, un bonus (`round(pts * 0.20)`) est crédité à la **Santé Globale** et tracé (`optionalBonusTotal`). Le bonus reste **séparé** du `tierScore` (le pct de tier reste ≤ 100 %, le bonus s'affiche en sus : `+X bonus opt.`).
+- **`runner.js` — Scorecard** : `printScorecard` et `buildScorecardReport` affichent le bonus par classe et sur le total. Le résumé « Score Global » (console + markdown) mentionne le bonus.
+- **`runner.js` — Cumul multi-écoles** : à la fin d'un run `all`, le résultat de l'école (score, quota/max, pct, santé, bonus, aide/rattrapage, date, rapport) est enregistré dans le carnet, puis le **BILAN GLOBAL** cumulé est affiché en console (tableau toutes écoles + TOTAL CUMULÉ + bonus cumulé + santé cumulée) et ajouté au rapport Markdown. Le cumul n'est touché que pour les runs `all` (un run mono-tier ne corrompt pas le score d'école complet).
+- **Pénalité / échecs répétés** : inchangé (pénalité sur échec, élimination à Santé ≤ -100, validation manuelle des points après échec définitif).
+
+### Fichiers modifiés
+- `score-ledger.js` (nouveau)
+- `config.js` — `OPTIONAL_BONUS_PCT`
+- `runner.js` — bonus optionnel, scorecard, cumul carnet + BILAN GLOBAL
+
+### Validation
+- `node -c runner.js` / `node -c score-ledger.js` : syntaxe OK.
+- Test carnet : 2 écoles (Primaire 100 %, College-Lycee) — keep-best conserve la meilleure tentative (98 % sur 3 re-runs), grand total `5317/5370 (99 %)` + `bonus 70` + `santé 5317 PV`, conforme aux attentes.
+- Le bonus ne dépasse jamais 100 % sur un tier (séparé du `tierScore`).
+
+## 2026-07-11 — Exercices d'algorithmique réels + suppression de la trivia (histoire/géo)
+
+### Contexte
+Les tests multi-profils montraient des échecs récurrents sur les exercices de culture générale (capitales, dates historiques). L'utilisateur a demandé de se concentrer sur des exercices de **code pur** plutôt que d'histoire/géo. Par ailleurs, l'analyse a révélé un bug silencieux de l'`auto-updater` : il injectait 5 exercices `algo_*` « placeholders » par tier avec `"call": "true"` / `"assert": "result === true"` (donc toujours validés sans test) et **absents du prompt** (le modèle ne savait même pas qu'ils existait). Cela générait jusqu'à **60 points gratuits** par tier (10+10+10+15+15), faussant tous les scores.
+
+### Actions entreprises
+- **Réécriture de `auto-updater.js`** : création d'une banque `EXERCISE_BANK` de 35 exercices d'algorithmique pure (7 tiers × 5), à difficulté graduée (Tier 0 : parité/carré/somme → Tier 6 : fusion d'intervalles, médiane de deux tableaux triés, plus longue sous-suite croissante). Chaque exercice définit une fonction nommée, un prompt descriptif, un `hint`, et des évaluations `exec` **réelles** (`call` invoquant la fonction étudiante, `assert` testant le résultat).
+- **Injection idempotente dans le prompt** : `updateTiers()` ajoute un bloc `[ALGORITHMIC EXERCISES — code pur, sans culture générale]` à la fin du prompt de chaque tier (strip-then-append, stable d'un run à l'autre).
+- **Remplacement des placeholders** : les 5 `algo_*` cassés de chaque tier (90 au total) sont remplacés par les vrais exercices de la banque correspondant au numéro de tier.
+- **Suppression de la trivia tier0_standard** : remplacement de l'exercice `capitale(pays)` (Géo) par `contientValeur(tab, val)` (recherche en tableau) et de `anneeDecouverteAmerique()` = 1492 (Histoire) par `valeurAbsolue(n)`. Les IDs `geo`/`histoire` deviennent `contient`/`absolu`.
+
+### Fichiers modifiés
+- `auto-updater.js` — banque de 35 exercices + injection de prompt + remplacement des placeholders
+- `tiers/tier0_standard.json` à `tiers/tier6_master.json` (18 fichiers) — exercices `algo_*` réels + blocs de prompt
+- `tiers/tier0_standard.json` — remplacement des 2 exercices trivia
+
+### Validation
+- 0 placeholder `"call": "true"` restant (était 90).
+- 0 trivia (`capitale`/`1492`/`anneeDecouverteAmerique`) restante.
+- 18 fichiers JSON valides ; `tier-loader` charge sans erreur les 5 profils (LIGHT/STANDARD/EXPERT/DOCTORAT/FRONTIER).
+- 71/71 assertions `algo` validées contre des solutions de référence via `execCodeInVM` ; 4/4 assertions des exercices de remplacement validées.
+- `auto-updater` idempotent : un second lancement ne réécrit rien et préserve les exercices themed modifiés.
+
 ## 2026-07-10 — Fix boucle infinie de réessai + Système d'aide du professeur + Validation des points
 
 ### Contexte

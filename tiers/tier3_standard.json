@@ -6,7 +6,7 @@
   "optional_for": [
     "STANDARD"
   ],
-  "prompt": "You are taking a TIER 3 technical evaluation for STANDARD models.\n\nSolve 5 JavaScript exercises inspired by a middle school curriculum (3ème).\n\nReturn your answers in Markdown using headers for the exercise IDs and code blocks for the JavaScript functions.\n\n[EXERCISE Math]\nWrite a JavaScript function \"resoudreEquation(a, b)\" that solves a*x + b = 0 and returns x. Return null if a is 0.\n\n[EXERCISE Francais]\nWrite a JavaScript function \"compterVoyelles(phrase)\" that counts the number of vowels (a, e, i, o, u, y) ignoring case.\n\n[EXERCISE Histoire]\nWrite a JavaScript function \"trierAnnees(annees)\" that sorts an array of numbers (years) in ascending order.\n\n[EXERCISE SVT]\nWrite a JavaScript function \"estADN(chaine)\" that returns true if the string only contains 'A', 'T', 'C', or 'G' (uppercase), false otherwise.\n\n[EXERCISE Info]\nWrite a JavaScript function \"bonsEleves(eleves)\" that takes an array of objects like {nom: 'X', moyenne: 12} and returns an array of names for students with moyenne >= 10.\n\nExpected Markdown format:\n### tache_X\n```javascript\nfunction solution() { ... }\n```",
+  "prompt": "You are taking a TIER 3 technical evaluation for STANDARD models.\n\nSolve 5 JavaScript exercises inspired by a middle school curriculum (3ème).\n\nReturn your answers in Markdown using headers for the exercise IDs and code blocks for the JavaScript functions.\n\n[EXERCISE Math]\nWrite a JavaScript function \"resoudreEquation(a, b)\" that solves a*x + b = 0 and returns x. Return null if a is 0.\n\n[EXERCISE Francais]\nWrite a JavaScript function \"compterVoyelles(phrase)\" that counts the number of vowels (a, e, i, o, u, y) ignoring case.\n\n[EXERCISE Histoire]\nWrite a JavaScript function \"trierAnnees(annees)\" that sorts an array of numbers (years) in ascending order.\n\n[EXERCISE SVT]\nWrite a JavaScript function \"estADN(chaine)\" that returns true if the string only contains 'A', 'T', 'C', or 'G' (uppercase), false otherwise.\n\n[EXERCISE Info]\nWrite a JavaScript function \"bonsEleves(eleves)\" that takes an array of objects like {nom: 'X', moyenne: 12} and returns an array of names for students with moyenne >= 10.\n\nExpected Markdown format:\n### tache_X\n```javascript\nfunction solution() { ... }\n```\n\n[ALGORITHMIC EXERCISES — code pur, sans culture générale]\nReturn each function using a Markdown header (### <exercise id>) followed by a ```javascript code block.\n\n[EXERCISE algo_facile_1]\nWrite a JavaScript function \"validerParentheses(s)\" that returns true if the parentheses in s are balanced (only \"(\" and \")\" are considered).\n\n[EXERCISE algo_facile_2]\nWrite a JavaScript function \"fibonacci(n)\" that returns the n-th Fibonacci number, with fibonacci(0)=0 and fibonacci(1)=1.\n\n[EXERCISE algo_moyen_1]\nWrite a JavaScript function \"motsUniques(s)\" that returns the number of distinct words (separated by whitespace) in the string.\n\n[EXERCISE algo_difficile_1]\nWrite a JavaScript function \"aplatirTableau(tab)\" that flattens an array of arrays by one level (e.g. [[1,2],[3]] -> [1,2,3]).\n\n[EXERCISE algo_defi]\nWrite a JavaScript function \"rotationDroite(tab, k)\" that returns the array rotated right by k positions (e.g. [1,2,3,4], 1 -> [4,1,2,3]).",
   "tasks": [
     {
       "id": "math",
@@ -98,77 +98,119 @@
       "points": 8
     },
     {
-      "id": "algo_facile_1_tier3",
-      "label": "Algorithmique - Variables et Types",
+      "id": "algo_facile_1",
+      "label": "Algorithmique — Parenthèses valides",
       "points": 10,
-      "hint": "Déclarez une variable et retournez sa valeur. Le type de la variable doit correspondre à ce qui est demandé.",
+      "hint": "Compteur +1 pour '(' et -1 pour ')' ; invalide si négatif ou non nul à la fin.",
       "evaluations": [
         {
           "type": "exec",
-          "description": "Retourne basique",
+          "description": "Balancées",
           "setup": "",
-          "call": "true",
+          "call": "validerParentheses('()')",
           "assert": "result === true"
+        },
+        {
+          "type": "exec",
+          "description": "Non fermée",
+          "setup": "",
+          "call": "validerParentheses('(')",
+          "assert": "result === false"
+        },
+        {
+          "type": "exec",
+          "description": "Inversées",
+          "setup": "",
+          "call": "validerParentheses(')(')",
+          "assert": "result === false"
         }
       ]
     },
     {
-      "id": "algo_facile_2_tier3",
-      "label": "Algorithmique - Opérations de base",
+      "id": "algo_facile_2",
+      "label": "Algorithmique — Fibonacci",
       "points": 10,
-      "hint": "Utilisez les opérateurs arithmétiques (+, -, *, /, %) pour calculer le résultat demandé.",
+      "hint": "fib(0)=0, fib(1)=1, fib(n)=fib(n-1)+fib(n-2). Itérez pour éviter la complexité exponentielle.",
       "evaluations": [
         {
           "type": "exec",
-          "description": "Vérification",
+          "description": "fib(7)",
           "setup": "",
-          "call": "true",
-          "assert": "result === true"
+          "call": "fibonacci(7)",
+          "assert": "result === 13"
+        },
+        {
+          "type": "exec",
+          "description": "fib(0)",
+          "setup": "",
+          "call": "fibonacci(0)",
+          "assert": "result === 0"
         }
       ]
     },
     {
-      "id": "algo_moyen_1_tier3",
-      "label": "Algorithmique - Conditions et Boucles",
+      "id": "algo_moyen_1",
+      "label": "Algorithmique — Mots uniques",
       "points": 10,
-      "hint": "Utilisez une boucle (for/while) et une condition (if/else) pour parcourir et filtrer les éléments selon le critère demandé.",
+      "hint": "Construisez un Set des mots (split sur les espaces) et renvoyez sa taille.",
       "evaluations": [
         {
           "type": "exec",
-          "description": "Logique moyenne",
+          "description": "Répétition",
           "setup": "",
-          "call": "true",
-          "assert": "result === true"
+          "call": "motsUniques('a a b')",
+          "assert": "result === 2"
+        },
+        {
+          "type": "exec",
+          "description": "Un seul",
+          "setup": "",
+          "call": "motsUniques('hello')",
+          "assert": "result === 1"
         }
       ]
     },
     {
-      "id": "algo_difficile_1_tier3",
-      "label": "Algorithmique - Structures de Données",
+      "id": "algo_difficile_1",
+      "label": "Algorithmique — Aplatir un tableau",
       "points": 15,
-      "hint": "Manipulez des tableaux ou objets imbriqués. Pensez à .reduce(), .map() ou des boucles imbriquées selon le besoin.",
+      "hint": "Utilisez .flat(1), ou concaténez chaque sous-tableau avec .concat / spread.",
       "evaluations": [
         {
           "type": "exec",
-          "description": "Logique difficile",
+          "description": "Imbriqué",
           "setup": "",
-          "call": "true",
-          "assert": "result === true"
+          "call": "aplatirTableau([[1, 2], [3]])",
+          "assert": "JSON.stringify(result) === '[1,2,3]'"
+        },
+        {
+          "type": "exec",
+          "description": "Vide",
+          "setup": "",
+          "call": "aplatirTableau([])",
+          "assert": "JSON.stringify(result) === '[]'"
         }
       ]
     },
     {
-      "id": "algo_defi_tier3",
-      "label": "Algorithmique - Défi d'Optimisation",
+      "id": "algo_defi",
+      "label": "Algorithmique — Rotation à droite",
       "points": 15,
-      "hint": "Cherchez une solution efficace (complexité O(n) ou O(n log n)). Évitez les boucles imbriquées inutiles (O(n²)).",
+      "hint": "tab.slice(-k).concat(tab.slice(0, -k)) effectue une rotation droite de k.",
       "evaluations": [
         {
           "type": "exec",
-          "description": "Défi",
+          "description": "Rotation 1",
           "setup": "",
-          "call": "true",
-          "assert": "result === true"
+          "call": "rotationDroite([1, 2, 3, 4], 1)",
+          "assert": "JSON.stringify(result) === '[4,1,2,3]'"
+        },
+        {
+          "type": "exec",
+          "description": "Pas de rotation",
+          "setup": "",
+          "call": "rotationDroite([1, 2, 3], 0)",
+          "assert": "JSON.stringify(result) === '[1,2,3]'"
         }
       ]
     }

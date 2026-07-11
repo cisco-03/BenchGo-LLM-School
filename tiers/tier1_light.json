@@ -6,7 +6,7 @@
     "LIGHT"
   ],
   "optional_for": [],
-  "prompt": "You are taking a TIER 1 technical evaluation.\n\nSolve 5 basic JavaScript exercises.\n\nReturn your answers in Markdown using headers for the exercise IDs and code blocks for the JavaScript functions.\n\n[EXERCISE 1-A: Subtraction]\nWrite a JavaScript function \"soustraire(a, b)\" that subtracts b from a and returns the result.\n\n[EXERCISE 1-B: Greater than 10]\nWrite a JavaScript function \"superieurA10(n)\" that returns true if n is strictly greater than 10, false otherwise.\n\n[EXERCISE 1-C: Concatenate]\nWrite a JavaScript function \"concatener(mot1, mot2)\" that returns the two words separated by a single space.\n\n[EXERCISE 1-D: Is empty string]\nWrite a JavaScript function \"estVide(chaine)\" that returns true if the string is empty (\"\"), false otherwise.\n\n[EXERCISE 1-E: Multiply by 2]\nWrite a JavaScript function \"multiplierPar2(n)\" that multiplies the given number by 2 and returns it.\n\nExpected Markdown format:\n### tache_X\n```javascript\nfunction solution() { ... }\n```",
+  "prompt": "You are taking a TIER 1 technical evaluation.\n\nSolve 5 basic JavaScript exercises.\n\nReturn your answers in Markdown using headers for the exercise IDs and code blocks for the JavaScript functions.\n\n[EXERCISE 1-A: Subtraction]\nWrite a JavaScript function \"soustraire(a, b)\" that subtracts b from a and returns the result.\n\n[EXERCISE 1-B: Greater than 10]\nWrite a JavaScript function \"superieurA10(n)\" that returns true if n is strictly greater than 10, false otherwise.\n\n[EXERCISE 1-C: Concatenate]\nWrite a JavaScript function \"concatener(mot1, mot2)\" that returns the two words separated by a single space.\n\n[EXERCISE 1-D: Is empty string]\nWrite a JavaScript function \"estVide(chaine)\" that returns true if the string is empty (\"\"), false otherwise.\n\n[EXERCISE 1-E: Multiply by 2]\nWrite a JavaScript function \"multiplierPar2(n)\" that multiplies the given number by 2 and returns it.\n\nExpected Markdown format:\n### tache_X\n```javascript\nfunction solution() { ... }\n```\n\n[ALGORITHMIC EXERCISES — code pur, sans culture générale]\nReturn each function using a Markdown header (### <exercise id>) followed by a ```javascript code block.\n\n[EXERCISE algo_facile_1]\nWrite a JavaScript function \"estMultipleDe(n, m)\" that returns true if n is a multiple of m (m !== 0), false otherwise.\n\n[EXERCISE algo_facile_2]\nWrite a JavaScript function \"puissance(base, exp)\" that returns base raised to the power exp (exp >= 0).\n\n[EXERCISE algo_moyen_1]\nWrite a JavaScript function \"compterPairs(tab)\" that returns the count of even numbers in the array.\n\n[EXERCISE algo_difficile_1]\nWrite a JavaScript function \"supprimerDoublons(tab)\" that returns a new array with duplicates removed, preserving first occurrence order.\n\n[EXERCISE algo_defi]\nWrite a JavaScript function \"sommePaires(tab)\" that returns the sum of all even numbers in the array.",
   "tasks": [
     {
       "id": "tache_1a",
@@ -128,72 +128,112 @@
       "points": 8
     },
     {
-      "id": "algo_facile_1_tier1",
-      "label": "Algorithmique - Variables et Types",
+      "id": "algo_facile_1",
+      "label": "Algorithmique — Multiplicité",
       "points": 10,
+      "hint": "n est multiple de m si n % m === 0 (et m !== 0).",
       "evaluations": [
         {
           "type": "exec",
-          "description": "Retourne basique",
+          "description": "Multiple",
           "setup": "",
-          "call": "true",
+          "call": "estMultipleDe(10, 5)",
           "assert": "result === true"
+        },
+        {
+          "type": "exec",
+          "description": "Non multiple",
+          "setup": "",
+          "call": "estMultipleDe(7, 3)",
+          "assert": "result === false"
         }
       ]
     },
     {
-      "id": "algo_facile_2_tier1",
-      "label": "Algorithmique - Opérations de base",
+      "id": "algo_facile_2",
+      "label": "Algorithmique — Puissance",
       "points": 10,
+      "hint": "Multipliez base par lui-même exp fois, ou utilisez l'opérateur **.",
       "evaluations": [
         {
           "type": "exec",
-          "description": "Vérification",
+          "description": "2^3",
           "setup": "",
-          "call": "true",
-          "assert": "result === true"
+          "call": "puissance(2, 3)",
+          "assert": "result === 8"
+        },
+        {
+          "type": "exec",
+          "description": "5^0",
+          "setup": "",
+          "call": "puissance(5, 0)",
+          "assert": "result === 1"
         }
       ]
     },
     {
-      "id": "algo_moyen_1_tier1",
-      "label": "Algorithmique - Conditions et Boucles",
+      "id": "algo_moyen_1",
+      "label": "Algorithmique — Comptage de pairs",
       "points": 10,
+      "hint": "Filtrez les éléments pairs (x % 2 === 0) et comptez-les.",
       "evaluations": [
         {
           "type": "exec",
-          "description": "Logique moyenne",
+          "description": "Mixte",
           "setup": "",
-          "call": "true",
-          "assert": "result === true"
+          "call": "compterPairs([1, 2, 3, 4])",
+          "assert": "result === 2"
+        },
+        {
+          "type": "exec",
+          "description": "Aucun pair",
+          "setup": "",
+          "call": "compterPairs([1, 3, 5])",
+          "assert": "result === 0"
         }
       ]
     },
     {
-      "id": "algo_difficile_1_tier1",
-      "label": "Algorithmique - Structures de Données",
+      "id": "algo_difficile_1",
+      "label": "Algorithmique — Suppression de doublons",
       "points": 15,
+      "hint": "Gardez la première occurrence : Set ou filter((v, i) => tab.indexOf(v) === i).",
       "evaluations": [
         {
           "type": "exec",
-          "description": "Logique difficile",
+          "description": "Avec doublons",
           "setup": "",
-          "call": "true",
-          "assert": "result === true"
+          "call": "supprimerDoublons([1, 2, 2, 3])",
+          "assert": "JSON.stringify(result) === '[1,2,3]'"
+        },
+        {
+          "type": "exec",
+          "description": "Tous identiques",
+          "setup": "",
+          "call": "supprimerDoublons([5, 5, 5])",
+          "assert": "JSON.stringify(result) === '[5]'"
         }
       ]
     },
     {
-      "id": "algo_defi_tier1",
-      "label": "Algorithmique - Défi d'Optimisation",
+      "id": "algo_defi",
+      "label": "Algorithmique — Somme des pairs",
       "points": 15,
+      "hint": "Filtrez les pairs puis réduisez par somme (ou boucle accumulatrice).",
       "evaluations": [
         {
           "type": "exec",
-          "description": "Défi",
+          "description": "Mixte",
           "setup": "",
-          "call": "true",
-          "assert": "result === true"
+          "call": "sommePaires([1, 2, 3, 4])",
+          "assert": "result === 6"
+        },
+        {
+          "type": "exec",
+          "description": "Aucun pair",
+          "setup": "",
+          "call": "sommePaires([1, 3])",
+          "assert": "result === 0"
         }
       ]
     }

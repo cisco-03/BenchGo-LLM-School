@@ -7,7 +7,7 @@
     "DOCTORAT"
   ],
   "optional_for": [],
-  "prompt": "You are taking a TIER 2 EXPERT evaluation — concurrency, reactive programming and optimization.\n\nSolve 5 JavaScript exercises. Return your answers in Markdown using headers for the exercise IDs and code blocks for the JavaScript functions.\n\n[2-A] Async function executerEnPool(taches, concurrence) — executes an array of async task functions with a concurrency limit. Returns an array of results in original order.\nExample: executerEnPool([()=>fetchA(), ()=>fetchB(), ()=>fetchC()], 2) runs max 2 at a time.\n\n[2-B] Function creerSubject() — a reactive Subject (like RxJS): has next(val), error(err), complete(), and subscribe({next, error, complete}). Multicasts to all subscribers.\n\n[2-C] Function memoiserAsync(fn) — memoize an async function. Concurrent calls with the same args while the first is pending should wait for the same Promise, not trigger duplicate calls.\n\n[2-D] Debugging — fix the following async race condition:\nasync function chargerUtilisateur(id) {\n  let resultat = null;\n  fetch('/api/user/' + id).then(r => r.json()).then(data => { resultat = data; });\n  return resultat;\n}\nBug: returns null because it doesn't await the fetch.\n\n[2-E] Function creerCircuitBreaker(fn, seuil, delaiResetMs) — circuit breaker pattern: after seuil consecutive failures, trips open and rejects all calls for delaiResetMs ms, then moves to half-open.\n\nExpected strict response format:\n{\n  \"tache_2a\": \"async function executerEnPool(taches, concurrence) { ... }\",\n  \"tache_2b\": \"function creerSubject() { ... }\",\n  \"tache_2c\": \"function memoiserAsync(fn) { ... }\",\n  \"tache_2d\": \"async function chargerUtilisateur(id) { ... }\",\n  \"tache_2e\": \"function creerCircuitBreaker(fn, seuil, delaiResetMs) { ... }\"\n}",
+  "prompt": "You are taking a TIER 2 EXPERT evaluation — concurrency, reactive programming and optimization.\n\nSolve 5 JavaScript exercises. Return your answers in Markdown using headers for the exercise IDs and code blocks for the JavaScript functions.\n\n[2-A] Async function executerEnPool(taches, concurrence) — executes an array of async task functions with a concurrency limit. Returns an array of results in original order.\nExample: executerEnPool([()=>fetchA(), ()=>fetchB(), ()=>fetchC()], 2) runs max 2 at a time.\n\n[2-B] Function creerSubject() — a reactive Subject (like RxJS): has next(val), error(err), complete(), and subscribe({next, error, complete}). Multicasts to all subscribers.\n\n[2-C] Function memoiserAsync(fn) — memoize an async function. Concurrent calls with the same args while the first is pending should wait for the same Promise, not trigger duplicate calls.\n\n[2-D] Debugging — fix the following async race condition:\nasync function chargerUtilisateur(id) {\n  let resultat = null;\n  fetch('/api/user/' + id).then(r => r.json()).then(data => { resultat = data; });\n  return resultat;\n}\nBug: returns null because it doesn't await the fetch.\n\n[2-E] Function creerCircuitBreaker(fn, seuil, delaiResetMs) — circuit breaker pattern: after seuil consecutive failures, trips open and rejects all calls for delaiResetMs ms, then moves to half-open.\n\nExpected strict response format:\n{\n  \"tache_2a\": \"async function executerEnPool(taches, concurrence) { ... }\",\n  \"tache_2b\": \"function creerSubject() { ... }\",\n  \"tache_2c\": \"function memoiserAsync(fn) { ... }\",\n  \"tache_2d\": \"async function chargerUtilisateur(id) { ... }\",\n  \"tache_2e\": \"function creerCircuitBreaker(fn, seuil, delaiResetMs) { ... }\"\n}\n\n[ALGORITHMIC EXERCISES — code pur, sans culture générale]\nReturn each function using a Markdown header (### <exercise id>) followed by a ```javascript code block.\n\n[EXERCISE algo_facile_1]\nWrite a JavaScript function \"estPalindrome(s)\" that returns true if the string reads the same backward (case-sensitive).\n\n[EXERCISE algo_facile_2]\nWrite a JavaScript function \"pgcd(a, b)\" that returns the greatest common divisor of a and b (both > 0).\n\n[EXERCISE algo_moyen_1]\nWrite a JavaScript function \"nombreMots(s)\" that returns the number of words separated by whitespace. Ignore leading/trailing spaces.\n\n[EXERCISE algo_difficile_1]\nWrite a JavaScript function \"fusionTriee(a, b)\" that merges two already-sorted arrays into one sorted array.\n\n[EXERCISE algo_defi]\nWrite a JavaScript function \"sontAnagrammes(a, b)\" that returns true if a and b are anagrams (same letters rearranged, case-sensitive).",
   "tasks": [
     {
       "id": "tache_2a",
@@ -108,72 +108,112 @@
       "points": 8
     },
     {
-      "id": "algo_facile_1_tier2",
-      "label": "Algorithmique - Variables et Types",
+      "id": "algo_facile_1",
+      "label": "Algorithmique — Palindrome",
       "points": 10,
+      "hint": "Comparez s à son inverse : s.split(\"\").reverse().join(\"\").",
       "evaluations": [
         {
           "type": "exec",
-          "description": "Retourne basique",
+          "description": "Palindrome",
           "setup": "",
-          "call": "true",
+          "call": "estPalindrome('kayak')",
           "assert": "result === true"
+        },
+        {
+          "type": "exec",
+          "description": "Non palindrome",
+          "setup": "",
+          "call": "estPalindrome('chat')",
+          "assert": "result === false"
         }
       ]
     },
     {
-      "id": "algo_facile_2_tier2",
-      "label": "Algorithmique - Opérations de base",
+      "id": "algo_facile_2",
+      "label": "Algorithmique — PGCD",
       "points": 10,
+      "hint": "Algorithme d'Euclide : tant que b !== 0, [a, b] = [b, a % b] ; renvoyez a.",
       "evaluations": [
         {
           "type": "exec",
-          "description": "Vérification",
+          "description": "48 et 18",
           "setup": "",
-          "call": "true",
-          "assert": "result === true"
+          "call": "pgcd(48, 18)",
+          "assert": "result === 6"
+        },
+        {
+          "type": "exec",
+          "description": "Premiers entre eux",
+          "setup": "",
+          "call": "pgcd(7, 5)",
+          "assert": "result === 1"
         }
       ]
     },
     {
-      "id": "algo_moyen_1_tier2",
-      "label": "Algorithmique - Conditions et Boucles",
+      "id": "algo_moyen_1",
+      "label": "Algorithmique — Nombre de mots",
       "points": 10,
+      "hint": "s.trim().split(/\\s+/).filter(Boolean).length donne le nombre de mots.",
       "evaluations": [
         {
           "type": "exec",
-          "description": "Logique moyenne",
+          "description": "3 mots",
           "setup": "",
-          "call": "true",
-          "assert": "result === true"
+          "call": "nombreMots('le chat noir')",
+          "assert": "result === 3"
+        },
+        {
+          "type": "exec",
+          "description": "1 mot",
+          "setup": "",
+          "call": "nombreMots('un')",
+          "assert": "result === 1"
         }
       ]
     },
     {
-      "id": "algo_difficile_1_tier2",
-      "label": "Algorithmique - Structures de Données",
+      "id": "algo_difficile_1",
+      "label": "Algorithmique — Fusion triée",
       "points": 15,
+      "hint": "Deux pointeurs : comparez les têtes et prenez la plus petite à chaque pas.",
       "evaluations": [
         {
           "type": "exec",
-          "description": "Logique difficile",
+          "description": "Deux tableaux",
           "setup": "",
-          "call": "true",
-          "assert": "result === true"
+          "call": "fusionTriee([1, 3], [2, 4])",
+          "assert": "JSON.stringify(result) === '[1,2,3,4]'"
+        },
+        {
+          "type": "exec",
+          "description": "Un vide",
+          "setup": "",
+          "call": "fusionTriee([], [1])",
+          "assert": "JSON.stringify(result) === '[1]'"
         }
       ]
     },
     {
-      "id": "algo_defi_tier2",
-      "label": "Algorithmique - Défi d'Optimisation",
+      "id": "algo_defi",
+      "label": "Algorithmique — Anagrammes",
       "points": 15,
+      "hint": "Triez les caractères des deux chaînes et comparez-les.",
       "evaluations": [
         {
           "type": "exec",
-          "description": "Défi",
+          "description": "Anagrammes",
           "setup": "",
-          "call": "true",
+          "call": "sontAnagrammes('chien', 'niche')",
           "assert": "result === true"
+        },
+        {
+          "type": "exec",
+          "description": "Pas anagrammes",
+          "setup": "",
+          "call": "sontAnagrammes('a', 'b')",
+          "assert": "result === false"
         }
       ]
     }

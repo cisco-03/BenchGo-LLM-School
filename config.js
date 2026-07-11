@@ -3,6 +3,7 @@ const LM_STUDIO_API_URL = "http://localhost:1234/v1/chat/completions";
 const LM_STUDIO_MODELS_URL = "http://localhost:1234/v1/models";
 const EVAL_TIMEOUT_MS = 5000;
 const API_TIMEOUT_MS = 900000;
+const OPTIONAL_BONUS_PCT = 0.20; // Bonus appliqué aux exercices optionnels réussis (20% des points de base)
 
 const PROFILES = {
   LIGHT:    { mandatory: [0, 1],          optional: [2, 3, 4, 5],    label: "LIGHT — Primaire (< 3B paramètres)",                      ecole: "Primaire"    },
@@ -116,6 +117,7 @@ module.exports = {
   LM_STUDIO_MODELS_URL,
   EVAL_TIMEOUT_MS,
   API_TIMEOUT_MS,
+  OPTIONAL_BONUS_PCT,
   PROFILES,
   CLASSE_NAMES,
   SPINNER_FRAMES,

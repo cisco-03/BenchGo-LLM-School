@@ -6,7 +6,7 @@
   "optional_for": [
     "LIGHT"
   ],
-  "prompt": "You are taking a TIER 4 technical evaluation.\n\nSolve 5 basic JavaScript exercises.\n\nReturn your answers in Markdown using headers for the exercise IDs and code blocks for the JavaScript functions.\n\n[EXERCISE 4-A: Max in array]\nWrite a JavaScript function \"trouverMaximum(tableau)\" that takes an array of numbers and returns the largest.\n\n[EXERCISE 4-B: Reverse string]\nWrite a JavaScript function \"inverserChaine(chaine)\" that returns the reversed string.\n\n[EXERCISE 4-C: Count vowels]\nWrite a JavaScript function \"compterVoyelles(chaine)\" that counts the number of vowels (a, e, i, o, u) in a string. Case-insensitive. Do not count 'y'.\n\n[EXERCISE 4-D: Filter positive]\nWrite a JavaScript function \"filtrerPositifs(tableau)\" that returns a new array containing only the strictly positive numbers (> 0) from the input array.\n\n[EXERCISE 4-E: Repeat string]\nWrite a JavaScript function \"repeterChaine(chaine, n)\" that repeats the string n times and returns the result. If n <= 0, return an empty string.\n\nExpected Markdown format:\n### tache_X\n```javascript\nfunction solution() { ... }\n```",
+  "prompt": "You are taking a TIER 4 technical evaluation.\n\nSolve 5 basic JavaScript exercises.\n\nReturn your answers in Markdown using headers for the exercise IDs and code blocks for the JavaScript functions.\n\n[EXERCISE 4-A: Max in array]\nWrite a JavaScript function \"trouverMaximum(tableau)\" that takes an array of numbers and returns the largest.\n\n[EXERCISE 4-B: Reverse string]\nWrite a JavaScript function \"inverserChaine(chaine)\" that returns the reversed string.\n\n[EXERCISE 4-C: Count vowels]\nWrite a JavaScript function \"compterVoyelles(chaine)\" that counts the number of vowels (a, e, i, o, u) in a string. Case-insensitive. Do not count 'y'.\n\n[EXERCISE 4-D: Filter positive]\nWrite a JavaScript function \"filtrerPositifs(tableau)\" that returns a new array containing only the strictly positive numbers (> 0) from the input array.\n\n[EXERCISE 4-E: Repeat string]\nWrite a JavaScript function \"repeterChaine(chaine, n)\" that repeats the string n times and returns the result. If n <= 0, return an empty string.\n\nExpected Markdown format:\n### tache_X\n```javascript\nfunction solution() { ... }\n```\n\n[ALGORITHMIC EXERCISES — code pur, sans culture générale]\nReturn each function using a Markdown header (### <exercise id>) followed by a ```javascript code block.\n\n[EXERCISE algo_facile_1]\nWrite a JavaScript function \"capitaliserMots(s)\" that capitalizes the first letter of each word and lowercases the rest (words separated by single spaces).\n\n[EXERCISE algo_facile_2]\nWrite a JavaScript function \"sommeChiffres(n)\" that returns the sum of the decimal digits of n (n >= 0).\n\n[EXERCISE algo_moyen_1]\nWrite a JavaScript function \"grouperParParite(tab)\" that returns an object { pairs: [even numbers], impairs: [odd numbers] } preserving order.\n\n[EXERCISE algo_difficile_1]\nWrite a JavaScript function \"plusLongMot(s)\" that returns the longest word (separated by spaces). On a tie, return the first one. Return \"\" for an empty string.\n\n[EXERCISE algo_defi]\nWrite a JavaScript function \"mediane(tab)\" that returns the median of an array of numbers. Odd length: the middle value; even length: the average of the two middle values.",
   "tasks": [
     {
       "id": "tache_4a",
@@ -121,72 +121,112 @@
       "points": 8
     },
     {
-      "id": "algo_facile_1_tier4",
-      "label": "Algorithmique - Variables et Types",
+      "id": "algo_facile_1",
+      "label": "Algorithmique — Capitaliser les mots",
       "points": 10,
+      "hint": "Pour chaque mot : charAt(0).toUpperCase() + slice(1).toLowerCase(), puis join(' ').",
       "evaluations": [
         {
           "type": "exec",
-          "description": "Retourne basique",
+          "description": "Deux mots",
           "setup": "",
-          "call": "true",
-          "assert": "result === true"
+          "call": "capitaliserMots('bonjour monde')",
+          "assert": "result === 'Bonjour Monde'"
+        },
+        {
+          "type": "exec",
+          "description": "Majuscules",
+          "setup": "",
+          "call": "capitaliserMots('HELLO')",
+          "assert": "result === 'Hello'"
         }
       ]
     },
     {
-      "id": "algo_facile_2_tier4",
-      "label": "Algorithmique - Opérations de base",
+      "id": "algo_facile_2",
+      "label": "Algorithmique — Somme des chiffres",
       "points": 10,
+      "hint": "Convertir en chaîne et additionner Number(c) de chaque caractère, ou modulo 10 et division.",
       "evaluations": [
         {
           "type": "exec",
-          "description": "Vérification",
+          "description": "1234",
           "setup": "",
-          "call": "true",
-          "assert": "result === true"
+          "call": "sommeChiffres(1234)",
+          "assert": "result === 10"
+        },
+        {
+          "type": "exec",
+          "description": "Zéro",
+          "setup": "",
+          "call": "sommeChiffres(0)",
+          "assert": "result === 0"
         }
       ]
     },
     {
-      "id": "algo_moyen_1_tier4",
-      "label": "Algorithmique - Conditions et Boucles",
+      "id": "algo_moyen_1",
+      "label": "Algorithmique — Grouper par parité",
       "points": 10,
+      "hint": "Retournez { pairs: tab.filter(x => x % 2 === 0), impairs: tab.filter(x => x % 2 !== 0) }.",
       "evaluations": [
         {
           "type": "exec",
-          "description": "Logique moyenne",
+          "description": "Mixte",
           "setup": "",
-          "call": "true",
-          "assert": "result === true"
+          "call": "grouperParParite([2, 4, 5])",
+          "assert": "result.pairs.length === 2 && result.impairs.length === 1"
+        },
+        {
+          "type": "exec",
+          "description": "Tous pairs",
+          "setup": "",
+          "call": "grouperParParite([2, 4, 6])",
+          "assert": "result.pairs.length === 3 && result.impairs.length === 0"
         }
       ]
     },
     {
-      "id": "algo_difficile_1_tier4",
-      "label": "Algorithmique - Structures de Données",
+      "id": "algo_difficile_1",
+      "label": "Algorithmique — Mot le plus long",
       "points": 15,
+      "hint": "Split par espaces, gardez le mot de longueur maximale (premier en cas d'égalité).",
       "evaluations": [
         {
           "type": "exec",
-          "description": "Logique difficile",
+          "description": "Phrase",
           "setup": "",
-          "call": "true",
-          "assert": "result === true"
+          "call": "plusLongMot('le chat noir superbe')",
+          "assert": "result === 'superbe'"
+        },
+        {
+          "type": "exec",
+          "description": "Égalité",
+          "setup": "",
+          "call": "plusLongMot('aa bb')",
+          "assert": "result === 'aa'"
         }
       ]
     },
     {
-      "id": "algo_defi_tier4",
-      "label": "Algorithmique - Défi d'Optimisation",
+      "id": "algo_defi",
+      "label": "Algorithmique — Médiane",
       "points": 15,
+      "hint": "Triez d'abord, puis prenez le milieu (ou moyenne des deux milieux pour longueur paire).",
       "evaluations": [
         {
           "type": "exec",
-          "description": "Défi",
+          "description": "Impair",
           "setup": "",
-          "call": "true",
-          "assert": "result === true"
+          "call": "mediane([1, 2, 3])",
+          "assert": "result === 2"
+        },
+        {
+          "type": "exec",
+          "description": "Pair",
+          "setup": "",
+          "call": "mediane([1, 2, 3, 4])",
+          "assert": "result === 2.5"
         }
       ]
     }

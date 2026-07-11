@@ -7,7 +7,7 @@
     "DOCTORAT"
   ],
   "optional_for": [],
-  "prompt": "You are taking a TIER 0 EXPERT evaluation — classic algorithms and advanced closures.\n\nSolve 5 JavaScript exercises. Return your answers in Markdown using headers for the exercise IDs and code blocks for the JavaScript functions.\n\n[EXERCISE 0-A: Curry]\nWrite a JavaScript function \"curry(fn)\" that transforms a multi-argument function into a curried version. It should auto-execute when all arguments are provided.\nExample: const add = curry((a,b,c) => a+b+c); add(1)(2)(3) must return 6. add(1,2)(3) must also return 6.\n\n[EXERCISE 0-B: Deep equal]\nWrite a JavaScript function \"egalProfond(a, b)\" that performs a deep equality check between two values (objects, arrays, primitives). Returns true if structurally identical.\nExample: egalProfond({a:{b:1}}, {a:{b:1}}) must return true.\n\n[EXERCISE 0-C: Compose]\nWrite a JavaScript function \"composer(...fns)\" that composes functions right to left. composer(f, g, h)(x) = f(g(h(x))).\nExample: composer(x => x+1, x => x*2)(3) must return 7.\n\n[EXERCISE 0-D: Binary search tree insert+search]\nWrite a JavaScript class or factory \"creerBST()\" that returns an object with: insert(val) to add a node, contains(val) to check if a value exists. Uses a binary search tree structure internally.\n\n[EXERCISE 0-E: Debounce with immediate option]\nWrite a JavaScript function \"debounce(fn, delai, immediat)\" — standard debounce but if immediat=true, executes fn on the leading edge (first call) instead of trailing.\nExample: with immediat=true, the first call fires immediately; subsequent calls within delai are ignored.\n\nExpected Markdown format:\n### tache_X\n```javascript\nfunction solution() { ... }\n```",
+  "prompt": "You are taking a TIER 0 EXPERT evaluation — classic algorithms and advanced closures.\n\nSolve 5 JavaScript exercises. Return your answers in Markdown using headers for the exercise IDs and code blocks for the JavaScript functions.\n\n[EXERCISE 0-A: Curry]\nWrite a JavaScript function \"curry(fn)\" that transforms a multi-argument function into a curried version. It should auto-execute when all arguments are provided.\nExample: const add = curry((a,b,c) => a+b+c); add(1)(2)(3) must return 6. add(1,2)(3) must also return 6.\n\n[EXERCISE 0-B: Deep equal]\nWrite a JavaScript function \"egalProfond(a, b)\" that performs a deep equality check between two values (objects, arrays, primitives). Returns true if structurally identical.\nExample: egalProfond({a:{b:1}}, {a:{b:1}}) must return true.\n\n[EXERCISE 0-C: Compose]\nWrite a JavaScript function \"composer(...fns)\" that composes functions right to left. composer(f, g, h)(x) = f(g(h(x))).\nExample: composer(x => x+1, x => x*2)(3) must return 7.\n\n[EXERCISE 0-D: Binary search tree insert+search]\nWrite a JavaScript class or factory \"creerBST()\" that returns an object with: insert(val) to add a node, contains(val) to check if a value exists. Uses a binary search tree structure internally.\n\n[EXERCISE 0-E: Debounce with immediate option]\nWrite a JavaScript function \"debounce(fn, delai, immediat)\" — standard debounce but if immediat=true, executes fn on the leading edge (first call) instead of trailing.\nExample: with immediat=true, the first call fires immediately; subsequent calls within delai are ignored.\n\nExpected Markdown format:\n### tache_X\n```javascript\nfunction solution() { ... }\n```\n\n[ALGORITHMIC EXERCISES — code pur, sans culture générale]\nReturn each function using a Markdown header (### <exercise id>) followed by a ```javascript code block.\n\n[EXERCISE algo_facile_1]\nWrite a JavaScript function \"estPair(n)\" that returns true if n is even, false otherwise.\n\n[EXERCISE algo_facile_2]\nWrite a JavaScript function \"carre(n)\" that returns n multiplied by itself.\n\n[EXERCISE algo_moyen_1]\nWrite a JavaScript function \"somme1aN(n)\" that returns the sum of all integers from 1 to n (n >= 1).\n\n[EXERCISE algo_difficile_1]\nWrite a JavaScript function \"inverserChaine(s)\" that returns the string reversed (e.g. \"abc\" -> \"cba\").\n\n[EXERCISE algo_defi]\nWrite a JavaScript function \"valeurMax(tab)\" that returns the largest number in a non-empty array.",
   "tasks": [
     {
       "id": "tache_0a",
@@ -157,72 +157,112 @@
       "points": 8
     },
     {
-      "id": "algo_facile_1_tier0",
-      "label": "Algorithmique - Variables et Types",
+      "id": "algo_facile_1",
+      "label": "Algorithmique — Parité",
       "points": 10,
+      "hint": "Un nombre est pair si le reste de sa division par 2 vaut 0 : n % 2 === 0.",
       "evaluations": [
         {
           "type": "exec",
-          "description": "Retourne basique",
+          "description": "Pair",
           "setup": "",
-          "call": "true",
+          "call": "estPair(4)",
           "assert": "result === true"
+        },
+        {
+          "type": "exec",
+          "description": "Impair",
+          "setup": "",
+          "call": "estPair(7)",
+          "assert": "result === false"
         }
       ]
     },
     {
-      "id": "algo_facile_2_tier0",
-      "label": "Algorithmique - Opérations de base",
+      "id": "algo_facile_2",
+      "label": "Algorithmique — Carré",
       "points": 10,
+      "hint": "Le carré d'un nombre est le nombre multiplié par lui-même : n * n.",
       "evaluations": [
         {
           "type": "exec",
-          "description": "Vérification",
+          "description": "Positif",
           "setup": "",
-          "call": "true",
-          "assert": "result === true"
+          "call": "carre(6)",
+          "assert": "result === 36"
+        },
+        {
+          "type": "exec",
+          "description": "Zéro",
+          "setup": "",
+          "call": "carre(0)",
+          "assert": "result === 0"
         }
       ]
     },
     {
-      "id": "algo_moyen_1_tier0",
-      "label": "Algorithmique - Conditions et Boucles",
+      "id": "algo_moyen_1",
+      "label": "Algorithmique — Somme 1..N",
       "points": 10,
+      "hint": "Boucle de 1 à n en accumulant, ou formule n * (n + 1) / 2.",
       "evaluations": [
         {
           "type": "exec",
-          "description": "Logique moyenne",
+          "description": "Somme 5",
           "setup": "",
-          "call": "true",
-          "assert": "result === true"
+          "call": "somme1aN(5)",
+          "assert": "result === 15"
+        },
+        {
+          "type": "exec",
+          "description": "Somme 1",
+          "setup": "",
+          "call": "somme1aN(1)",
+          "assert": "result === 1"
         }
       ]
     },
     {
-      "id": "algo_difficile_1_tier0",
-      "label": "Algorithmique - Structures de Données",
+      "id": "algo_difficile_1",
+      "label": "Algorithmique — Inversion de chaîne",
       "points": 15,
+      "hint": "s.split(\"\").reverse().join(\"\") inverse les caractères d'une chaîne.",
       "evaluations": [
         {
           "type": "exec",
-          "description": "Logique difficile",
+          "description": "Mot",
           "setup": "",
-          "call": "true",
-          "assert": "result === true"
+          "call": "inverserChaine('abc')",
+          "assert": "result === 'cba'"
+        },
+        {
+          "type": "exec",
+          "description": "Un caractère",
+          "setup": "",
+          "call": "inverserChaine('x')",
+          "assert": "result === 'x'"
         }
       ]
     },
     {
-      "id": "algo_defi_tier0",
-      "label": "Algorithmique - Défi d'Optimisation",
+      "id": "algo_defi",
+      "label": "Algorithmique — Maximum d'un tableau",
       "points": 15,
+      "hint": "Parcourez en gardant la plus grande valeur, ou Math.max(...tab).",
       "evaluations": [
         {
           "type": "exec",
-          "description": "Défi",
+          "description": "Positifs",
           "setup": "",
-          "call": "true",
-          "assert": "result === true"
+          "call": "valeurMax([3, 9, 2])",
+          "assert": "result === 9"
+        },
+        {
+          "type": "exec",
+          "description": "Négatifs",
+          "setup": "",
+          "call": "valeurMax([-1, -5, -3])",
+          "assert": "result === -1"
         }
       ]
     }

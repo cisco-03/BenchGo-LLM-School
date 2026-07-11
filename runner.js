@@ -3,7 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const readline = require('readline');
 const logger = require('./logger');
-const { PROFILES, CLASSE_NAMES, parseCliArgs, detectProfileFromModelName, fetchModelNameFromLMStudio } = require('./config');
+const { PROFILES, CLASSE_NAMES, parseCliArgs, detectProfileFromModelName, fetchModelNameFromLMStudio, OPTIONAL_BONUS_PCT } = require('./config');
 const { ProgressBar, Spinner, letterGrade } = require('./progress-bar');
 const { extractJSON, extractCodeRegex } = require('./parsing-utils');
 const { queryLLM: queryLLMLocal } = require('./lm-studio-client');
@@ -12,6 +12,7 @@ const { loadTiers } = require('./tier-loader');
 const { evaluateTask } = require('./task-evaluator');
 const { buildTierReport, shortenModelName } = require('./report-generator');
 const { updateTiers } = require('./auto-updater');
+const scoreLedger = require('./score-ledger');
 
 const DEFAULT_CONTEXT_LIMIT_TOKENS = 16384;
 const MAX_RATTRAPAGE_ATTEMPTS = 1;
@@ -78,19 +79,22 @@ function printScorecard(scorecard, ecoleLabel, isFinal, globalLifeScore) {
 
   let totalScore = 0;
   let totalMax = 0;
+  let totalBonus = 0;
 
   for (const entry of scorecard) {
     totalScore += entry.score;
     totalMax += entry.max;
+    totalBonus += entry.optionalBonus || 0;
     const pct = entry.max > 0 ? Math.round((entry.score / entry.max) * 100) : 0;
     const gradeInfo = letterGrade(pct);
     const optTag = entry.mandatory ? '' : ' (opt.)';
     const statusIcon = entry.passed ? '\x1b[32m✔ Validé\x1b[0m' : '\x1b[31m✘ Échec\x1b[0m';
     const annTag = (entry.annotations && entry.annotations.length > 0) ? ` \x1b[33m[${entry.annotations.join(', ')}]\x1b[0m` : '';
+    const bonusTag = (entry.optionalBonus > 0) ? ` \x1b[35m[+${entry.optionalBonus} bonus]\x1b[0m` : '';
     const pointsStr = `${entry.score}/${entry.max}`;
     console.log(
       `  ${entry.className.padEnd(18)}${pointsStr.padStart(12)}${(pct + '%').padStart(7)}  ` +
-      `${gradeInfo.color}${gradeInfo.grade}\x1b[0m      ${statusIcon}${optTag}${annTag}`
+      `${gradeInfo.color}${gradeInfo.grade}\x1b[0m      ${statusIcon}${optTag}${annTag}${bonusTag}`
     );
   }
 
@@ -98,9 +102,10 @@ function printScorecard(scorecard, ecoleLabel, isFinal, globalLifeScore) {
     const totalPct = totalMax > 0 ? Math.round((totalScore / totalMax) * 100) : 0;
     const totalGrade = letterGrade(totalPct);
     console.log(`  \x1b[90m${'─'.repeat(58)}\x1b[0m`);
+    const bonusLine = totalBonus > 0 ? ` \x1b[35m(+${totalBonus} bonus opt.)\x1b[0m` : '';
     console.log(
       `  \x1b[1m${'TOTAL ÉCOLE'.padEnd(18)}${`${totalScore}/${totalMax}`.padStart(12)}${(totalPct + '%').padStart(7)}  ` +
-      `${totalGrade.color}${totalGrade.grade}\x1b[0m\x1b[1m  (Santé: ${globalLifeScore} PV)\x1b[0m`
+      `${totalGrade.color}${totalGrade.grade}\x1b[0m\x1b[1m  (Santé: ${globalLifeScore} PV)${bonusLine}\x1b[0m`
     );
   }
   console.log('');
@@ -113,15 +118,18 @@ function buildScorecardReport(scorecard, ecoleLabel, globalLifeScore) {
 
   let totalScore = 0;
   let totalMax = 0;
+  let totalBonus = 0;
 
   for (const entry of scorecard) {
     totalScore += entry.score;
     totalMax += entry.max;
+    totalBonus += entry.optionalBonus || 0;
     const pct = entry.max > 0 ? Math.round((entry.score / entry.max) * 100) : 0;
     const gradeInfo = letterGrade(pct);
     const status = entry.passed ? '✔ Validé' : '✘ Échec';
     const mandatory = entry.mandatory ? 'Oui' : 'Optionnel';
-    const ann = (entry.annotations && entry.annotations.length > 0) ? entry.annotations.join(', ') : '—';
+    let ann = (entry.annotations && entry.annotations.length > 0) ? entry.annotations.join(', ') : '—';
+    if (entry.optionalBonus > 0) ann += ` (+${entry.optionalBonus} bonus opt.)`;
     report += `| ${entry.className} | ${entry.score}/${entry.max} | ${pct}% | ${gradeInfo.grade} | ${status} | ${mandatory} | ${ann} |\n`;
   }
 
@@ -130,6 +138,7 @@ function buildScorecardReport(scorecard, ecoleLabel, globalLifeScore) {
     const totalGrade = letterGrade(totalPct);
     report += `| **TOTAL ÉCOLE** | **${totalScore}/${totalMax}** | **${totalPct}%** | **${totalGrade.grade}** | | | |\n`;
     report += `\n> **Santé Globale finale :** ${globalLifeScore} PV\n`;
+    if (totalBonus > 0) report += `> **Bonus optionnel :** +${totalBonus} points (au-delà du quota)\n`;
   }
 
   report += `\n---\n`;
@@ -179,6 +188,7 @@ async function runTierAttempt({ tierNum, tierData, isMandatory, profileArg, cont
   const taskHelpUsed = {};
   const taskHelpOffered = {};
   const taskLastError = {};
+  let optionalBonusTotal = 0;
   let responseModelName = null;
   let rawResponseAll = '';
   
@@ -370,7 +380,14 @@ async function runTierAttempt({ tierNum, tierData, isMandatory, profileArg, cont
              tierScore += pts;
              gameState.globalLifeScore += pts;
              taskNetPoints[task.id] = (taskNetPoints[task.id] || 0) + pts;
-             console.log(`  \x1b[32m✔ Succès ! +${pts} Points (Tier: ${tierScore}, Santé: ${gameState.globalLifeScore})\x1b[0m`);
+             let _bonusTag = '';
+             if (!isMandatory) {
+               const bonus = Math.round(pts * OPTIONAL_BONUS_PCT);
+               gameState.globalLifeScore += bonus;
+               optionalBonusTotal += bonus;
+               _bonusTag = ` (+${bonus} bonus opt.)`;
+             }
+             console.log(`  \x1b[32m✔ Succès ! +${pts}${_bonusTag} Points (Tier: ${tierScore}, Santé: ${gameState.globalLifeScore})\x1b[0m`);
 
              // Verbosité logic
              if (studentCode && studentCode.length > 0 && rawResponse.length > studentCode.length * 4) {
@@ -489,7 +506,8 @@ async function runTierAttempt({ tierNum, tierData, isMandatory, profileArg, cont
     helpUsedCount,
     retriedCount,
     tierAnnotations,
-    responseModelName
+    responseModelName,
+    optionalBonus: optionalBonusTotal
   };
 }
 
@@ -601,6 +619,7 @@ async function main() {
   let globalScore = { passed: 0, total: 0, mandatoryPassed: 0, mandatoryTotal: 0 };
   let globalHelpCount = 0;
   let globalRetriedCount = 0;
+  let globalOptionalBonus = 0;
   // Le rattrapage est désactivé en mode cloud (coût par appel API)
   const rattrapageEnabled = !isCloudMode && isRattrapageEligibleProfile(profileArg);
 
@@ -708,10 +727,12 @@ async function main() {
       mandatory: isMandatory,
       helpUsedCount: bestResult.helpUsedCount || 0,
       retriedCount: bestResult.retriedCount || 0,
+      optionalBonus: bestResult.optionalBonus || 0,
       annotations: bestResult.tierAnnotations || []
     });
     globalHelpCount += bestResult.helpUsedCount || 0;
     globalRetriedCount += bestResult.retriedCount || 0;
+    globalOptionalBonus += bestResult.optionalBonus || 0;
     printScorecard(tierScorecard, ecoleLabel, false, gameState.globalLifeScore);
 
     if (stopGlobalEval) {
@@ -743,6 +764,10 @@ async function main() {
   console.log(`\x1b[36m\u2551  SCORE OBLIGATOIRE    : ${mandatoryScoreStr.padEnd(25)} \x1b[0m`);
   console.log(`\x1b[36m\u2551  NOTE GLOBALE         : ${globalGradeInfo.color}\x1b[1m\u2588\u2588 ${globalGradeInfo.grade.padEnd(3)} \u2588\u2588\x1b[0m\x1b[36m                          \x1b[0m`);
   console.log(`\x1b[36m\u2551  NOTE OBLIGATOIRE     : ${mandatoryGradeInfo.color}\x1b[1m\u2588\u2588 ${mandatoryGradeInfo.grade.padEnd(3)} \u2588\u2588\x1b[0m\x1b[36m                          \x1b[0m`);
+
+  if (globalOptionalBonus > 0) {
+    console.log(`\x1b[36m\u2551  \x1b[35m+ Bonus optionnel : ${globalOptionalBonus} points (exercices optionnels réussis)\x1b[0m`);
+  }
 
   if (globalHelpCount > 0 || globalRetriedCount > 0) {
     const parts = [];
@@ -776,6 +801,10 @@ async function main() {
   globalReport += `| Score obligatoire | ${mandatoryScoreStr} | ${mandatoryGradeInfo.grade} |\n`;
   globalReport += `| Verdict | ${verdictPct >= 80 ? 'RECOMMANDÉ' : verdictPct >= 50 ? 'PARTIEL' : 'NON RECOMMANDÉ'} | ${hasMandatory ? mandatoryGradeInfo.grade : globalGradeInfo.grade} |\n`;
 
+  if (globalOptionalBonus > 0) {
+    globalReport += `| Bonus optionnel | +${globalOptionalBonus} points | — |\n`;
+  }
+
   if (globalHelpCount > 0 || globalRetriedCount > 0) {
     const parts = [];
     if (globalHelpCount > 0) parts.push(`**avec aide** (${globalHelpCount} exercice${globalHelpCount > 1 ? 's' : ''})`);
@@ -808,11 +837,39 @@ async function main() {
 
   fs.mkdirSync(targetDir, { recursive: true });
   const outputPath = path.join(targetDir, filename);
-  fs.writeFileSync(outputPath, globalReport, 'utf8');
   const relPath = path.relative(__dirname, outputPath);
+
+  // --- Carnet de scores persistant (cumul multi-écoles) ---
+  const effectiveModel = (modelName !== "Modele_En_Attente") ? modelName : (cloudModel || null);
+  if (effectiveModel && tierArg === "all") {
+    const ecoleResult = {
+      profile: profileArg,
+      ecole: ecole,
+      score: globalScore.passed,
+      max: globalScore.total,
+      pct: pctGlobal,
+      mandatoryPassed: globalScore.mandatoryPassed,
+      mandatoryTotal: globalScore.mandatoryTotal,
+      globalLifeScore: gameState.globalLifeScore,
+      optionalBonus: globalOptionalBonus,
+      helpCount: globalHelpCount,
+      retriedCount: globalRetriedCount,
+      date: dateStr,
+      reportFile: relPath
+    };
+    const bilanMd = scoreLedger.saveAndBuildBilan(shortName, effectiveModel, ecoleResult);
+    if (bilanMd) globalReport += bilanMd;
+  }
+
+  fs.writeFileSync(outputPath, globalReport, 'utf8');
   const logRelPath = path.relative(__dirname, logger.getFilePath());
   console.log(`  \x1b[32mRapport sauvegardé : ${relPath}\x1b[0m`);
   console.log(`  \x1b[90mFichier de log    : ${logRelPath}\x1b[0m\n`);
+
+  // --- Bilan global multi-écoles (console) ---
+  if (effectiveModel && tierArg === "all") {
+    scoreLedger.printBilanGlobal(shortName, effectiveModel);
+  }
 
   logger.info(`Benchmark terminé. Score global : ${globalScore.passed}/${globalScore.total} (${pctGlobal}%). Score obligatoire : ${globalScore.mandatoryPassed}/${globalScore.mandatoryTotal} (${pctMandatory}%).`);
   logger.close();

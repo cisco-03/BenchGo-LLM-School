@@ -6,7 +6,7 @@
     "LIGHT"
   ],
   "optional_for": [],
-  "prompt": "You are taking a TIER 0 technical evaluation — the simplest level.\n\nSolve 5 basic JavaScript exercises (no TypeScript, no frameworks). Write each requested function.\n\nReturn your answers in Markdown using headers for the exercise IDs and code blocks for the JavaScript functions.\n\n[EXERCISE 0-A: Return text]\nWrite a JavaScript function \"direBonjour()\" that takes no parameters and returns the string \"Bonjour\".\n\n[EXERCISE 0-B: Return boolean]\nWrite a JavaScript function \"retournerVrai()\" that takes no parameters and returns the boolean true.\n\n[EXERCISE 0-C: Return number]\nWrite a JavaScript function \"retourner42()\" that takes no parameters and returns the number 42.\n\n[EXERCISE 0-D: Addition]\nWrite a JavaScript function \"additionner(a, b)\" that takes two numbers and returns their sum.\n\n[EXERCISE 0-E: Identity function]\nWrite a JavaScript function \"identite(x)\" that takes one parameter and returns it exactly as it is.\n\nExpected Markdown format:\n### tache_X\n```javascript\nfunction solution() { ... }\n```",
+  "prompt": "You are taking a TIER 0 technical evaluation — the simplest level.\n\nSolve 5 basic JavaScript exercises (no TypeScript, no frameworks). Write each requested function.\n\nReturn your answers in Markdown using headers for the exercise IDs and code blocks for the JavaScript functions.\n\n[EXERCISE 0-A: Return text]\nWrite a JavaScript function \"direBonjour()\" that takes no parameters and returns the string \"Bonjour\".\n\n[EXERCISE 0-B: Return boolean]\nWrite a JavaScript function \"retournerVrai()\" that takes no parameters and returns the boolean true.\n\n[EXERCISE 0-C: Return number]\nWrite a JavaScript function \"retourner42()\" that takes no parameters and returns the number 42.\n\n[EXERCISE 0-D: Addition]\nWrite a JavaScript function \"additionner(a, b)\" that takes two numbers and returns their sum.\n\n[EXERCISE 0-E: Identity function]\nWrite a JavaScript function \"identite(x)\" that takes one parameter and returns it exactly as it is.\n\nExpected Markdown format:\n### tache_X\n```javascript\nfunction solution() { ... }\n```\n\n[ALGORITHMIC EXERCISES — code pur, sans culture générale]\nReturn each function using a Markdown header (### <exercise id>) followed by a ```javascript code block.\n\n[EXERCISE algo_facile_1]\nWrite a JavaScript function \"estPair(n)\" that returns true if n is even, false otherwise.\n\n[EXERCISE algo_facile_2]\nWrite a JavaScript function \"carre(n)\" that returns n multiplied by itself.\n\n[EXERCISE algo_moyen_1]\nWrite a JavaScript function \"somme1aN(n)\" that returns the sum of all integers from 1 to n (n >= 1).\n\n[EXERCISE algo_difficile_1]\nWrite a JavaScript function \"inverserChaine(s)\" that returns the string reversed (e.g. \"abc\" -> \"cba\").\n\n[EXERCISE algo_defi]\nWrite a JavaScript function \"valeurMax(tab)\" that returns the largest number in a non-empty array.",
   "tasks": [
     {
       "id": "tache_0a",
@@ -93,72 +93,112 @@
       "points": 8
     },
     {
-      "id": "algo_facile_1_tier0",
-      "label": "Algorithmique - Variables et Types",
+      "id": "algo_facile_1",
+      "label": "Algorithmique — Parité",
       "points": 10,
+      "hint": "Un nombre est pair si le reste de sa division par 2 vaut 0 : n % 2 === 0.",
       "evaluations": [
         {
           "type": "exec",
-          "description": "Retourne basique",
+          "description": "Pair",
           "setup": "",
-          "call": "true",
+          "call": "estPair(4)",
           "assert": "result === true"
+        },
+        {
+          "type": "exec",
+          "description": "Impair",
+          "setup": "",
+          "call": "estPair(7)",
+          "assert": "result === false"
         }
       ]
     },
     {
-      "id": "algo_facile_2_tier0",
-      "label": "Algorithmique - Opérations de base",
+      "id": "algo_facile_2",
+      "label": "Algorithmique — Carré",
       "points": 10,
+      "hint": "Le carré d'un nombre est le nombre multiplié par lui-même : n * n.",
       "evaluations": [
         {
           "type": "exec",
-          "description": "Vérification",
+          "description": "Positif",
           "setup": "",
-          "call": "true",
-          "assert": "result === true"
+          "call": "carre(6)",
+          "assert": "result === 36"
+        },
+        {
+          "type": "exec",
+          "description": "Zéro",
+          "setup": "",
+          "call": "carre(0)",
+          "assert": "result === 0"
         }
       ]
     },
     {
-      "id": "algo_moyen_1_tier0",
-      "label": "Algorithmique - Conditions et Boucles",
+      "id": "algo_moyen_1",
+      "label": "Algorithmique — Somme 1..N",
       "points": 10,
+      "hint": "Boucle de 1 à n en accumulant, ou formule n * (n + 1) / 2.",
       "evaluations": [
         {
           "type": "exec",
-          "description": "Logique moyenne",
+          "description": "Somme 5",
           "setup": "",
-          "call": "true",
-          "assert": "result === true"
+          "call": "somme1aN(5)",
+          "assert": "result === 15"
+        },
+        {
+          "type": "exec",
+          "description": "Somme 1",
+          "setup": "",
+          "call": "somme1aN(1)",
+          "assert": "result === 1"
         }
       ]
     },
     {
-      "id": "algo_difficile_1_tier0",
-      "label": "Algorithmique - Structures de Données",
+      "id": "algo_difficile_1",
+      "label": "Algorithmique — Inversion de chaîne",
       "points": 15,
+      "hint": "s.split(\"\").reverse().join(\"\") inverse les caractères d'une chaîne.",
       "evaluations": [
         {
           "type": "exec",
-          "description": "Logique difficile",
+          "description": "Mot",
           "setup": "",
-          "call": "true",
-          "assert": "result === true"
+          "call": "inverserChaine('abc')",
+          "assert": "result === 'cba'"
+        },
+        {
+          "type": "exec",
+          "description": "Un caractère",
+          "setup": "",
+          "call": "inverserChaine('x')",
+          "assert": "result === 'x'"
         }
       ]
     },
     {
-      "id": "algo_defi_tier0",
-      "label": "Algorithmique - Défi d'Optimisation",
+      "id": "algo_defi",
+      "label": "Algorithmique — Maximum d'un tableau",
       "points": 15,
+      "hint": "Parcourez en gardant la plus grande valeur, ou Math.max(...tab).",
       "evaluations": [
         {
           "type": "exec",
-          "description": "Défi",
+          "description": "Positifs",
           "setup": "",
-          "call": "true",
-          "assert": "result === true"
+          "call": "valeurMax([3, 9, 2])",
+          "assert": "result === 9"
+        },
+        {
+          "type": "exec",
+          "description": "Négatifs",
+          "setup": "",
+          "call": "valeurMax([-1, -5, -3])",
+          "assert": "result === -1"
         }
       ]
     }

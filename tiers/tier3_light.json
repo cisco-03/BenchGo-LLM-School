@@ -6,7 +6,7 @@
   "optional_for": [
     "LIGHT"
   ],
-  "prompt": "You are taking a TIER 3 technical evaluation.\n\nSolve 5 basic JavaScript exercises.\n\nReturn your answers in Markdown using headers for the exercise IDs and code blocks for the JavaScript functions.\n\n[EXERCISE 3-A: Last element]\nWrite a JavaScript function \"dernierElement(tableau)\" that returns the last element of the array. Return undefined if the array is empty.\n\n[EXERCISE 3-B: Count to N]\nWrite a JavaScript function \"compterJusqua(n)\" that returns an array of numbers from 1 to n. If n < 1, return an empty array.\n\n[EXERCISE 3-C: Replace letter]\nWrite a JavaScript function \"remplacerLettre(mot, ancienne, nouvelle)\" that replaces all occurrences of 'ancienne' letter with 'nouvelle' in the word and returns the new word.\n\n[EXERCISE 3-D: Sum array]\nWrite a JavaScript function \"sommeTableau(tableau)\" that returns the sum of all numbers in the array. Return 0 if the array is empty.\n\n[EXERCISE 3-E: Contains 'a']\nWrite a JavaScript function \"contientA(mot)\" that returns true if the word contains the letter 'a' (case-insensitive), false otherwise.\n\nExpected Markdown format:\n### tache_X\n```javascript\nfunction solution() { ... }\n```",
+  "prompt": "You are taking a TIER 3 technical evaluation.\n\nSolve 5 basic JavaScript exercises.\n\nReturn your answers in Markdown using headers for the exercise IDs and code blocks for the JavaScript functions.\n\n[EXERCISE 3-A: Last element]\nWrite a JavaScript function \"dernierElement(tableau)\" that returns the last element of the array. Return undefined if the array is empty.\n\n[EXERCISE 3-B: Count to N]\nWrite a JavaScript function \"compterJusqua(n)\" that returns an array of numbers from 1 to n. If n < 1, return an empty array.\n\n[EXERCISE 3-C: Replace letter]\nWrite a JavaScript function \"remplacerLettre(mot, ancienne, nouvelle)\" that replaces all occurrences of 'ancienne' letter with 'nouvelle' in the word and returns the new word.\n\n[EXERCISE 3-D: Sum array]\nWrite a JavaScript function \"sommeTableau(tableau)\" that returns the sum of all numbers in the array. Return 0 if the array is empty.\n\n[EXERCISE 3-E: Contains 'a']\nWrite a JavaScript function \"contientA(mot)\" that returns true if the word contains the letter 'a' (case-insensitive), false otherwise.\n\nExpected Markdown format:\n### tache_X\n```javascript\nfunction solution() { ... }\n```\n\n[ALGORITHMIC EXERCISES — code pur, sans culture générale]\nReturn each function using a Markdown header (### <exercise id>) followed by a ```javascript code block.\n\n[EXERCISE algo_facile_1]\nWrite a JavaScript function \"validerParentheses(s)\" that returns true if the parentheses in s are balanced (only \"(\" and \")\" are considered).\n\n[EXERCISE algo_facile_2]\nWrite a JavaScript function \"fibonacci(n)\" that returns the n-th Fibonacci number, with fibonacci(0)=0 and fibonacci(1)=1.\n\n[EXERCISE algo_moyen_1]\nWrite a JavaScript function \"motsUniques(s)\" that returns the number of distinct words (separated by whitespace) in the string.\n\n[EXERCISE algo_difficile_1]\nWrite a JavaScript function \"aplatirTableau(tab)\" that flattens an array of arrays by one level (e.g. [[1,2],[3]] -> [1,2,3]).\n\n[EXERCISE algo_defi]\nWrite a JavaScript function \"rotationDroite(tab, k)\" that returns the array rotated right by k positions (e.g. [1,2,3,4], 1 -> [4,1,2,3]).",
   "tasks": [
     {
       "id": "tache_3a",
@@ -128,72 +128,119 @@
       "points": 8
     },
     {
-      "id": "algo_facile_1_tier3",
-      "label": "Algorithmique - Variables et Types",
+      "id": "algo_facile_1",
+      "label": "Algorithmique — Parenthèses valides",
       "points": 10,
+      "hint": "Compteur +1 pour '(' et -1 pour ')' ; invalide si négatif ou non nul à la fin.",
       "evaluations": [
         {
           "type": "exec",
-          "description": "Retourne basique",
+          "description": "Balancées",
           "setup": "",
-          "call": "true",
+          "call": "validerParentheses('()')",
           "assert": "result === true"
+        },
+        {
+          "type": "exec",
+          "description": "Non fermée",
+          "setup": "",
+          "call": "validerParentheses('(')",
+          "assert": "result === false"
+        },
+        {
+          "type": "exec",
+          "description": "Inversées",
+          "setup": "",
+          "call": "validerParentheses(')(')",
+          "assert": "result === false"
         }
       ]
     },
     {
-      "id": "algo_facile_2_tier3",
-      "label": "Algorithmique - Opérations de base",
+      "id": "algo_facile_2",
+      "label": "Algorithmique — Fibonacci",
       "points": 10,
+      "hint": "fib(0)=0, fib(1)=1, fib(n)=fib(n-1)+fib(n-2). Itérez pour éviter la complexité exponentielle.",
       "evaluations": [
         {
           "type": "exec",
-          "description": "Vérification",
+          "description": "fib(7)",
           "setup": "",
-          "call": "true",
-          "assert": "result === true"
+          "call": "fibonacci(7)",
+          "assert": "result === 13"
+        },
+        {
+          "type": "exec",
+          "description": "fib(0)",
+          "setup": "",
+          "call": "fibonacci(0)",
+          "assert": "result === 0"
         }
       ]
     },
     {
-      "id": "algo_moyen_1_tier3",
-      "label": "Algorithmique - Conditions et Boucles",
+      "id": "algo_moyen_1",
+      "label": "Algorithmique — Mots uniques",
       "points": 10,
+      "hint": "Construisez un Set des mots (split sur les espaces) et renvoyez sa taille.",
       "evaluations": [
         {
           "type": "exec",
-          "description": "Logique moyenne",
+          "description": "Répétition",
           "setup": "",
-          "call": "true",
-          "assert": "result === true"
+          "call": "motsUniques('a a b')",
+          "assert": "result === 2"
+        },
+        {
+          "type": "exec",
+          "description": "Un seul",
+          "setup": "",
+          "call": "motsUniques('hello')",
+          "assert": "result === 1"
         }
       ]
     },
     {
-      "id": "algo_difficile_1_tier3",
-      "label": "Algorithmique - Structures de Données",
+      "id": "algo_difficile_1",
+      "label": "Algorithmique — Aplatir un tableau",
       "points": 15,
+      "hint": "Utilisez .flat(1), ou concaténez chaque sous-tableau avec .concat / spread.",
       "evaluations": [
         {
           "type": "exec",
-          "description": "Logique difficile",
+          "description": "Imbriqué",
           "setup": "",
-          "call": "true",
-          "assert": "result === true"
+          "call": "aplatirTableau([[1, 2], [3]])",
+          "assert": "JSON.stringify(result) === '[1,2,3]'"
+        },
+        {
+          "type": "exec",
+          "description": "Vide",
+          "setup": "",
+          "call": "aplatirTableau([])",
+          "assert": "JSON.stringify(result) === '[]'"
         }
       ]
     },
     {
-      "id": "algo_defi_tier3",
-      "label": "Algorithmique - Défi d'Optimisation",
+      "id": "algo_defi",
+      "label": "Algorithmique — Rotation à droite",
       "points": 15,
+      "hint": "tab.slice(-k).concat(tab.slice(0, -k)) effectue une rotation droite de k.",
       "evaluations": [
         {
           "type": "exec",
-          "description": "Défi",
+          "description": "Rotation 1",
           "setup": "",
-          "call": "true",
-          "assert": "result === true"
+          "call": "rotationDroite([1, 2, 3, 4], 1)",
+          "assert": "JSON.stringify(result) === '[4,1,2,3]'"
+        },
+        {
+          "type": "exec",
+          "description": "Pas de rotation",
+          "setup": "",
+          "call": "rotationDroite([1, 2, 3], 0)",
+          "assert": "JSON.stringify(result) === '[1,2,3]'"
         }
       ]
     }
