@@ -1,5 +1,136 @@
 # CHANGELOG - Carnet de Notes BenchGo
 
+## 2026-07-12 — Auto-Profilage & Calibration (Self-Profiling)
+
+### Contexte
+Implémentation d'un système d'Auto-Profilage et d'Étalonnage (Calibration) dans BenchGo.
+Le fichier `Memories-BenchGo/Tasks1.md` (rédigé par Gemini) décrivait le besoin en 4 étapes
+(interview initiale → filtrage dynamique → calcul de calibration → rapport). Une analyse du
+code réel a révélé plusieurs incohérences entre les instructions de Gemini et le code existant
+(voir « Écarts avec Tasks1.md » ci-dessous). L'implémentation a été adaptée aux structures
+réelles après validation avec l'utilisateur.
+
+### Workflow implémenté
+1. **Interview initiale (Self-Profiling)** : le runner interroge le modèle au démarrage via un
+   mega-prompt JSON pour qu'il s'auto-évalue sur 4 compétences clés (niveau 1 à 5).
+2. **Filtrage dynamique amont** : les tâches trop difficiles selon le profil auto-déclaré sont
+   marquées « Bypassée (Non déclarée) » et retirées de l'évaluation (non envoyées au modèle).
+3. **Calcul de la Calibration** : à la fin du run, calcul de l'Indice de Calibration C = 1 - |D - P|
+   où D = capacité déclarée moyenne, P = performance réelle (ratio de réussite des tâches exécutées).
+4. **Section rapport** : une section « Auto-Profilage & Calibration » est injectée en haut du
+   rapport Markdown, avec tableau des compétences déclarées, indice C, interprétation et
+   liste des tâches bypassées.
+
+### Compétences évaluées (alignées sur BenchGo réel)
+- `javascript_basics` — tâches algo simples + exec de base (par défaut)
+- `javascript_async` — tâches custom async (tache_2a, tache_3e, tache_4c frontier)
+- `algorithms_advanced` — tier 4 frontier + algo_difficile_1/defi + tier 6
+- `code_debugging` — tâches de débogage/sécurité (tache_1d, 2d, 2e, 2b, 2c, 3a-f)
+
+### Actions entreprises
+
+**1. `config.js` — flags de configuration**
+- Ajout de l'objet `selfProfiling` : `{ enabled: true, minLevelToTest: 2, bypassFilter: false }`.
+- `minLevelToTest` : niveau minimum déclaré (1-5) pour lancer les tests associés.
+- `bypassFilter` : si true, garde le profilage mais exécute TOUS les tests quand même.
+
+**2. Nouveau module `self-profiling.js`**
+- `SKILL_TASK_MAP` : carte statique compétence → IDs de tâches (construite via inventaire des
+  18 fichiers tier). Mapping inverse `TASK_TO_SKILL` pour le filtrage.
+- `SKILL_LABELS` : libellés humains des 4 compétences.
+- `PROFILE_PROMPT` : mega-prompt d'interview (français, schéma JSON strict, 4 compétences).
+- `runSelfProfiling(queryFn, providerConfig, contextLimitTokens)` : exécute l'interview,
+  tente `JSON.parse` puis fallback regex, valide le schéma, retourne le profil ou `null`
+  (graceful degradation si le modèle ne supporte pas le JSON).
+- `filterTasksByProfile(tasks, profile, minLevelToTest, bypassFilter)` : filtre les tâches
+  d'un tier, retourne `{ kept, bypassed, decisions }`. Logger chaque décision.
+- `getTaskSkill(task)` : retourne la skill d'une tâche (`javascript_basics` par défaut).
+
+**3. `lm-studio-client.js` — support `response_format` JSON**
+- Ajout du paramètre optionnel `options.responseFormat` dans le payload du fetch.
+- Si fourni (`{ type: "json_object" }`), inclus dans le body — supporté par LM Studio (OpenAI-compat).
+- Ne casse pas les appelants existants (valeur absente = comportement inchangé).
+
+**4. `cloud-client.js` — support `response_format` (OpenAI-compat uniquement)**
+- OpenAI-compat (openai, groq, together, openrouter, mistral, ollama, lmstudio, custom) :
+  ajout de `response_format` au body si fourni.
+- Anthropic (format natif Messages API) : `response_format` NON envoyé (non supporté) —
+  le prompt impose le JSON et le fallback regex côté `self-profiling.js` gère l'échec.
+
+**5. `runner.js` — orchestration**
+- Imports : `selfProfiling` de config, `runSelfProfiling`/`filterTasksByProfile`/`SKILL_LABELS`
+  de self-profiling, `buildCalibrationReport` de report-generator.
+- `main()` : après détermination de `queryFn`/`providerConfig`/`contextLimitTokens`, lance
+  l'interview d'auto-profilage (spinner + try/catch non fatal). Affiche les compétences
+  déclarées en console.
+- `runTierAttempt()` : reçoit `selfProfile`, filtre les tâches via `filterTasksByProfile` après
+  l'attribution des points aléatoires. Les tâches bypassées sont retirées de `availableTasks`
+  (le seuil de validation 70% porte automatiquement sur les points restants).
+- `evalResultsMap` : ajout du champ `status` (`success`/`failed`) sur chaque tâche évaluée.
+  Les tâches bypassées sont enregistrées avec `status: 'bypassed'`.
+- `runTierAttempt` retourne `bypassedCount` et `filterDecisions`.
+- `main()` agrège `allEvalResults` + `allFilterDecisions` tout au long de la boucle des tiers.
+- En fin de run : calcul de `calculateCalibrationIndex(selfProfile, allEvalResults)`, affichage
+  console (D, P, C + verdict coloré), et injection de la section rapport via
+  `buildCalibrationReport` (insérée après le premier `---` de l'en-tête du rapport).
+- `ecoleResult` (carnet persistant) : ajout de `calibrationIndex` et `declaredLevel`.
+
+**6. `score-ledger.js` — calcul de calibration**
+- `calculateCalibrationIndex(declaredProfile, testResults)` : D = moyenne des levels / 5,
+  P = réussites / tâches exécutées (status !== 'bypassed'), C = 1 - |D - P|. Retourne aussi
+  `executedCount` et `successCount`.
+- `interpretCalibration(C)` : ≥0.85 « Hautement Fiable / Lucide » ; 0.65-0.85 « Modérément
+  Calibré » ; <0.65 « Biais de Surconfiance ou Sous-confiance Majeur ».
+
+**7. `report-generator.js` — section rapport calibration**
+- `buildCalibrationReport(declaredProfile, calibration, filterDecisions, skillLabels)` :
+  génère la section Markdown « Auto-Profilage & Calibration » avec tableau des compétences
+  déclarées + ratio, justification, tableau D/P/C/écart, verdict, et tableau des tâches
+  bypassées. Exportée dans `module.exports`.
+
+### Décisions de conception (validées avec l'utilisateur)
+1. **Adapter au code réel** plutôt que suivre Tasks1.md à la lettre.
+2. **4 compétences réelles** (pas html_css/python_apis fictifs de Gemini).
+3. **Filtrage amont par le runner** (pas d'auto-sélection par le modèle via SELECTION).
+4. **Carte statique par ID** (pas de modification des 18 fichiers tier, pas de tags).
+5. **Seuil de validation** : tâches bypassées non comptées (ni numérateur ni dénominateur) —
+   neutre vis-à-vis de la sous/sur-confidence.
+6. **Graceful degradation** : si l'interview échoue, le benchmark se déroule normalement.
+7. **Rapports Markdown uniquement** (pas de PDF/JSON — BenchGo ne produit que du MD).
+
+### Écarts avec Tasks1.md (Gemini)
+| Point Tasks1 | Code réel | Décision |
+|---|---|---|
+| Tags/dossiers de tests | Aucun tag dans les tiers | Carte statique par ID |
+| `html_css_frontend`, `python_apis/can_use_fastapi` | Non testés par BenchGo | Remplacés par 4 skills réelles |
+| `response_format: json_object` forcé | Clients n'ont pas le paramètre ; Anthropic ne le supporte pas | Ajout optionnel + fallback regex |
+| Rapports PDF/JSON | Seulement Markdown | Markdown uniquement |
+| `Docs/Rapports.md` | Rapports dans `Export-Rapports/...` | Emplacement existant conservé |
+| Tests unitaires « à ne pas casser » | Aucun test dans le projet | Critère nul — vérif via `node -c` |
+| Champ `status` dans testResults | N'existe pas | Ajouté (success/failed/bypassed) |
+| « Initialisation de connexion » | Pas de connexion persistante | Insertion dans `main()` après `queryFn` |
+
+### Fichiers modifiés
+- `config.js` (ajout `selfProfiling`)
+- `self-profiling.js` (nouveau module)
+- `lm-studio-client.js` (support `response_format`)
+- `cloud-client.js` (support `response_format` OpenAI-compat)
+- `runner.js` (orchestration complète)
+- `score-ledger.js` (`calculateCalibrationIndex`, `interpretCalibration`)
+- `report-generator.js` (`buildCalibrationReport`)
+
+### Validation
+- `node -c` sur tous les modules modifiés : OK
+- Test fonctionnel : imports résolus, `calculateCalibrationIndex` correct (D=0.6, P=0.75 → C=0.85),
+  `filterTasksByProfile` filtre correctement (tache_2a async lvl 1 < 2 → bypassed), `getTaskSkill`
+  catégorise correctement, `buildCalibrationReport` génère le Markdown attendu.
+- `node runner.js` démarre sans erreur d'import (tente ensuite de joindre LM Studio).
+- `selfProfiling.enabled = false` : comportement strictement identique à l'actuel (pas de filtrage,
+  pas d'interview).
+
+### Voir aussi
+- Plan détaillé : `.kilo/plans/1783886722254-self-profiling-calibration.md`
+
 ## 2026-07-10 — Fix boucle infinie de réessai + Système d'aide du professeur + Validation des points
 
 ### Contexte

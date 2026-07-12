@@ -22,6 +22,15 @@ const CLASSE_NAMES = {
   FRONTIER: { 0: "Classe-0-PostDoc1",   1: "Classe-1-PostDoc2",  2: "Classe-2-PostDoc3",     3: "Classe-3-PostDoc4",   4: "Classe-4-Frontier", 6: "Classe-6-Ultimate" }
 };
 
+// Auto-profilage & Calibration : le runner interroge le modèle au démarrage pour
+// qu'il s'auto-évalue sur 4 compétences clés, puis filtre les tâches trop difficiles
+// selon le niveau déclaré. bypassFilter=true garde le profilage mais exécute tout.
+const selfProfiling = {
+  enabled: true,
+  minLevelToTest: 2,     // Niveau minimum déclaré (1 à 5) pour lancer les tests associés
+  bypassFilter: false    // true = profilage conservé mais exécution de TOUS les tests
+};
+
 const SPINNER_FRAMES = '\u2588';
 
 const SPINNER_CHARS = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
@@ -125,5 +134,6 @@ module.exports = {
   WAITING_MESSAGES,
   parseCliArgs,
   detectProfileFromModelName,
-  fetchModelNameFromLMStudio
+  fetchModelNameFromLMStudio,
+  selfProfiling
 };

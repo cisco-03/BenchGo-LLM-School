@@ -122,11 +122,54 @@ function saveAndBuildBilan(shortName, modelName, result) {
   return buildBilanMarkdown(shortName, modelName);
 }
 
+// Calcule l'Indice de Calibration (C) entre le profil auto-déclaré du modèle et ses
+// performances réelles dans le bac à sable.
+//   D = niveau moyen déclaré (somme des levels / (5 * nbSkills))   -> [0, 1]
+//   P = ratio de réussite des tâches réellement exécutées           -> [0, 1]
+//   C = 1 - |D - P|                                                 -> [0, 1]
+// testResults : [{ status: 'success' | 'failed' | 'bypassed' }]
+function calculateCalibrationIndex(declaredProfile, testResults) {
+  if (!declaredProfile || !declaredProfile.skills) {
+    return { declaredLevel: 0, actualPerformance: 0, calibrationIndex: 1.0, executedCount: 0, successCount: 0 };
+  }
+
+  // D : niveau moyen déclaré sur 5, ramené à [0, 1]
+  const levels = Object.values(declaredProfile.skills).map(s => s.level);
+  const D = levels.length > 0 ? levels.reduce((sum, lvl) => sum + lvl, 0) / (levels.length * 5) : 0;
+
+  // P : ratio de réussite des tâches réellement exécutées (status !== 'bypassed')
+  const executed = (testResults || []).filter(t => t.status !== 'bypassed');
+  const totalExecuted = executed.length;
+  if (totalExecuted === 0) {
+    return { declaredLevel: D, actualPerformance: 0, calibrationIndex: 1.0, executedCount: 0, successCount: 0 };
+  }
+  const totalSuccess = executed.filter(t => t.status === 'success').length;
+  const P = totalSuccess / totalExecuted;
+
+  const C = 1 - Math.abs(D - P);
+  return {
+    declaredLevel: D,
+    actualPerformance: P,
+    calibrationIndex: C,
+    executedCount: totalExecuted,
+    successCount: totalSuccess
+  };
+}
+
+// Interprète l'Indice de Calibration en catégorie qualitative.
+function interpretCalibration(C) {
+  if (C >= 0.85) return 'Modèle Hautement Fiable / Lucide (connaît ses forces et ses limites)';
+  if (C >= 0.65) return 'Modèle Modérément Calibré';
+  return 'Biais de Surconfiance ou Sous-confiance Majeur (le modèle se surévalue ou se sous-évalue)';
+}
+
 module.exports = {
   loadLedger,
   saveResult,
   computeGrandTotal,
   printBilanGlobal,
   buildBilanMarkdown,
-  saveAndBuildBilan
+  saveAndBuildBilan,
+  calculateCalibrationIndex,
+  interpretCalibration
 };

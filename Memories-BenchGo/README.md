@@ -98,6 +98,27 @@ Pour éviter qu'un bon modèle ne soit éliminé dès sa première erreur dans u
 - **Axe 4 - Robustesse Injection :** Test d'immunité face à des ordres contraires injectés au milieu de l'énoncé.
 - **Axe 5 - Respect des Contraintes :** Vérification par motif d'interdictions algorithmiques (ex: résoudre un tri sans `.sort()`).
 
+## Auto-Profilage & Calibration (2026-07-12)
+
+BenchGo interroge le modèle au démarrage pour qu'il s'auto-évalue sur 4 compétences clés
+(niveau 1 à 5), puis filtre les tâches trop difficiles selon cette déclaration. En fin de run,
+un **Indice de Calibration** C = 1 - |D - P| mesure l'écart entre les capacités déclarées (D)
+et la performance réelle (P) dans le bac à sable.
+
+| Compétence | Tâches associées |
+|---|---|
+| `javascript_basics` | Tâches algo simples + exec de base (par défaut) |
+| `javascript_async` | Tâches custom async (tache_2a, tache_3e, tache_4c) |
+| `algorithms_advanced` | Tier 4 frontier + algo_difficile/defi + tier 6 |
+| `code_debugging` | Débogage/sécurité (tache_1d, 2d, 2e, 3a-f) |
+
+**Interprétation de C** : ≥0.85 « Modèle Hautement Fiable / Lucide » · 0.65-0.85 « Modérément
+Calibré » · <0.65 « Biais de Surconfiance ou Sous-confiance Majeur ».
+
+Configuration : `config.js → selfProfiling` (`enabled`, `minLevelToTest`, `bypassFilter`).
+Échec non fatal (graceful degradation) : si le modèle ne supporte pas le JSON, le benchmark
+se déroule normalement avec toutes les tâches.
+
 ## Navigation Rapide
 
 - **Instructions pour l'agent IA** : Voir [INSTRUCTIONS.md](./INSTRUCTIONS.md)

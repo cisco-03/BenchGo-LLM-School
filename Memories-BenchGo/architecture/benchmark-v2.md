@@ -12,6 +12,7 @@ modèle à générer du code correct à travers 7 niveaux de difficulté (Tiers 
 ┌─────────────────────────────────────────────────────────────────┐
 │                        runner.js                                 │
 │           (Orchestrateur — routing Local / Cloud)                │
+│                  + Self-Profiling & Calibration                  │
 └─────────────────────────┬───────────────────────────────────────┘
                           │
           ┌───────────────┼───────────────┐
@@ -26,6 +27,8 @@ modèle à générer du code correct à travers 7 niveaux de difficulté (Tiers 
 │ - CLI args  │  │   chain      │  │              │
 │ - Détection │  │              │  │              │
 │   profil    │  │              │  │              │
+│ - selfProfil│  │              │  │              │
+│   ing flags │  │              │  │              │
 └─────────────┘  └──────────────┘  └──────────────┘
 
     ┌────────────────────┬─────────────────────┐
@@ -35,68 +38,82 @@ modèle à générer du code correct à travers 7 niveaux de difficulté (Tiers 
 │  client.js   │  │  client.js   │   │              │
 │              │  │              │   │ extractJSON  │
 │ LM Studio    │  │ 6 providers  │   │ extractRegex │
-│ localhost    │  │ OpenAI/Groq  │   │ stripTS()    │
-│ streaming    │  │ Anthropic    │   │              │
-│ context      │  │ OpenRouter   │   └──────────────┘
-│ budget       │  │ Mistral/etc. │
+│ streaming    │  │ OpenAI/Groq  │   │ stripTS()    │
+│ context      │  │ Anthropic    │   │              │
+│ budget       │  │ OpenRouter   │   └──────────────┘
+│ response_fmt │  │ Mistral/etc. │
 └──────────────┘  └──────────────┘
 
-          ┌───────────────────────────┐
-          ▼                           ▼
+           ┌───────────────────────┐
+           ▼                       ▼
+┌──────────────┐          ┌────────────────────┐
+│vm-sandbox.js │          │ self-profiling.js   │
+│              │          │   (NOUVEAU 2026-07-12)│
+│ buildSandbox │          │ SKILL_TASK_MAP      │
+│ execCodeInVM │          │ runSelfProfiling()  │
+│              │          │ filterTasksByProfile│
+└──────────────┘          └────────────────────┘
+
+           ┌───────────────────────────┐
+           ▼                           ▼
 ┌──────────────┐              ┌────────────────┐
-│vm-sandbox.js │              │task-evaluator  │
-│              │              │                │
-│ buildSandbox │              │ Orchestre les  │
-│ execCodeInVM │              │ évaluations    │
-│              │              │ par tâche      │
-└──────────────┘              └───────┬────────┘
-                                      │
-          ┌───────────────────────────┴────────────────┐
-          ▼                                             ▼
-┌──────────────────────────────┐             ┌──────────────┐
-│    custom-evaluators.js      │             │parsing-utils │
-│                              │             │(pour stripTS)│
-│ GeoJSON RFC7946              │             └──────────────┘
-│ React Hook                   │
-│ Flood Fill                   │
-│ PowerShell Rollback          │
-│ Python ConsecutiveLimiter    │
-│ Async PartialErrors          │
-│ Async SequentialProcessing   │
-│ Async RetryLogic             │
+│task-evaluator│              │score-ledger.js  │
+│              │              │  + Calibration   │
+│ Orchestre les│              │ calculateCalibIdx│
+│ évaluations  │              │ interpretCalib   │
+└───────┬──────┘              └────────────────┘
+        │
+        ▼
+┌──────────────────────────────┐
+│    custom-evaluators.js       │
+│ GeoJSON RFC7946              │
+│ React Hook / Flood Fill      │
+│ PowerShell / Python Limiter  │
+│ Async PartialErrors/Retry/   │
+│ ConcurrencyLimit             │
 │ Cloudflare Middleware        │
-│ Async ConcurrencyLimit (NEW) │
 └──────────────────────────────┘
 
-┌────────────────────────────┐
-│    report-generator.js     │
-│ buildTierReport()          │
-│ sanitizeFilename()         │
-│ shortenModelName()         │
-└────────────────────────────┘
+┌────────────────────────────────────────┐
+│       report-generator.js              │
+│ buildTierReport()                      │
+│ buildCalibrationReport() (NOUVEAU)      │
+│ sanitizeFilename() / shortenModelName() │
+└────────────────────────────────────────┘
 ```
 
 ## Modules
 
 ### config.js
 - **Rôle** : Configuration centralisée
-- **Contenu** : URLs API LM Studio, timeouts, définition des profils (LIGHT/STANDARD/EXPERT/DOCTORAT/FRONTIER), parsing des arguments CLI (`--profile`, `--context-limit`, `--provider`, `--model`, `--api-key`), détection automatique du profil selon la taille du modèle, CLASSE_NAMES pour l'export
+- **Contenu** : URLs API LM Studio, timeouts, définition des profils (LIGHT/STANDARD/EXPERT/DOCTORAT/FRONTIER), parsing des arguments CLI (`--profile`, `--context-limit`, `--provider`, `--model`, `--api-key`), détection automatique du profil selon la taille du modèle, CLASSE_NAMES pour l'export, **`selfProfiling`** (flags d'auto-profilage : `enabled`, `minLevelToTest`, `bypassFilter`)
 - **Dépendances** : Aucune
+
+### self-profiling.js *(nouveau 2026-07-12)*
+- **Rôle** : Auto-profilage du modèle et filtrage dynamique des tâches
+- **Contenu** :
+  - `SKILL_TASK_MAP` — carte statique compétence → IDs de tâches (construite à partir des 18 fichiers tier)
+  - `SKILL_LABELS` — libellés humains des 4 compétences (javascript_basics, javascript_async, algorithms_advanced, code_debugging)
+  - `PROFILE_PROMPT` — mega-prompt d'interview (français, schéma JSON strict)
+  - `runSelfProfiling(queryFn, providerConfig, contextLimitTokens)` — exécute l'interview JSON, fallback regex si le modèle ne supporte pas le JSON natif, retourne `null` en cas d'échec (graceful degradation)
+  - `filterTasksByProfile(tasks, profile, minLevelToTest, bypassFilter)` — filtre les tâches d'un tier selon le profil auto-déclaré, retourne `{ kept, bypassed, decisions }`
+  - `getTaskSkill(task)` — retourne la skill associée à une tâche (`javascript_basics` par défaut)
+- **Dépendances** : `logger.js`, `parsing-utils.js` (`extractJSON`)
 
 ### lm-studio-client.js
 - **Rôle** : Client API LM Studio (local)
-- **Contenu** : `queryLLM()`, streaming SSE, estimation du budget contexte, gestion timeout/erreur
+- **Contenu** : `queryLLM()`, streaming SSE, estimation du budget contexte, gestion timeout/erreur, support optionnel `response_format` (JSON) via `options.responseFormat`
 - **Dépendances** : `config.js`, `logger.js`
 
 ### cloud-client.js *(nouveau)*
 - **Rôle** : Client API pour modèles cloud
-- **Contenu** : `queryLLM()` avec même interface que lm-studio-client ; supporte OpenAI, Groq, Together, OpenRouter, Mistral (format OpenAI-compatible) et Anthropic (format natif Messages API) ; résolution de la clé API depuis env var ou `--api-key`
+- **Contenu** : `queryLLM()` avec même interface que lm-studio-client ; supporte OpenAI, Groq, Together, OpenRouter, Mistral (format OpenAI-compatible) et Anthropic (format natif Messages API) ; résolution de la clé API depuis env var ou `--api-key` ; support optionnel `response_format` (JSON) pour OpenAI-compat (ignoré pour Anthropic)
 - **Dépendances** : `config.js`, `logger.js`
 
 ### runner.js
 - **Rôle** : Orchestrateur principal
-- **Contenu** : `main()`, `runTierAttempt()`, routing dual Local/Cloud (`queryFn` + `providerConfig`), rattrapage interactif (désactivé en mode cloud), export des rapports classés
-- **Dépendances** : tous les modules
+- **Contenu** : `main()`, `runTierAttempt()`, routing dual Local/Cloud (`queryFn` + `providerConfig`), rattrapage interactif (désactivé en mode cloud), export des rapports classés. **Auto-profilage** : interview du modèle au démarrage via `self-profiling.js`, filtrage amont des tâches selon le profil auto-déclaré, agrégation des résultats (status success/failed/bypassed), calcul de l'Indice de Calibration en fin de run, injection de la section rapport.
+- **Dépendances** : tous les modules + `self-profiling.js`
 
 ### tier-loader.js
 - **Rôle** : Chargement des fichiers tier JSON par profil
@@ -130,12 +147,17 @@ modèle à générer du code correct à travers 7 niveaux de difficulté (Tiers 
 
 ### report-generator.js
 - **Rôle** : Génération des rapports Markdown
-- **Contenu** : `buildTierReport()`, `sanitizeFilename()`, `shortenModelName()` (raccourcit le nom de modèle LM Studio en supprimant la répétition du nom de base, ex. `org/repo-gguf/repo-mtp-q4_k_m.gguf` → `org_repo-mtp-q4_k_m`)
+- **Contenu** : `buildTierReport()`, `sanitizeFilename()`, `shortenModelName()` (raccourcit le nom de modèle LM Studio en supprimant la répétition du nom de base, ex. `org/repo-gguf/repo-mtp-q4_k_m.gguf` → `org_repo-mtp-q4_k_m`), **`buildCalibrationReport()`** (section « Auto-Profilage & Calibration » : tableau des compétences déclarées + ratios, justification, Indice de Calibration C avec interprétation, liste des tâches bypassées)
 - **Dépendances** : Aucune
 
 ### logger.js
 - **Rôle** : Journalisation dans logs/
 - **Dépendances** : Aucune
+
+### score-ledger.js
+- **Rôle** : Grand livre des scores persistant (cumul multi-écoles) + calcul de calibration
+- **Contenu** : `loadLedger`/`saveResult`/`saveAndBuildBilan` (carnet JSON par modèle), `computeGrandTotal`, `printBilanGlobal`, `buildBilanMarkdown`, **`calculateCalibrationIndex(declaredProfile, testResults)`** (D = niveau moyen déclaré /5, P = réussite des tâches exécutées, C = 1 - |D-P|), **`interpretCalibration(C)`** (≥0.85 Lucide / 0.65-0.85 Modérément Calibré / <0.65 Biais majeur)
+- **Dépendances** : `logger.js`, `progress-bar.js`
 
 ## Profils d'évaluation
 
@@ -156,15 +178,33 @@ parseCliArgs() → isCloudMode=true, queryFn=queryLLMCloud
     ↓
 profileArg = profileArgExplicit || 'FRONTIER'
     ↓
+[Auto-profilage] runSelfProfiling(queryFn) → interview JSON du modèle sur 4 compétences
+    ↓ (graceful : null si échec)
 loadTiers('FRONTIER') → tiers 0,1,2,3,4
     ↓
 pour chaque tier :
+  filterTasksByProfile(tâches, selfProfile, minLevelToTest) → kept / bypassed
+    ↓ (les tâches bypassées ne sont pas envoyées au modèle)
   queryLLMCloud(prompt, ..., { providerConfig: {provider, model, apiKey} })
     ↓ POST https://api.openai.com/v1/chat/completions avec streaming SSE
-  evaluateTask(tache, codeEtudiant)
+  evaluateTask(tache, codeEtudiant) → status: success/failed (+ bypassed pour filtrées)
     ↓
-   buildTierReport() → Export-Rapports/<date-locale>/Post-Doctorat/rapport_v3_<modeleCourt>_<profil>[_tierN]_<HH-MM-SS>.md
+  buildTierReport() + agrégation allEvalResults/allFilterDecisions
+    ↓
+[Fin de run] calculateCalibrationIndex(selfProfile, allEvalResults) → C = 1 - |D-P|
+    ↓
+  buildCalibrationReport() → section injectée en haut du rapport
+    ↓
+  Export-Rapports/<date-locale>/Post-Doctorat/rapport_v3_<modeleCourt>_<profil>[_tierN]_<HH-MM-SS>.md
 ```
+
+**Auto-profilage & Calibration (2026-07-12)** : si `selfProfiling.enabled=true`, le runner interroge
+le modèle au démarrage pour qu'il s'auto-évalue sur 4 compétences (javascript_basics,
+javascript_async, algorithms_advanced, code_debugging) avec un niveau 1-5. Les tâches dont la
+compétence associée est déclarée sous `minLevelToTest` sont marquées « Bypassée (Non déclarée) »
+et retirées de l'évaluation (filtrage amont). En fin de run, l'Indice de Calibration
+C = 1 - |D - P| (D = capacité déclarée moyenne, P = performance réelle) est calculé et affiché
+dans la console + une section dédiée du rapport Markdown. Échec non fatal (graceful degradation).
 
 
 ## Vue d'ensemble

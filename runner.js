@@ -3,16 +3,17 @@ const fs = require('fs');
 const path = require('path');
 const readline = require('readline');
 const logger = require('./logger');
-const { PROFILES, CLASSE_NAMES, parseCliArgs, detectProfileFromModelName, fetchModelNameFromLMStudio, OPTIONAL_BONUS_PCT } = require('./config');
+const { PROFILES, CLASSE_NAMES, parseCliArgs, detectProfileFromModelName, fetchModelNameFromLMStudio, OPTIONAL_BONUS_PCT, selfProfiling } = require('./config');
 const { ProgressBar, Spinner, letterGrade } = require('./progress-bar');
 const { extractJSON, extractCodeRegex } = require('./parsing-utils');
 const { queryLLM: queryLLMLocal } = require('./lm-studio-client');
 const { queryLLM: queryLLMCloud } = require('./cloud-client');
 const { loadTiers } = require('./tier-loader');
 const { evaluateTask } = require('./task-evaluator');
-const { buildTierReport, shortenModelName } = require('./report-generator');
+const { buildTierReport, shortenModelName, buildCalibrationReport } = require('./report-generator');
 const { updateTiers } = require('./auto-updater');
 const scoreLedger = require('./score-ledger');
+const { runSelfProfiling, filterTasksByProfile, SKILL_LABELS } = require('./self-profiling');
 
 const DEFAULT_CONTEXT_LIMIT_TOKENS = 16384;
 const MAX_RATTRAPAGE_ATTEMPTS = 1;
@@ -167,7 +168,7 @@ async function askYesNo(question, defaultNo = true) {
   });
 }
 
-async function runTierAttempt({ tierNum, tierData, isMandatory, profileArg, contextLimitTokens, attemptNumber, queryFn, providerConfig, gameState }) {
+async function runTierAttempt({ tierNum, tierData, isMandatory, profileArg, contextLimitTokens, attemptNumber, queryFn, providerConfig, gameState, selfProfile }) {
   const attemptTag = attemptNumber > 1 ? ` (RATTRAPAGE ${attemptNumber - 1}/${MAX_RATTRAPAGE_ATTEMPTS})` : '';
 
   console.log(`\x1b[33m━━ TIER ${tierNum} : ${tierData.title}${attemptTag} ━━\x1b[0m`);
@@ -181,6 +182,22 @@ async function runTierAttempt({ tierNum, tierData, isMandatory, profileArg, cont
   availableTasks.forEach(t => {
     t.points = Math.floor(Math.random() * 31) + 30; // Random entre 30 et 60
   });
+
+  // --- Filtrage amont par auto-profilage ---
+  // Les tâches trop difficiles selon le profil auto-déclaré sont marquées "Bypassée"
+  // et retirées de availableTasks. Elles ne sont pas envoyées au modèle et ne comptent
+  // ni au numérateur ni au dénominateur du seuil de validation.
+  let bypassedTasks = [];
+  let filterDecisions = [];
+  if (selfProfile && selfProfiling.enabled && !selfProfiling.bypassFilter) {
+    const filtered = filterTasksByProfile(availableTasks, selfProfile, selfProfiling.minLevelToTest, selfProfiling.bypassFilter);
+    availableTasks = filtered.kept;
+    bypassedTasks = filtered.bypassed;
+    filterDecisions = filtered.decisions;
+    if (bypassedTasks.length > 0) {
+      console.log(`  \x1b[36mAuto-profilage : ${bypassedTasks.length} tâche(s) bypassée(s) selon le profil déclaré (niveau < ${selfProfiling.minLevelToTest}).\x1b[0m`);
+    }
+  }
 
   let evalResultsMap = {};
   const taskRetryMap = {};
@@ -434,7 +451,8 @@ async function runTierAttempt({ tierNum, tierData, isMandatory, profileArg, cont
             evaluations: taskResults,
             points: taskNetPoints[task.id] || 0,
             helpUsed: Boolean(taskHelpUsed[task.id]),
-            retried: (taskRetryMap[task.id] || 0) >= 1
+            retried: (taskRetryMap[task.id] || 0) >= 1,
+            status: taskPassed ? 'success' : 'failed'
           };
        }
 
@@ -461,6 +479,21 @@ async function runTierAttempt({ tierNum, tierData, isMandatory, profileArg, cont
     }
   }
   
+  // --- Enregistrement des tâches bypassées par auto-profilage ---
+  // Elles portent le status 'bypassed' (exclues du calcul de calibration P).
+  for (const task of bypassedTasks) {
+    evalResultsMap[task.id] = {
+      id: task.id,
+      label: task.label,
+      code: null,
+      evaluations: [],
+      points: 0,
+      helpUsed: false,
+      retried: false,
+      status: 'bypassed'
+    };
+  }
+
   // Validation of the Tier
   const tierPassed = tierScore >= validationThreshold;
   const tierPassedCount = tierScore; // Using points as passed count logic for broader system compatibility
@@ -507,7 +540,9 @@ async function runTierAttempt({ tierNum, tierData, isMandatory, profileArg, cont
     retriedCount,
     tierAnnotations,
     responseModelName,
-    optionalBonus: optionalBonusTotal
+    optionalBonus: optionalBonusTotal,
+    bypassedCount: bypassedTasks.length,
+    filterDecisions
   };
 }
 
@@ -580,6 +615,35 @@ async function main() {
     profileArg = 'STANDARD';
   }
 
+  // --- Auto-profilage (Self-Profiling) ---
+  // Interroge le modèle au démarrage pour qu'il s'auto-évalue sur 4 compétences clés.
+  // Le profil obtenu sert ensuite à filtrer les tâches trop difficiles et à calculer
+  // l'Indice de Calibration en fin de run. Échec non fatal (graceful degradation).
+  let selfProfile = null;
+  if (selfProfiling.enabled) {
+    const profileSpinner = new Spinner('Auto-profilage du modèle (interview JSON)...');
+    profileSpinner.start();
+    try {
+      selfProfile = await runSelfProfiling(queryFn, providerConfig, contextLimitTokens);
+    } catch (e) {
+      logger.warn(`Auto-profilage échoué : ${e.message}. Continuation sans filtrage.`);
+    }
+    if (selfProfile) {
+      profileSpinner.stop('Auto-profilage réussi');
+      const skills = selfProfile.skills || {};
+      console.log(`  \x1b[36mAuto-profilage : compétences déclarées —\x1b[0m`);
+      for (const [skill, label] of Object.entries(SKILL_LABELS)) {
+        const lvl = skills[skill] ? skills[skill].level : '?';
+        console.log(`    \x1b[90m${label} : niveau ${lvl}/5\x1b[0m`);
+      }
+      if (selfProfile.justification) {
+        console.log(`    \x1b[90mJustification : ${selfProfile.justification}\x1b[0m`);
+      }
+    } else {
+      profileSpinner.stop('Auto-profilage échoué (fallback : toutes les tâches seront exécutées)');
+    }
+  }
+
   const profile = PROFILES[profileArg];
   logger.runConfig({ 
     'Cible': tierArg, 
@@ -631,6 +695,8 @@ async function main() {
   let stopGlobalEval = false;
   let gameState = { globalLifeScore: 0 };
   let tierScorecard = [];
+  let allEvalResults = [];      // Agrégation pour le calcul de calibration (status: success/failed/bypassed)
+  let allFilterDecisions = [];  // Décisions de filtrage pour la section rapport calibration
   const ecoleLabel = PROFILES[profileArg]?.ecole || profileArg;
 
   for (const tierNum of tierKeys) {
@@ -650,7 +716,8 @@ async function main() {
         attemptNumber,
         queryFn,
         providerConfig: isCloudMode ? { provider, model: cloudModel, apiKey, endpoint } : null,
-        gameState
+        gameState,
+        selfProfile
       });
 
       if (attemptResult.responseModelName && modelName === "Modele_En_Attente") {
@@ -733,6 +800,15 @@ async function main() {
     globalHelpCount += bestResult.helpUsedCount || 0;
     globalRetriedCount += bestResult.retriedCount || 0;
     globalOptionalBonus += bestResult.optionalBonus || 0;
+
+    // Agrégation pour la calibration (status: success/failed/bypassed)
+    if (bestResult.evalResults && bestResult.evalResults.length > 0) {
+      allEvalResults = allEvalResults.concat(bestResult.evalResults);
+    }
+    if (bestResult.filterDecisions && bestResult.filterDecisions.length > 0) {
+      allFilterDecisions = allFilterDecisions.concat(bestResult.filterDecisions);
+    }
+
     printScorecard(tierScorecard, ecoleLabel, false, gameState.globalLifeScore);
 
     if (stopGlobalEval) {
@@ -747,6 +823,21 @@ async function main() {
     globalReport += buildScorecardReport(tierScorecard, ecoleLabel, gameState.globalLifeScore);
   }
 
+  // --- Section Auto-Profilage & Calibration (injectée en haut du rapport) ---
+  // Placée après le scorecard récapitulatif mais avant le verdict, pour garder
+  // l'en-tête du rapport intact (date/log/profil). La section est générée ici
+  // puis insérée juste après le premier "---" du rapport.
+  if (selfProfile && calibration) {
+    const calibrationSection = buildCalibrationReport(selfProfile, calibration, allFilterDecisions, SKILL_LABELS);
+    // Insère la section juste après le premier séparateur "---" de l'en-tête
+    const firstSep = globalReport.indexOf('\n---\n');
+    if (firstSep !== -1) {
+      globalReport = globalReport.slice(0, firstSep + 5) + '\n' + calibrationSection + globalReport.slice(firstSep + 5);
+    } else {
+      globalReport = calibrationSection + globalReport;
+    }
+  }
+
   const hasMandatory = globalScore.mandatoryTotal > 0;
   const pctMandatory = hasMandatory
     ? Math.round((globalScore.mandatoryPassed / globalScore.mandatoryTotal) * 100)
@@ -758,6 +849,14 @@ async function main() {
   const globalGradeInfo = letterGrade(pctGlobal);
   const mandatoryGradeInfo = hasMandatory ? letterGrade(pctMandatory) : { grade: 'N/A', color: '\x1b[90m' };
   const mandatoryScoreStr = hasMandatory ? `${globalScore.mandatoryPassed}/${globalScore.mandatoryTotal} (${pctMandatory}%)` : "N/A (Optionnel)";
+
+  // --- Calcul de l'Indice de Calibration (Self-Profiling) ---
+  let calibration = null;
+  if (selfProfile && allEvalResults.length > 0) {
+    calibration = scoreLedger.calculateCalibrationIndex(selfProfile, allEvalResults);
+    const verdict = scoreLedger.interpretCalibration(calibration.calibrationIndex);
+    logger.info(`Calibration : D=${calibration.declaredLevel.toFixed(3)}, P=${calibration.actualPerformance.toFixed(3)}, C=${calibration.calibrationIndex.toFixed(3)} — ${verdict}`);
+  }
 
   console.log('\x1b[36m\u2554\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2557\x1b[0m');
   console.log(`\x1b[36m\u2551  SCORE GLOBAL (Points) : ${globalScore.passed}/${globalScore.total} (${pctGlobal}%)                    \x1b[0m`);
@@ -784,6 +883,14 @@ async function main() {
     console.log(`\x1b[36m\u2551  \x1b[33m\u2588\u2588\u2588 VERDICT : MODÈLE PARTIEL — RÉSERVES \u2588\u2588\u2588\x1b[0m\x1b[36m           \u2551\x1b[0m`);
   } else {
     console.log(`\x1b[36m\u2551  \x1b[31m\u2588\u2588\u2588 VERDICT : MODÈLE NON RECOMMANDÉ \u2588\u2588\u2588\x1b[0m\x1b[36m             \u2551\x1b[0m`);
+  }
+
+  // Affichage console de l'Indice de Calibration
+  if (calibration) {
+    const verdict = scoreLedger.interpretCalibration(calibration.calibrationIndex);
+    const cColor = calibration.calibrationIndex >= 0.85 ? '\x1b[32m' : (calibration.calibrationIndex >= 0.65 ? '\x1b[33m' : '\x1b[31m');
+    console.log(`\x1b[36m\u2551  ${cColor}Indice de Calibration : C = ${calibration.calibrationIndex.toFixed(3)} (D=${(calibration.declaredLevel*100).toFixed(0)}%, P=${(calibration.actualPerformance*100).toFixed(0)}%)\x1b[0m`);
+    console.log(`\x1b[36m\u2551  ${cColor}${verdict}\x1b[0m`);
   }
 
   // Gamification Niveau 3 : Grosse Recompense d'Ecole
@@ -854,6 +961,8 @@ async function main() {
       optionalBonus: globalOptionalBonus,
       helpCount: globalHelpCount,
       retriedCount: globalRetriedCount,
+      calibrationIndex: calibration ? calibration.calibrationIndex : null,
+      declaredLevel: calibration ? calibration.declaredLevel : null,
       date: dateStr,
       reportFile: relPath
     };

@@ -152,22 +152,28 @@ async function queryLLM(prompt, difficulty, tierId, isMandatory, spinner, option
         headers['HTTP-Referer'] = 'https://benchgo-v3';
         headers['X-Title'] = 'BenchGo V3';
       }
+      const requestBody = {
+        model,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user',   content: prompt }
+        ],
+        temperature: 0.1,
+        stream: true
+      };
+      // response_format optionnel (auto-profilage JSON) — supporté par les APIs OpenAI-compat
+      if (options.responseFormat) {
+        requestBody.response_format = options.responseFormat;
+      }
       response = await fetch(resolvedUrl, {
         method: 'POST',
         headers,
-        body: JSON.stringify({
-          model,
-          messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user',   content: prompt }
-          ],
-          temperature: 0.1,
-          stream: true
-        }),
+        body: JSON.stringify(requestBody),
         signal: controller.signal
       });
     } else {
-      // Anthropic Messages API (format natif)
+      // Anthropic Messages API (format natif) — response_format non supporté,
+      // le prompt doit imposer le format JSON (fallback regex côté self-profiling).
       response = await fetch(resolvedUrl, {
         method: 'POST',
         headers: {

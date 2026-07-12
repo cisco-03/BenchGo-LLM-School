@@ -87,4 +87,66 @@ function buildTierReport(tierData, evalResults, rawResponse, stats = {}) {
   return { report, allPassed };
 }
 
-module.exports = { buildTierReport, sanitizeFilename, shortenModelName };
+// Section "Auto-Profilage & Calibration" injectée en haut du rapport global.
+// declaredProfile : { skills: { skill: { level } }, justification }
+// calibration : { declaredLevel, actualPerformance, calibrationIndex, executedCount, successCount }
+// filterDecisions : [{ taskId, taskLabel, skill, declaredLevel, action }]
+// skillLabels : map skill -> libellé (SKILL_LABELS de self-profiling.js)
+function buildCalibrationReport(declaredProfile, calibration, filterDecisions, skillLabels) {
+  if (!declaredProfile || !calibration) return '';
+
+  let report = `## Auto-Profilage & Calibration\n\n`;
+  report += `Le modèle a été interrogé au démarrage pour s'auto-évaluer sur 4 compétences clés (niveau 1 à 5). BenchGo a ensuite filtré les tâches jugées trop difficiles selon cette déclaration, puis calculé l'Indice de Calibration (C) mesurant l'écart entre les capacités déclarées et la performance réelle.\n\n`;
+
+  // Tableau des compétences déclarées
+  report += `### Compétences déclarées\n\n`;
+  report += `| Compétence | Niveau déclaré (1-5) | Ratio (D) |\n`;
+  report += `|---|---|---|\n`;
+  const skills = declaredProfile.skills || {};
+  for (const [skill, label] of Object.entries(skillLabels || {})) {
+    const level = skills[skill] ? skills[skill].level : '—';
+    const ratio = (level !== '—') ? (level / 5).toFixed(2) : '—';
+    report += `| ${label} | ${level} | ${ratio} |\n`;
+  }
+
+  if (declaredProfile.justification) {
+    report += `\n> **Justification du modèle :** ${declaredProfile.justification}\n`;
+  }
+
+  // Indice de calibration
+  report += `\n### Indice de Calibration (C)\n\n`;
+  report += `| Métrique | Valeur |\n`;
+  report += `|---|---|\n`;
+  report += `| Capacité déclarée moyenne (D) | ${(calibration.declaredLevel * 100).toFixed(1)}% |\n`;
+  report += `| Performance réelle (P) | ${(calibration.actualPerformance * 100).toFixed(1)}% (${calibration.successCount}/${calibration.executedCount} tâches réussies) |\n`;
+  report += `| Écart | ${Math.abs(calibration.declaredLevel - calibration.actualPerformance * 1).toFixed(3)} |\n`;
+  report += `| **Indice de Calibration (C)** | **${calibration.calibrationIndex.toFixed(3)}** |\n`;
+
+  // Interprétation
+  let verdict = 'Biais de Surconfiance ou Sous-confiance Majeur';
+  if (calibration.calibrationIndex >= 0.85) verdict = 'Modèle Hautement Fiable / Lucide';
+  else if (calibration.calibrationIndex >= 0.65) verdict = 'Modèle Modérément Calibré';
+  report += `\n> **Verdict :** ${verdict}\n`;
+  if (calibration.calibrationIndex < 0.65) {
+    report += `> Le modèle se surévalue ou se sous-évalue drastiquement par rapport à ses performances réelles.\n`;
+  }
+
+  // Décisions de filtrage
+  if (filterDecisions && filterDecisions.length > 0) {
+    const bypassed = filterDecisions.filter(d => d.action === 'bypassed');
+    if (bypassed.length > 0) {
+      report += `\n### Tâches bypassées par filtrage (${bypassed.length})\n\n`;
+      report += `| Exercice | Compétence | Niveau déclaré | Statut |\n`;
+      report += `|---|---|---|---|\n`;
+      for (const d of bypassed) {
+        const skillLabel = (skillLabels && skillLabels[d.skill]) || d.skill;
+        report += `| ${d.taskId} — ${d.taskLabel || ''} | ${skillLabel} | ${d.declaredLevel} | Bypassée (Non déclarée) |\n`;
+      }
+    }
+  }
+
+  report += `\n---\n\n`;
+  return report;
+}
+
+module.exports = { buildTierReport, sanitizeFilename, shortenModelName, buildCalibrationReport };

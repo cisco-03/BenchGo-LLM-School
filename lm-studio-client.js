@@ -90,19 +90,26 @@ async function queryLLM(prompt, difficulty, tierId, isMandatory, spinner, option
 
     logger.promptHash(tierId, prompt);
     logger.info(`Tier ${tierId} — Budget contexte: limite=${contextLimitTokens}, entrée~${estimatedInputTokens}, sortie max=${maxTokens} tokens.`);
+
+    const requestBody = {
+      model: "local-model",
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: prompt }
+      ],
+      temperature: 0.1,
+      max_tokens: maxTokens,
+      stream: true
+    };
+    // response_format optionnel (auto-profilage JSON) — supporté par LM Studio (OpenAI-compat)
+    if (options.responseFormat) {
+      requestBody.response_format = options.responseFormat;
+    }
+
     const response = await fetch(LM_STUDIO_API_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: "local-model",
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: prompt }
-        ],
-        temperature: 0.1,
-        max_tokens: maxTokens,
-        stream: true
-      }),
+      body: JSON.stringify(requestBody),
       signal: controller.signal
     });
 
