@@ -144,10 +144,13 @@ async function runSelfProfiling(queryFn, providerConfig, contextLimitTokens) {
     start() {}, stop() {}, fail() {}, updateTokens() {}, _modelName: null
   };
 
+  // Le prompt impose déjà le format JSON, et un fallback regex gère les modèles non-JSON.
+  // On n'envoie PAS response_format : LM Studio n'accepte que 'json_schema'/'text' (pas
+  // 'json_object' propre à OpenAI), et Anthropic ne le supporte pas du tout. Le schéma
+  // strict + le fallback regex couvrent tous les cas sans dépendre du format natif.
   const options = {
     contextLimitTokens,
-    providerConfig,
-    responseFormat: { type: 'json_object' }
+    providerConfig
   };
 
   let response;
