@@ -141,7 +141,8 @@ async function runSelfProfiling(queryFn, providerConfig, contextLimitTokens) {
   // Spinner factice : l'appelant gère le spinner réel. On passe un objet minimal
   // compatible avec l'interface attendue par queryFn (updateTokens, start/stop no-op).
   const noopSpinner = {
-    start() {}, stop() {}, fail() {}, updateTokens() {}, _modelName: null
+    start() {}, stop() {}, fail() {}, updateTokens() {}, _modelName: null,
+    beginStreaming() {}, appendStreamChunk() {}, endStreaming() {}
   };
 
   // Le prompt impose déjà le format JSON, et un fallback regex gère les modèles non-JSON.

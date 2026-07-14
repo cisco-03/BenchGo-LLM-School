@@ -1,5 +1,28 @@
 # CHANGELOG - Carnet de Notes BenchGo
 
+## 2026-07-14 — Mise en page responsive sur 3 colonnes du Classement
+
+### Contexte
+La mise en page des forces, faiblesses et détails par école s'affichait sur une seule colonne verticale, créant un espace vide inesthétique et allongeant inutilement les cartes des modèles. L'utilisateur a demandé de les répartir sur 3 colonnes horizontales.
+
+### Actions entreprises
+
+**1. `leaderboard.js` — Générateur de classement**
+- Ajout d'une mise en page CSS Grid `.args-section { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; ... }` avec media query `@media (max-width: 768px)` pour la compatibilité mobile.
+- Restructuration de la fonction `buildLeaderboardHTML` pour générer systématiquement les 3 colonnes (Forces, Faiblesses + Notes, Détails par école).
+- Ajout de l'attribut `open` par défaut sur le `<details class="ecoles-toggle">` pour occuper l'espace harmonieusement.
+
+**2. `Export-Rapports/classement.html` — Rapport statique actif**
+- Application des mêmes modifications CSS Grid et restructuration HTML pour que les changements soient visibles immédiatement sans régénération complète obligatoire.
+
+### Résultat
+- Un affichage plus compact, esthétique et équilibré avec les trois sections disposées côte à côte sur grand écran.
+- Une transition fluide en colonne unique sur petit écran grâce au design responsive.
+
+### Fichiers modifiés
+- `leaderboard.js`
+- `Export-Rapports/classement.html`
+
 ## 2026-07-12 — Auto-Profilage & Calibration (Self-Profiling)
 
 ### Contexte

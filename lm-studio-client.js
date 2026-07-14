@@ -55,8 +55,8 @@ async function streamLLMResponse(response, spinner) {
           fullContent += delta;
           tokenCount++;
           spinner.updateTokens(tokenCount, fullContent.length);
-          // Affiche le fragment de réponse finale en live
-          if (delta.trim()) spinner.appendStreamChunk(delta, 'content');
+          // Affiche le fragment de réponse finale en live (flux brut, sans filtre)
+          spinner.appendStreamChunk(delta, 'content');
         }
         // Certains modèles de raisonnement (MiniCPM5, Qwen3, DeepSeek-R1, GLM...)
         // diffusent leur réponse dans `reasoning_content` et laissent `content` vide.
@@ -66,7 +66,7 @@ async function streamLLMResponse(response, spinner) {
           tokenCount++;
           spinner.updateTokens(tokenCount, reasoningContent.length);
           // Affiche le raisonnement (pensée) en live, comme les logs LM Studio
-          if (reasoning.trim()) spinner.appendStreamChunk(reasoning, 'reasoning');
+          spinner.appendStreamChunk(reasoning, 'reasoning');
         }
         if (modelName && !spinner._modelName) {
           spinner._modelName = modelName;

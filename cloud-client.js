@@ -62,14 +62,14 @@ async function streamOpenAICompatResponse(response, spinner) {
           fullContent += delta;
           tokenCount++;
           spinner.updateTokens(tokenCount, fullContent.length);
-          if (delta.trim()) spinner.appendStreamChunk(delta, 'content');
+          spinner.appendStreamChunk(delta, 'content');
         }
         // Modèles de raisonnement (DeepSeek-R1, Qwen3, GLM...) en cloud
         if (reasoning) {
           reasoningContent += reasoning;
           tokenCount++;
           spinner.updateTokens(tokenCount, reasoningContent.length);
-          if (reasoning.trim()) spinner.appendStreamChunk(reasoning, 'reasoning');
+          spinner.appendStreamChunk(reasoning, 'reasoning');
         }
       } catch (_) {}
     }
@@ -116,7 +116,7 @@ async function streamAnthropicResponse(response, spinner) {
           reasoningContent += thinkText;
           tokenCount++;
           spinner.updateTokens(tokenCount, reasoningContent.length);
-          if (thinkText.trim()) spinner.appendStreamChunk(thinkText, 'reasoning');
+          spinner.appendStreamChunk(thinkText, 'reasoning');
           continue;
         }
         if (chunk.type === 'content_block_delta' && chunk.delta?.type === 'text_delta') {
@@ -125,7 +125,7 @@ async function streamAnthropicResponse(response, spinner) {
           fullContent += text;
           tokenCount++;
           spinner.updateTokens(tokenCount, fullContent.length);
-          if (text.trim()) spinner.appendStreamChunk(text, 'content');
+          spinner.appendStreamChunk(text, 'content');
         }
       } catch (_) {}
     }

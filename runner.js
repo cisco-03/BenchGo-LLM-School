@@ -14,6 +14,7 @@ const { buildTierReport, shortenModelName, buildCalibrationReport } = require('.
 const { updateTiers } = require('./auto-updater');
 const scoreLedger = require('./score-ledger');
 const { runSelfProfiling, filterTasksByProfile, SKILL_LABELS } = require('./self-profiling');
+const leaderboard = require('./leaderboard');
 
 const DEFAULT_CONTEXT_LIMIT_TOKENS = 16384;
 const MAX_RATTRAPAGE_ATTEMPTS = 1;
@@ -584,6 +585,7 @@ async function main() {
   const queryFn = isCloudMode ? queryLLMCloud : queryLLMLocal;
   let profileArg = profileArgExplicit || (isCloudMode ? 'FRONTIER' : 'STANDARD');
   const contextLimitTokens = contextLimitFromCli || DEFAULT_CONTEXT_LIMIT_TOKENS;
+  let preKnownModelName = isCloudMode ? cloudModel : null;
 
   // Lance l'auto-updater pour ajouter les exercices manquants et les points
   updateTiers();
@@ -615,6 +617,7 @@ async function main() {
   } else if (!profileArgExplicit) {
     logger.info(`Aucun --profile= passé. Tentative de détection automatique via LM Studio...`);
     const detectedModelName = await fetchModelNameFromLMStudio();
+    preKnownModelName = detectedModelName;
     if (detectedModelName) {
       const { paramSize, detected } = detectProfileFromModelName(detectedModelName);
       logger.modelDetection(detectedModelName, paramSize ? paramSize + 'B' : null, detected || 'inconnu');
@@ -722,6 +725,31 @@ async function main() {
   let allEvalResults = [];      // Agrégation pour le calcul de calibration (status: success/failed/bypassed)
   let allFilterDecisions = [];  // Décisions de filtrage pour la section rapport calibration
   const ecoleLabel = PROFILES[profileArg]?.ecole || profileArg;
+
+  // --- Détection de doublon (modèle déjà testé sur cette école) ---
+  // Vérifie le carnet de scores persistant : si une entrée existe déjà pour ce
+  // modèle sur cette école, on alerte l'utilisateur et on lui propose de forcer.
+  if (tierArg === "all" && preKnownModelName) {
+    const dupShortName = shortenModelName(preKnownModelName);
+    const dupLedger = scoreLedger.loadLedger(dupShortName);
+    const existing = dupLedger.ecoles[ecoleLabel];
+    if (existing) {
+      console.log('');
+      console.log(`  \x1b[33m⚠ ATTENTION : Ce modèle a déjà été testé sur l'école ${ecoleLabel} !\x1b[0m`);
+      console.log(`  \x1b[90m  Score précédent : ${existing.score}/${existing.max} (${existing.pct}%) — ${existing.date}\x1b[0m`);
+      console.log(`  \x1b[90m  Rapport : ${existing.reportFile || 'N/A'}\x1b[0m`);
+      const forceRetest = await askYesNo(`  Voulez-vous forcer un nouveau test (écrasera le score précédent) ?`, true);
+      if (!forceRetest) {
+        console.log(`  \x1b[36mTest annulé : le score existant est conservé.\x1b[0m`);
+        console.log(`  \x1b[90mAstuce : relancez avec un autre modèle ou profil pour comparer.\x1b[0m\n`);
+        logger.info(`Test annulé : doublon détecté pour ${preKnownModelName} sur ${ecoleLabel}, utilisateur a refusé de forcer.`);
+        logger.close();
+        return;
+      }
+      logger.info(`Doublon détecté mais utilisateur force le re-test de ${preKnownModelName} sur ${ecoleLabel}.`);
+      console.log(`  \x1b[33mRe-test forcé — le nouveau score remplacera l'ancien.\x1b[0m\n`);
+    }
+  }
 
   for (const tierNum of tierKeys) {
     const tierData = tiers[tierNum];
@@ -851,19 +879,7 @@ async function main() {
   }
 
   // --- Section Auto-Profilage & Calibration (injectée en haut du rapport) ---
-  // Placée après le scorecard récapitulatif mais avant le verdict, pour garder
-  // l'en-tête du rapport intact (date/log/profil). La section est générée ici
-  // puis insérée juste après le premier "---" du rapport.
-  if (selfProfile && calibration) {
-    const calibrationSection = buildCalibrationReport(selfProfile, calibration, allFilterDecisions, SKILL_LABELS);
-    // Insère la section juste après le premier séparateur "---" de l'en-tête
-    const firstSep = globalReport.indexOf('\n---\n');
-    if (firstSep !== -1) {
-      globalReport = globalReport.slice(0, firstSep + 5) + '\n' + calibrationSection + globalReport.slice(firstSep + 5);
-    } else {
-      globalReport = calibrationSection + globalReport;
-    }
-  }
+  // Injectée plus loin, après le calcul de `calibration` (cf. ci-dessous).
 
   const hasMandatory = globalScore.mandatoryTotal > 0;
   const pctMandatory = hasMandatory
@@ -883,6 +899,17 @@ async function main() {
     calibration = scoreLedger.calculateCalibrationIndex(selfProfile, allEvalResults);
     const verdict = scoreLedger.interpretCalibration(calibration.calibrationIndex);
     logger.info(`Calibration : D=${calibration.declaredLevel.toFixed(3)}, P=${calibration.actualPerformance.toFixed(3)}, C=${calibration.calibrationIndex.toFixed(3)} — ${verdict}`);
+  }
+
+  // --- Injection de la section Calibration dans le rapport (après calcul) ---
+  if (selfProfile && calibration) {
+    const calibrationSection = buildCalibrationReport(selfProfile, calibration, allFilterDecisions, SKILL_LABELS);
+    const firstSep = globalReport.indexOf('\n---\n');
+    if (firstSep !== -1) {
+      globalReport = globalReport.slice(0, firstSep + 5) + '\n' + calibrationSection + globalReport.slice(firstSep + 5);
+    } else {
+      globalReport = calibrationSection + globalReport;
+    }
   }
 
   console.log('\x1b[36m\u2554\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2557\x1b[0m');
@@ -1020,6 +1047,13 @@ async function main() {
   // --- Bilan global multi-écoles (console) ---
   if (effectiveModel && tierArg === "all") {
     scoreLedger.printBilanGlobal(shortName, effectiveModel);
+  }
+
+  // --- Génération du classement global (HTML + Markdown) ---
+  // Après chaque run complet, on régénère le classement de tous les modèles testés.
+  if (tierArg === "all") {
+    console.log(`  \x1b[35mGénération du classement...\x1b[0m`);
+    leaderboard.generateLeaderboard();
   }
 
   logger.info(`Benchmark terminé. Score global : ${globalScore.passed}/${globalScore.total} (${pctGlobal}%). Score obligatoire : ${globalScore.mandatoryPassed}/${globalScore.mandatoryTotal} (${pctMandatory}%).`);

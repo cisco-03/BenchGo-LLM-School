@@ -5,6 +5,28 @@
 - Le projet est en version BenchGo V3.
 - Les fichiers sources sont désormais à la racine de `benchmark-v3/` (le nom `benchmark-v2` est abandonné).
 
+## 2026-07-14 — Classement des modèles (Leaderboard) + Détection de doublon
+
+### Contexte
+L'utilisateur enchaînait les tests de modèles sans pouvoir comparer leurs scores ni savoir où chaque modèle se situe par rapport aux autres. Demande : « récupérer les scores à chaque fois qu'un modèle est testé sur une école, générer un HTML, comptabiliser les points et faire un classement comme les courses de chevaux — les bons et les mauvais, avec des arguments ». Demande complémentaire : détecter si un modèle a déjà été testé sur une école et proposer de forcer un re-test.
+
+### Actions entreprises
+- **Nouveau module `leaderboard.js`** : agrège tous les carnets de scores (`Export-Rapports/.carnet/*.json`), calcule des métriques globales (score, %, santé, bonus, aide, rattrapage, calibration), génère des **arguments qualitatifs** automatiques (forces/faiblesses) selon les résultats, et produit un classement trié (meilleur → pire) au format **HTML** (style sombre, médailles 🥇🥈🥉, barres de progression) et **Markdown** (tableau récapitulatif + détail par modèle).
+- **`runner.js` — Génération automatique** : après chaque run complet (`tierArg === "all"`), le classement est régénéré automatiquement et affiché en console. Le classement peut aussi être régénéré manuellement via `node leaderboard.js`.
+- **`runner.js` — Détection de doublon** : avant de lancer les tiers, le runner vérifie le carnet de scores. Si le modèle a déjà été testé sur la même école, il affiche le score précédent et demande à l'utilisateur s'il veut forcer un re-test (`askYesNo`). Si l'utilisateur refuse, le test est annulé et le score existant est conservé. Si l'utilisateur accepte, le nouveau score remplacera l'ancien.
+- **`leaderboard.js` — Tri** : % décroissant, puis score décroissant, puis santé globale décroissante. Les modèles catastrophiques (pct < 50) sont classés en bas avec le verdict « NON RECOMMANDÉ ».
+- **`leaderboard.js` — Arguments** : détection automatique de forces (maîtrise, obligatoire 100%, bonus, santé robuste, lucidité calibration) et de faiblesses (échec obligatoire, aide, rattrapage, santé critique, biais de calibration, plus de 50% d'échec).
+
+### Fichiers modifiés
+- `leaderboard.js` (nouveau — ~270 lignes)
+- `runner.js` — import leaderboard, détection de doublon, génération auto du classement
+- `Memories-BenchGo/README.md` — section Classement des modèles
+
+### Validation
+- `node --check leaderboard.js` / `node --check runner.js` : syntaxe OK.
+- `node leaderboard.js` : génère HTML + MD avec 2 modèles classés (mistral-7b 98% 🥇, minicpm5-1b 50% 🥈), arguments qualitatifs corrects (forces : maîtrise quasi-parfaite, 100% obligatoire, +349 bonus, santé robuste ; faiblesses : aide 1x, rattrapage 1x, biais calibration C=0.60).
+- HTML ouvrable dans un navigateur, style sombre cohérent, médailles et couleurs de verdict visibles.
+
 ## 2026-07-11 — Cumul des scores multi-écoles + quota + bonus optionnel
 
 ### Contexte

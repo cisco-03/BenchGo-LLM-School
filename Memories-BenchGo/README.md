@@ -13,6 +13,8 @@ Memories-BenchGo/
 ├── CHANGELOG.md           ← Carnet de notes chronologique
 ├── architecture/          ← Documentation de l'architecture du projet
 │   └── benchmark-v2.md    ← Architecture complète du moteur
+├── carte-mentale/         ← Cartes mentales et guides visuels de la structure
+│   └── classement-leaderboard.md  ← Fonctionnement et débogage du classement HTML/CSS
 ├── refactorisations/      ← Historique des refactorisations
 │   ├── 2026-07-07-runner-modularisation.md
 │   ├── 2026-07-07-runner-rattrapage-interactif.md
@@ -126,6 +128,21 @@ se déroule normalement avec toutes les tâches.
 - **Architecture actuelle** : Voir [architecture/benchmark-v2.md](./architecture/benchmark-v2.md) (BenchGo V3, dossier technique `benchmark-v2`)
 - **Refactorisations récentes** : Voir [refactorisations/](./refactorisations/)
 - **Issues/fix récentes** : Voir [issues-fixes/](./issues-fixes/)
+
+## Classement des modèles (Leaderboard)
+
+BenchGo génère un **classement global** de tous les modèles testés, du meilleur au pire,
+à la fin de chaque run complet (`tierArg === "all"`). Le classement peut aussi être
+régénéré manuellement via `node leaderboard.js`.
+
+- **Formats produits** : HTML (auto-ouvrable, style sombre avec médailles 🥇🥈🥉) + Markdown.
+- **Emplacement** : `Export-Rapports/<AAAA-MM-JJ>/classement_<HH-MM-SS>.html|md`
+- **Source des données** : carnets de scores persistants `Export-Rapports/.carnet/<modele>.json`
+- **Tri** : % décroissant, puis score, puis santé globale
+- **Arguments qualitatifs** : forces et faiblesses générés automatiquement (maîtrise, obligatoire,
+  bonus, aide, rattrapage, santé, calibration)
+- **Détection de doublon** : si un modèle a déjà été testé sur la même école, le runner alerte
+  l'utilisateur et propose de forcer un re-test (le nouveau score remplace l'ancien).
 
 ## Objectif de ce dossier
 

@@ -80,6 +80,14 @@ modèle à générer du code correct à travers 7 niveaux de difficulté (Tiers 
 │ buildCalibrationReport() (NOUVEAU)      │
 │ sanitizeFilename() / shortenModelName() │
 └────────────────────────────────────────┘
+
+┌────────────────────────────────────────┐
+│       leaderboard.js (NOUVEAU)          │
+│ generateLeaderboard()                  │
+│ buildLeaderboardHTML() / MD()          │
+│ aggregateLedger() / buildArguments()    │
+│ Détection de doublon (via carnet)      │
+└────────────────────────────────────────┘
 ```
 
 ## Modules
@@ -112,8 +120,8 @@ modèle à générer du code correct à travers 7 niveaux de difficulté (Tiers 
 
 ### runner.js
 - **Rôle** : Orchestrateur principal
-- **Contenu** : `main()`, `runTierAttempt()`, routing dual Local/Cloud (`queryFn` + `providerConfig`), rattrapage interactif (désactivé en mode cloud), export des rapports classés. **Auto-profilage** : interview du modèle au démarrage via `self-profiling.js`, filtrage amont des tâches selon le profil auto-déclaré, agrégation des résultats (status success/failed/bypassed), calcul de l'Indice de Calibration en fin de run, injection de la section rapport.
-- **Dépendances** : tous les modules + `self-profiling.js`
+- **Contenu** : `main()`, `runTierAttempt()`, routing dual Local/Cloud (`queryFn` + `providerConfig`), rattrapage interactif (désactivé en mode cloud), export des rapports classés. **Auto-profilage** : interview du modèle au démarrage via `self-profiling.js`, filtrage amont des tâches selon le profil auto-déclaré, agrégation des résultats (status success/failed/bypassed), calcul de l'Indice de Calibration en fin de run, injection de la section rapport. **Détection de doublon** : avant le lancement des tiers, vérifie le carnet de scores et propose un re-test forcé si le modèle a déjà été évalué sur la même école. **Classement** : après chaque run complet, régénère le classement global via `leaderboard.js`.
+- **Dépendances** : tous les modules + `self-profiling.js` + `leaderboard.js`
 
 ### tier-loader.js
 - **Rôle** : Chargement des fichiers tier JSON par profil
@@ -158,6 +166,19 @@ modèle à générer du code correct à travers 7 niveaux de difficulté (Tiers 
 - **Rôle** : Grand livre des scores persistant (cumul multi-écoles) + calcul de calibration
 - **Contenu** : `loadLedger`/`saveResult`/`saveAndBuildBilan` (carnet JSON par modèle), `computeGrandTotal`, `printBilanGlobal`, `buildBilanMarkdown`, **`calculateCalibrationIndex(declaredProfile, testResults)`** (D = niveau moyen déclaré /5, P = réussite des tâches exécutées, C = 1 - |D-P|), **`interpretCalibration(C)`** (≥0.85 Lucide / 0.65-0.85 Modérément Calibré / <0.65 Biais majeur)
 - **Dépendances** : `logger.js`, `progress-bar.js`
+
+### leaderboard.js *(nouveau 2026-07-14)*
+- **Rôle** : Classement global des modèles (leaderboard)
+- **Contenu** :
+  - `loadAllLedgers()` — lit tous les carnets `.json` de `Export-Rapports/.carnet/`
+  - `aggregateLedger(ledger)` — agrège un carnet en entrée de classement (score, max, pct, santé, bonus, aide, rattrapage, écoles, calibration)
+  - `buildArguments(entry)` — génère des **arguments qualitatifs** automatiques (forces/faiblesses/notes) selon les métriques
+  - `getVerdict(entry)` — détermine le verdict (RECOMMANDÉ ≥80% / PARTIEL ≥50% / NON RECOMMANDÉ <50%)
+  - `buildLeaderboardHTML(entries)` — génère un HTML autonome (style sombre, médailles, barres de progression)
+  - `buildLeaderboardMarkdown(entries)` — génère un Markdown (tableau récapitulatif + détail par modèle)
+  - `generateLeaderboard()` — orchestre : charge → agrège → trie (% décroissant) → génère HTML+MD → sauvegarde dans `Export-Rapports/<date>/classement_<heure>.html|md`
+- **Exécutable standalone** : `node leaderboard.js` régénère le classement à la demande
+- **Dépendances** : `logger.js`, `progress-bar.js`, `report-generator.js`
 
 ## Profils d'évaluation
 

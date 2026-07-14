@@ -1,7 +1,6 @@
-const { SPINNER_CHARS, WAITING_MESSAGES } = require('./config');
+const { SPINNER_CHARS } = require('./config');
 
 const BAR_WIDTH = 30;
-const WAITING_MESSAGE_INTERVAL_MS = 2500;
 
 class ProgressBar {
   constructor(label, total) {
@@ -32,44 +31,27 @@ class Spinner {
     this.tokenCount = 0;
     this.charCount = 0;
     this._modelName = null;
-    this.messageIndex = Math.floor(Math.random() * WAITING_MESSAGES.length);
-    this.currentWaitingMessage = WAITING_MESSAGES[this.messageIndex];
-    this.messageInterval = null;
 
-    // Suivi du raisonnement/streaming en live (cf. logs LM Studio)
+    // Streaming live du raisonnement (cf. logs LM Studio)
     this._streamingActive = false;
     this._streamStartTime = null;
-    this._lastReasoningChunkTime = null;
-    this._reasoningTokensWindow = []; // {t, count} pour calcul t/s sur 3s glissantes
-    this._lastDisplayLen = 0;
-    this._reasoningLineActive = false;
+    this._streamingKind = null;       // 'reasoning' | 'content'
+    this._lastStatsTime = 0;          // dernier affichage des stats (throttle)
+    this._reasoningTokensWindow = []; // fenêtre glissante 3s pour tg_3s
   }
 
   start() {
     this.interval = setInterval(() => {
+      // Pendant le streaming, le spinner est arrêté — on n'affiche rien ici.
+      if (this._streamingActive) return;
       const frame = SPINNER_CHARS[this.frameIndex % SPINNER_CHARS.length];
       this.frameIndex++;
-
-      let status;
-      if (this._streamingActive && this.tokenCount > 0) {
-        const elapsed = (Date.now() - this._streamStartTime) / 1000;
-        const tps = elapsed > 0 ? (this.tokenCount / elapsed).toFixed(2) : '0.00';
-        status = `${this.label}... (n_decoded=${this.tokenCount}, tg=${tps} t/s)`;
-      } else if (this.tokenCount > 0) {
-        status = `${this.label}... (${this.tokenCount} tokens, ${this.charCount} chars)`;
-      } else {
-        status = this.currentWaitingMessage;
-      }
+      const status = this.tokenCount > 0
+        ? `${this.label}... (${this.tokenCount} tokens, ${this.charCount} chars)`
+        : `${this.label}...`;
       const line = `  \x1b[35m${frame}\x1b[0m ${status}`;
       process.stdout.write(`\r${line}`.padEnd(120));
     }, 100);
-
-    this.messageInterval = setInterval(() => {
-      if (this.tokenCount === 0) {
-        this.messageIndex = (this.messageIndex + 1) % WAITING_MESSAGES.length;
-        this.currentWaitingMessage = WAITING_MESSAGES[this.messageIndex];
-      }
-    }, WAITING_MESSAGE_INTERVAL_MS);
   }
 
   updateTokens(tokenCount, charCount) {
@@ -77,95 +59,82 @@ class Spinner {
     this.charCount = charCount;
   }
 
-  // Active le mode streaming live : affiche le raisonnement du modèle au fur
-  // et à mesure de sa génération (comme les logs LM Studio), avec le nombre de
-  // tokens décodés et le débit en t/s. À appeler une fois au début du stream.
+  // Active le mode streaming : arrête le spinner et prépare l'affichage en flux.
   beginStreaming() {
     this._streamingActive = true;
     this._streamStartTime = Date.now();
-    this._lastReasoningChunkTime = Date.now();
+    this._lastStatsTime = 0;
     this._reasoningTokensWindow = [];
+    // Arrête le spinner pour libérer la console
+    if (this.interval) { clearInterval(this.interval); this.interval = null; }
+    // Efface la ligne du spinner
+    process.stdout.write(`\r${' '.repeat(120)}\r`);
   }
 
-  // Affiche un fragment de raisonnement en live (streaming) sur une ligne
-  // rafraîchie, façon log LM Studio. À appeler pour chaque chunk reçu.
+  // Affiche un fragment du raisonnement/réponse directement dans la console,
+  // sans manipulation de curseur (compatible PowerShell 5.1). Le texte s'écrit
+  // au fur et à mesure, comme les logs LM Studio.
   // kind: 'reasoning' (pensée) | 'content' (réponse finale) | null
   appendStreamChunk(text, kind = null) {
     if (!text) return;
-    // Nouvelle ligne de raisonnement : on saute une ligne après le spinner
-    if (!this._reasoningLineActive) {
-      // Arrête le spinner spinner temporairement pour libérer la ligne
-      if (this.interval) { clearInterval(this.interval); this.interval = null; }
-      if (this.messageInterval) { clearInterval(this.messageInterval); this.messageInterval = null; }
+
+    // Si on change de type (reasoning -> content), on ajoute un séparateur
+    if (this._streamingKind && this._streamingKind !== kind) {
       process.stdout.write('\n');
-      this._reasoningLineActive = true;
-      this._lastDisplayLen = 0;
     }
+    this._streamingKind = kind;
 
+    const kindTag = kind === 'reasoning' ? '💭 ' : (kind === 'content' ? '✍ ' : '');
+
+    // Affiche les stats périodiquement (throttle ~2s), façon LM Studio
     const now = Date.now();
-    const elapsed = (now - this._streamStartTime) / 1000;
-    const tps = elapsed > 0 ? (this.tokenCount / elapsed).toFixed(2) : '0.00';
+    if (now - this._lastStatsTime > 2000 || this._lastStatsTime === 0) {
+      this._lastStatsTime = now;
+      const elapsed = (now - this._streamStartTime) / 1000;
+      const tps = elapsed > 0 ? (this.tokenCount / elapsed).toFixed(2) : '0.00';
 
-    // Fenêtre glissante 3s pour t/s (style log LM Studio : tg_3s)
-    this._reasoningTokensWindow.push({ t: now, count: this.tokenCount });
-    this._reasoningTokensWindow = this._reasoningTokensWindow.filter(e => now - e.t <= 3000);
-    let tps3s = '0.00';
-    if (this._reasoningTokensWindow.length >= 2) {
-      const first = this._reasoningTokensWindow[0];
-      const last = this._reasoningTokensWindow[this._reasoningTokensWindow.length - 1];
-      const dt = (last.t - first.t) / 1000;
-      if (dt > 0) tps3s = ((last.count - first.count) / dt).toFixed(2);
+      // Fenêtre glissante 3s pour tg_3s
+      this._reasoningTokensWindow.push({ t: now, count: this.tokenCount });
+      this._reasoningTokensWindow = this._reasoningTokensWindow.filter(e => now - e.t <= 3000);
+      let tps3s = '0.00';
+      if (this._reasoningTokensWindow.length >= 2) {
+        const first = this._reasoningTokensWindow[0];
+        const last = this._reasoningTokensWindow[this._reasoningTokensWindow.length - 1];
+        const dt = (last.t - first.t) / 1000;
+        if (dt > 0) tps3s = ((last.count - first.count) / dt).toFixed(2);
+      }
+
+      process.stdout.write(`\x1b[90m  ${kindTag}n_decoded = ${this.tokenCount}, tg = ${tps} t/s, tg_3s = ${tps3s} t/s\x1b[0m\n`);
     }
 
-    // Tronque le texte affiché pour éviter les lignes trop longues (terminaux ~120 colonnes)
-    const kindTag = kind === 'reasoning' ? '💭' : (kind === 'content' ? '✍' : '›');
-    const header = `  \x1b[90m${kindTag} n_decoded=${this.tokenCount}, tg=${tps} t/s, tg_3s=${tps3s} t/s\x1b[0m`;
-    // On ne réaffiche que les ~80 derniers caractères du flux courant
-    const snippet = text.length > 80 ? '…' + text.slice(-80) : text;
-    const display = `${header}\n  \x1b[37m${snippet}\x1b[0m`;
-
-    // Efface la zone d'affichage précédente (2 lignes) puis réécrit
-    if (this._lastDisplayLen > 0) {
-      process.stdout.write(`\x1b[2A\r${' '.repeat(120)}\n${' '.repeat(120)}\n\x1b[2A\r`);
-    }
-    process.stdout.write(`\r${display}\n`);
-    this._lastDisplayLen = display.length;
+    // Écrit le fragment de texte directement (append, pas de cursor trick)
+    process.stdout.write(text);
   }
 
-  // Termine l'affichage streaming et relance le spinner (si besoin)
+  // Termine le streaming : ferme la ligne en cours.
   endStreaming() {
-    if (this._reasoningLineActive) {
-      // Laisse une ligne vierge pour séparer le raisonnement de la suite
+    if (this._streamingActive) {
       process.stdout.write('\n');
-      this._reasoningLineActive = false;
-      this._lastDisplayLen = 0;
-    }
-    this._streamingActive = false;
-    // Relance le spinner si stop() n'a pas encore été appelé
-    if (!this.interval) {
-      this.start();
+      this._streamingActive = false;
+      this._streamingKind = null;
     }
   }
 
   stop(finalLabel) {
     if (this.interval) clearInterval(this.interval);
-    if (this.messageInterval) clearInterval(this.messageInterval);
-    if (this._reasoningLineActive) {
+    if (this._streamingActive) {
       process.stdout.write('\n');
-      this._reasoningLineActive = false;
+      this._streamingActive = false;
     }
-    this._streamingActive = false;
     process.stdout.write(`\r  \x1b[32m✔\x1b[0m ${finalLabel || this.label} (${this.tokenCount} tokens)`.padEnd(120) + '\n');
   }
 
   fail(finalLabel) {
     if (this.interval) clearInterval(this.interval);
-    if (this.messageInterval) clearInterval(this.messageInterval);
-    if (this._reasoningLineActive) {
+    if (this._streamingActive) {
       process.stdout.write('\n');
-      this._reasoningLineActive = false;
+      this._streamingActive = false;
     }
-    this._streamingActive = false;
     process.stdout.write(`\r  \x1b[31m✘\x1b[0m ${finalLabel || this.label}`.padEnd(120) + '\n');
   }
 }
