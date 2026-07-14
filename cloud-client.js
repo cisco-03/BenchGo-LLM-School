@@ -29,8 +29,11 @@ async function streamOpenAICompatResponse(response, spinner) {
   const reader = response.body.getReader();
   const decoder = new TextDecoder('utf-8');
   let fullContent = '';
+  let reasoningContent = '';
   let tokenCount = 0;
   let sseBuffer = '';
+
+  let streamingStarted = false;
 
   while (true) {
     const { done, value } = await reader.read();
@@ -48,13 +51,34 @@ async function streamOpenAICompatResponse(response, spinner) {
       try {
         const chunk = JSON.parse(payload);
         const delta = chunk.choices?.[0]?.delta?.content;
+        const reasoning = chunk.choices?.[0]?.delta?.reasoning_content;
+
+        if (!streamingStarted && (delta || reasoning)) {
+          spinner.beginStreaming();
+          streamingStarted = true;
+        }
+
         if (delta) {
           fullContent += delta;
           tokenCount++;
           spinner.updateTokens(tokenCount, fullContent.length);
+          if (delta.trim()) spinner.appendStreamChunk(delta, 'content');
+        }
+        // Modèles de raisonnement (DeepSeek-R1, Qwen3, GLM...) en cloud
+        if (reasoning) {
+          reasoningContent += reasoning;
+          tokenCount++;
+          spinner.updateTokens(tokenCount, reasoningContent.length);
+          if (reasoning.trim()) spinner.appendStreamChunk(reasoning, 'reasoning');
         }
       } catch (_) {}
     }
+  }
+
+  if (streamingStarted) spinner.endStreaming();
+
+  if (!fullContent.trim() && reasoningContent.trim()) {
+    fullContent = reasoningContent;
   }
 
   return { content: fullContent, tokenCount };
@@ -64,8 +88,11 @@ async function streamAnthropicResponse(response, spinner) {
   const reader = response.body.getReader();
   const decoder = new TextDecoder('utf-8');
   let fullContent = '';
+  let reasoningContent = '';
   let tokenCount = 0;
   let sseBuffer = '';
+
+  let streamingStarted = false;
 
   while (true) {
     const { done, value } = await reader.read();
@@ -82,13 +109,32 @@ async function streamAnthropicResponse(response, spinner) {
       if (!payload) continue;
       try {
         const chunk = JSON.parse(payload);
+        // Anthropic "thinking" deltas (extended thinking)
+        if (chunk.type === 'content_block_delta' && chunk.delta?.type === 'thinking_delta') {
+          const thinkText = chunk.delta.thinking || '';
+          if (!streamingStarted && thinkText) { spinner.beginStreaming(); streamingStarted = true; }
+          reasoningContent += thinkText;
+          tokenCount++;
+          spinner.updateTokens(tokenCount, reasoningContent.length);
+          if (thinkText.trim()) spinner.appendStreamChunk(thinkText, 'reasoning');
+          continue;
+        }
         if (chunk.type === 'content_block_delta' && chunk.delta?.type === 'text_delta') {
-          fullContent += chunk.delta.text || '';
+          const text = chunk.delta.text || '';
+          if (!streamingStarted && text) { spinner.beginStreaming(); streamingStarted = true; }
+          fullContent += text;
           tokenCount++;
           spinner.updateTokens(tokenCount, fullContent.length);
+          if (text.trim()) spinner.appendStreamChunk(text, 'content');
         }
       } catch (_) {}
     }
+  }
+
+  if (streamingStarted) spinner.endStreaming();
+
+  if (!fullContent.trim() && reasoningContent.trim()) {
+    fullContent = reasoningContent;
   }
 
   return { content: fullContent, tokenCount };

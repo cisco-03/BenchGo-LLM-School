@@ -23,6 +23,9 @@ async function streamLLMResponse(response, spinner) {
   let tokenCount = 0;
   let sseBuffer = '';
 
+  // Active le mode streaming live du spinner dès la première donnée reçue.
+  let streamingStarted = false;
+
   while (true) {
     const { done, value } = await reader.read();
     if (done) break;
@@ -42,22 +45,39 @@ async function streamLLMResponse(response, spinner) {
         const delta = chunk.choices?.[0]?.delta?.content;
         const reasoning = chunk.choices?.[0]?.delta?.reasoning_content;
         const modelName = chunk.model;
+
+        if (!streamingStarted && (delta || reasoning)) {
+          spinner.beginStreaming();
+          streamingStarted = true;
+        }
+
         if (delta) {
           fullContent += delta;
           tokenCount++;
           spinner.updateTokens(tokenCount, fullContent.length);
+          // Affiche le fragment de réponse finale en live
+          if (delta.trim()) spinner.appendStreamChunk(delta, 'content');
         }
         // Certains modèles de raisonnement (MiniCPM5, Qwen3, DeepSeek-R1, GLM...)
         // diffusent leur réponse dans `reasoning_content` et laissent `content` vide.
-        // On le capture pour ne pas perdre la réponse.
+        // On le capture pour ne pas perdre la réponse ET l'afficher en live.
         if (reasoning) {
           reasoningContent += reasoning;
+          tokenCount++;
+          spinner.updateTokens(tokenCount, reasoningContent.length);
+          // Affiche le raisonnement (pensée) en live, comme les logs LM Studio
+          if (reasoning.trim()) spinner.appendStreamChunk(reasoning, 'reasoning');
         }
         if (modelName && !spinner._modelName) {
           spinner._modelName = modelName;
         }
       } catch (_) {}
     }
+  }
+
+  // Termine l'affichage streaming (relance le spinner proprement)
+  if (streamingStarted) {
+    spinner.endStreaming();
   }
 
   // Repli : si le modèle n'a produit aucun `content` (modèle de raisonnement),

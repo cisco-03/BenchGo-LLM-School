@@ -46,7 +46,19 @@ function buildTierReport(tierData, evalResults, rawResponse, stats = {}) {
     let tags = '';
     if (taskResult.helpUsed) tags += ' *(avec aide)*';
     if (taskResult.retried) tags += ' *(rattrapage)*';
-    report += `### ${taskResult.id} — ${taskResult.label} ${taskPassed ? '✔' : '✘'}${tags}\n\n`;
+    const statusIcon = taskResult.status === 'bypassed' ? '⊘' : (taskPassed ? '✔' : '✘');
+    report += `### ${taskResult.id} — ${taskResult.label} ${statusIcon}${tags}\n\n`;
+
+    // Bloc points + type d'exercice (identique à l'invite de commande)
+    const maxPts = taskResult.maxPoints || 0;
+    const netPts = taskResult.points || 0;
+    const taskType = taskResult.taskType || '—';
+    const statusLabel = taskResult.status === 'bypassed' ? 'Bypassé'
+      : (taskPassed ? 'Validé' : 'Échec');
+    report += `| Exercice | Type | Points obtenus | Points max | Statut |\n`;
+    report += `|---|---|---|---|---|\n`;
+    report += `| ${taskResult.id} | ${taskType} | ${netPts} | ${maxPts} | ${statusLabel} |\n\n`;
+
     report += `Score : ${passedCount}/${taskResult.evaluations.length}\n\n`;
 
     for (const ev of taskResult.evaluations) {
@@ -67,17 +79,30 @@ function buildTierReport(tierData, evalResults, rawResponse, stats = {}) {
   const pct = totalCount > 0 ? Math.round((totalPassed / totalCount) * 100) : 0;
   
   // Calculate points
-  const points = evalResults.reduce((sum, tr) => sum + tr.points, 0);
+  const points = evalResults.reduce((sum, tr) => sum + (tr.points || 0), 0);
+  const maxPointsTotal = evalResults.reduce((sum, tr) => sum + (tr.maxPoints || 0), 0);
   
   const annotation = (stats.tierAnnotations && stats.tierAnnotations.length > 0)
     ? ` (${stats.tierAnnotations.join(', ')})`
     : '';
-  report += `**Score du tier : ${points}/100 Points${annotation}**\n`;
+  report += `**Score du tier : ${points}/${maxPointsTotal} Points${annotation}**\n`;
   if (points >= 70) {
     report += `> 🏆 **Classe Validée avec Mention**\n\n`;
   } else {
     report += `> ❌ **Classe Non Validée (Seuil de 70 points non atteint)**\n\n`;
   }
+
+  // --- Tableau récapitulatif des points par exercice ---
+  report += `### Tableau des points par exercice — Tier ${tierData.tier}\n\n`;
+  report += `| Exercice | Type | Points obtenus | Points max | Statut | Aide | Rattrapage |\n`;
+  report += `|---|---|---|---|---|---|---|\n`;
+  for (const tr of evalResults) {
+    const st = tr.status === 'bypassed' ? '⊘ Bypassé' : (tr.status === 'success' ? '✔ Validé' : '✘ Échec');
+    const help = tr.helpUsed ? 'Oui' : 'Non';
+    const retry = tr.retried ? 'Oui' : 'Non';
+    report += `| ${tr.id} | ${tr.taskType || '—'} | ${tr.points || 0} | ${tr.maxPoints || 0} | ${st} | ${help} | ${retry} |\n`;
+  }
+  report += `| **TOTAL** | | **${points}** | **${maxPointsTotal}** | | | |\n\n`;
 
   report += `<details>\n<summary>Réponse brute du modèle</summary>\n\n`;
   report += '```\n' + (rawResponse || 'N/A') + '\n```\n\n</details>\n\n---\n\n';

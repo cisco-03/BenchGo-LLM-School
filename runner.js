@@ -450,6 +450,8 @@ async function runTierAttempt({ tierNum, tierData, isMandatory, profileArg, cont
             code: studentCode,
             evaluations: taskResults,
             points: taskNetPoints[task.id] || 0,
+            maxPoints: task.points || 8,
+            taskType: task.label ? task.label.split(':')[0].trim() : 'Exercice',
             helpUsed: Boolean(taskHelpUsed[task.id]),
             retried: (taskRetryMap[task.id] || 0) >= 1,
             status: taskPassed ? 'success' : 'failed'
@@ -488,6 +490,8 @@ async function runTierAttempt({ tierNum, tierData, isMandatory, profileArg, cont
       code: null,
       evaluations: [],
       points: 0,
+      maxPoints: task.points || 8,
+      taskType: task.label ? task.label.split(':')[0].trim() : 'Exercice',
       helpUsed: false,
       retried: false,
       status: 'bypassed'
@@ -516,6 +520,26 @@ async function runTierAttempt({ tierNum, tierData, isMandatory, profileArg, cont
       console.log(`  \x1b[36mℹ Tier optionnel pour le profil ${profileArg} — non pénalisé dans le score obligatoire.\x1b[0m`);
     }
   }
+
+  // --- Message de fin + récapitulatif des points par exercice ---
+  // Le modèle annonce qu'il a terminé, puis on affiche le détail des points
+  // obtenus pour chaque exercice (ce qui s'affichait dans l'invite de commande).
+  console.log(`\n  \x1b[1;36m━━━ J'ai fini mes exercices, veuillez consulter mes points ━━━\x1b[0m\n`);
+  const evalResultsForDisplay = Object.values(evalResultsMap);
+  console.log(`  \x1b[90m${'Exercice'.padEnd(22)}${'Type'.padEnd(14)}${'Points'.padStart(12)}${'Max'.padStart(8)}  Statut\x1b[0m`);
+  console.log(`  \x1b[90m${'─'.repeat(70)}\x1b[0m`);
+  for (const r of evalResultsForDisplay) {
+    const statusLabel = r.status === 'success' ? '\x1b[32m✔ Validé\x1b[0m'
+      : r.status === 'bypassed' ? '\x1b[90m⊘ Bypassé\x1b[0m'
+      : '\x1b[31m✘ Échec\x1b[0m';
+    const idStr = (r.id || '').padEnd(22);
+    const typeStr = (r.taskType || '—').padEnd(14);
+    const ptsStr = String(r.points || 0).padStart(12);
+    const maxStr = ('/' + (r.maxPoints || 0)).padStart(8);
+    console.log(`  ${idStr}${typeStr}${ptsStr}${maxStr}  ${statusLabel}`);
+  }
+  console.log(`  \x1b[90m${'─'.repeat(70)}\x1b[0m`);
+  console.log(`  \x1b[1m${'TOTAL TIER'.padEnd(22)}${''.padEnd(14)}${String(tierScore).padStart(12)}${('/' + totalPossiblePoints).padStart(8)}\x1b[0m\n`);
 
   const evalResults = Object.values(evalResultsMap);
   const helpUsedCount = Object.values(taskHelpUsed).filter(Boolean).length;
@@ -803,6 +827,9 @@ async function main() {
 
     // Agrégation pour la calibration (status: success/failed/bypassed)
     if (bestResult.evalResults && bestResult.evalResults.length > 0) {
+      for (const er of bestResult.evalResults) {
+        er._tierNum = tierNum;
+      }
       allEvalResults = allEvalResults.concat(bestResult.evalResults);
     }
     if (bestResult.filterDecisions && bestResult.filterDecisions.length > 0) {
@@ -901,6 +928,21 @@ async function main() {
   }
 
   console.log('\x1b[36m\u255A\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u255D\x1b[0m\n');
+
+  globalReport += `\n---\n\n## Tableau récapitulatif des points par exercice\n\n`;
+  globalReport += `| Tier | Exercice | Type | Points obtenus | Points max | Statut | Aide | Rattrapage |\n`;
+  globalReport += `|---|---|---|---|---|---|---|---|\n`;
+  for (const r of allEvalResults) {
+    const tierNumMatch = (r._tierNum != null) ? r._tierNum : '';
+    const st = r.status === 'bypassed' ? '⊘ Bypassé' : (r.status === 'success' ? '✔ Validé' : '✘ Échec');
+    const help = r.helpUsed ? 'Oui' : 'Non';
+    const retry = r.retried ? 'Oui' : 'Non';
+    globalReport += `| ${tierNumMatch} | ${r.id} | ${r.taskType || '—'} | ${r.points || 0} | ${r.maxPoints || 0} | ${st} | ${help} | ${retry} |\n`;
+  }
+  const grandTotalPts = allEvalResults.reduce((s, r) => s + (r.points || 0), 0);
+  const grandTotalMax = allEvalResults.reduce((s, r) => s + (r.maxPoints || 0), 0);
+  globalReport += `| **TOTAL** | | | **${grandTotalPts}** | **${grandTotalMax}** | | | |\n\n`;
+  globalReport += `---\n\n`;
 
   globalReport += `\n---\n\n## Score Global\n\n`;
   globalReport += `| Métrique | Valeur | Note |\n|---|---|---|\n`;
