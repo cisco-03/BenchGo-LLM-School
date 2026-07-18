@@ -917,13 +917,15 @@ async function main() {
   if (tierArg === "all" && preKnownModelName) {
     const dupShortName = shortenModelName(preKnownModelName);
     const dupLedger = scoreLedger.loadLedger(dupShortName);
-    const existing = dupLedger.ecoles[ecoleLabel];
+    const rawExisting = dupLedger.ecoles[ecoleLabel];
+    const existing = scoreLedger.getEcoleBest(rawExisting);
+    const existingAttempts = scoreLedger.getEcoleAttempts(rawExisting);
     if (existing) {
       console.log('');
       console.log(`  \x1b[33m⚠ ATTENTION : Ce modèle a déjà été testé sur l'école ${ecoleLabel} !\x1b[0m`);
-      console.log(`  \x1b[90m  Score précédent : ${existing.score}/${existing.max} (${existing.pct}%) — ${existing.date}\x1b[0m`);
-      console.log(`  \x1b[90m  Rapport : ${existing.reportFile || 'N/A'}\x1b[0m`);
-      const forceRetest = await askYesNo(`  Voulez-vous forcer un nouveau test (écrasera le score précédent) ?`, true);
+      console.log(`  \x1b[90m  Meilleur score précédent : ${existing.score}/${existing.max} (${existing.pct}%) — ${existing.date}\x1b[0m`);
+      console.log(`  \x1b[90m  Tentatives cumulées : ${existingAttempts.length} | Rapport : ${existing.reportFile || 'N/A'}\x1b[0m`);
+      const forceRetest = await askYesNo(`  Voulez-vous lancer un nouveau test (sera cumulé à l'historique, le meilleur score est conservé) ?`, true);
       if (!forceRetest) {
         console.log(`  \x1b[36mTest annulé : le score existant est conservé.\x1b[0m`);
         console.log(`  \x1b[90mAstuce : relancez avec un autre modèle ou profil pour comparer.\x1b[0m\n`);
@@ -931,8 +933,8 @@ async function main() {
         logger.close();
         return;
       }
-      logger.info(`Doublon détecté mais utilisateur force le re-test de ${preKnownModelName} sur ${ecoleLabel}.`);
-      console.log(`  \x1b[33mRe-test forcé — le nouveau score remplacera l'ancien.\x1b[0m\n`);
+      logger.info(`Re-test demandé pour ${preKnownModelName} sur ${ecoleLabel} (tentative #${existingAttempts.length + 1}).`);
+      console.log(`  \x1b[33mRe-test lancé — tentative #${existingAttempts.length + 1} (le meilleur score est conservé pour le classement).\x1b[0m\n`);
     }
   }
 

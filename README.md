@@ -105,6 +105,7 @@ Le classement HTML (généré dans `Export-Rapports/classement.html`) est **cond
 
 - **Cartes condensées** : une ligne par modèle avec rang, nom, badge de catégorie, badge de taille (ex : `📦 7B`), et mini-stats (% avec barre, Note, Santé, Obligatoire, Aide/Rattrapage).
 - **Modale de détail** : clic sur une carte ou sur « Détails » → ouvre une modale avec statistiques complètes, forces/faiblesses, tableau détaillé par école (avec calibration), et métadonnées.
+- **Historique des re-tests** : le carnet de scores cumule toutes les tentatives par école. Dans la modale, une école ayant subi plusieurs tests affiche un toggle dépliable listant l'historique chronologique (la meilleure tentative est marquée ★). Idéal pour suivre l'évolution d'un modèle après une mise à jour du créateur. Le classement global reste basé sur la meilleure tentative.
 - **Filtres par catégorie** : 🏆 Top du top (≥90%) · ✅ Recommandés (≥80%) · 📊 Dans la moyenne (≥70%) · ⚠️ En rattrapage (≥50%) · 💥 Échec total (<50%).
 - **Filtres par taille de paramètres** : 🐱 < 3B · 📦 3B–14B · 🎓 14B–30B · 🧠 > 30B · ❓ Inconnue.
 - **Recherche texte** : par nom de modèle. Combinable avec les filtres (ET logique).

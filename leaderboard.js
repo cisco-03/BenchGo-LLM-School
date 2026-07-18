@@ -26,37 +26,80 @@ function loadAllLedgers() {
   return ledgers;
 }
 
-// Agrège un carnet en une entrée de classement.
+// Normalise une entrée d'école du carnet vers { best, attempts }.
+// Gère l'ancien format (résultat unique) et le nouveau format cumul.
+function normalizeEcoleEntryLb(raw) {
+  if (!raw) return { best: null, attempts: [] };
+  if (raw.attempts && Array.isArray(raw.attempts)) {
+    let best = raw.best;
+    if (!best && raw.attempts.length > 0) {
+      best = raw.attempts.reduce((b, a) => (a.pct || 0) >= (b.pct || 0) ? a : b, raw.attempts[0]);
+    }
+    return { best, attempts: raw.attempts.slice() };
+  }
+  if (raw.score != null || raw.max != null || raw.pct != null) {
+    return { best: raw, attempts: [raw] };
+  }
+  return { best: null, attempts: [] };
+}
+
+// Compacte une tentative d'école pour la sérialisation JSON (modale).
+function compactAttempt(a, idx, total) {
+  return {
+    n: idx + 1,
+    date: a.date || '—',
+    time: a.time || null,
+    score: a.score || 0,
+    max: a.max || 0,
+    pct: a.max > 0 ? Math.round((a.score / a.max) * 100) : 0,
+    grade: letterGrade(a.max > 0 ? Math.round((a.score / a.max) * 100) : 0).grade,
+    optionalBonus: a.optionalBonus || 0,
+    globalLifeScore: a.globalLifeScore || 0,
+    helpCount: a.helpCount || 0,
+    retriedCount: a.retriedCount || 0,
+    mandatoryPassed: a.mandatoryPassed || 0,
+    mandatoryTotal: a.mandatoryTotal || 0,
+    calibrationIndex: a.calibrationIndex != null ? a.calibrationIndex : null,
+    reportFile: a.reportFile || null
+  };
+}
+
+// Agrège un carnet en une entrée de classement (utilise la meilleure tentative par école).
 function aggregateLedger(ledger) {
-  const entries = Object.values(ledger.ecoles || {});
-  if (entries.length === 0) return null;
+  const rawEntries = Object.values(ledger.ecoles || {});
+  if (rawEntries.length === 0) return null;
 
   let score = 0, max = 0, globalLifeScore = 0, optionalBonus = 0;
   let helpCount = 0, retriedCount = 0;
   let mandatoryPassed = 0, mandatoryTotal = 0;
   const ecoles = [];
 
-  for (const e of entries) {
-    score += e.score || 0;
-    max += e.max || 0;
-    globalLifeScore += e.globalLifeScore || 0;
-    optionalBonus += e.optionalBonus || 0;
-    helpCount += e.helpCount || 0;
-    retriedCount += e.retriedCount || 0;
-    mandatoryPassed += e.mandatoryPassed || 0;
-    mandatoryTotal += e.mandatoryTotal || 0;
+  for (const raw of rawEntries) {
+    const { best, attempts } = normalizeEcoleEntryLb(raw);
+    if (!best) continue;
+    score += best.score || 0;
+    max += best.max || 0;
+    globalLifeScore += best.globalLifeScore || 0;
+    optionalBonus += best.optionalBonus || 0;
+    helpCount += best.helpCount || 0;
+    retriedCount += best.retriedCount || 0;
+    mandatoryPassed += best.mandatoryPassed || 0;
+    mandatoryTotal += best.mandatoryTotal || 0;
+    const bPct = best.max > 0 ? Math.round((best.score / best.max) * 100) : 0;
     ecoles.push({
-      ecole: e.ecole,
-      score: e.score || 0,
-      max: e.max || 0,
-      pct: e.max > 0 ? Math.round((e.score / e.max) * 100) : 0,
-      optionalBonus: e.optionalBonus || 0,
-      globalLifeScore: e.globalLifeScore || 0,
-      helpCount: e.helpCount || 0,
-      retriedCount: e.retriedCount || 0,
-      calibrationIndex: e.calibrationIndex != null ? e.calibrationIndex : null,
-      date: e.date || '—',
-      reportFile: e.reportFile || null
+      ecole: best.ecole,
+      score: best.score || 0,
+      max: best.max || 0,
+      pct: bPct,
+      optionalBonus: best.optionalBonus || 0,
+      globalLifeScore: best.globalLifeScore || 0,
+      helpCount: best.helpCount || 0,
+      retriedCount: best.retriedCount || 0,
+      calibrationIndex: best.calibrationIndex != null ? best.calibrationIndex : null,
+      date: best.date || '—',
+      reportFile: best.reportFile || null,
+      attemptsCount: attempts.length,
+      attempts: attempts.map((a, i) => compactAttempt(a, i, attempts.length))
     });
   }
 
@@ -69,7 +112,7 @@ function aggregateLedger(ledger) {
     score, max, pct,
     mandatoryPassed, mandatoryTotal, mandatoryPct,
     globalLifeScore, optionalBonus, helpCount, retriedCount,
-    ecoleCount: entries.length,
+    ecoleCount: ecoles.length,
     ecoles,
     lastUpdated: ledger.lastUpdated || null
   };
@@ -207,7 +250,9 @@ function buildLeaderboardHTML(entries) {
         helpCount: ec.helpCount,
         retriedCount: ec.retriedCount,
         calibrationIndex: ec.calibrationIndex,
-        date: ec.date
+        date: ec.date,
+        attemptsCount: ec.attemptsCount,
+        attempts: ec.attempts
       }))
     };
   });
@@ -263,6 +308,9 @@ function buildLeaderboardHTML(entries) {
   .btn-delete { flex: 0 0 auto; padding: 6px 12px; border: 1px solid #f85149; background: rgba(248,81,73,0.1); color: #f85149; border-radius: 6px; cursor: pointer; font-size: 0.78em; font-weight: 600; transition: all 0.15s; }
   .btn-delete:hover { background: #f85149; color: #fff; }
   .btn-delete:disabled { opacity: 0.5; cursor: default; }
+  .btn-copy { flex: 0 0 auto; padding: 3px 8px; border: 1px solid #30363d; background: #21262d; color: #8b949e; border-radius: 5px; cursor: pointer; font-size: 0.7em; font-weight: 600; transition: all 0.15s; vertical-align: middle; margin-left: 6px; line-height: 1; }
+  .btn-copy:hover { background: #1f6feb; color: #fff; border-color: #1f6feb; }
+  .btn-copy:active { transform: scale(0.94); }
 
   @media (max-width: 768px) {
     .card-row { flex-wrap: wrap; }
@@ -311,6 +359,19 @@ function buildLeaderboardHTML(entries) {
   .ecoles-table td.num { text-align: right; }
   .ecoles-table .grade { font-weight: 700; text-align: center; }
   .ecoles-table tr:hover { background: #161b22; }
+
+  /* Historique des tentatives (modale) */
+  .hist-toggle { display: inline-block; font-size: 0.72em; color: #58a6ff; cursor: pointer; padding: 1px 6px; border: 1px solid #30363d; border-radius: 8px; margin-left: 4px; user-select: none; }
+  .hist-toggle:hover { background: #1f6feb; color: #fff; border-color: #1f6feb; }
+  .hist-row > td { padding: 0 !important; }
+  .hist-block { padding: 10px 14px; background: #0d1117; border-top: 1px solid #21262d; border-bottom: 1px solid #21262d; }
+  .hist-title { font-size: 0.78em; color: #8b949e; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.4px; }
+  .hist-table { width: 100%; border-collapse: collapse; font-size: 0.8em; }
+  .hist-table th, .hist-table td { padding: 5px 7px; text-align: left; border-bottom: 1px solid #21262d; }
+  .hist-table th { color: #8b949e; font-size: 0.72em; text-transform: uppercase; letter-spacing: 0.4px; font-weight: 600; }
+  .hist-table td.num { text-align: right; }
+  .hist-best { background: rgba(56,139,253,0.08); }
+  .best-tag { color: #ffd700; font-size: 0.9em; }
 
   .meta-line { font-size: 0.78em; color: #8b949e; margin-top: 10px; padding-top: 8px; border-top: 1px solid #21262d; }
 
@@ -418,7 +479,7 @@ function renderCards() {
     var html = '<div class="card ' + cardClass + '" onclick="openModal(' + i + ')">' +
       '<div class="card-row">' +
         '<div class="rank">' + rankDisp + '</div>' +
-        '<div class="model-name"><span class="cat-icon">' + m.cat.icon + '</span>' + esc(m.model) + ' ' + szBadge + '</div>' +
+        '<div class="model-name"><span class="cat-icon">' + m.cat.icon + '</span>' + esc(m.model) + ' ' + szBadge + ' <button class="btn-copy" onclick="event.stopPropagation();copyModelName(' + i + ')" title="Copier le nom du modèle">⧉</button></div>' +
         '<div class="mini-stats">' +
           '<div class="mini-stat"><span class="lbl">%</span><span class="val" style="color:' + pc + '">' + m.pct + '%</span><div class="pct-bar-wrap"><div class="pct-bar-fill" style="width:' + m.pct + '%;background:' + pc + '"></div></div></div>' +
           '<div class="mini-stat"><span class="lbl">Note</span><span class="grade" style="color:' + gc + '">' + m.grade + '</span></div>' +
@@ -427,7 +488,7 @@ function renderCards() {
           '<div class="mini-stat"><span class="lbl">Aide/Rat.</span><span class="val" style="font-size:0.8em">' + esc(helpStr) + '</span></div>' +
         '</div>' +
         '<button class="btn-detail" onclick="event.stopPropagation();openModal(' + i + ')">Détails</button>' +
-        '<button class="btn-delete" onclick="event.stopPropagation();deleteModel(\'' + esc(m.shortName) + '\', this)">🗑</button>' +
+        '<button class="btn-delete" onclick="event.stopPropagation();deleteModel(' + i + ', this)">🗑</button>' +
       '</div>' +
     '</div>';
     container.insertAdjacentHTML('beforeend', html);
@@ -478,17 +539,23 @@ function openModal(idx) {
     body += '</ul></div>';
   }
 
-  // --- Détail par école
+  // --- Détail par école (avec historique des tentatives de re-test)
   body += '<h3>Détail par école</h3>';
   body += '<table class="ecoles-table"><thead><tr>' +
     '<th>École</th><th class="num">Points</th><th>%</th><th>Note</th>' +
-    '<th class="num">Bonus</th><th class="num">Santé</th><th class="num">Aide</th><th class="num">Rat.</th><th class="num">Calib.</th><th>Date</th>' +
+    '<th class="num">Bonus</th><th class="num">Santé</th><th class="num">Aide</th><th class="num">Rat.</th><th class="num">Calib.</th><th>Date</th><th>Tent.</th>' +
     '</tr></thead><tbody>';
   for (var e of m.ecoles) {
     var egc = gradeColor(e.grade);
     var epc = pctColor(e.pct);
-    body += '<tr>' +
-      '<td>' + esc(e.ecole) + '</td>' +
+    var attempts = e.attempts || [];
+    var hasHistory = attempts.length > 1;
+    var ecoleCell = esc(e.ecole);
+    if (hasHistory) {
+      ecoleCell += ' <span class="hist-toggle" onclick="toggleHistory(this)" title="Voir l&#39;historique des re-tests">▸ ' + attempts.length + ' tentatives</span>';
+    }
+    body += '<tr' + (hasHistory ? ' class="ecole-main"' : '') + '>' +
+      '<td>' + ecoleCell + '</td>' +
       '<td class="num">' + e.score + '/' + e.max + '</td>' +
       '<td style="color:' + epc + '">' + e.pct + '%</td>' +
       '<td class="grade" style="color:' + egc + '">' + e.grade + '</td>' +
@@ -498,7 +565,37 @@ function openModal(idx) {
       '<td class="num">' + (e.retriedCount > 0 ? e.retriedCount : '—') + '</td>' +
       '<td class="num">' + (e.calibrationIndex != null ? 'C=' + e.calibrationIndex.toFixed(2) : '—') + '</td>' +
       '<td>' + esc(e.date) + '</td>' +
+      '<td class="num">' + attempts.length + '</td>' +
       '</tr>';
+    // Ligne d'historique repliable (uniquement si > 1 tentative)
+    if (hasHistory) {
+      body += '<tr class="hist-row" style="display:none;"><td colspan="11">' +
+        '<div class="hist-block">' +
+        '<div class="hist-title">Historique des ' + attempts.length + ' tentatives (chronologique) :</div>' +
+        '<table class="hist-table"><thead><tr>' +
+        '<th>#</th><th class="num">Points</th><th>%</th><th>Note</th>' +
+        '<th class="num">Bonus</th><th class="num">Santé</th><th class="num">Aide</th><th class="num">Rat.</th><th class="num">Calib.</th><th>Date</th>' +
+        '</tr></thead><tbody>';
+      for (var a of attempts) {
+        var agc = gradeColor(a.grade);
+        var apc = pctColor(a.pct);
+        var isBest = (a.pct === e.pct && a.score === e.score);
+        var bestTag = isBest ? ' <span class="best-tag" title="Meilleure tentative">★</span>' : '';
+        body += '<tr' + (isBest ? ' class="hist-best"' : '') + '>' +
+          '<td class="num">' + a.n + bestTag + '</td>' +
+          '<td class="num">' + a.score + '/' + a.max + '</td>' +
+          '<td style="color:' + apc + '">' + a.pct + '%</td>' +
+          '<td class="grade" style="color:' + agc + '">' + a.grade + '</td>' +
+          '<td class="num">' + (a.optionalBonus > 0 ? '+' + a.optionalBonus : '—') + '</td>' +
+          '<td class="num">' + a.globalLifeScore + '</td>' +
+          '<td class="num">' + (a.helpCount > 0 ? a.helpCount : '—') + '</td>' +
+          '<td class="num">' + (a.retriedCount > 0 ? a.retriedCount : '—') + '</td>' +
+          '<td class="num">' + (a.calibrationIndex != null ? 'C=' + a.calibrationIndex.toFixed(2) : '—') + '</td>' +
+          '<td>' + esc(a.date) + (a.time ? ' ' + esc(a.time).replace('-', 'h') : '') + '</td>' +
+          '</tr>';
+      }
+      body += '</tbody></table></div></td></tr>';
+    }
   }
   body += '</tbody></table>';
 
@@ -531,6 +628,17 @@ function closeModal() {
   document.getElementById('modal').classList.remove('show');
   document.body.style.overflow = '';
 }
+// Bascule l'affichage de l'historique des tentatives d'une école dans la modale.
+function toggleHistory(el) {
+  var mainRow = el.closest('tr.ecole-main');
+  if (!mainRow) return;
+  var histRow = mainRow.nextElementSibling;
+  if (!histRow || !histRow.classList.contains('hist-row')) return;
+  var shown = histRow.style.display !== 'none';
+  histRow.style.display = shown ? 'none' : 'table-row';
+  el.textContent = (shown ? '▸' : '▾') + ' ' + (el.getAttribute('data-n') || (el.textContent.match(/(\d+)/) || [,''])[1]) + ' tentatives';
+  el.setAttribute('data-n', el.textContent.match(/(\d+)/) ? el.textContent.match(/(\d+)/)[1] : '');
+}
 document.getElementById('modal').addEventListener('click', function(e) {
   if (e.target === this) closeModal();
 });
@@ -560,7 +668,8 @@ function showToast(msg, ok) {
   t.className = 'toast show ' + (ok ? 'ok' : 'err');
   setTimeout(function(){ t.className = 'toast ' + (ok ? 'ok' : 'err'); }, 2500);
 }
-function deleteModel(shortName, btn) {
+function deleteModel(idx, btn) {
+  var shortName = MODELS[idx].shortName;
   if (!confirm('Supprimer le modèle "' + shortName + '" du classement ?\\nLe carnet de scores sera définitivement supprimé.')) return;
   btn.disabled = true;
   btn.textContent = '…';
@@ -571,6 +680,22 @@ function deleteModel(shortName, btn) {
       else { showToast('Erreur : ' + (data.error || 'inconnue'), false); btn.disabled = false; btn.textContent = '🗑'; }
     })
     .catch(function() { showToast('Erreur réseau', false); btn.disabled = false; btn.textContent = '🗑'; });
+}
+
+// Copie le nom intégral du modèle dans le presse-papiers.
+function copyModelName(idx) {
+  var name = MODELS[idx].model;
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(name).then(function() { showToast('Nom copié : ' + name, true); }, function() { fallbackCopy(name); });
+  } else { fallbackCopy(name); }
+}
+function fallbackCopy(text) {
+  var ta = document.createElement('textarea');
+  ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+  document.body.appendChild(ta); ta.select();
+  try { document.execCommand('copy'); showToast('Nom copié : ' + text, true); }
+  catch (e) { showToast('Copie impossible', false); }
+  document.body.removeChild(ta);
 }
 
 renderCards();
@@ -678,7 +803,7 @@ function buildReasoningMarkdown(entries) {
     }
 
     for (const ecole of e.ecoles) {
-      const ecoleEntry = ledger.ecoles[ecole.ecole];
+      const ecoleEntry = normalizeEcoleEntryLb(ledger.ecoles[ecole.ecole]).best;
       if (!ecoleEntry) continue;
 
       const runDate = ecoleEntry.date || '—';

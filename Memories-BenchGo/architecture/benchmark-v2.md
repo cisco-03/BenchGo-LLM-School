@@ -164,23 +164,32 @@ modèle à générer du code correct à travers 7 niveaux de difficulté (Tiers 
 
 ### score-ledger.js
 - **Rôle** : Grand livre des scores persistant (cumul multi-écoles) + calcul de calibration
-- **Contenu** : `loadLedger`/`saveResult`/`saveAndBuildBilan` (carnet JSON par modèle), `computeGrandTotal`, `printBilanGlobal`, `buildBilanMarkdown`, **`calculateCalibrationIndex(declaredProfile, testResults)`** (D = niveau moyen déclaré /5, P = réussite des tâches exécutées, C = 1 - |D-P|), **`interpretCalibration(C)`** (≥0.85 Lucide / 0.65-0.85 Modérément Calibré / <0.65 Biais majeur)
+- **Contenu** :
+  - `loadLedger`/`saveLedger` : carnet JSON par modèle dans `Export-Rapports/.carnet/`
+  - `normalizeEcoleEntry(raw)` *(nouveau 2026-07-18)* : normalise une entrée d'école vers `{ best, attempts }`. Migration automatique des anciens carnets (résultat unique → `{ best, attempts: [resultat] }`).
+  - `pickBest(attempts)` *(nouveau)* : sélectionne la tentative au % le plus élevé (égalité → dernière).
+  - `getEcoleBest(raw)` / `getEcoleAttempts(raw)` *(nouveaux)* : accesseurs publics (meilleure tentative / liste chronologique).
+  - `saveResult(shortName, modelName, result)` : **cumule** désormais `result` dans `attempts[]` et recalcule `best` (au lieu d'écraser). Conserve l'historique des re-tests.
+  - `computeGrandTotal`, `printBilanGlobal`, `buildBilanMarkdown` : itèrent sur `getEcoleBest()` ; affichent le nombre de tentatives par école (colonne « Tentatives », tag `(N tentatives)`).
+  - `calculateCalibrationIndex(declaredProfile, testResults)` : D = niveau moyen déclaré /5, P = réussite des tâches exécutées, C = 1 - |D-P|
+  - `interpretCalibration(C)` : ≥0.85 Lucide / 0.65-0.85 Modérément Calibré / <0.65 Biais majeur
 - **Dépendances** : `logger.js`, `progress-bar.js`
 
 ### leaderboard.js *(nouveau 2026-07-14)*
 - **Rôle** : Classement global des modèles (leaderboard) + export raisonnement consolidé
 - **Contenu** :
   - `loadAllLedgers()` — lit tous les carnets `.json` de `Export-Rapports/.carnet/`
-  - `aggregateLedger(ledger)` — agrège un carnet en entrée de classement (score, max, pct, santé, bonus, aide, rattrapage, écoles, calibration)
+  - `aggregateLedger(ledger)` *(refonte 2026-07-18)* — agrège un carnet en utilisant `normalizeEcoleEntryLb` (format cumul `{ best, attempts }`). Agrège sur `best` (meilleure tentative par école) pour le classement global. Sérialise `attemptsCount` et `attempts[]` (compactées via `compactAttempt`) pour l'historique de la modale.
+  - `compactAttempt(a, idx)` *(nouveau)* : compacte une tentative d'école pour la sérialisation JSON (n°, date, time, score, max, pct, grade, bonus, santé, aide, rat., calibration, mandatory, reportFile).
   - `buildArguments(entry)` — génère des **arguments qualitatifs** automatiques (forces/faiblesses/notes) selon les métriques
   - `getVerdict(entry)` — détermine le verdict (RECOMMANDÉ ≥80% / PARTIEL ≥50% / NON RECOMMANDÉ <50%)
   - `getCategory(entry)` *(nouveau 2026-07-18)* — catégorise un modèle en 5 niveaux par % global : 🏆 top (≥90%) / ✅ recommande (≥80%) / 📊 moyenne (≥70%) / ⚠️ rattrapage (≥50%) / 💥 catastrophe (<50%). Utilisé par les filtres du HTML.
   - `getParamSize(modelName)` *(nouveau 2026-07-18)* — détecte la taille de paramètres depuis le nom du modèle (réutilise `detectProfileFromModelName` de `config.js`) : 🐱 petit (<3B) / 📦 standard (3B-14B) / 🎓 expert (14B-30B) / 🧠 doctorat (>30B) / ❓ inconnu. Mêmes seuils que les profils d'école.
-  - `buildLeaderboardHTML(entries)` *(refonte 2026-07-18)* — génère un HTML autonome **condensé** : une carte compacte par modèle (rang + nom + badge taille + mini-stats + bouton Détails), modale de détail au clic (stats complètes + forces/faiblesses + tableau par école + méta), barre de filtres par catégorie, barre de filtres par taille de params, recherche texte. Données complètes sérialisées en JSON côté client (`var MODELS`). Style sombre, médailles 🥇🥈🥉. Aucune dépendance externe (CSS+JS embarqués).
+  - `buildLeaderboardHTML(entries)` *(refonte 2026-07-18)* — génère un HTML autonome **condensé** : une carte compacte par modèle (rang + nom + badge taille + mini-stats + bouton Détails), modale de détail au clic (stats complètes + forces/faiblesses + tableau par école **avec historique repliable des tentatives de re-test** + méta), barre de filtres par catégorie, barre de filtres par taille de params, recherche texte. Données complètes sérialisées en JSON côté client (`var MODELS`). Style sombre, médailles 🥇🥈🥉. Aucune dépendance externe (CSS+JS embarqués).
   - `buildLeaderboardMarkdown(entries)` — génère un Markdown (tableau récapitulatif + détail par modèle)
-  - `buildReasoningMarkdown(entries)` *(nouveau 2026-07-18)* — génère un Markdown détaillé par modèle : nom **intégral**, date/heure du run, auto-profilage déclaré, par école et par tier (classe) : exercices tentés, code produit, explications d'échec, réponse brute complète (raisonnement + code). Destiné à être ingéré par Gemini puis alimente une base NotebookLM pour analyse qualitative.
+  - `buildReasoningMarkdown(entries)` *(nouveau 2026-07-18)* — génère un Markdown détaillé par modèle : nom **intégral**, date/heure du run, auto-profilage déclaré, par école et par tier (classe) : exercices tentés, code produit, explications d'échec, réponse brute complète (raisonnement + code). `ecoleEntry` pointe sur `best` (meilleure tentative) via `normalizeEcoleEntryLb`. Destiné à être ingéré par Gemini puis alimente une base NotebookLM pour analyse qualitative.
   - `loadLedgerByName(shortName)` *(nouveau 2026-07-18)* — recharge un carnet original pour accéder aux données détaillées (tiers, selfProfile)
-  - `generateLeaderboard()` — orchestre : charge → agrège → trie (% décroissant) → génère 3 fichiers (HTML + MD + raisonnement) → sauvegarde dans `Export-Rapports/classement.html`, `classement.md` et `raisonnement_modeles.md`
+  - `generateLeaderboard()` — orchestre : charge → agrège → trie (% décroissant sur `best`) → génère 3 fichiers (HTML + MD + raisonnement) → sauvegarde dans `Export-Rapports/classement.html`, `classement.md` et `raisonnement_modeles.md`
 - **Exécutable standalone** : `node leaderboard.js` régénère les 3 fichiers à la demande ; `node leaderboard.js --serve` démarre un serveur interactif (port 3939) avec boutons de suppression
 - **Dépendances** : `logger.js`, `progress-bar.js`, `report-generator.js`, `config.js` (`detectProfileFromModelName`)
 

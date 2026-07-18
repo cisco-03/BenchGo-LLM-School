@@ -33,23 +33,67 @@ function saveLedger(ledger) {
   }
 }
 
-// Conserve la meilleure tentative par école (pct le plus élevé ; égalité -> remplace par la plus récente).
+// Normalise une entrée d'école du carnet vers le format cumul { best, attempts }.
+// Gère l'ancien format (entrée = résultat unique) et le nouveau format cumul.
+function normalizeEcoleEntry(raw) {
+  if (!raw) return { best: null, attempts: [] };
+  // Nouveau format cumul
+  if (raw.attempts && Array.isArray(raw.attempts)) {
+    let best = raw.best;
+    if (!best && raw.attempts.length > 0) best = pickBest(raw.attempts);
+    return { best: best, attempts: raw.attempts.slice() };
+  }
+  // Ancien format (résultat unique) — migration
+  if (raw.score != null || raw.max != null || raw.pct != null) {
+    return { best: raw, attempts: [raw] };
+  }
+  // Inattendu
+  return { best: null, attempts: [] };
+}
+
+// Sélectionne la meilleure tentative d'une liste (pct le plus élevé ; égalité -> dernière).
+function pickBest(attempts) {
+  if (!attempts || attempts.length === 0) return null;
+  let best = attempts[0];
+  for (let i = 1; i < attempts.length; i++) {
+    if ((attempts[i].pct || 0) >= (best.pct || 0)) best = attempts[i];
+  }
+  return best;
+}
+
+// Conserve TOUTES les tentatives par école (historique des re-tests), la meilleure
+// est référencée par `best` pour le classement global. Migration auto des anciens carnets.
 function saveResult(shortName, modelName, result) {
   const ledger = loadLedger(shortName);
   ledger.model = modelName;
   ledger.shortName = shortName;
-  const existing = ledger.ecoles[result.ecole];
-  if (!existing || (result.pct >= existing.pct)) {
-    ledger.ecoles[result.ecole] = result;
+  const entry = normalizeEcoleEntry(ledger.ecoles[result.ecole]);
+  entry.attempts.push(result);
+  const newBest = pickBest(entry.attempts);
+  const prevBest = entry.best;
+  entry.best = newBest;
+  ledger.ecoles[result.ecole] = entry;
+  if (prevBest && newBest && newBest !== prevBest) {
+    logger.info('Carnet : ' + result.ecole + ' nouvelle meilleure tentative (' + newBest.pct + '%, ' + entry.attempts.length + ' tentative(s) cumulée(s)).');
   } else {
-    logger.info('Carnet : ' + result.ecole + ' conserve sa meilleure tentative (' + existing.pct + '% > ' + result.pct + '%).');
+    logger.info('Carnet : ' + result.ecole + ' tentative #' + entry.attempts.length + ' enregistrée (meilleure : ' + (newBest ? newBest.pct : '?') + '%).');
   }
   saveLedger(ledger);
   return ledger;
 }
 
+// Renvoie la meilleure tentative d'une entrée d'école (gère ancien et nouveau format).
+function getEcoleBest(raw) {
+  return normalizeEcoleEntry(raw).best;
+}
+
+// Renvoie la liste des tentatives (chronologique) d'une entrée d'école.
+function getEcoleAttempts(raw) {
+  return normalizeEcoleEntry(raw).attempts;
+}
+
 function computeGrandTotal(ledger) {
-  const entries = Object.values(ledger.ecoles || {});
+  const entries = Object.values(ledger.ecoles || {}).map(getEcoleBest).filter(Boolean);
   let score = 0, max = 0, globalLifeScore = 0, optionalBonus = 0;
   for (const e of entries) {
     score += e.score || 0;
@@ -63,7 +107,8 @@ function computeGrandTotal(ledger) {
 
 function printBilanGlobal(shortName, modelName) {
   const ledger = loadLedger(shortName);
-  const entries = Object.values(ledger.ecoles || {});
+  const rawEntries = Object.values(ledger.ecoles || {});
+  const entries = rawEntries.map(getEcoleBest).filter(Boolean);
   if (entries.length === 0) return;
 
   console.log('');
@@ -72,7 +117,10 @@ function printBilanGlobal(shortName, modelName) {
   console.log('  \x1b[90m' + '─'.repeat(60) + '\x1b[0m');
 
   let totalScore = 0, totalMax = 0, totalBonus = 0, totalSante = 0;
-  for (const e of entries) {
+  for (let i = 0; i < entries.length; i++) {
+    const e = entries[i];
+    const raw = rawEntries[i];
+    const attempts = getEcoleAttempts(raw);
     totalScore += e.score || 0;
     totalMax += e.max || 0;
     totalBonus += e.optionalBonus || 0;
@@ -82,7 +130,8 @@ function printBilanGlobal(shortName, modelName) {
     const status = e.mandatoryTotal > 0 ? (pct >= 70 ? '\x1b[32m✔ Validé\x1b[0m' : '\x1b[31m✘ Échec\x1b[0m') : '\x1b[36m(évaluée)\x1b[0m';
     const bonusTag = (e.optionalBonus > 0) ? ' \x1b[35m[+' + e.optionalBonus + ' bonus opt.]\x1b[0m' : '';
     const pts = (e.score || 0) + '/' + (e.max || 0);
-    console.log('  ' + (e.ecole || '?').padEnd(20) + pts.padStart(12) + (pct + '%').padStart(7) + '  ' + g.color + g.grade + '\x1b[0m      ' + status + bonusTag);
+    const histTag = attempts.length > 1 ? ' \x1b[90m(' + attempts.length + ' tentatives)\x1b[0m' : '';
+    console.log('  ' + (e.ecole || '?').padEnd(20) + pts.padStart(12) + (pct + '%').padStart(7) + '  ' + g.color + g.grade + '\x1b[0m      ' + status + bonusTag + histTag);
   }
 
   const totalPct = totalMax > 0 ? Math.round((totalScore / totalMax) * 100) : 0;
@@ -98,20 +147,24 @@ function printBilanGlobal(shortName, modelName) {
 
 function buildBilanMarkdown(shortName, modelName) {
   const ledger = loadLedger(shortName);
-  const entries = Object.values(ledger.ecoles || {});
+  const rawEntries = Object.entries(ledger.ecoles || {});
+  const entries = rawEntries.map(([k, v]) => getEcoleBest(v)).filter(Boolean);
   if (entries.length === 0) return '';
   const t = computeGrandTotal(ledger);
 
   let md = '\n---\n\n## Bilan Global Cumulé — ' + (modelName || shortName) + '\n\n';
   md += '> Cumul des écoles évaluées (meilleure tentative conservée par école).\n\n';
-  md += '| École | Points | Quota | Pct | Note | Bonus opt. | Santé |\n';
-  md += '|---|---|---|---|---|---|---|\n';
-  for (const e of entries) {
+  md += '| École | Points | Quota | Pct | Note | Bonus opt. | Santé | Tentatives |\n';
+  md += '|---|---|---|---|---|---|---|---|\n';
+  for (let i = 0; i < entries.length; i++) {
+    const e = entries[i];
+    const raw = rawEntries[i][1];
+    const attempts = getEcoleAttempts(raw);
     const pct = e.max > 0 ? Math.round((e.score / e.max) * 100) : 0;
     const g = letterGrade(pct);
-    md += '| ' + e.ecole + ' | ' + e.score + ' | ' + e.max + ' | ' + pct + '% | ' + g.grade + ' | +' + (e.optionalBonus || 0) + ' | ' + (e.globalLifeScore || 0) + ' PV |\n';
+    md += '| ' + e.ecole + ' | ' + e.score + ' | ' + e.max + ' | ' + pct + '% | ' + g.grade + ' | +' + (e.optionalBonus || 0) + ' | ' + (e.globalLifeScore || 0) + ' PV | ' + attempts.length + ' |\n';
   }
-  md += '| **TOTAL CUMULÉ** | **' + t.score + '** | **' + t.max + '** | **' + t.pct + '%** | **' + letterGrade(t.pct).grade + '** | **+' + t.optionalBonus + '** | **' + t.globalLifeScore + ' PV** |\n';
+  md += '| **TOTAL CUMULÉ** | **' + t.score + '** | **' + t.max + '** | **' + t.pct + '%** | **' + letterGrade(t.pct).grade + '** | **+' + t.optionalBonus + '** | **' + t.globalLifeScore + ' PV** | — |\n';
   md += '\n> *Bonus optionnel cumulé : +' + t.optionalBonus + ' points (récompense pour les exercices optionnels réussis, au-delà du quota).*\n';
   return md;
 }
@@ -171,5 +224,9 @@ module.exports = {
   buildBilanMarkdown,
   saveAndBuildBilan,
   calculateCalibrationIndex,
-  interpretCalibration
+  interpretCalibration,
+  normalizeEcoleEntry,
+  getEcoleBest,
+  getEcoleAttempts,
+  pickBest
 };

@@ -19,7 +19,8 @@ Memories-BenchGo/
 │   ├── 2026-07-07-runner-modularisation.md
 │   ├── 2026-07-07-runner-rattrapage-interactif.md
 │   ├── 2026-07-08-retravail-tiers-export-rapports.md
-│   └── 2026-07-18-classement-html-condense-modale-filtres.md
+│   ├── 2026-07-18-classement-html-condense-modale-filtres.md
+│   └── 2026-07-18-cumul-historique-retests-ecole.md
 ├── issues-fixes/          ← Problèmes corrigés et solutions
 │   ├── 2026-07-07-barre-progression-figee.md
 │   ├── 2026-07-07-test-async-middleware-toujours-echec.md
@@ -146,6 +147,7 @@ régénéré manuellement via `node leaderboard.js`.
 ### Interface HTML (refonte 2026-07-18)
 - **Cartes condensées** : une ligne compacte par modèle — rang/médaille, nom, icône catégorie, badge taille, mini-stats (% avec barre, Note, Santé, Oblig., Aide/Rat.), boutons « Détails » et « 🗑 ».
 - **Modale de détail** : au clic sur une carte ou sur « Détails », ouverture d'une modale avec statistiques complètes, forces/faiblesses/notes, tableau détaillé par école (avec calibration et date), et méta (dernière mise à jour, nom court). Fermeture par clic overlay, bouton × ou touche Échap.
+- **Historique des re-tests** *(2026-07-18)* : le carnet de scores cumule désormais **toutes les tentatives** par école (format `{ best, attempts }`). Dans la modale, une école ayant plusieurs tentatives affiche un toggle `▸ N tentatives` qui déplie l'historique chronologique (n°, points, %, note, bonus, santé, aide, rat., calibration, date+heure). La meilleure tentative est marquée ★. Le classement global reste basé sur la meilleure tentative. Migration automatique des carnets existants à la lecture.
 - **Filtres par catégorie** (5 niveaux de performance) : 🏆 Top du top (≥90%) · ✅ Recommandés (≥80%) · 📊 Dans la moyenne (≥70%) · ⚠️ En rattrapage (≥50%) · 💥 Échec total (<50%).
 - **Filtres par taille de paramètres** (5 catégories, mêmes seuils que les profils d'école) : 🐱 < 3B · 📦 3B-14B · 🎓 14B-30B · 🧠 > 30B · ❓ Inconnue.
 - **Recherche texte** : filtre par nom intégral ou nom court. Combinable avec les deux filtres (ET logique).

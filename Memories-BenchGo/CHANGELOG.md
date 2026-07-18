@@ -1,5 +1,73 @@
 # CHANGELOG - Carnet de Notes BenchGo
 
+## 2026-07-18 — Cumul de l'historique des re-tests par école (carnet persistant)
+
+### Contexte
+Le carnet de scores (`Export-Rapports/.carnet/<modele>.json`) ne conservait que la **meilleure
+tentative** par école (`score-ledger.js saveResult` : écrasement si `result.pct >= existing.pct`).
+Quand un créateur de modèle publie une mise à jour et qu'on relance un benchmark sur la même
+école, l'ancien score était écrasé : impossible de comparer l'avant/après.
+
+L'utilisateur a demandé de **cumuler toutes les tentatives** par école dans le carnet, de façon à
+pouvoir retracer l'historique des re-tests dans la modale de détail du classement HTML. Le
+**classement global** continue d'utiliser la **meilleure tentative** par école (comportement
+inchangé).
+
+### Actions entreprises
+
+**1. `score-ledger.js` — Format cumul `{ best, attempts }` par école**
+- Nouveaux helpers :
+  - `normalizeEcoleEntry(raw)` : normalise une entrée d'école vers `{ best, attempts }`. Gère l'ancien format (résultat unique) et le nouveau format cumul — **migration automatique à la lecture**, aucun script de migration nécessaire.
+  - `pickBest(attempts)` : sélectionne la tentative au % le plus élevé (égalité → dernière).
+  - `getEcoleBest(raw)` / `getEcoleAttempts(raw)` : accesseurs publics pour la meilleure tentative et la liste chronologique.
+- `saveResult(shortName, modelName, result)` : pousse désormais `result` dans `attempts[]` et recalcule `best` via `pickBest`. Log indique le numéro de la tentative et la meilleure performance.
+- `computeGrandTotal` / `printBilanGlobal` / `buildBilanMarkdown` : itèrent désormais sur `getEcoleBest()` (et non plus sur l'entrée brute). Le bilan CLI et Markdown affichent le nombre de tentatives par école et une colonne « Tentatives » dans le tableau.
+- Tous les helpers ajoutés à `module.exports`.
+
+**2. `leaderboard.js` — Agrégation + sérialisation de l'historique**
+- `aggregateLedger(ledger)` : utilise `normalizeEcoleEntryLb` (équivalent local) pour agréger sur `best`. Chaque école sérialisée inclut désormais `attemptsCount` et `attempts[]` (compactées via `compactAttempt` : n°, date, time, score, max, pct, grade, bonus, santé, aide, rat., calibration, mandatory, reportFile).
+- `buildReasoningMarkdown` : `ecoleEntry` pointe sur `best` (via `normalizeEcoleEntryLb`) pour préserver l'accès à `selfProfile` et `tiers`.
+- Sérialisation `modelsData` (modale) : chaque école inclut `attemptsCount` et `attempts`.
+
+**3. Modale de détail — Affichage de l'historique des tentatives**
+- Tableau « Détail par école » : nouvelle colonne « Tent. » (nombre de tentatives).
+- Quand une école a > 1 tentative, un toggle cliquable `▸ N tentatives` apparaît à côté du nom de l'école.
+- Au clic, une sous-table repliable s'affiche listant **toutes les tentatives chronologiquement** (n°, points, %, note, bonus, santé, aide, rat., calibration, date+heure). La meilleure tentative est marquée d'une étoile ★ et surlignée.
+- Nouveaux styles CSS : `.hist-toggle`, `.hist-block`, `.hist-table`, `.hist-best`, `.best-tag`.
+- Nouvelle fonction JS `toggleHistory(el)` : bascule l'affichage de la ligne d'historique.
+
+**4. `runner.js` — Détection de doublon adaptée**
+- La détection de doublon utilisait `dupLedger.ecoles[ecoleLabel]` directement (ancien format = résultat). Désormais utilise `scoreLedger.getEcoleBest()` et `getEcoleAttempts()`.
+- Message adapté : « Meilleur score précédent », « Tentatives cumulées : N », et propose « un nouveau test (sera cumulé à l'historique, le meilleur score est conservé) » au lieu d'« écrasera le score précédent ».
+
+### Compatibilité descendante
+- Les carnets existants (ancien format = résultat unique par école) sont **migrés à la volée** à la lecture par `normalizeEcoleEntry` : une entrée `resultat` devient `{ best: resultat, attempts: [resultat] }`. Aucun script de migration à exécuter.
+- Au prochain `saveResult` sur une école existante, le carnet est réécrit au nouveau format cumul.
+- Le classement global est **strictement inchangé** (meilleure tentative par école, comme avant).
+
+### Résultat
+- Re-tester un modèle après une mise à jour du créateur ajoute une tentative à l'historique sans écraser l'ancien score.
+- La modale de détail du classement HTML affiche l'historique complet des tentatives par école (repliable), avec la meilleure mise en évidence.
+- Le bilan CLI et Markdown mentionnent le nombre de tentatives par école.
+- Le classement global reste basé sur la meilleure tentative (comportement préservé).
+
+### Fichiers modifiés
+- `score-ledger.js` (format cumul, helpers, migration auto, bilan CLI/MD)
+- `leaderboard.js` (agrégation, sérialisation, modale historique, CSS, JS `toggleHistory`)
+- `runner.js` (détection doublon adaptée)
+
+### Validation
+- `node --check` sur `score-ledger.js`, `leaderboard.js`, `runner.js` → OK
+- Test cumul : `saveResult` avec un faux résultat sur `College-Lycee` d'un carnet existant → `attempts.length = 2`, `best.pct` correct (restauration du carnet effectuée après test).
+- `node leaderboard.js` → génère les 3 fichiers, JS inline valide (`vm.Script` OK).
+- `aggregateLedger` sur un carnet existant → `attemptsCount = 1`, `attempts[0]` correctement compacté.
+
+### Voir aussi
+- `refactorisations/2026-07-18-cumul-historique-retests-ecole.md`
+- `architecture/benchmark-v2.md` (section score-ledger.js + leaderboard.js)
+
+---
+
 ## 2026-07-18 — Refonte HTML du classement : cartes condensées, modale de détail, filtres par catégorie et par taille
 
 ### Contexte

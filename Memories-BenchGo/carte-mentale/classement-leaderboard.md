@@ -93,9 +93,15 @@ Ouverte au clic, contient :
 - **En-tête** : rang, nom intégral, badge verdict coloré, catégorie + taille
 - **Statistiques** : 9 cartes (Points, % global + barre, Note, Obligatoire + barre, Santé, Bonus, Aide, Rattrapage, Écoles)
 - **Forces & Faiblesses** : grid 2 colonnes + Notes
-- **Détail par école** : tableau (École, Points, %, Note, Bonus, Santé, Aide, Rat., Calib., Date)
+- **Détail par école** : tableau (École, Points, %, Note, Bonus, Santé, Aide, Rat., Calib., Date, **Tent.**). Quand une école a > 1 tentative (re-test), un toggle `▸ N tentatives` déplie une sous-table listant **l'historique chronologique des tentatives** (n°, points, %, note, bonus, santé, aide, rat., calibration, date+heure). La meilleure tentative est marquée ★ et surlignée.
 - **Méta** : dernière mise à jour, nom court
 - Fermeture : clic overlay · bouton × · touche Échap
+
+> **Cumul des re-tests (2026-07-18)** : le carnet de scores conserve désormais toutes les
+> tentatives par école (format `{ best, attempts }`). Le classement global utilise `best`
+> (meilleure tentative) — comportement inchangé. Les re-tests (ex : après une mise à jour du
+> créateur du modèle) s'ajoutent à l'historique sans écraser l'ancien score. Migration
+> automatique des carnets existants à la lecture (`normalizeEcoleEntry` dans `score-ledger.js`).
 
 ### D. Données côté client
 Les données complètes de chaque modèle sont sérialisées en JSON dans `var MODELS = [...]`
