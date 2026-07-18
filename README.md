@@ -25,21 +25,104 @@ le tout dans un bac à sable VM isolé.
 
 ---
 
-## 🚀 Démarrage rapide
+## 📥 Installation (pas-à-pas, pour débutants)
 
-### Prérequis
-- [Node.js](https://nodejs.org/) 18+
-- [LM Studio](https://lmstudio.ai/) (pour les modèles locaux) OU une clé API cloud
+BenchGo V3 est une application en ligne de commande (CLI) qui s'exécute dans un terminal.
+Pas besoin de navigateur ni d'interface graphique : tout se passe dans PowerShell
+(Windows), Terminal (macOS) ou bash (Linux).
 
-### Mode local (LM Studio)
+### Étape 1 — Installer Node.js (obligatoire)
+
+BenchGo est un programme JavaScript qui a besoin de **Node.js version 18 ou supérieure**
+pour s'exécuter.
+
+1. Allez sur https://nodejs.org/
+2. Téléchargez la version **LTS** (recommandée) pour votre système.
+3. Installez-la avec les options par défaut (Suivant → Suivant → Terminer).
+4. Vérifiez l'installation dans un terminal :
+
+   ```powershell
+   node --version
+   ```
+   Doit afficher `v18.x.x` ou plus (ex : `v20.18.0`).
+
+### Étape 2 — Télécharger BenchGo V3
+
+Trois méthodes possibles, de la plus simple à la plus « pro ».
+
+#### Méthode A — Télécharger un ZIP (le plus simple, sans Git)
+
+1. Ouvrez la page GitHub du projet : https://github.com/cisco-03/benchgo
+2. Cliquez sur le bouton vert **« <> Code »** en haut à droite.
+3. Choisissez **« Download ZIP »**.
+4. Extrayez l'archive (`benchgo-main.zip`) où vous le souhaitez, par exemple dans
+   `C:\Users\votre-nome\Desktop\` → dossier `benchgo-main`.
+5. Ouvrez un terminal **dans ce dossier** :
+   - Windows : clic droit dans le dossier → « Ouvrir dans le terminal »
+   - ou : PowerShell, puis `cd Chemin\Vers\benchgo-main`
+
+#### Méthode B — Cloner avec Git (recommandé pour recevoir les mises à jour)
+
+Si vous avez [Git](https://git-scm.com/) installé :
+
+```powershell
+git clone https://github.com/cisco-03/benchgo.git
+cd benchgo
+```
+
+Pour récupérer les mises à jour plus tard, il suffira de :
+
+```powershell
+git pull
+```
+
+#### Méthode C — Via GitHub CLI
+
+Si vous utilisez [GitHub CLI](https://cli.github.com/) :
+
+```powershell
+gh repo clone cisco-03/benchgo
+cd benchgo
+```
+
+### Étape 3 — Aucune installation de dépendances
+
+BenchGo n'utilise **que des modules intégrés à Node.js** (`fs`, `http`, `vm`, `crypto`…).
+Il n'y a **pas de `npm install` à lancer**. Une fois le dossier téléchargé et Node.js
+présent, l'application est prête.
+
+### Étape 4 — Préparer un modèle à évaluer
+
+Vous avez deux options :
+
+- **Modèle local** : installez [LM Studio](https://lmstudio.ai/), chargez un modèle
+  (GGUF), puis démarrez le **serveur local** de LM Studio (icône serveur → « Start
+  Server »). L'API écoute par défaut sur `http://localhost:1234`.
+- **Modèle cloud** : créez un compte chez un fournisseur (OpenAI, Anthropic, Groq,
+  OpenRouter…) et récupérez une clé API.
+
+### Étape 5 — Lancer le premier benchmark
+
+```powershell
+node runner.js all
+```
+
+L'application détecte automatiquement la taille du modèle chargé dans LM Studio et
+choisit le profil adapté (LIGHT / STANDARD / EXPERT…). Le résultat s'affiche dans le
+terminal ; un rapport Markdown est généré dans `Export-Rapports/`.
+
+> 📖 Pour le détail des commandes et options, consultez le
+> [Manuel utilisateur](./Docs/Manuel-utilisateur/README.md).
+
+---
+
+## 🚀 Démarrage rapide (récapitulatif)
 
 ```bash
-# 1. Charger un modèle dans LM Studio et démarrer le serveur local (port 1234)
-
-# 2. Lancer un benchmark complet (détection auto du profil selon la taille du modèle)
+# Mode local (LM Studio) — détection auto du profil selon la taille du modèle
 node runner.js all
 
-# 3. Ou forcer un profil
+# Forcer un profil
 node runner.js all --profile=LIGHT      # < 3B
 node runner.js all --profile=STANDARD   # 3B – 14B
 node runner.js all --profile=EXPERT     # 14B – 30B
@@ -162,8 +245,7 @@ benchmark-v3/
 ├── progress-bar.js            ← UI console
 ├── logger.js                  ← Journalisation
 ├── tiers/                     ← 16 fichiers JSON d'exercices (par profil × tier)
-├── Docs/                      ← Documentation utilisateur
-├── Memories-BenchGo/          ← Mémoire du projet (CHANGELOG, architecture, issues-fixes)
+├── Docs/                      ← Documentation utilisateur (Manuel, CHANGELOG, gamification)
 └── Export-Rapports/           ← Rapports générés (gitignored)
     ├── .carnet/<modele>.json  ← Carnets de scores persistants
     ├── classement.html        ← Classement interactif
@@ -175,11 +257,9 @@ benchmark-v3/
 
 ## 📖 Documentation
 
-- [Memories-BenchGo/README.md](./Memories-BenchGo/README.md) — Index de la mémoire du projet
-- [Memories-BenchGo/CHANGELOG.md](./Memories-BenchGo/CHANGELOG.md) — Historique chronologique des modifications
-- [Memories-BenchGo/architecture/benchmark-v2.md](./Memories-BenchGo/architecture/benchmark-v2.md) — Architecture détaillée du moteur
-- [Memories-BenchGo/carte-mentale/classement-leaderboard.md](./Memories-BenchGo/carte-mentale/classement-leaderboard.md) — Carte mentale du classement HTML
-- [Docs/](./Docs/) — Documentation utilisateur (démarrage, commandes, fonctionnement, dépannage)
+- [Manuel utilisateur](./Docs/Manuel-utilisateur/README.md) — Démarrage, commandes, fonctionnement, lecture des résultats, dépannage, référence des tiers
+- [CHANGELOG](./Docs/CHANGELOG.md) — Historique chronologique des modifications
+- [Système de gamification & santé](./Docs/Apps-Fonctions/gamification-sante.md) — Fonctionnement des PV, pénalités et élimination
 
 ---
 

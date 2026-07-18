@@ -71,21 +71,21 @@ node runner.js all --profile=EXPERT
 ## Probleme 6: rapport introuvable
 
 Rappel:
-- le rapport est ecrit a la racine du projet, pas dans benchmark-v2
+- le rapport est généré dans `Export-Rapports/` (organisé par date et profil)
 
-Chercher les fichiers commencant par:
-- rapport_v3_
+Chercher les fichiers dans :
+- `Export-Rapports/<AAAA-MM-JJ>/<PROFIL>/rapport_*.md`
 
 ## Probleme 7: comprendre un echec de tache
 
-Methode recommande:
+Methode recommandee:
 1. Lire la tache concernee dans le rapport Markdown
 2. Lire le message d erreur dans la section evaluation
-3. Ouvrir le log benchmark-v2/logs pour le detail VM/PARSE/API
+3. Ouvrir le dernier fichier de `logs/` pour le detail VM/PARSE/API
 
 ## Bonnes pratiques
 
-- lancer depuis benchmark-v2 (nom technique historique du dossier, meme en V3)
+- lancer depuis la racine du projet (le dossier contenant `runner.js`)
 - garder LM Studio stable pendant tout le run
 - eviter de changer le modele en cours d execution
 - archiver rapport + log ensemble pour chaque campagne

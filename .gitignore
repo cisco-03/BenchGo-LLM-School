@@ -1,9 +1,13 @@
 # =============================================================================
-# .gitignore — Local-LLM-Benchmark-V3
-# Stratégie : tout ignorer par défaut, puis n'autoriser QUE l'application
-# principale (sources JS + config des tiers) et la documentation.
-# Tout le reste (Admin, Export-Rapports, logs, .vscode, fichiers jetables)
-# est considéré comme sensible / non versionné.
+# .gitignore — BenchGo V3
+# Stratégie : tout ignorer par défaut, puis n'autoriser QUE ce qui est utile
+# à un utilisateur qui télécharge le projet depuis GitHub :
+#   - les sources JS de l'application
+#   - les fichiers de tiers (données d'exercices)
+#   - le manuel utilisateur (Docs/Manuel-utilisateur + CHANGELOG + Apps-Fonctions)
+#   - le README racine
+# Le reste (mémoire interne de dev, scripts jetables, rapports, logs, Admin)
+# reste local et n'est jamais publié.
 # =============================================================================
 
 # --- 1. On ignore TOUT par défaut ---
@@ -16,26 +20,37 @@
 !.gitignore
 !*.js
 
-# --- 4. Application principale : configuration des tiers (données du benchmark) ---
-!/tiers/
-!tiers/**
+# --- 4. Scripts de dev JETABLES (non requis par l'application) ---
+# On les ignore explicitement même si *.js est ré-autorisé ci-dessus.
+analyze_and_fix.js
+generate_tiers.js
+update_tiers_script.js
 
-# --- 5. Documentation de l'application ---
+# --- 5. Données du benchmark : configuration des tiers ---
+!/tiers/
+tiers/**
+
+# --- 6. Documentation utilisateur (publiée sur GitHub) ---
 !/Docs/
 Docs/**
-!/Memories-BenchGo/
-Memories-BenchGo/**
+!Docs/Manuel-utilisateur/
+Docs/Manuel-utilisateur/**
+!Docs/CHANGELOG.md
+!Docs/Apps-Fonctions/
+Docs/Apps-Fonctions/**
+
+# --- 7. README racine (page GitHub) ---
 !/README.md
-Admin/Notes-Cisco.md
-Admin/Tasks-old.md
-Docs/Rapports.md
-Admin/Articles
 
 # =============================================================================
-# Données SENSIBLES — NE PAS COMMITER (ignorées par le "*" ci-dessus) :
-#   Admin/              -> notes, tâches, articles, archives .7z (sensible)
-#   Export-Rapports/    -> rapports générés (données personnelles)
-#   logs/               -> journaux d'exécution
-#   .vscode/            -> réglages locaux de l'éditeur
+# Données SENSIBLES / INTERNES — NE PAS COMMITER (ignorées par le "*" ci-dessus) :
+#   Memories-BenchGo/    -> mémoire interne de dev (Kilo Memory, issues-fixes, etc.)
+#   Admin/               -> notes, tâches, archives .7z (sensible)
+#   Export-Rapports/     -> rapports générés + carnets de scores (données perso)
+#   logs/                -> journaux d'exécution
+#   .vscode/             -> réglages locaux de l'éditeur
+#   Docs/README.md       -> doublon (ancien index Memories-BenchGo mal placé)
+#   Docs/Rapports.md     -> rapport interne V2.2 obsolète (mentionne benchmark-v2)
+#   Docs/Modeles-exclure/ -> dossier vide de travail local
 #   fichiers racine jetables (ex: "c", ")") -> ignorés automatiquement
 # =============================================================================

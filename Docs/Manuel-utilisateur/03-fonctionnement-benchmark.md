@@ -70,11 +70,11 @@ Disponible pour LIGHT et STANDARD:
 - une seule tentative supplementaire maximum
 - conservation du meilleur score
 
-## Fichiers d entree et de sortie
+## Fichiers d'entrée et de sortie
 
-Entrees:
-- benchmark-v2/tiers/*.json
+Entrées :
+- `tiers/*.json` (configuration des épreuves)
 
-Sorties:
-- rapport final a la racine du projet (rapport_v3_...md)
-- logs dans benchmark-v2/logs/benchmarks-v2-YYYYMMDD-HHmmss.log
+Sorties :
+- rapport Markdown dans `Export-Rapports/` (organisé par date et profil)
+- logs dans `logs/benchgo_<horodatage>.log` (un fichier par run)

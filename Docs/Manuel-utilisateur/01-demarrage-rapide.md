@@ -1,43 +1,45 @@
-# Demarrage rapide
+# Démarrage rapide
 
-## 1. Prerequis
+## 1. Prérequis
 
 - Windows, macOS ou Linux
-- Node.js 18+ installe
-- LM Studio lance avec:
-  - un modele charge
+- Node.js 18+ installé (voir le [README racine](../../README.md) pour l'installation pas-à-pas)
+- LM Studio lancé avec :
+  - un modèle chargé
   - API locale active sur le port 1234
 
-## 2. Ouvrir un terminal dans le bon dossier
+## 2. Ouvrir un terminal dans le dossier du projet
 
-Depuis la racine du projet:
-
-Note importante:
-- Le projet est bien en version V3.
-- Le dossier d execution conserve le nom historique `benchmark-v2` pour compatibilite.
+Depuis le dossier racine de BenchGo (celui qui contient `runner.js`) :
 
 ```powershell
-cd benchmark-v2
+# Si vous n'êtes pas encore dans le dossier :
+cd chemin\vers\benchgo
 ```
+
+Vérifiez que vous êtes au bon endroit :
+
+```powershell
+dir runner.js
+```
+Doit afficher le fichier `runner.js`.
 
 ## 3. Lancer le benchmark complet
 
 ```powershell
-node runner.js
+node runner.js all
 ```
 
-Cette commande:
+Cette commande :
 - lance tous les tiers applicables
-- tente la detection automatique du profil si vous ne forcez pas --profile
-- cree un rapport Markdown final
-- cree un log persistant
+- tente la détection automatique du profil si vous ne forcez pas `--profile`
+- crée un rapport Markdown final
+- crée un log persistant
 
-## 4. Verifier les sorties
+## 4. Vérifier les sorties
 
-- Rapport: a la racine du projet, nomme comme:
-  - rapport_v3_nom-modele_standard.md
-  - rapport_v3_nom-modele_expert.md
-- Logs: dossier benchmark-v2/logs
+- **Rapport Markdown** : dans `Export-Rapports/`, organisé par date et profil
+- **Logs** : dossier `logs/` à la racine du projet, un fichier horodaté par run
 
 ## 5. Lancer un seul tier (exemple)
 
@@ -45,10 +47,10 @@ Cette commande:
 node runner.js 2
 ```
 
-Utile pour:
+Utile pour :
 - debug rapide
-- validation ciblee
-- rerun apres correction
+- validation ciblée
+- rerun après correction
 
 ## 6. Si vous voulez forcer le profil
 
@@ -56,7 +58,9 @@ Utile pour:
 node runner.js all --profile=STANDARD
 ```
 
-Profils disponibles:
-- LIGHT
-- STANDARD
-- EXPERT
+Profils disponibles :
+- LIGHT      (< 3B)
+- STANDARD   (3B – 14B)
+- EXPERT     (14B – 30B)
+- DOCTORAT   (> 30B)
+- FRONTIER   (modèles cloud)
