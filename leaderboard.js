@@ -869,7 +869,10 @@ function buildReasoningMarkdown(entries) {
               md += `*Aucun code exploitable produit.*\n\n`;
             }
             if (r.failureExplanation) {
-              md += `**Explication de l'échec (par le modèle) :** ${r.failureExplanation}\n\n`;
+              md += `**Explication de l'échec (par l'élève) :** ${r.failureExplanation}\n\n`;
+            }
+            if (r.teacherCorrection) {
+              md += `**🎓 Correction du professeur IA :** ${r.teacherCorrection}\n\n`;
             }
           }
         }

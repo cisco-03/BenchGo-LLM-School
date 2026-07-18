@@ -5,6 +5,26 @@ const EVAL_TIMEOUT_MS = 5000;
 const API_TIMEOUT_MS = 900000;
 const OPTIONAL_BONUS_PCT = 0.20; // Bonus appliqué aux exercices optionnels réussis (20% des points de base)
 
+// --- Professeur (correcteur IA distinct de l'élève) ---
+// Après un échec définitif, l'élève (le modèle testé) s'auto-analyse. Puis un
+// PROFESSEUR indépendant — un modèle cloud plus robuste — relit cette analyse,
+// identifie ce qui est juste/faux et DÉMONTRE la vraie cause racine. Cela évite
+// qu'un modèle faible se contredise lui-même ou valide une analyse erronée.
+//
+// Par défaut : OpenRouter gratuit (aucune clé requise pour les modèles :free).
+// Override possible via --teacher-model / --teacher-api-key / --teacher-endpoint.
+const TEACHER_CONFIG = {
+  enabled: true,
+  provider: 'openrouter',
+  // Modèle gratuit par défaut (clean, bon en français, robuste pour la critique).
+  model: 'meta-llama/llama-3.3-70b-instruct:free',
+  apiKey: null,         // Surcharge via --teacher-api-key ou OPENROUTER_API_KEY
+  endpoint: null,      // Surcharge via --teacher-endpoint (rare)
+  maxRetries: 3,       // Tentatives avant repli sur l'auto-analyse de l'élève
+  temperature: 0.15,    // Déterministe mais pas rigide pour l'analyse pédagogique
+  maxTokens: 512        // Limite stricte : l'analyse prof doit rester concise
+};
+
 const PROFILES = {
   LIGHT:    { mandatory: [0, 1],          optional: [2, 3, 4, 5],    label: "LIGHT — Primaire (< 3B paramètres)",                      ecole: "Primaire"    },
   STANDARD: { mandatory: [0, 1, 2],       optional: [3, 4, 5, 6],    label: "STANDARD — Collège/Lycée (3B – 14B paramètres)",         ecole: "College-Lycee" },
@@ -56,10 +76,16 @@ function parseCliArgs() {
   const profileArgRaw    = ((rawArgs.find(a => a.startsWith('--profile='))       || '').split('=')[1]);
   const contextLimitRaw  = ((rawArgs.find(a => a.startsWith('--context-limit=')) || '').split('=')[1]);
   const providerArgRaw   = ((rawArgs.find(a => a.startsWith('--provider='))      || '').split('=')[1]);
-  // --model, --api-key et --endpoint peuvent contenir des '=' (tokens base64, URLs) → on rejoint tout après le premier '='
+  // --model, --api-key et --endpoint peuvent contenir des '=' (tokens base64, URLs) → on joint tout après le premier '='
   const modelArgRaw    = (() => { const a = rawArgs.find(r => r.startsWith('--model='));    return a ? a.split('=').slice(1).join('=') : null; })();
   const apiKeyArgRaw   = (() => { const a = rawArgs.find(r => r.startsWith('--api-key='));  return a ? a.split('=').slice(1).join('=') : null; })();
   const endpointArgRaw = (() => { const a = rawArgs.find(r => r.startsWith('--endpoint=')); return a ? a.split('=').slice(1).join('=') : null; })();
+
+  // --- Override du professeur (modèle cloud indépendant qui corrige l'élève) ---
+  const teacherModelRaw    = (() => { const a = rawArgs.find(r => r.startsWith('--teacher-model='));    return a ? a.split('=').slice(1).join('=') : null; })();
+  const teacherApiKeyRaw   = (() => { const a = rawArgs.find(r => r.startsWith('--teacher-api-key='));  return a ? a.split('=').slice(1).join('=') : null; })();
+  const teacherEndpointRaw = (() => { const a = rawArgs.find(r => r.startsWith('--teacher-endpoint=')); return a ? a.split('=').slice(1).join('=') : null; })();
+  const teacherDisabledRaw = rawArgs.includes('--no-teacher');
 
   const profileArgExplicit = profileArgRaw ? profileArgRaw.toUpperCase() : null;
   const parsedContextLimit = contextLimitRaw ? parseInt(contextLimitRaw, 10) : null;
@@ -74,7 +100,9 @@ function parseCliArgs() {
   // Si --provider est spécifié sans --profile, on présume un modèle frontier
   let profileArg = profileArgExplicit || (provider ? 'FRONTIER' : 'STANDARD');
 
-  return { tierArg, profileArg, profileArgExplicit, contextLimitTokens, provider, model, apiKey, endpoint };
+  return { tierArg, profileArg, profileArgExplicit, contextLimitTokens, provider, model, apiKey, endpoint,
+           teacherModel: teacherModelRaw, teacherApiKey: teacherApiKeyRaw, teacherEndpoint: teacherEndpointRaw,
+           teacherDisabled: teacherDisabledRaw };
 }
 
 function detectProfileFromModelName(modelName) {
@@ -132,6 +160,7 @@ module.exports = {
   SPINNER_FRAMES,
   SPINNER_CHARS,
   WAITING_MESSAGES,
+  TEACHER_CONFIG,
   parseCliArgs,
   detectProfileFromModelName,
   fetchModelNameFromLMStudio,

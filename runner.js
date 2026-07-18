@@ -3,11 +3,12 @@ const fs = require('fs');
 const path = require('path');
 const readline = require('readline');
 const logger = require('./logger');
-const { PROFILES, CLASSE_NAMES, parseCliArgs, detectProfileFromModelName, fetchModelNameFromLMStudio, OPTIONAL_BONUS_PCT, selfProfiling } = require('./config');
+const { PROFILES, CLASSE_NAMES, parseCliArgs, detectProfileFromModelName, fetchModelNameFromLMStudio, OPTIONAL_BONUS_PCT, selfProfiling, TEACHER_CONFIG } = require('./config');
 const { ProgressBar, Spinner, letterGrade } = require('./progress-bar');
 const { extractJSON, extractCodeRegex } = require('./parsing-utils');
 const { queryLLM: queryLLMLocal } = require('./lm-studio-client');
 const { queryLLM: queryLLMCloud } = require('./cloud-client');
+const { askTeacherToCorrectStudentAnalysis } = require('./teacher-client');
 const { loadTiers } = require('./tier-loader');
 const { evaluateTask } = require('./task-evaluator');
 const { buildTierReport, shortenModelName, buildCalibrationReport } = require('./report-generator');
@@ -212,6 +213,18 @@ async function askYesNo(question, defaultNo = true) {
   });
 }
 
+// Demande une saisie texte libre à l'utilisateur (non-TTY → retourne '').
+async function askFreeText(question) {
+  if (!process.stdin.isTTY || !process.stdout.isTTY) return '';
+  return new Promise(resolve => {
+    const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+    rl.question(`${question} `, answer => {
+      rl.close();
+      resolve((answer || '').trim());
+    });
+  });
+}
+
 // --- Explication d'échec exigée par le professeur ---
 // Après un échec définitif sur un exercice, le professeur (le runner) interroge le
 // modèle une dernière fois pour exiger qu'il EXPLIQUE la cause de son échec. On
@@ -269,7 +282,7 @@ async function askModelForFailureExplanation({ queryFn, providerConfig, contextL
   }
 }
 
-async function runTierAttempt({ tierNum, tierData, isMandatory, profileArg, contextLimitTokens, attemptNumber, queryFn, providerConfig, gameState, selfProfile }) {
+async function runTierAttempt({ tierNum, tierData, isMandatory, profileArg, contextLimitTokens, attemptNumber, queryFn, providerConfig, gameState, selfProfile, teacherConfig }) {
   const attemptTag = attemptNumber > 1 ? ` (RATTRAPAGE ${attemptNumber - 1}/${MAX_RATTRAPAGE_ATTEMPTS})` : '';
 
   console.log(`\x1b[33m━━ TIER ${tierNum} : ${tierData.title}${attemptTag} ━━\x1b[0m`);
@@ -307,6 +320,7 @@ async function runTierAttempt({ tierNum, tierData, isMandatory, profileArg, cont
   const taskHelpOffered = {};
   const taskLastError = {};
   let taskFailureExplanations = {};   // taskId -> explication pédagogique de l'échec définitif
+  let taskTeacherCorrections = {};   // taskId -> correction du professeur IA (OpenRouter)
   let optionalBonusTotal = 0;
   let responseModelName = null;
   let rawResponseAll = '';
@@ -541,37 +555,70 @@ async function runTierAttempt({ tierNum, tierData, isMandatory, profileArg, cont
                    logger.warn(`Explication d'échec échouée pour ${task.id} : ${e.message}`);
                  }
 
-                 if (failureExplanation && failureExplanation.length > 0) {
-                   console.log(`  \x1b[36m💬 Explication de l'élève pour ${task.id} :\x1b[0m`);
-                   // Découpe l'explication en lignes pour un rendu CLI propre.
-                   const explainLines = failureExplanation.split(/\r?\n/).filter(l => l.trim()).slice(0, 6);
-                   for (const line of explainLines) {
-                     console.log(`    \x1b[90m${line.substring(0, 140)}\x1b[0m`);
-                   }
-                 } else {
-                   // Repli : si le modèle n'a pas pu répondre, le professeur fournit
-                   // lui-même une explication de l'erreur technique pour l'utilisateur.
-                   const profExplanation = explainTechnicalError(errors, task);
-                   console.log(`  \x1b[33m👨‍🏫 Professeur (explication à la place de l'élève) :\x1b[0m`);
-                   console.log(`    \x1b[90m${profExplanation}\x1b[0m`);
-                   failureExplanation = profExplanation;
-                 }
+                  if (failureExplanation && failureExplanation.length > 0) {
+                    console.log(`  \x1b[36m💬 Explication de l'élève pour ${task.id} :\x1b[0m`);
+                    // Découpe l'explication en lignes pour un rendu CLI propre.
+                    const explainLines = failureExplanation.split(/\r?\n/).filter(l => l.trim()).slice(0, 6);
+                    for (const line of explainLines) {
+                      console.log(`    \x1b[90m${line.substring(0, 140)}\x1b[0m`);
+                    }
+                  } else {
+                    // Repli : si le modèle n'a pas pu répondre, le professeur fournit
+                    // lui-même une explication de l'erreur technique pour l'utilisateur.
+                    const profExplanation = explainTechnicalError(errors, task);
+                    console.log(`  \x1b[33m👨‍🏫 Professeur (explication à la place de l'élève) :\x1b[0m`);
+                    console.log(`    \x1b[90m${profExplanation}\x1b[0m`);
+                    failureExplanation = profExplanation;
+                  }
 
-                 // Le professeur (utilisateur) décide si la pénalité est comptabilisée
-                 const countPoints = await askYesNo(`  Comptabiliser la pénalité de -${pts} points pour l'exercice ${task.id} ?`, true);
-                 if (!countPoints) {
-                    tierScore += pts;
-                    gameState.globalLifeScore += pts;
-                    taskNetPoints[task.id] = (taskNetPoints[task.id] || 0) + pts;
-                    console.log(`  \x1b[32m✅ Pénalité annulée pour ${task.id} (Tier: ${tierScore}, Santé: ${gameState.globalLifeScore})\x1b[0m`);
-                 } else {
-                    console.log(`  \x1b[31m✘ Pénalité maintenue : -${pts} Points (Tier: ${tierScore}, Santé: ${gameState.globalLifeScore})\x1b[0m`);
-                 }
-                 permanentlyFailedIds.push(task.id);
+                  // --- Le professeur IA corrige l'analyse de l'élève ---
+                  // Modèle cloud indépendant (OpenRouter gratuit par défaut) qui relit
+                  // l'auto-analyse de l'élève, dit si elle est juste/fausse, et DÉMONTRE la
+                  // vraie cause racine. Évite qu'un modèle faible se valide lui-même.
+                  let teacherCorrection = null;
+                  if (teacherConfig && teacherConfig.enabled) {
+                    console.log(`  \x1b[35m👨‍🏫 Professeur IA : relecture critique de l'analyse de l'élève pour ${task.id}...\x1b[0m`);
+                    try {
+                      teacherCorrection = await askTeacherToCorrectStudentAnalysis({
+                        teacherConfig,
+                        task, errors, studentCode,
+                        studentAnalysis: failureExplanation,
+                        tierNum
+                      });
+                    } catch (e) {
+                      logger.warn(`Teacher: exception pour ${task.id} : ${e.message}`);
+                    }
+                    if (teacherCorrection && teacherCorrection.length > 0) {
+                      console.log(`  \x1b[35m🎓 Correction du professeur pour ${task.id} :\x1b[0m`);
+                      const teachLines = teacherCorrection.split(/\r?\n/).filter(l => l.trim()).slice(0, 8);
+                      for (const line of teachLines) {
+                        console.log(`    \x1b[90m${line.substring(0, 140)}\x1b[0m`);
+                      }
+                    } else {
+                      console.log(`  \x1b[33m👨‍🏫 Professeur IA : indisponible (repli sur l'auto-analyse de l'élève).\x1b[0m`);
+                      logger.info(`Teacher: aucun retour pour ${task.id} — repli sur auto-analyse.`);
+                    }
+                  }
 
-                 // Mémorise l'explication pour le rapport Markdown
-                 if (!taskFailureExplanations) taskFailureExplanations = {};
-                 taskFailureExplanations[task.id] = failureExplanation || '';
+                  // Le professeur (utilisateur) décide si la pénalité est comptabilisée
+                  const countPoints = await askYesNo(`  Comptabiliser la pénalité de -${pts} points pour l'exercice ${task.id} ?`, true);
+                  if (!countPoints) {
+                     tierScore += pts;
+                     gameState.globalLifeScore += pts;
+                     taskNetPoints[task.id] = (taskNetPoints[task.id] || 0) + pts;
+                     console.log(`  \x1b[32m✅ Pénalité annulée pour ${task.id} (Tier: ${tierScore}, Santé: ${gameState.globalLifeScore})\x1b[0m`);
+                  } else {
+                     console.log(`  \x1b[31m✘ Pénalité maintenue : -${pts} Points (Tier: ${tierScore}, Santé: ${gameState.globalLifeScore})\x1b[0m`);
+                  }
+                  permanentlyFailedIds.push(task.id);
+
+                  // Mémorise l'explication (élève) ET la correction (professeur) pour le rapport
+                  if (!taskFailureExplanations) taskFailureExplanations = {};
+                  taskFailureExplanations[task.id] = failureExplanation || '';
+                  if (teacherCorrection && teacherCorrection.length > 0) {
+                    if (!taskTeacherCorrections) taskTeacherCorrections = {};
+                    taskTeacherCorrections[task.id] = teacherCorrection;
+                  }
               } else {
                 // Premier échec — pénalité appliquée, une nouvelle tentative sera proposée
                 tierScore -= pts;
@@ -594,7 +641,8 @@ async function runTierAttempt({ tierNum, tierData, isMandatory, profileArg, cont
             helpUsed: Boolean(taskHelpUsed[task.id]),
             retried: (taskRetryMap[task.id] || 0) >= 1,
             status: taskPassed ? 'success' : 'failed',
-            failureExplanation: taskFailureExplanations[task.id] || null
+            failureExplanation: taskFailureExplanations[task.id] || null,
+            teacherCorrection: taskTeacherCorrections[task.id] || null
           };
        }
 
@@ -707,7 +755,8 @@ async function runTierAttempt({ tierNum, tierData, isMandatory, profileArg, cont
     optionalBonus: optionalBonusTotal,
     bypassedCount: bypassedTasks.length,
     filterDecisions,
-    failureExplanations: taskFailureExplanations
+    failureExplanations: taskFailureExplanations,
+    teacherCorrections: taskTeacherCorrections
   };
 }
 
@@ -719,13 +768,67 @@ async function main() {
   console.log('\x1b[36m\u2551   (VM Sandbox + Tests RFC 7946 + Flood Fill + React Sim)  \u2551\x1b[0m');
   console.log('\x1b[36m\u255A\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u255D\x1b[0m\n');
 
-  const { tierArg, profileArgExplicit, contextLimitTokens: contextLimitFromCli, provider, model: cloudModel, apiKey, endpoint } = parseCliArgs();
+  const { tierArg, profileArgExplicit, contextLimitTokens: contextLimitFromCli, provider, model: cloudModel, apiKey, endpoint,
+           teacherModel, teacherApiKey, teacherEndpoint, teacherDisabled } = parseCliArgs();
   const isCloudMode = Boolean(provider);
   const providerConfig = isCloudMode ? { provider, model: cloudModel, apiKey } : null;
   const queryFn = isCloudMode ? queryLLMCloud : queryLLMLocal;
   let profileArg = profileArgExplicit || (isCloudMode ? 'FRONTIER' : 'STANDARD');
   const contextLimitTokens = contextLimitFromCli || DEFAULT_CONTEXT_LIMIT_TOKENS;
   let preKnownModelName = isCloudMode ? cloudModel : null;
+
+  // --- Configuration du professeur (modèle cloud indépendant qui corrige l'élève) ---
+  // Au démarrage, on demande à l'utilisateur s'il veut :
+  //  (A) Professeur amélioré via OpenRouter (Free Router : rotate sur les modèles
+  //      gratuits) — nécessite une clé API OpenRouter (création de compte gratuite).
+  //  (B) Auto-analyse classique : le modèle testé s'analyse lui-même (comportement
+  //      historique, aucun compte externe requis).
+  // Override CLI : --no-teacher force (B) sans demander ; --teacher-api-key=...
+  // force (A) sans demander.
+  const teacherConfig = (() => {
+    const base = { ...TEACHER_CONFIG, enabled: false };
+    if (teacherDisabled) {
+      console.log(`  \x1b[90mProfesseur : auto-analyse classique (--no-teacher).\x1b[0m`);
+      return base;
+    }
+
+    // Clé fournie en CLI ou en env → mode OpenRouter sans demander.
+    const envKey = process.env.OPENROUTER_API_KEY || process.env.OPENROUTER_KEY;
+    if (teacherApiKey || envKey) {
+      const resolved = { ...TEACHER_CONFIG, enabled: true };
+      if (teacherModel)    resolved.model    = teacherModel;
+      if (teacherApiKey)   resolved.apiKey   = teacherApiKey;
+      else if (envKey)     resolved.apiKey   = envKey;
+      if (teacherEndpoint) resolved.endpoint = teacherEndpoint;
+      console.log(`  \x1b[35mProfesseur : OpenRouter (Free Router) activé — clé détectée.\x1b[0m`);
+      return resolved;
+    }
+
+    // Sinon : on demande interactivement à l'utilisateur.
+    console.log(`\n  \x1b[36m━━ PROFESSEUR CORRECTEUR ━━\x1b[0m`);
+    console.log(`  \x1b[90mAprès chaque échec définitif, l'élève s'auto-analyse. Un professeur IA indépendant peut relire cette analyse et démontrer la vraie cause racine.\x1b[0m`);
+    console.log(`  \x1b[90m(A) Professeur OpenRouter (Free Router, modèles gratuits) — nécessite une clé API (création de compte gratuite sur https://openrouter.ai).\x1b[0m`);
+    console.log(`  \x1b[90m(B) Auto-analyse classique (aucun compte requis) — le modèle testé s'analyse lui-même.\x1b[0m`);
+    return (async () => {
+      const wantsOpenRouter = await askYesNo(`  Utiliser le professeur OpenRouter (Free Router) ?`, true);
+      if (!wantsOpenRouter) {
+        console.log(`  \x1b[90mProfesseur : auto-analyse classique.\x1b[0m`);
+        return base;
+      }
+      const key = await askFreeText(`  Collez votre clé API OpenRouter (sk-or-v1-...) :`);
+      if (!key) {
+        console.log(`  \x1b[33mAucune clé saisie — repli sur l'auto-analyse classique.\x1b[0m`);
+        return base;
+      }
+      const resolved = { ...TEACHER_CONFIG, enabled: true, apiKey: key };
+      if (teacherModel)    resolved.model    = teacherModel;
+      if (teacherEndpoint) resolved.endpoint = teacherEndpoint;
+      console.log(`  \x1b[35mProfesseur : OpenRouter (Free Router) activé.\x1b[0m`);
+      return resolved;
+    })();
+  })();
+  const teacherConfigResolved = (teacherConfig && teacherConfig.then) ? await teacherConfig : teacherConfig;
+  logger.info(`Professeur : ${teacherConfigResolved.enabled ? `activé (OpenRouter Free Router)` : 'désactivé (auto-analyse classique)'}`);
 
   // Lance l'auto-updater pour ajouter les exercices manquants et les points
   updateTiers();
@@ -956,7 +1059,8 @@ async function main() {
         queryFn,
         providerConfig: isCloudMode ? { provider, model: cloudModel, apiKey, endpoint } : null,
         gameState,
-        selfProfile
+        selfProfile,
+        teacherConfig: teacherConfigResolved
       });
 
       if (attemptResult.responseModelName && modelName === "Modele_En_Attente") {
@@ -1185,7 +1289,10 @@ async function main() {
     for (const r of failedWithExplanations) {
       const tierNumMatch = (r._tierNum != null) ? `Tier ${r._tierNum} — ` : '';
       globalReport += `### ${tierNumMatch}${r.id} — ${r.taskType || 'Exercice'}\n\n`;
-      globalReport += `**Explication :** ${r.failureExplanation}\n\n`;
+      globalReport += `**Explication de l'élève :** ${r.failureExplanation}\n\n`;
+      if (r.teacherCorrection) {
+        globalReport += `**🎓 Correction du professeur IA :** ${r.teacherCorrection}\n\n`;
+      }
     }
     globalReport += `---\n\n`;
   }
