@@ -42,6 +42,18 @@ Docs/Apps-Fonctions/**
 # --- 7. README racine (page GitHub) ---
 !/README.md
 
+# --- 7bis. Licence + templates communauté GitHub ---
+!/LICENSE
+!/.github/
+.github/**
+!/.github/CONTRIBUTING.md
+!/.github/CODE_OF_CONDUCT.md
+!/.github/PULL_REQUEST_TEMPLATE.md
+!/.github/ISSUE_TEMPLATE/
+.github/ISSUE_TEMPLATE/**
+!/.github/ISSUE_TEMPLATE/bug_report.md
+!/.github/ISSUE_TEMPLATE/feature_request.md
+
 # =============================================================================
 # Données SENSIBLES / INTERNES — NE PAS COMMITER (ignorées par le "*" ci-dessus) :
 #   Memories-BenchGo/    -> mémoire interne de dev (Kilo Memory, issues-fixes, etc.)

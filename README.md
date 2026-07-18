@@ -278,7 +278,30 @@ benchmark-v3/
 
 ## 📜 Licence
 
-Projet personnel — voir les conditions d'utilisation dans le dépôt.
+Ce projet est distribué sous licence **MIT**. Voir le fichier [`LICENSE`](./LICENSE).
+
+En résumé : vous êtes libre d'utiliser, copier, modifier, fusionner, publier,
+distribuer et même commercialiser BenchGo V3, à condition de conserver la
+mention de copyright et la notice de licence. Le logiciel est fourni « tel quel »,
+sans aucune garantie.
+
+---
+
+## 🤝 Contribuer
+
+Les contributions sont les bienvenues ! Avant de proposer une modification,
+lisez le guide [`CONTRIBUTING.md`](./.github/CONTRIBUTING.md).
+
+Le flux standard est le suivant :
+
+1. **Forkez** le dépôt sur GitHub.
+2. Créez une branche : `git checkout -b ma-feature`.
+3. Commitez vos changements avec un message clair.
+4. Poussez : `git push origin ma-feature`.
+5. Ouvrez une **Pull Request** depuis votre fork vers la branche `main`.
+
+Toutes les PR passent par une revue avant fusion — vous gardez ainsi la maîtrise
+du projet. Voir aussi le [Code de conduite](./.github/CODE_OF_CONDUCT.md).
 
 ---
 
