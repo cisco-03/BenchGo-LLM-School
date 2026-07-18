@@ -201,6 +201,31 @@ Le classement HTML (généré dans `Export-Rapports/classement.html`) est **cond
 | `classement.md` | Classement Markdown tabulaire + détail par modèle |
 | `raisonnement_modeles.md` | Raisonnements & réponses détaillés par modèle (destiné à NotebookLM via Gemini) |
 
+### Rapports datés par école et par jour
+
+Chaque exécution de `runner.js` produit aussi un **rapport individuel horodaté**,
+classé par date puis par école :
+
+```
+Export-Rapports/
+└── <AAAA-MM-JJ>/
+    ├── Primaire/
+    │   └── rapport_v3_<modèle>_<profil>_<HH-MM-SS>.md
+    └── College-Lycee/
+        └── rapport_v3_<modèle>_<profil>_<HH-MM-SS>.md
+```
+
+Ces rapports contiennent le **détail complet d'un run** (exercice par exercice,
+réponse du modèle, raisonnement, points obtenus/max, statut). Ils ne sont pas
+écrasés : un nouveau fichier est créé à chaque run, ce qui permet de constituer
+un **historique** des performances d'un modèle dans le temps.
+
+> 💡 **Workflow d'analyse qualitatif** : ces rapports datés sont conçus pour être
+> transmis à **Gemini**, qui en produit une synthèse ; cette synthèse est ensuite
+> injectée dans un carnet **NotebookLM** partagé pour interroger librement les
+> résultats par modèle, par exercice ou par école :
+> 👉 [Carnet NotebookLM BenchGo V3](https://notebooklm.google.com/notebook/bd6cf971-b22a-460a-9892-419d1db02f9e)
+
 ---
 
 ## 🧩 Modules
@@ -273,6 +298,31 @@ benchmark-v3/
 | `--provider=<NOM>` | Mode cloud (openai / anthropic / groq / together / openrouter / mistral) |
 | `--model=<NOM>` | Nom du modèle cloud |
 | `--api-key=<CLÉ>` | Clé API cloud (⚠️ visible dans le terminal — préférer les variables d'env) |
+
+---
+
+## 🖼️ Galerie
+
+Aperçu de l'interface console et des exports produits par BenchGo V3.
+
+<table>
+  <tr>
+    <td width="50%" align="center"><b>Auto-profilage & début d'exercice</b></td>
+    <td width="50%" align="center"><b>Résultats des tests & points par LLM</b></td>
+  </tr>
+  <tr>
+    <td width="50%" align="center"><img src="./Docs/Screens/auto-profilage-debut_exercice.jpg" alt="Auto-profilage du modèle et début d'exercice"></td>
+    <td width="50%" align="center"><img src="./Docs/Screens/resultats-tests-points-llm.jpg" alt="Résultats des tests et points obtenus par LLM"></td>
+  </tr>
+  <tr>
+    <td width="50%" align="center"><b>Classement global des modèles</b></td>
+    <td width="50%" align="center"><b>Modale de détail — résultats par école</b></td>
+  </tr>
+  <tr>
+    <td width="50%" align="center"><img src="./Docs/Screens/classement-llm-modeles-points.jpg" alt="Classement HTML des modèles LLM avec points"></td>
+    <td width="50%" align="center"><img src="./Docs/Screens/modale-score-llm-resultats-ecoles.jpg" alt="Modale de détail d'un LLM avec résultats par école"></td>
+  </tr>
+</table>
 
 ---
 

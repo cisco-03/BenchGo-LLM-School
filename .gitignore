@@ -39,6 +39,15 @@ Docs/Manuel-utilisateur/**
 !Docs/Apps-Fonctions/
 Docs/Apps-Fonctions/**
 
+# --- 6bis. Captures d'écran (page GitHub) ---
+!Docs/Screens/
+Docs/Screens/**
+!Docs/Screens/*.png
+!Docs/Screens/*.jpg
+!Docs/Screens/*.jpeg
+!Docs/Screens/*.gif
+!Docs/Screens/*.webp
+
 # --- 7. README racine (page GitHub) ---
 !/README.md
 
