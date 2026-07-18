@@ -22,9 +22,14 @@
 
 # --- 5. Documentation de l'application ---
 !/Docs/
-!Docs/**
+Docs/**
 !/Memories-BenchGo/
-!Memories-BenchGo/**
+Memories-BenchGo/**
+!/README.md
+Admin/Notes-Cisco.md
+Admin/Tasks-old.md
+Docs/Rapports.md
+Admin/Articles
 
 # =============================================================================
 # Données SENSIBLES — NE PAS COMMITER (ignorées par le "*" ci-dessus) :

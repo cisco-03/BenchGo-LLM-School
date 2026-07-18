@@ -120,7 +120,7 @@ modèle à générer du code correct à travers 7 niveaux de difficulté (Tiers 
 
 ### runner.js
 - **Rôle** : Orchestrateur principal
-- **Contenu** : `main()`, `runTierAttempt()`, routing dual Local/Cloud (`queryFn` + `providerConfig`), rattrapage interactif (désactivé en mode cloud), export des rapports classés. **Auto-profilage** : interview du modèle au démarrage via `self-profiling.js`, filtrage amont des tâches selon le profil auto-déclaré, agrégation des résultats (status success/failed/bypassed), calcul de l'Indice de Calibration en fin de run, injection de la section rapport. **Détection de doublon** : avant le lancement des tiers, vérifie le carnet de scores et propose un re-test forcé si le modèle a déjà été évalué sur la même école. **Classement** : après chaque run complet, régénère le classement global via `leaderboard.js`.
+- **Contenu** : `main()`, `runTierAttempt()`, routing dual Local/Cloud (`queryFn` + `providerConfig`), rattrapage interactif (désactivé en mode cloud), export des rapports classés. **Auto-profilage** : interview du modèle au démarrage via `self-profiling.js`, filtrage amont des tâches selon le profil auto-déclaré, agrégation des résultats (status success/failed/bypassed), calcul de l'Indice de Calibration en fin de run, injection de la section rapport. **Affichage immédiat de la configuration** (2026-07-18) : la config (cible, profil, école, tokens, tiers, mode) est affichée AVANT l'auto-profilage, avec un message annonçant l'auto-profilage et sa durée estimée (10-15s), puis un récap détaillé des compétences déclarées (barre visuelle + niveau moyen + justification). **Explications pédagogiques des échecs** (2026-07-18) : `askModelForFailureExplanation()` interroge le modèle après chaque échec définitif pour exiger une analyse de la cause racine (l'erreur technique brute + le code sont fournis au modèle) ; `explainTechnicalError()` est le repli programmatique qui traduit les erreurs JS courantes (`is not defined`, `Invalid or unexpected token`, etc.) en explication humaine. Les erreurs brutes ne sont jamais affichées seules. Section `## Explications des échecs définitifs` dans le rapport Markdown. **Détection de doublon** : avant le lancement des tiers, vérifie le carnet de scores et propose un re-test forcé si le modèle a déjà été évalué sur la même école. **Classement** : après chaque run complet, régénère le classement global via `leaderboard.js`.
 - **Dépendances** : tous les modules + `self-profiling.js` + `leaderboard.js`
 
 ### tier-loader.js
@@ -168,17 +168,21 @@ modèle à générer du code correct à travers 7 niveaux de difficulté (Tiers 
 - **Dépendances** : `logger.js`, `progress-bar.js`
 
 ### leaderboard.js *(nouveau 2026-07-14)*
-- **Rôle** : Classement global des modèles (leaderboard)
+- **Rôle** : Classement global des modèles (leaderboard) + export raisonnement consolidé
 - **Contenu** :
   - `loadAllLedgers()` — lit tous les carnets `.json` de `Export-Rapports/.carnet/`
   - `aggregateLedger(ledger)` — agrège un carnet en entrée de classement (score, max, pct, santé, bonus, aide, rattrapage, écoles, calibration)
   - `buildArguments(entry)` — génère des **arguments qualitatifs** automatiques (forces/faiblesses/notes) selon les métriques
   - `getVerdict(entry)` — détermine le verdict (RECOMMANDÉ ≥80% / PARTIEL ≥50% / NON RECOMMANDÉ <50%)
-  - `buildLeaderboardHTML(entries)` — génère un HTML autonome (style sombre, médailles, barres de progression)
+  - `getCategory(entry)` *(nouveau 2026-07-18)* — catégorise un modèle en 5 niveaux par % global : 🏆 top (≥90%) / ✅ recommande (≥80%) / 📊 moyenne (≥70%) / ⚠️ rattrapage (≥50%) / 💥 catastrophe (<50%). Utilisé par les filtres du HTML.
+  - `getParamSize(modelName)` *(nouveau 2026-07-18)* — détecte la taille de paramètres depuis le nom du modèle (réutilise `detectProfileFromModelName` de `config.js`) : 🐱 petit (<3B) / 📦 standard (3B-14B) / 🎓 expert (14B-30B) / 🧠 doctorat (>30B) / ❓ inconnu. Mêmes seuils que les profils d'école.
+  - `buildLeaderboardHTML(entries)` *(refonte 2026-07-18)* — génère un HTML autonome **condensé** : une carte compacte par modèle (rang + nom + badge taille + mini-stats + bouton Détails), modale de détail au clic (stats complètes + forces/faiblesses + tableau par école + méta), barre de filtres par catégorie, barre de filtres par taille de params, recherche texte. Données complètes sérialisées en JSON côté client (`var MODELS`). Style sombre, médailles 🥇🥈🥉. Aucune dépendance externe (CSS+JS embarqués).
   - `buildLeaderboardMarkdown(entries)` — génère un Markdown (tableau récapitulatif + détail par modèle)
-  - `generateLeaderboard()` — orchestre : charge → agrège → trie (% décroissant) → génère HTML+MD → sauvegarde dans `Export-Rapports/<date>/classement_<heure>.html|md`
-- **Exécutable standalone** : `node leaderboard.js` régénère le classement à la demande
-- **Dépendances** : `logger.js`, `progress-bar.js`, `report-generator.js`
+  - `buildReasoningMarkdown(entries)` *(nouveau 2026-07-18)* — génère un Markdown détaillé par modèle : nom **intégral**, date/heure du run, auto-profilage déclaré, par école et par tier (classe) : exercices tentés, code produit, explications d'échec, réponse brute complète (raisonnement + code). Destiné à être ingéré par Gemini puis alimente une base NotebookLM pour analyse qualitative.
+  - `loadLedgerByName(shortName)` *(nouveau 2026-07-18)* — recharge un carnet original pour accéder aux données détaillées (tiers, selfProfile)
+  - `generateLeaderboard()` — orchestre : charge → agrège → trie (% décroissant) → génère 3 fichiers (HTML + MD + raisonnement) → sauvegarde dans `Export-Rapports/classement.html`, `classement.md` et `raisonnement_modeles.md`
+- **Exécutable standalone** : `node leaderboard.js` régénère les 3 fichiers à la demande ; `node leaderboard.js --serve` démarre un serveur interactif (port 3939) avec boutons de suppression
+- **Dépendances** : `logger.js`, `progress-bar.js`, `report-generator.js`, `config.js` (`detectProfileFromModelName`)
 
 ## Profils d'évaluation
 

@@ -65,6 +65,49 @@ function shouldReplaceBestResult(currentBest, candidate) {
   return candidate.tierPct >= currentBest.tierPct;
 }
 
+// --- Traduction pédagogique des erreurs techniques brutes du moteur JS ---
+// Le sandbox VM renvoie des erreurs cryptiques (ex: "élèves is not defined",
+// "Invalid or unexpected token") qui font croire à un bug du benchmark. Cette
+// fonction produit une explication humaine compréhensible utilisée comme repli
+// si le modèle n'a pas pu fournir sa propre explication.
+function explainTechnicalError(errors, task) {
+  const e = (errors || '').toLowerCase();
+  const taskId = (task && task.id) || 'cet exercice';
+
+  if (/is not defined/.test(e)) {
+    const m = (errors || '').match(/([A-Za-z_$][\w$]*)\s+is not defined/i);
+    const sym = m ? m[1] : 'une variable';
+    return `L'élève a utilisé ${sym} sans l'avoir déclarée. Le moteur d'exécution ne trouve pas cette référence — il s'agit soit d'une variable/fonction oubliée, soit d'une faute de frappe dans le nom. L'élève aurait dû déclarer ${sym} avant de l'utiliser.`;
+  }
+  if (/invalid or unexpected token/.test(e)) {
+    return `Le code contient un caractère invalide ou inattendu (souvent un signe parasite, une mauvaise apostrophe, un caractère copié depuis un traitement de texte, ou un bout d'expression mal collé). Le moteur ne peut pas analyser la syntaxe — l'élève aurait dû relire son code caractère par caractère.`;
+  }
+  if (/unexpected token/.test(e)) {
+    return `La syntaxe du code est incorrecte à un endroit précis (parenthèse, accolade ou opérateur mal placé). L'élève a probablement oublié un séparateur ou mal appairé des symboles.`;
+  }
+  if (/unexpected end of input|end of script/.test(e)) {
+    return `Le code est incomplet : il manque une accolade fermante, une parenthèse ou un point-virgule à la fin. L'élève a interrompu son code trop tôt.`;
+  }
+  if (/is not a function/.test(e)) {
+    const m = (errors || '').match(/([A-Za-z_$][\w$.]*)\s+is not a function/i);
+    const sym = m ? m[1] : 'une expression';
+    return `L'élève a essayé d'appeler ${sym} comme une fonction, mais ce n'en est pas une. Soit la valeur n'existe pas, soit c'est un nombre/une chaîne/undefined.`;
+  }
+  if (/cannot read propert(?:y|ies) of (?:undefined|null)/.test(e)) {
+    return `L'élève a essayé de lire une propriété sur une valeur undefined ou null. Il n'a pas protégé son accès et a oublié de vérifier que l'objet existait avant d'accéder à un de ses champs.`;
+  }
+  if (/maximum call stack|rangeerror/.test(e)) {
+    return `Récursion infinie détectée : la fonction s'appelle elle-même sans condition d'arrêt. Le moteur a saturé la pile d'exécution.`;
+  }
+  if (/timeout|temps d'exécution dépassé/.test(e)) {
+    return `L'algorithme n'est pas assez efficace ou boucle indéfiniment — il a dépassé le temps d'exécution autorisé. L'élève aurait dû optimiser sa solution.`;
+  }
+  if (/assertion échouée|assertion echouee/.test(e)) {
+    return `Le code s'exécute mais ne produit pas le résultat attendu par le test. La logique de l'élève est incorrecte, même si la syntaxe est valide.`;
+  }
+  return `L'élève n'a pas réussi à produire un code correct pour ${taskId}. Erreur technique du moteur : ${(errors || 'inconnue').substring(0, 200)}. Une analyse plus poussée du code aurait été nécessaire pour identifier précisément la cause.`;
+}
+
 function getClassName(profileArg, tierNum) {
   const fullName = (CLASSE_NAMES[profileArg] && CLASSE_NAMES[profileArg][tierNum]) || `Classe-${tierNum}`;
   const firstDash = fullName.indexOf('-');
@@ -169,6 +212,63 @@ async function askYesNo(question, defaultNo = true) {
   });
 }
 
+// --- Explication d'échec exigée par le professeur ---
+// Après un échec définitif sur un exercice, le professeur (le runner) interroge le
+// modèle une dernière fois pour exiger qu'il EXPLIQUE la cause de son échec. On
+// lui fournit l'erreur technique renvoyée par le sandbox VM (ex: "élèves is not
+// defined", "Invalid or unexpected token") et le code qu'il a produit, puis on lui
+// demande une analyse pédagogique de la cause racine.
+//
+// Objectif : éviter à l'utilisateur les erreurs brutes et cryptiques du moteur JS
+// (qui font croire à un bug du benchmark). Le modèle doit justifier pourquoi il
+// n'y arrive pas — ce n'est PAS négociable, une erreur brute sans explication est
+// interdite dans le CLI. L'explication est affichée à l'utilisateur et enregistrée
+// dans le rapport.
+//
+// Retourne une chaîne explicative (français) ou null si l'appel a échoué.
+async function askModelForFailureExplanation({ queryFn, providerConfig, contextLimitTokens, tierNum, isMandatory, task, errors, studentCode }) {
+  if (!queryFn) return null;
+
+  const codePreview = (studentCode || '').trim().substring(0, 1200);
+  const explanationPrompt =
+    `CONTEXTE : Vous étiez en train de résoudre l'exercice ${task.id} (${task.label}) ` +
+    `en classe de Tier ${tierNum}. Vous avez échoué définitivement après plusieurs tentatives.\n\n` +
+    `Le professeur a corrigé votre copie et le moteur d'évaluation a renvoyé l'erreur technique suivante :\n` +
+    `"${(errors || 'erreur inconnue').substring(0, 400)}"\n\n` +
+    `Voici le code que vous aviez proposé :\n` +
+    "```javascript\n" + codePreview + "\n```\n\n" +
+    `INSTRUCTION : En tant qu'élève, vous devez EXPLIQUER précisément POURQUOI vous n'avez ` +
+    `pas réussi à résoudre cet exercice. Analysez l'erreur technique ci-dessus et votre code, ` +
+    `puis expliquez la cause racine en 2 à 4 phrases claires, en français. Ne vous contentez ` +
+    `PAS de recopier l'erreur brute : décrivez ce qui ne va pas dans votre code (variable non ` +
+    `définie, syntaxe invalide, parenthèse manquante, mauvaise approche algorithmique, etc.) ` +
+    `et ce qu'il aurait fallu faire. Une réponse vide ou une simple répétition de l'erreur ` +
+    `technique n'est PAS acceptable.\n` +
+    `Répondez UNIQUEMENT par votre explication, sans balise de code.`;
+
+  const explainSpinner = new Spinner(`Tier ${tierNum} — Professeur : demande d'explication pour l'échec ${task.id}...`);
+  explainSpinner.start();
+  try {
+    const response = await queryFn(
+      explanationPrompt,
+      'EASY',
+      tierNum,
+      isMandatory,
+      explainSpinner,
+      { contextLimitTokens, providerConfig }
+    );
+    explainSpinner.stop(`Tier ${tierNum} — Explication reçue`);
+    const content = (response && response.content || '').trim();
+    if (!content) return null;
+    // Nettoyage : retire d'éventuels blocs de code pour ne garder que l'explication textuelle.
+    return content.replace(/```[\s\S]*?```/g, '').trim();
+  } catch (e) {
+    explainSpinner.fail(`Tier ${tierNum} — Explication impossible (erreur API)`);
+    logger.warn(`Explication d'échec impossible pour ${task.id} : ${e.message}`);
+    return null;
+  }
+}
+
 async function runTierAttempt({ tierNum, tierData, isMandatory, profileArg, contextLimitTokens, attemptNumber, queryFn, providerConfig, gameState, selfProfile }) {
   const attemptTag = attemptNumber > 1 ? ` (RATTRAPAGE ${attemptNumber - 1}/${MAX_RATTRAPAGE_ATTEMPTS})` : '';
 
@@ -206,6 +306,7 @@ async function runTierAttempt({ tierNum, tierData, isMandatory, profileArg, cont
   const taskHelpUsed = {};
   const taskHelpOffered = {};
   const taskLastError = {};
+  let taskFailureExplanations = {};   // taskId -> explication pédagogique de l'échec définitif
   let optionalBonusTotal = 0;
   let responseModelName = null;
   let rawResponseAll = '';
@@ -417,24 +518,61 @@ async function runTierAttempt({ tierNum, tierData, isMandatory, profileArg, cont
              const retryCount = taskRetryMap[task.id];
              taskLastError[task.id] = errors;
 
-             if (retryCount > MAX_TASK_RETRIES) {
-                // Échec définitif après réessai — le modèle abandonne
-                console.log(`  \x1b[31m✘ Échec définitif sur l'exercice ${task.id} après ${retryCount} tentatives !\x1b[0m`);
-                console.log(`    \x1b[90mRaison: ${errors.substring(0, 80)}\x1b[0m`);
-                console.log(`  \x1b[33m🏳️ L'élève déclare avoir terminé : impossible de résoudre l'exercice ${task.id}.\x1b[0m`);
+              if (retryCount > MAX_TASK_RETRIES) {
+                 // Échec définitif après réessai — le modèle abandonne
+                 console.log(`  \x1b[31m✘ Échec définitif sur l'exercice ${task.id} après ${retryCount} tentatives !\x1b[0m`);
+                 console.log(`    \x1b[90mErreur technique brute du moteur : ${errors.substring(0, 120)}\x1b[0m`);
+                 console.log(`  \x1b[33m🏳️ L'élève déclare avoir terminé : impossible de résoudre l'exercice ${task.id}.\x1b[0m`);
 
-                // Le professeur (utilisateur) décide si la pénalité est comptabilisée
-                const countPoints = await askYesNo(`  Comptabiliser la pénalité de -${pts} points pour l'exercice ${task.id} ?`, true);
-                if (!countPoints) {
-                   tierScore += pts;
-                   gameState.globalLifeScore += pts;
-                   taskNetPoints[task.id] = (taskNetPoints[task.id] || 0) + pts;
-                   console.log(`  \x1b[32m✅ Pénalité annulée pour ${task.id} (Tier: ${tierScore}, Santé: ${gameState.globalLifeScore})\x1b[0m`);
-                } else {
-                   console.log(`  \x1b[31m✘ Pénalité maintenue : -${pts} Points (Tier: ${tierScore}, Santé: ${gameState.globalLifeScore})\x1b[0m`);
-                }
-                permanentlyFailedIds.push(task.id);
-             } else {
+                 // --- Le professeur exige une explication pédagogique de l'échec ---
+                 // Interdit : afficher une erreur brute sans explication (l'utilisateur
+                 // croirait que le benchmark a planté). Le modèle doit justifier lui-même
+                 // pourquoi il n'y arrive pas. Le professeur relaie l'erreur technique au
+                 // modèle et exige une analyse de la cause racine.
+                 console.log(`  \x1b[36m👨‍🏫 Professeur : le modèle doit expliquer la cause de son échec sur ${task.id}.\x1b[0m`);
+                 let failureExplanation = null;
+                 try {
+                   failureExplanation = await askModelForFailureExplanation({
+                     queryFn, providerConfig, contextLimitTokens,
+                     tierNum, isMandatory, task,
+                     errors, studentCode
+                   });
+                 } catch (e) {
+                   logger.warn(`Explication d'échec échouée pour ${task.id} : ${e.message}`);
+                 }
+
+                 if (failureExplanation && failureExplanation.length > 0) {
+                   console.log(`  \x1b[36m💬 Explication de l'élève pour ${task.id} :\x1b[0m`);
+                   // Découpe l'explication en lignes pour un rendu CLI propre.
+                   const explainLines = failureExplanation.split(/\r?\n/).filter(l => l.trim()).slice(0, 6);
+                   for (const line of explainLines) {
+                     console.log(`    \x1b[90m${line.substring(0, 140)}\x1b[0m`);
+                   }
+                 } else {
+                   // Repli : si le modèle n'a pas pu répondre, le professeur fournit
+                   // lui-même une explication de l'erreur technique pour l'utilisateur.
+                   const profExplanation = explainTechnicalError(errors, task);
+                   console.log(`  \x1b[33m👨‍🏫 Professeur (explication à la place de l'élève) :\x1b[0m`);
+                   console.log(`    \x1b[90m${profExplanation}\x1b[0m`);
+                   failureExplanation = profExplanation;
+                 }
+
+                 // Le professeur (utilisateur) décide si la pénalité est comptabilisée
+                 const countPoints = await askYesNo(`  Comptabiliser la pénalité de -${pts} points pour l'exercice ${task.id} ?`, true);
+                 if (!countPoints) {
+                    tierScore += pts;
+                    gameState.globalLifeScore += pts;
+                    taskNetPoints[task.id] = (taskNetPoints[task.id] || 0) + pts;
+                    console.log(`  \x1b[32m✅ Pénalité annulée pour ${task.id} (Tier: ${tierScore}, Santé: ${gameState.globalLifeScore})\x1b[0m`);
+                 } else {
+                    console.log(`  \x1b[31m✘ Pénalité maintenue : -${pts} Points (Tier: ${tierScore}, Santé: ${gameState.globalLifeScore})\x1b[0m`);
+                 }
+                 permanentlyFailedIds.push(task.id);
+
+                 // Mémorise l'explication pour le rapport Markdown
+                 if (!taskFailureExplanations) taskFailureExplanations = {};
+                 taskFailureExplanations[task.id] = failureExplanation || '';
+              } else {
                 // Premier échec — pénalité appliquée, une nouvelle tentative sera proposée
                 tierScore -= pts;
                 gameState.globalLifeScore -= pts;
@@ -455,7 +593,8 @@ async function runTierAttempt({ tierNum, tierData, isMandatory, profileArg, cont
             taskType: task.label ? task.label.split(':')[0].trim() : 'Exercice',
             helpUsed: Boolean(taskHelpUsed[task.id]),
             retried: (taskRetryMap[task.id] || 0) >= 1,
-            status: taskPassed ? 'success' : 'failed'
+            status: taskPassed ? 'success' : 'failed',
+            failureExplanation: taskFailureExplanations[task.id] || null
           };
        }
 
@@ -567,7 +706,8 @@ async function runTierAttempt({ tierNum, tierData, isMandatory, profileArg, cont
     responseModelName,
     optionalBonus: optionalBonusTotal,
     bypassedCount: bypassedTasks.length,
-    filterDecisions
+    filterDecisions,
+    failureExplanations: taskFailureExplanations
   };
 }
 
@@ -642,47 +782,91 @@ async function main() {
     profileArg = 'STANDARD';
   }
 
+  const profile = PROFILES[profileArg];
+
+  // --- Affichage IMMÉDIAT de la configuration (priorité absolue) ---
+  // Avant toute chose (et surtout avant l'auto-profilage qui peut prendre 10-15s),
+  // on affiche à l'utilisateur toutes les infos essentielles du run. Ainsi, même
+  // pendant que le modèle réfléchit à son auto-profilage, l'utilisateur sait
+  // exactement ce qui se passe : cible, tokens, profil, école, tiers.
+  logger.runConfig({
+    'Cible': tierArg,
+    'Profil': profile.label,
+    'Budget contexte': `${contextLimitTokens} tokens`,
+    'Tiers obligatoires': profile.mandatory.join(','),
+    'Tiers optionnels': profile.optional.join(',') || 'aucun'
+  });
+
+  console.log(`  \x1b[1;36m━━━ CONFIGURATION DU RUN ━━━\x1b[0m`);
+  console.log(`  \x1b[1;33mCible demandée      :\x1b[0m \x1b[1;33m${tierArg.toUpperCase()}\x1b[0m`);
+  console.log(`  \x1b[1;33mProfil d'évaluation :\x1b[0m \x1b[1;33m${profile.label}\x1b[0m`);
+  console.log(`  \x1b[1;33mÉcole               :\x1b[0m \x1b[1;33m${profile.ecole}\x1b[0m`);
+  console.log(`  \x1b[1;33mContexte max        :\x1b[0m \x1b[1;33m${contextLimitTokens} tokens\x1b[0m`);
+  console.log(`  \x1b[1;33mTiers obligatoires  :\x1b[0m \x1b[1;33m${profile.mandatory.join(', ')}\x1b[0m`);
+  if (profile.optional.length > 0) {
+    console.log(`  \x1b[1;33mTiers optionnels    :\x1b[0m \x1b[1;33m${profile.optional.join(', ')}\x1b[0m`);
+  }
+  console.log(`  \x1b[1;33mMode                :\x1b[0m \x1b[1;33m${isCloudMode ? `CLOUD (${provider.toUpperCase()})` : 'LOCAL (LM Studio)'}\x1b[0m`);
+  console.log('');
+
   // --- Auto-profilage (Self-Profiling) ---
   // Interroge le modèle au démarrage pour qu'il s'auto-évalue sur 4 compétences clés.
   // Le profil obtenu sert ensuite à filtrer les tâches trop difficiles et à calculer
   // l'Indice de Calibration en fin de run. Échec non fatal (graceful degradation).
+  //
+  // IMPORTANT : on annonce explicitement à l'utilisateur que l'auto-profilage va
+  // commencer et peut prendre 10-15s. Sans cela, l'utilisateur croit que le CLI a
+  // planté pendant que le modèle réfléchit en silence.
   let selfProfile = null;
   if (selfProfiling.enabled) {
-    const profileSpinner = new Spinner('Auto-profilage du modèle (interview JSON)...');
+    console.log(`  \x1b[1;35m━━━ AUTO-PROFILAGE DU MODÈLE ━━━\x1b[0m`);
+    console.log(`  \x1b[35mLe modèle va s'auto-évaluer sur 4 compétences (niveau 1 à 5).\x1b[0m`);
+    console.log(`  \x1b[35mCette étape peut prendre 10 à 15 secondes — merci de patienter.\x1b[0m`);
+    console.log(`  \x1b[90mCompétences évaluées : JavaScript Bases, Async, Algorithmes avancés, Débogage/Sécurité.\x1b[0m\n`);
+
+    const profileSpinner = new Spinner('Auto-profilage : interview JSON du modèle en cours');
     profileSpinner.start();
+    const profileStartTime = Date.now();
     try {
       selfProfile = await runSelfProfiling(queryFn, providerConfig, contextLimitTokens);
     } catch (e) {
       logger.warn(`Auto-profilage échoué : ${e.message}. Continuation sans filtrage.`);
     }
+    const profileDurationMs = Date.now() - profileStartTime;
+    const profileDurationSec = (profileDurationMs / 1000).toFixed(1);
+
     if (selfProfile) {
-      profileSpinner.stop('Auto-profilage réussi');
+      profileSpinner.stop(`Auto-profilage réussi en ${profileDurationSec}s`);
       const skills = selfProfile.skills || {};
-      console.log(`  \x1b[36mAuto-profilage : compétences déclarées —\x1b[0m`);
+      console.log('');
+      console.log(`  \x1b[1;36m━━━ RÉSULTAT DE L'AUTO-PROFILAGE ━━━\x1b[0m`);
+      console.log(`  \x1b[36mCompétences déclarées par le modèle :\x1b[0m`);
+      let levelSum = 0;
+      let levelCount = 0;
       for (const [skill, label] of Object.entries(SKILL_LABELS)) {
         const lvl = skills[skill] ? skills[skill].level : '?';
-        console.log(`    \x1b[90m${label} : niveau ${lvl}/5\x1b[0m`);
+        if (typeof lvl === 'number') { levelSum += lvl; levelCount++; }
+        const bar = typeof lvl === 'number' ? '█'.repeat(lvl) + '░'.repeat(5 - lvl) : '░░░░░';
+        const lvlStr = typeof lvl === 'number' ? String(lvl) : '?';
+        console.log(`    \x1b[90m${label.padEnd(48)}\x1b[0m \x1b[1;33m[${bar}] ${lvlStr}/5\x1b[0m`);
+      }
+      if (levelCount > 0) {
+        const avg = (levelSum / levelCount).toFixed(2);
+        console.log(`    \x1b[90m${'Niveau moyen déclaré'.padEnd(48)}\x1b[0m \x1b[1;33m${avg}/5\x1b[0m`);
       }
       if (selfProfile.justification) {
-        console.log(`    \x1b[90mJustification : ${selfProfile.justification}\x1b[0m`);
+        console.log(`  \x1b[36mJustification du modèle :\x1b[0m \x1b[90m${selfProfile.justification}\x1b[0m`);
       }
+      const bypassedNote = selfProfiling.bypassFilter
+        ? `Filtrage DÉSACTIVÉ (bypassFilter=true) — toutes les tâches seront exécutées malgré le profil.`
+        : `Les tâches dont la compétence est déclarée < ${selfProfiling.minLevelToTest}/5 seront bypassées.`;
+      console.log(`  \x1b[90mFiltrage : ${bypassedNote}\x1b[0m`);
+      console.log('');
     } else {
-      profileSpinner.stop('Auto-profilage échoué (fallback : toutes les tâches seront exécutées)');
+      profileSpinner.stop(`Auto-profilage échoué en ${profileDurationSec}s (fallback : toutes les tâches seront exécutées)`);
+      console.log(`  \x1b[90mLe modèle n'a pas pu s'auto-évaluer — continuons sans filtrage ni calibration.\x1b[0m\n`);
     }
   }
-
-  const profile = PROFILES[profileArg];
-  logger.runConfig({ 
-    'Cible': tierArg, 
-    'Profil': profile.label, 
-    'Budget contexte': `${contextLimitTokens} tokens`,
-    'Tiers obligatoires': profile.mandatory.join(','), 
-    'Tiers optionnels': profile.optional.join(',') || 'aucun' 
-  });
-
-  console.log(`  Profil d'évaluation : \x1b[1;33m${profile.label}\x1b[0m`);
-  console.log(`  Cible demandée      : \x1b[1;33m${tierArg.toUpperCase()}\x1b[0m\n`);
-  console.log(`  Contexte max        : \x1b[1;33m${contextLimitTokens} tokens\x1b[0m\n`);
 
   const tiers = loadTiers(profileArg);
   let tierKeys = Object.keys(tiers).map(Number).sort();
@@ -724,6 +908,7 @@ async function main() {
   let tierScorecard = [];
   let allEvalResults = [];      // Agrégation pour le calcul de calibration (status: success/failed/bypassed)
   let allFilterDecisions = [];  // Décisions de filtrage pour la section rapport calibration
+  let allTierResponses = [];    // Réponses brutes + raisonnement par tier (pour l'export raisonnement NotebookLM)
   const ecoleLabel = PROFILES[profileArg]?.ecole || profileArg;
 
   // --- Détection de doublon (modèle déjà testé sur cette école) ---
@@ -864,6 +1049,19 @@ async function main() {
       allFilterDecisions = allFilterDecisions.concat(bestResult.filterDecisions);
     }
 
+    // Agrégation des réponses brutes + raisonnement par tier (pour l'export
+    // raisonnement consolidé destiné à NotebookLM via Gemini).
+    if (bestResult.rawResponse) {
+      allTierResponses.push({
+        tierNum,
+        tierTitle: tierData.title,
+        isMandatory,
+        className: getClassName(profileArg, tierNum),
+        rawResponse: bestResult.rawResponse,
+        evalResults: bestResult.evalResults || []
+      });
+    }
+
     printScorecard(tierScorecard, ecoleLabel, false, gameState.globalLifeScore);
 
     if (stopGlobalEval) {
@@ -971,6 +1169,25 @@ async function main() {
   globalReport += `| **TOTAL** | | | **${grandTotalPts}** | **${grandTotalMax}** | | | |\n\n`;
   globalReport += `---\n\n`;
 
+  // --- Section : explications pédagogiques des échecs définitifs ---
+  // Pour chaque exercice définitivement échoué, on restitue l'explication fournie
+  // par le modèle (ou par le professeur en cas de repli). Interdit d'afficher une
+  // erreur brute sans explication : cette section garantit que l'utilisateur
+  // dispose toujours d'une analyse compréhensible de chaque échec.
+  const failedWithExplanations = allEvalResults.filter(r => r.status === 'failed' && r.failureExplanation);
+  if (failedWithExplanations.length > 0) {
+    globalReport += `\n## Explications des échecs définitifs\n\n`;
+    globalReport += `> Le professeur a exigé du modèle qu'il explique la cause de chaque échec définitif. `;
+    globalReport += `Les erreurs techniques brutes du moteur d'exécution ne sont jamais affichées seules : `;
+    globalReport += `elles sont systématiquement accompagnées d'une analyse pédagogique.\n\n`;
+    for (const r of failedWithExplanations) {
+      const tierNumMatch = (r._tierNum != null) ? `Tier ${r._tierNum} — ` : '';
+      globalReport += `### ${tierNumMatch}${r.id} — ${r.taskType || 'Exercice'}\n\n`;
+      globalReport += `**Explication :** ${r.failureExplanation}\n\n`;
+    }
+    globalReport += `---\n\n`;
+  }
+
   globalReport += `\n---\n\n## Score Global\n\n`;
   globalReport += `| Métrique | Valeur | Note |\n|---|---|---|\n`;
   globalReport += `| Score global | ${globalScore.passed}/${globalScore.total} (${pctGlobal}%) | ${globalGradeInfo.grade} |\n`;
@@ -1033,7 +1250,10 @@ async function main() {
       calibrationIndex: calibration ? calibration.calibrationIndex : null,
       declaredLevel: calibration ? calibration.declaredLevel : null,
       date: dateStr,
-      reportFile: relPath
+      time: timeStr,
+      reportFile: relPath,
+      selfProfile: selfProfile || null,
+      tiers: allTierResponses
     };
     const bilanMd = scoreLedger.saveAndBuildBilan(shortName, effectiveModel, ecoleResult);
     if (bilanMd) globalReport += bilanMd;

@@ -18,7 +18,8 @@ Memories-BenchGo/
 ├── refactorisations/      ← Historique des refactorisations
 │   ├── 2026-07-07-runner-modularisation.md
 │   ├── 2026-07-07-runner-rattrapage-interactif.md
-│   └── 2026-07-08-retravail-tiers-export-rapports.md
+│   ├── 2026-07-08-retravail-tiers-export-rapports.md
+│   └── 2026-07-18-classement-html-condense-modale-filtres.md
 ├── issues-fixes/          ← Problèmes corrigés et solutions
 │   ├── 2026-07-07-barre-progression-figee.md
 │   ├── 2026-07-07-test-async-middleware-toujours-echec.md
@@ -123,9 +124,11 @@ se déroule normalement avec toutes les tâches.
 
 ## Navigation Rapide
 
+- **README GitHub (racine projet)** : Voir [../README.md](../README.md) — présentation du projet pour GitHub
 - **Instructions pour l'agent IA** : Voir [INSTRUCTIONS.md](./INSTRUCTIONS.md)
 - **Dernières modifications** : Voir [CHANGELOG.md](./CHANGELOG.md)
 - **Architecture actuelle** : Voir [architecture/benchmark-v2.md](./architecture/benchmark-v2.md) (BenchGo V3, dossier technique `benchmark-v2`)
+- **Carte mentale du classement** : Voir [carte-mentale/classement-leaderboard.md](./carte-mentale/classement-leaderboard.md) (structure & débogage du HTML)
 - **Refactorisations récentes** : Voir [refactorisations/](./refactorisations/)
 - **Issues/fix récentes** : Voir [issues-fixes/](./issues-fixes/)
 
@@ -135,14 +138,26 @@ BenchGo génère un **classement global** de tous les modèles testés, du meill
 à la fin de chaque run complet (`tierArg === "all"`). Le classement peut aussi être
 régénéré manuellement via `node leaderboard.js`.
 
-- **Formats produits** : HTML (auto-ouvrable, style sombre avec médailles 🥇🥈🥉) + Markdown.
-- **Emplacement** : `Export-Rapports/<AAAA-MM-JJ>/classement_<HH-MM-SS>.html|md`
+### Fichiers produits (à la racine de `Export-Rapports/`, écrasés à chaque génération)
+- `classement.html` — classement visuel **interactif et condensé** (une ligne par modèle, modale de détail au clic, filtres, recherche)
+- `classement.md` — classement Markdown tabulaire + détail par modèle
+- `raisonnement_modeles.md` — raisonnements & réponses détaillés par modèle (destiné à NotebookLM via Gemini)
+
+### Interface HTML (refonte 2026-07-18)
+- **Cartes condensées** : une ligne compacte par modèle — rang/médaille, nom, icône catégorie, badge taille, mini-stats (% avec barre, Note, Santé, Oblig., Aide/Rat.), boutons « Détails » et « 🗑 ».
+- **Modale de détail** : au clic sur une carte ou sur « Détails », ouverture d'une modale avec statistiques complètes, forces/faiblesses/notes, tableau détaillé par école (avec calibration et date), et méta (dernière mise à jour, nom court). Fermeture par clic overlay, bouton × ou touche Échap.
+- **Filtres par catégorie** (5 niveaux de performance) : 🏆 Top du top (≥90%) · ✅ Recommandés (≥80%) · 📊 Dans la moyenne (≥70%) · ⚠️ En rattrapage (≥50%) · 💥 Échec total (<50%).
+- **Filtres par taille de paramètres** (5 catégories, mêmes seuils que les profils d'école) : 🐱 < 3B · 📦 3B-14B · 🎓 14B-30B · 🧠 > 30B · ❓ Inconnue.
+- **Recherche texte** : filtre par nom intégral ou nom court. Combinable avec les deux filtres (ET logique).
+- **Données côté client** : les données complètes de chaque modèle sont sérialisées en JSON dans `var MODELS` — le fichier HTML est autonome et ouvrable hors-ligne (aucune dépendance externe, CSS+JS embarqués).
+
+### Caractéristiques techniques
 - **Source des données** : carnets de scores persistants `Export-Rapports/.carnet/<modele>.json`
 - **Tri** : % décroissant, puis score, puis santé globale
-- **Arguments qualitatifs** : forces et faiblesses générés automatiquement (maîtrise, obligatoire,
-  bonus, aide, rattrapage, santé, calibration)
-- **Détection de doublon** : si un modèle a déjà été testé sur la même école, le runner alerte
-  l'utilisateur et propose de forcer un re-test (le nouveau score remplace l'ancien).
+- **Détection de taille** : `getParamSize()` réutilise `detectProfileFromModelName` de `config.js` (déduction depuis le nom du modèle)
+- **Arguments qualitatifs** : forces et faiblesses générés automatiquement (maîtrise, obligatoire, bonus, aide, rattrapage, santé, calibration)
+- **Détection de doublon** : si un modèle a déjà été testé sur la même école, le runner alerte l'utilisateur et propose de forcer un re-test (le nouveau score remplace l'ancien)
+- **Mode interactif** : `node leaderboard.js --serve` démarre un serveur sur http://localhost:3939 avec boutons de suppression actifs dans le navigateur
 
 ## Objectif de ce dossier
 

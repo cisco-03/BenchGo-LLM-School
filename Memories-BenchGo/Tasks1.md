@@ -1,29 +1,4 @@
-
-
-
-
-
 # Instruction pour cette tâche
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 

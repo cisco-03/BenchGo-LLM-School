@@ -1,5 +1,183 @@
 # CHANGELOG - Carnet de Notes BenchGo
 
+## 2026-07-18 — Refonte HTML du classement : cartes condensées, modale de détail, filtres par catégorie et par taille
+
+### Contexte
+Le classement HTML précédent affichait chaque modèle sous forme d'une carte volumineuse (stats en ligne + 3 colonnes forces/faiblesses/détail-école toujours ouvertes), ce qui devenait fastidieux à parcourir avec des dizaines de modèles. L'utilisateur a demandé :
+1. Un affichage **condensé** (une ligne compacte par modèle avec les stats principales).
+2. Un **bouton « Détails »** ouvrant une **modale** avec TOUT le détail (forces/faiblesses, détail par école, calibration, méta).
+3. Un **système de filtres par catégorie** : Top du top, Recommandés, Dans la moyenne, En rattrapage, Échec total.
+4. Un **filtre par taille de paramètres** (comme pour les écoles) : < 3B (petit), 3B–14B (standard), 14B–30B (expert), > 30B (doctorat), inconnue.
+5. Une **recherche texte** par nom de modèle.
+
+### Actions entreprises
+
+**1. `leaderboard.js` — Nouvelles fonctions de catégorisation**
+- `getCategory(entry)` : catégorise un modèle selon son % global en 5 catégories affinables :
+  - 🏆 `top` (≥ 90%) — Top du top
+  - ✅ `recommande` (≥ 80%) — Recommandés
+  - 📊 `moyenne` (≥ 70%) — Dans la moyenne
+  - ⚠️ `rattrapage` (≥ 50%) — En rattrapage
+  - 💥 `catastrophe` (< 50%) — Échec total
+- `getParamSize(modelName)` : détecte la taille de paramètres depuis le nom du modèle en réutilisant `detectProfileFromModelName` de `config.js` (mêmes seuils que les profils d'école) :
+  - 🐱 `petit` (< 3B) — profil LIGHT
+  - 📦 `standard` (3B–14B) — profil STANDARD
+  - 🎓 `expert` (14B–30B) — profil EXPERT
+  - 🧠 `doctorat` (> 30B) — profil DOCTORAT
+  - ❓ `inconnu` — taille non détectable dans le nom
+- Nouvel import : `const { detectProfileFromModelName } = require('./config');`
+
+**2. `leaderboard.js` — Refonte complète de `buildLeaderboardHTML`**
+- **Cartes condensées** : une carte compacte par modèle, affichant sur une seule ligne : rang/médaille + nom + icône catégorie + badge taille (ex : `📦 7B`) + mini-stats (% avec barre, Note, Santé, Obligatoire, Aide/Rat.) + boutons « Détails » et « 🗑 ».
+- **Modale de détail** : ouverture au clic sur la carte ou sur « Détails ». Contient :
+  - En-tête : rang/médaille, nom intégral, badge verdict, catégorie + taille
+  - Statistiques complètes (Points, % global avec barre, Note, Obligatoire avec barre, Santé, Bonus, Aide, Rattrapage, Écoles)
+  - Forces & Faiblesses (grid 2 colonnes) + Notes
+  - Tableau détaillé par école (École, Points, %, Note, Bonus, Santé, Aide, Rat., Calib., Date)
+  - Ligne méta (dernière mise à jour, nom court)
+  - Fermeture : clic sur overlay, bouton ×, ou touche Échap
+- **Barre de filtres par catégorie** (`#chips`) : chips cliquables avec compteurs par catégorie.
+- **Barre de filtres par taille** (`#sizeChips`) : chips cliquables avec compteurs par taille, indépendante du filtre catégorie (combinable).
+- **Recherche texte** (`#search`) : filtre par nom de modèle ou nom court, combinable avec les deux filtres.
+- **Compteur de résultats** : affiche `shown/total` en temps réel.
+- **Message « Aucun modèle ne correspond »** quand les filtres excluent tout.
+- Les données complètes de chaque modèle (forces/faiblesses, écoles, catégorie, taille, verdict) sont sérialisées en JSON dans une variable `MODELS` côté client pour alimenter la modale sans re-fetch serveur.
+- Les styles CSS et le JS sont entièrement embarqués dans le HTML généré (fichier autonome, ouvrable hors-ligne).
+
+**3. Exports du module**
+- `getCategory` et `getParamSize` ajoutés à `module.exports` de `leaderboard.js`.
+
+### Résultat
+- Le classement HTML passe d'un affichage volumineux (cartes détaillées toujours ouvertes) à un affichage **condensé et navigable** : on voit d'un coup d'œil tous les modèles avec leurs stats clés, et on ouvre la modale pour le détail complet.
+- Les filtres par catégorie et par taille permettent de segmenter rapidement des dizaines de modèles (ex : « montrer uniquement les modèles < 3B qui sont recommandés »).
+- La recherche texte permet de retrouver un modèle par son nom.
+- Le bouton de suppression reste fonctionnel en mode `--serve`.
+- Le HTML reste un fichier autonome (CSS + JS embarqués), ouvrable hors-ligne en double-clic.
+
+### Fichiers modifiés
+- `leaderboard.js` (import config, `getCategory`, `getParamSize`, refonte `buildLeaderboardHTML`, exports)
+- `Export-Rapports/classement.html` (régénéré automatiquement par `node leaderboard.js`)
+
+### Validation
+- `node --check leaderboard.js` → OK
+- `node leaderboard.js` → génère les 3 fichiers (HTML condensé + MD + raisonnement), affichage console correct
+- Vérification du HTML généré : présence des barres de filtres `#chips` et `#sizeChips`, badge `.size-badge` sur les cartes, variable `MODELS` sérialisée avec `paramSize` et `cat`, détection correcte (7B → standard 📦, 12B → standard 📦, 9B → standard 📦)
+- Compatibilité : les carnets existants (sans champ taille) sont gérés — la taille est déduite du nom du modèle, pas du carnet
+
+### Voir aussi
+- `refactorisations/2026-07-18-classement-html-condense-modale-filtres.md`
+- `carte-mentale/classement-leaderboard.md` (mise à jour)
+- `README.md` racine du projet (README GitHub, créé)
+
+---
+
+## 2026-07-18 — Export raisonnement consolidé (NotebookLM via Gemini)
+
+### Contexte
+Le classement Markdown existant (`classement.md`) ne contient que les scores agrégés et les arguments qualitatifs automatiques (forces/faiblesses). Pour analyser finement le **raisonnement** et les **réponses** de chaque modèle LLM, l'utilisateur a besoin d'un fichier Markdown détaillé consolidant, par modèle :
+- le nom **intégral** du modèle
+- la date (et heure si possible) du run
+- l'auto-profilage déclaré (4 compétences + justification)
+- pour chaque école et chaque classe (tier) traversée : les exercices tentés, le code produit, le statut, les explications d'échec
+- la **réponse brute complète** (raisonnement + code) du modèle pour chaque tier
+
+Ce fichier est destiné à être ingéré par **Gemini** puis à alimenter une base **NotebookLM** pour analyse qualitative.
+
+### Actions entreprises
+
+**1. `runner.js` — Enrichissement du carnet JSON**
+- Nouvelle variable `allTierResponses` dans `main()` : collecte, pour chaque tier complété, `{ tierNum, tierTitle, isMandatory, className, rawResponse, evalResults }`.
+- `ecoleResult` (sauvegardé dans le carnet) enrichi avec :
+  - `time` : heure locale `HH-MM-SS` du run
+  - `selfProfile` : profil auto-déclaré complet (4 compétences + justification)
+  - `tiers` : tableau des réponses brutes + évaluations par tier
+- Les anciens carnets restent compatibles (les champs manquants sont gérés gracieusement).
+
+**2. `leaderboard.js` — Nouveau 3ème export**
+- Nouvelle fonction `buildReasoningMarkdown(entries)` : génère un Markdown détaillé par modèle avec :
+  - Nom intégral + nom court + score global + score obligatoire + santé + bonus + aide/rattrapage
+  - Par école : date (et heure si disponible), profil, scores, calibration, auto-profilage déclaré
+  - Par tier (classe) : titre, statut obligatoire/optionnel, nom de classe
+  - Tableau des exercices tentés (ID, type, points, max, statut, aide, rattrapage)
+  - Code produit par le modèle pour chaque exercice (bloc ```javascript)
+  - Explications d'échec fournies par le modèle (`failureExplanation`)
+  - Réponse brute complète du modèle (raisonnement + code) dans un bloc ```text
+- Nouvelle fonction utilitaire `loadLedgerByName(shortName)` : recharge le carnet original pour accéder aux données détaillées.
+- `generateLeaderboard()` sauvegarde désormais un 3ème fichier `Export-Rapports/raisonnement_modeles.md` (écrasé à chaque génération).
+- Affichage console mis à jour : 3 lignes (HTML, MD, raisonnement) avec mention « destiné à NotebookLM via Gemini ».
+- `buildReasoningMarkdown` exportée dans `module.exports`.
+
+**3. Compatibilité descendante**
+- Les carnets antérieurs à cette version n'ont pas `tiers` ni `selfProfile` : le fichier raisonnement affiche un message gracieux « *Aucun détail de tier disponible pour cette école (données antérieures à l'export raisonnement).* »
+- Les nouveaux runs incluront automatiquement toutes les données détaillées.
+
+### Résultat
+- 3 fichiers générés à chaque run complet ou `node leaderboard.js` :
+  1. `classement.html` — classement visuel interactif
+  2. `classement.md` — classement Markdown tabulaire
+  3. `raisonnement_modeles.md` — raisonnements & réponses détaillés par modèle (NotebookLM)
+- Le fichier raisonnement contient toujours le nom **intégral** du modèle et la date du run (heure incluse si disponible).
+- Chaque classe traversée, chaque exercice tenté, le code produit et le raisonnement brut sont restitués.
+
+### Fichiers modifiés
+- `runner.js` (collecte `allTierResponses` + enrichissement `ecoleResult`)
+- `leaderboard.js` (`buildReasoningMarkdown`, `loadLedgerByName`, `generateLeaderboard` 3ème fichier, exports)
+
+### Validation
+- `node --check leaderboard.js` → OK
+- `node --check runner.js` → OK
+- `node leaderboard.js` → génère les 3 fichiers, affichage console correct
+- Vérification du contenu de `raisonnement_modeles.md` : structure correcte, nom intégral présent, message gracieux pour les carnets antérieurs sans données de tier
+
+### Voir aussi
+- `issues-fixes/2026-07-18-auto-profilage-silencieux-erreurs-brutes.md` (session précédente)
+
+---
+
+## 2026-07-18 — Affichage immédiat de la config + explications pédagogiques des échecs
+
+### Contexte
+Deux problèmes utilisateurs identifiés en CLI :
+1. Au lancement d'un run, l'auto-profilage prend 10-15s pendant lesquelles **rien n'est affiché** : l'utilisateur croit que le CLI a planté.
+2. Les échecs définitifs d'exercices affichent des **erreurs techniques brutes** du moteur JS (`is not defined`, `Invalid or unexpected token`) qui font croire à un bug du benchmark. Aucune explication de la cause racine n'est fournie.
+
+### Actions entreprises
+
+**1. `runner.js` — Affichage immédiat de la configuration (priorité absolue)**
+- Réorganisation de `main()` : la configuration (cible, profil, école, tokens, tiers, mode) est affichée **avant** l'auto-profilage.
+- Bloc `━━━ CONFIGURATION DU RUN ━━━` avec toutes les infos essentielles.
+- Bloc `━━━ AUTO-PROFILAGE DU MODÈLE ━━━` annonçant explicitement que l'auto-profilage va commencer et peut prendre 10-15s, avec la liste des 4 compétences évaluées.
+- Bloc `━━━ RÉSULTAT DE L'AUTO-PROFILAGE ━━━` après l'interview : chaque compétence avec barre visuelle `[███░░] 3/5`, niveau moyen déclaré, justification du modèle, politique de filtrage.
+- Chronométrage de l'auto-profilage (durée affichée dans le stop du spinner).
+
+**2. `runner.js` — Explication exigée par le professeur après chaque échec définitif**
+- Nouvelle fonction `askModelForFailureExplanation()` : interroge le modèle avec un prompt pédagogique qui fournit l'erreur technique brute + le code produit, et exige une analyse de la cause racine en 2-4 phrases (français). Interdit les réponses vides ou la recopie de l'erreur brute.
+- Nouvelle fonction `explainTechnicalError(errors, task)` (repli) : traduit les erreurs courantes du moteur JS en explication humaine compréhensible (`is not defined`, `Invalid or unexpected token`, `Unexpected token`, `Unexpected end of input`, `is not a function`, `Cannot read properties of undefined/null`, `Maximum call stack`, `Timeout`, `Assertion échouée`).
+- Intégration dans `runTierAttempt()` : variable `taskFailureExplanations`, appel à l'explication après échec définitif, champ `failureExplanation` dans `evalResultsMap`, retour `failureExplanations` dans le résultat du tier.
+- En CLI : l'erreur technique brute est renommée `Erreur technique brute du moteur` (distincte de l'explication pédagogique). L'explication est affichée sous `💬 Explication de l'élève pour {task.id}` ou `👨‍🏫 Professeur (explication à la place de l'élève)` en cas de repli.
+
+**3. `runner.js` — Section dédiée dans le rapport Markdown**
+- Nouvelle section `## Explications des échecs définitifs` après le tableau récapitulatif des points par exercice.
+- Restitue l'explication de chaque exercice définitivement échoué (status `failed` + `failureExplanation`).
+- Note pédagogique : les erreurs techniques brutes ne sont jamais affichées seules.
+
+### Résultat
+- L'utilisateur sait **immédiatement** ce qui se passe au lancement (cible, tokens, profil, école) et est prévenu de l'attente de l'auto-profilage.
+- Les erreurs brutes `is not defined` et `Invalid or unexpected token` ne sont plus jamais affichées seules : elles sont toujours accompagnées d'une explication pédagogique (du modèle ou du professeur en repli).
+- Le benchmark gagne en intelligibilité et se rapproche de la métaphore scolaire (le professeur exige que l'élève justifie ses échecs).
+
+### Fichiers modifiés
+- `runner.js`
+
+### Validation
+- `node --check runner.js` → OK
+- `node --check config.js` → OK
+
+### Voir aussi
+- `issues-fixes/2026-07-18-auto-profilage-silencieux-erreurs-brutes.md`
+
+---
+
 ## 2026-07-14 — Mise en page responsive sur 3 colonnes du Classement
 
 ### Contexte

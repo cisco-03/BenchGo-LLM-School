@@ -5,6 +5,7 @@ const path = require('path');
 const logger = require('./logger');
 const { letterGrade } = require('./progress-bar');
 const { shortenModelName } = require('./report-generator');
+const { detectProfileFromModelName } = require('./config');
 
 const LEDGER_DIR = path.join(__dirname, 'Export-Rapports', '.carnet');
 const EXPORT_DIR = path.join(__dirname, 'Export-Rapports');
@@ -117,6 +118,34 @@ function getVerdict(entry) {
   return { label: 'NON RECOMMANDÉ', color: '#dc3545', rank: 3 };
 }
 
+// Catégorie de filtrage (plus fine que le verdict) basée sur le % global.
+function getCategory(entry) {
+  const p = entry.pct;
+  if (p >= 90) return { key: 'top', label: 'Top du top', icon: '🏆', color: '#ffd700' };
+  if (p >= 80) return { key: 'recommande', label: 'Recommandés', icon: '✅', color: '#28a745' };
+  if (p >= 70) return { key: 'moyenne', label: 'Dans la moyenne', icon: '📊', color: '#17a2b8' };
+  if (p >= 50) return { key: 'rattrapage', label: 'En rattrapage', icon: '⚠️', color: '#ffc107' };
+  return { key: 'catastrophe', label: 'Échec total', icon: '💥', color: '#dc3545' };
+}
+
+// Taille de paramètres détectée depuis le nom du modèle.
+// Retourne { key, label, short, icon } pour le filtrage et l'affichage.
+//   - petit   : < 3B  (profil LIGHT)
+//   - standard: 3B – 14B (profil STANDARD)
+//   - expert  : 14B – 30B (profil EXPERT)
+//   - doctorat: > 30B (profil DOCTORAT)
+//   - inconnu : taille non détectable dans le nom
+function getParamSize(modelName) {
+  const { paramSize, detected } = detectProfileFromModelName(modelName || '');
+  if (paramSize === null) {
+    return { key: 'inconnu', label: 'Taille inconnue', short: '?B', icon: '❓', paramSize: null, detected: null };
+  }
+  if (paramSize < 3)   return { key: 'petit',    label: 'Petit (< 3B)',    short: paramSize + 'B', icon: '🐱', paramSize, detected };
+  if (paramSize <= 14) return { key: 'standard', label: 'Standard (3B–14B)', short: paramSize + 'B', icon: '📦', paramSize, detected };
+  if (paramSize <= 30) return { key: 'expert',   label: 'Expert (14B–30B)',  short: paramSize + 'B', icon: '🎓', paramSize, detected };
+  return                 { key: 'doctorat', label: 'Doctorat (> 30B)',   short: paramSize + 'B', icon: '🧠', paramSize, detected };
+}
+
 function gradeColor(grade) {
   const map = { 'A': '#28a745', 'B': '#17a2b8', 'C': '#ffc107', 'D': '#e83e8c', 'F': '#dc3545' };
   return map[grade] || '#6c757d';
@@ -130,6 +159,59 @@ function esc(str) {
 
 function buildLeaderboardHTML(entries) {
   const now = new Date().toLocaleString('fr-FR');
+
+  // Compteurs par catégorie pour les filtres
+  const catCounts = { top: 0, recommande: 0, moyenne: 0, rattrapage: 0, catastrophe: 0 };
+  const sizeCounts = { petit: 0, standard: 0, expert: 0, doctorat: 0, inconnu: 0 };
+  for (const e of entries) {
+    catCounts[getCategory(e).key]++;
+    sizeCounts[getParamSize(e.model).key]++;
+  }
+
+  // Les données complètes de chaque modèle sont sérialisées en JSON pour la modale
+  // (forces/faiblesses, détail par école, etc. — calculés une seule fois côté serveur).
+  const modelsData = entries.map(e => {
+    const verdict = getVerdict(e);
+    const grade = letterGrade(e.pct);
+    const args = buildArguments(e);
+    const cat = getCategory(e);
+    const psize = getParamSize(e.model);
+    return {
+      shortName: e.shortName,
+      model: e.model,
+      pct: e.pct,
+      score: e.score,
+      max: e.max,
+      grade: grade.grade,
+      mandatoryPct: e.mandatoryPct,
+      mandatoryPassed: e.mandatoryPassed,
+      mandatoryTotal: e.mandatoryTotal,
+      globalLifeScore: e.globalLifeScore,
+      optionalBonus: e.optionalBonus,
+      helpCount: e.helpCount,
+      retriedCount: e.retriedCount,
+      ecoleCount: e.ecoleCount,
+      lastUpdated: e.lastUpdated,
+      verdict,
+      cat,
+      paramSize: psize,
+      args,
+      ecoles: e.ecoles.map(ec => ({
+        ecole: ec.ecole,
+        score: ec.score,
+        max: ec.max,
+        pct: ec.pct,
+        grade: letterGrade(ec.pct).grade,
+        optionalBonus: ec.optionalBonus,
+        globalLifeScore: ec.globalLifeScore,
+        helpCount: ec.helpCount,
+        retriedCount: ec.retriedCount,
+        calibrationIndex: ec.calibrationIndex,
+        date: ec.date
+      }))
+    };
+  });
+
   let html = `<!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -140,44 +222,101 @@ function buildLeaderboardHTML(entries) {
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: 'Segoe UI', system-ui, sans-serif; background: #0d1117; color: #c9d1d9; padding: 20px; }
   h1 { text-align: center; color: #58a6ff; margin-bottom: 5px; }
-  .subtitle { text-align: center; color: #8b949e; margin-bottom: 25px; font-size: 0.9em; }
-  .container { max-width: 1000px; margin: 0 auto; }
-  .card { background: #161b22; border: 1px solid #30363d; border-radius: 10px; margin-bottom: 14px; overflow: hidden; }
-  .card.gold { border-color: #ffd700; box-shadow: 0 0 12px rgba(255,215,0,0.15); }
+  .subtitle { text-align: center; color: #8b949e; margin-bottom: 18px; font-size: 0.9em; }
+
+  /* Barre de filtres + recherche */
+  .toolbar { max-width: 1100px; margin: 0 auto 18px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .filter-chips { display: flex; flex-wrap: wrap; gap: 6px; flex: 1; min-width: 0; }
+  .chip { padding: 6px 12px; border: 1px solid #30363d; background: #161b22; color: #c9d1d9; border-radius: 20px; font-size: 0.8em; cursor: pointer; white-space: nowrap; transition: all 0.15s; user-select: none; }
+  .chip:hover { border-color: #58a6ff; }
+  .chip.active { background: #1f6feb; border-color: #1f6feb; color: #fff; font-weight: 600; }
+  .chip .count { opacity: 0.7; margin-left: 4px; font-size: 0.85em; }
+  .search-wrap { flex: 0 0 auto; }
+  .search { padding: 7px 12px; background: #161b22; border: 1px solid #30363d; color: #c9d1d9; border-radius: 8px; font-size: 0.85em; width: 220px; }
+  .search:focus { outline: none; border-color: #58a6ff; }
+  .result-count { font-size: 0.78em; color: #8b949e; margin-left: 8px; }
+
+  .container { max-width: 1100px; margin: 0 auto; }
+  .empty-msg { text-align: center; color: #8b949e; padding: 40px; font-style: italic; display: none; }
+
+  /* Carte condensée — une ligne par modèle */
+  .card { background: #161b22; border: 1px solid #30363d; border-radius: 8px; margin-bottom: 8px; transition: border-color 0.15s; }
+  .card:hover { border-color: #484f58; }
+  .card.gold { border-color: #ffd700; box-shadow: 0 0 10px rgba(255,215,0,0.12); }
   .card.silver { border-color: #c0c0c0; }
   .card.bronze { border-color: #cd7f32; }
-  .card-top { display: flex; align-items: center; padding: 14px 18px; gap: 14px; background: #1c2128; border-bottom: 1px solid #30363d; }
-  .medal { font-size: 1.8em; flex-shrink: 0; width: 40px; text-align: center; }
-  .medal-num { font-size: 1.4em; font-weight: 700; color: #58a6ff; flex-shrink: 0; width: 40px; text-align: center; }
-  .model-name { color: #58a6ff; font-weight: 600; font-size: 1.05em; word-break: break-all; flex: 1; }
-  .verdict-badge { display: inline-block; padding: 4px 12px; border-radius: 6px; font-size: 0.75em; font-weight: 700; white-space: nowrap; }
-  .stats-row { display: flex; flex-wrap: wrap; gap: 0; padding: 12px 18px; border-bottom: 1px solid #21262d; }
-  .stat { flex: 1; min-width: 110px; text-align: center; padding: 4px 6px; }
-  .stat:not(:last-child) { border-right: 1px solid #21262d; }
-  .stat-label { font-size: 0.68em; color: #8b949e; text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 3px; }
-  .stat-value { font-size: 1.05em; font-weight: 700; }
-  .stat-grade { font-size: 1.4em; font-weight: 700; }
-  .pct-bar-wrap { width: 100%; max-width: 90px; height: 7px; background: #30363d; border-radius: 4px; margin: 4px auto 0; }
+  .card-row { display: flex; align-items: center; gap: 12px; padding: 10px 14px; cursor: pointer; }
+  .rank { flex: 0 0 38px; text-align: center; font-size: 1.3em; font-weight: 700; color: #58a6ff; }
+  .medal { font-size: 1.5em; }
+  .model-name { flex: 1; min-width: 0; color: #58a6ff; font-weight: 600; font-size: 0.95em; word-break: break-all; line-height: 1.3; }
+  .model-name .cat-icon { margin-right: 5px; }
+  .mini-stats { display: flex; gap: 18px; align-items: center; flex: 0 0 auto; flex-wrap: wrap; }
+  .mini-stat { text-align: center; white-space: nowrap; }
+  .mini-stat .lbl { font-size: 0.62em; color: #8b949e; text-transform: uppercase; letter-spacing: 0.4px; display: block; }
+  .mini-stat .val { font-size: 0.95em; font-weight: 700; }
+  .mini-stat .grade { font-size: 1.2em; font-weight: 700; }
+  .size-badge { display: inline-block; font-size: 0.72em; padding: 1px 7px; border-radius: 10px; background: #21262d; color: #8b949e; border: 1px solid #30363d; vertical-align: middle; margin-left: 4px; white-space: nowrap; }
+  .pct-bar-wrap { width: 70px; height: 6px; background: #30363d; border-radius: 4px; margin-top: 3px; overflow: hidden; }
   .pct-bar-fill { height: 100%; border-radius: 4px; }
-  .args-section { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; padding: 12px 18px 14px; }
-  @media (max-width: 768px) {
-    .args-section { grid-template-columns: 1fr; gap: 12px; }
-  }
-  .args-title { font-size: 0.72em; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
-  .args-forces { color: #28a745; }
-  .args-weak { color: #f85149; }
-  .args-notes { color: #8b949e; font-style: italic; }
-  .args-list { list-style: none; padding-left: 14px; }
-  .args-list li { font-size: 0.82em; margin-bottom: 2px; line-height: 1.3; }
-  .args-list li::before { content: "• "; }
-  .ecoles-toggle summary { cursor: pointer; color: #58a6ff; font-size: 0.72em; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; outline: none; }
-  .ecoles-list { font-size: 0.78em; color: #8b949e; margin-top: 6px; list-style: none; padding-left: 14px; }
-  .ecoles-list li { margin-bottom: 2px; }
-  .footer { text-align: center; color: #484f58; font-size: 0.75em; margin-top: 20px; }
-  .btn-delete { flex-shrink: 0; padding: 5px 14px; border: 1px solid #f85149; background: rgba(248,81,73,0.1); color: #f85149; border-radius: 6px; cursor: pointer; font-size: 0.78em; font-weight: 600; transition: all 0.15s; }
+  .btn-detail { flex: 0 0 auto; padding: 6px 14px; border: 1px solid #388bfd; background: rgba(56,139,253,0.1); color: #58a6ff; border-radius: 6px; cursor: pointer; font-size: 0.78em; font-weight: 600; transition: all 0.15s; }
+  .btn-detail:hover { background: #1f6feb; color: #fff; }
+  .btn-delete { flex: 0 0 auto; padding: 6px 12px; border: 1px solid #f85149; background: rgba(248,81,73,0.1); color: #f85149; border-radius: 6px; cursor: pointer; font-size: 0.78em; font-weight: 600; transition: all 0.15s; }
   .btn-delete:hover { background: #f85149; color: #fff; }
   .btn-delete:disabled { opacity: 0.5; cursor: default; }
-  .toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); padding: 10px 20px; border-radius: 8px; font-size: 0.85em; color: #fff; opacity: 0; transition: opacity 0.3s; pointer-events: none; z-index: 999; }
+
+  @media (max-width: 768px) {
+    .card-row { flex-wrap: wrap; }
+    .mini-stats { gap: 12px; width: 100%; justify-content: space-between; padding-top: 6px; border-top: 1px solid #21262d; margin-top: 4px; }
+    .search { width: 140px; }
+  }
+
+  /* Modale de détail */
+  .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); display: none; align-items: flex-start; justify-content: center; z-index: 1000; padding: 30px 16px; overflow-y: auto; }
+  .modal-overlay.show { display: flex; }
+  .modal { background: #161b22; border: 1px solid #30363d; border-radius: 12px; max-width: 820px; width: 100%; margin: auto; overflow: hidden; }
+  .modal-head { display: flex; align-items: flex-start; gap: 12px; padding: 18px 22px; background: #1c2128; border-bottom: 1px solid #30363d; }
+  .modal-head .rank { font-size: 1.6em; }
+  .modal-head .title { flex: 1; min-width: 0; }
+  .modal-head .title h2 { color: #58a6ff; font-size: 1.1em; word-break: break-all; margin-bottom: 4px; }
+  .modal-head .title .verdict-badge { display: inline-block; padding: 3px 10px; border-radius: 5px; font-size: 0.72em; font-weight: 700; color: #fff; }
+  .modal-head .title .cat-tag { display: inline-block; margin-left: 8px; font-size: 0.78em; opacity: 0.85; }
+  .modal-close { flex: 0 0 auto; background: none; border: none; color: #8b949e; font-size: 1.6em; cursor: pointer; padding: 0 4px; line-height: 1; }
+  .modal-close:hover { color: #f85149; }
+  .modal-body { padding: 18px 22px; max-height: calc(100vh - 220px); overflow-y: auto; }
+  .modal-body h3 { color: #58a6ff; font-size: 0.85em; text-transform: uppercase; letter-spacing: 0.5px; margin: 18px 0 8px; padding-bottom: 4px; border-bottom: 1px solid #21262d; }
+  .modal-body h3:first-child { margin-top: 0; }
+
+  .full-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px; }
+  .full-stat { background: #0d1117; border: 1px solid #21262d; border-radius: 6px; padding: 8px 10px; text-align: center; }
+  .full-stat .lbl { font-size: 0.65em; color: #8b949e; text-transform: uppercase; letter-spacing: 0.4px; }
+  .full-stat .val { font-size: 1.1em; font-weight: 700; margin-top: 2px; }
+  .full-stat .bar { width: 100%; height: 5px; background: #30363d; border-radius: 3px; margin-top: 4px; overflow: hidden; }
+  .full-stat .bar > div { height: 100%; border-radius: 3px; }
+
+  .args-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
+  @media (max-width: 600px) { .args-grid { grid-template-columns: 1fr; } }
+  .args-block { }
+  .args-block .args-title { font-size: 0.78em; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; font-weight: 600; }
+  .args-forces .args-title { color: #28a745; }
+  .args-weak .args-title { color: #f85149; }
+  .args-notes .args-title { color: #8b949e; }
+  .args-list { list-style: none; padding-left: 16px; }
+  .args-list li { font-size: 0.85em; margin-bottom: 3px; line-height: 1.4; }
+  .args-list li::before { content: "• "; }
+  .args-empty { font-size: 0.82em; color: #8b949e; font-style: italic; padding-left: 16px; }
+
+  .ecoles-table { width: 100%; border-collapse: collapse; font-size: 0.82em; }
+  .ecoles-table th, .ecoles-table td { padding: 7px 8px; text-align: left; border-bottom: 1px solid #21262d; }
+  .ecoles-table th { color: #8b949e; font-size: 0.75em; text-transform: uppercase; letter-spacing: 0.4px; font-weight: 600; }
+  .ecoles-table td.num { text-align: right; }
+  .ecoles-table .grade { font-weight: 700; text-align: center; }
+  .ecoles-table tr:hover { background: #161b22; }
+
+  .meta-line { font-size: 0.78em; color: #8b949e; margin-top: 10px; padding-top: 8px; border-top: 1px solid #21262d; }
+
+  .footer { text-align: center; color: #484f58; font-size: 0.75em; margin-top: 20px; }
+
+  .toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); padding: 10px 20px; border-radius: 8px; font-size: 0.85em; color: #fff; opacity: 0; transition: opacity 0.3s; pointer-events: none; z-index: 9999; }
   .toast.show { opacity: 1; }
   .toast.ok { background: #28a745; }
   .toast.err { background: #dc3545; }
@@ -186,88 +325,235 @@ function buildLeaderboardHTML(entries) {
 <body>
 <h1>🏇 Classement BenchGo V3</h1>
 <p class="subtitle">Généré le ${esc(now)} — ${entries.length} modèle${entries.length > 1 ? 's' : ''} classé${entries.length > 1 ? 's' : ''} du meilleur au pire</p>
-<div class="container">
-`;
 
-  for (let i = 0; i < entries.length; i++) {
-    const e = entries[i];
-    const verdict = getVerdict(e);
-    const grade = letterGrade(e.pct);
-    const args = buildArguments(e);
-    const cardClass = i === 0 ? 'gold' : i === 1 ? 'silver' : i === 2 ? 'bronze' : '';
-    const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : '';
-    const rankDisplay = medal ? `<div class="medal">${medal}</div>` : `<div class="medal-num">${i + 1}</div>`;
+<div class="toolbar">
+  <div class="filter-chips" id="chips">
+    <span class="chip active" data-cat="all">Tous <span class="count">${entries.length}</span></span>
+    <span class="chip" data-cat="top">🏆 Top du top <span class="count">${catCounts.top}</span></span>
+    <span class="chip" data-cat="recommande">✅ Recommandés <span class="count">${catCounts.recommande}</span></span>
+    <span class="chip" data-cat="moyenne">📊 Dans la moyenne <span class="count">${catCounts.moyenne}</span></span>
+    <span class="chip" data-cat="rattrapage">⚠️ En rattrapage <span class="count">${catCounts.rattrapage}</span></span>
+    <span class="chip" data-cat="catastrophe">💥 Échec total <span class="count">${catCounts.catastrophe}</span></span>
+  </div>
+  <div class="search-wrap">
+    <input type="text" class="search" id="search" placeholder="🔍 Rechercher un modèle…" />
+    <span class="result-count" id="resultCount"></span>
+  </div>
+</div>
 
-    const pctColor = e.pct >= 80 ? '#28a745' : e.pct >= 50 ? '#ffc107' : '#dc3545';
-    const santeColor = e.globalLifeScore < 0 ? '#f85149' : '#28a745';
-    const helpStr = (e.helpCount > 0 || e.retriedCount > 0)
-      ? (e.helpCount > 0 ? 'aide:' + e.helpCount : '') + (e.retriedCount > 0 ? (e.helpCount > 0 ? ' ' : '') + 'rat.:' + e.retriedCount : '')
+<div class="toolbar" style="margin-bottom:14px;">
+  <div class="filter-chips" id="sizeChips">
+    <span class="chip active" data-size="all">Toutes tailles <span class="count">${entries.length}</span></span>
+    <span class="chip" data-size="petit">🐱 &lt; 3B <span class="count">${sizeCounts.petit}</span></span>
+    <span class="chip" data-size="standard">📦 3B–14B <span class="count">${sizeCounts.standard}</span></span>
+    <span class="chip" data-size="expert">🎓 14B–30B <span class="count">${sizeCounts.expert}</span></span>
+    <span class="chip" data-size="doctorat">🧠 &gt; 30B <span class="count">${sizeCounts.doctorat}</span></span>
+    <span class="chip" data-size="inconnu">❓ Inconnue <span class="count">${sizeCounts.inconnu}</span></span>
+  </div>
+</div>
+
+<div class="container" id="cards"></div>
+<p class="empty-msg" id="emptyMsg">Aucun modèle ne correspond à ce filtre.</p>
+
+<p class="footer">Généré par BenchGo V3 — leaderboard.js | Cliquez sur une carte ou le bouton « Détails » pour ouvrir le détail complet.</p>
+
+<div id="modal" class="modal-overlay">
+  <div class="modal">
+    <div class="modal-head">
+      <div class="rank" id="mRank"></div>
+      <div class="title">
+        <h2 id="mTitle"></h2>
+        <div>
+          <span class="verdict-badge" id="mVerdict"></span>
+          <span class="cat-tag" id="mCat"></span>
+        </div>
+      </div>
+      <button class="modal-close" onclick="closeModal()" aria-label="Fermer">×</button>
+    </div>
+    <div class="modal-body" id="mBody"></div>
+  </div>
+</div>
+
+<div id="toast" class="toast"></div>
+
+<script>
+var MODELS = ${JSON.stringify(modelsData)};
+
+function gradeColor(g) {
+  var m = { A:'#28a745', B:'#17a2b8', C:'#ffc107', D:'#e83e8c', F:'#dc3545' };
+  return m[g] || '#6c757d';
+}
+function pctColor(p) {
+  return p >= 80 ? '#28a745' : p >= 50 ? '#ffc107' : '#dc3545';
+}
+function esc(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+function renderCards() {
+  var activeCat = document.querySelector('#chips .chip.active').getAttribute('data-cat');
+  var activeSize = document.querySelector('#sizeChips .chip.active').getAttribute('data-size');
+  var q = document.getElementById('search').value.trim().toLowerCase();
+  var container = document.getElementById('cards');
+  container.innerHTML = '';
+  var shown = 0;
+  for (var i = 0; i < MODELS.length; i++) {
+    var m = MODELS[i];
+    if (activeCat !== 'all' && m.cat.key !== activeCat) continue;
+    if (activeSize !== 'all' && m.paramSize.key !== activeSize) continue;
+    if (q && m.model.toLowerCase().indexOf(q) === -1 && m.shortName.toLowerCase().indexOf(q) === -1) continue;
+    shown++;
+
+    var cardClass = i === 0 ? 'gold' : i === 1 ? 'silver' : i === 2 ? 'bronze' : '';
+    var rankDisp = i < 3 ? '<span class="medal">' + (i === 0 ? '🥇' : i === 1 ? '🥈' : '🥉') + '</span>'
+                              : (i + 1);
+    var pc = pctColor(m.pct);
+    var sc = m.globalLifeScore < 0 ? '#f85149' : '#28a745';
+    var gc = gradeColor(m.grade);
+    var helpStr = (m.helpCount > 0 || m.retriedCount > 0)
+      ? (m.helpCount > 0 ? 'aide:' + m.helpCount : '') + (m.retriedCount > 0 ? (m.helpCount > 0 ? ' ' : '') + 'rat.:' + m.retriedCount : '')
       : '—';
+    var szBadge = '<span class="size-badge" title="' + esc(m.paramSize.label) + '">' + m.paramSize.icon + ' ' + esc(m.paramSize.short) + '</span>';
 
-    html += `<div class="card ${cardClass}" data-shortname="${esc(e.shortName)}">\n`;
-    html += `  <div class="card-top">${rankDisplay}<div class="model-name">${esc(e.model)}</div><span class="verdict-badge" style="background:${verdict.color};color:#fff">${verdict.label}</span><button class="btn-delete" onclick="deleteModel('${esc(e.shortName)}', this)">🗑 Supprimer</button></div>\n`;
-    html += `  <div class="stats-row">\n`;
-    html += `    <div class="stat"><div class="stat-label">Points</div><div class="stat-value">${e.score}/${e.max}</div></div>\n`;
-    html += `    <div class="stat"><div class="stat-label">%</div><div class="stat-value" style="color:${pctColor}">${e.pct}%</div><div class="pct-bar-wrap"><div class="pct-bar-fill" style="width:${e.pct}%;background:${pctColor}"></div></div></div>\n`;
-    html += `    <div class="stat"><div class="stat-label">Note</div><div class="stat-grade" style="color:${gradeColor(grade.grade)}">${grade.grade}</div></div>\n`;
-    html += `    <div class="stat"><div class="stat-label">Obligatoire</div><div class="stat-value">${e.mandatoryTotal > 0 ? e.mandatoryPct + '%' : '—'}</div></div>\n`;
-    html += `    <div class="stat"><div class="stat-label">Santé</div><div class="stat-value" style="color:${santeColor}">${e.globalLifeScore} PV</div></div>\n`;
-    html += `    <div class="stat"><div class="stat-label">Bonus</div><div class="stat-value">${e.optionalBonus > 0 ? '+' + e.optionalBonus : '—'}</div></div>\n`;
-    html += `    <div class="stat"><div class="stat-label">Aide / Rat.</div><div class="stat-value" style="font-size:0.85em">${esc(helpStr)}</div></div>\n`;
-    html += `    <div class="stat"><div class="stat-label">Écoles</div><div class="stat-value">${e.ecoleCount}</div></div>\n`;
-    html += `  </div>\n`;
-    html += `  <div class="args-section">\n`;
-    
-    // Colonne 1 : Forces
-    html += `    <div class="args-forces">\n`;
-    html += `      <div class="args-title">✅ Forces</div>\n`;
-    if (args.forces.length > 0) {
-      html += `      <ul class="args-list">\n`;
-      for (const f of args.forces) html += `        <li>${esc(f)}</li>\n`;
-      html += `      </ul>\n`;
-    } else {
-      html += `      <span style="font-size:0.82em;color:#8b949e;font-style:italic;padding-left:14px;">Aucune force particulière</span>\n`;
-    }
-    html += `    </div>\n`;
+    var html = '<div class="card ' + cardClass + '" onclick="openModal(' + i + ')">' +
+      '<div class="card-row">' +
+        '<div class="rank">' + rankDisp + '</div>' +
+        '<div class="model-name"><span class="cat-icon">' + m.cat.icon + '</span>' + esc(m.model) + ' ' + szBadge + '</div>' +
+        '<div class="mini-stats">' +
+          '<div class="mini-stat"><span class="lbl">%</span><span class="val" style="color:' + pc + '">' + m.pct + '%</span><div class="pct-bar-wrap"><div class="pct-bar-fill" style="width:' + m.pct + '%;background:' + pc + '"></div></div></div>' +
+          '<div class="mini-stat"><span class="lbl">Note</span><span class="grade" style="color:' + gc + '">' + m.grade + '</span></div>' +
+          '<div class="mini-stat"><span class="lbl">Santé</span><span class="val" style="color:' + sc + '">' + m.globalLifeScore + ' PV</span></div>' +
+          '<div class="mini-stat"><span class="lbl">Oblig.</span><span class="val">' + (m.mandatoryTotal > 0 ? m.mandatoryPct + '%' : '—') + '</span></div>' +
+          '<div class="mini-stat"><span class="lbl">Aide/Rat.</span><span class="val" style="font-size:0.8em">' + esc(helpStr) + '</span></div>' +
+        '</div>' +
+        '<button class="btn-detail" onclick="event.stopPropagation();openModal(' + i + ')">Détails</button>' +
+        '<button class="btn-delete" onclick="event.stopPropagation();deleteModel(\'' + esc(m.shortName) + '\', this)">🗑</button>' +
+      '</div>' +
+    '</div>';
+    container.insertAdjacentHTML('beforeend', html);
+  }
+  document.getElementById('resultCount').textContent = shown + '/' + MODELS.length;
+  document.getElementById('emptyMsg').style.display = shown === 0 ? 'block' : 'none';
+}
 
-    // Colonne 2 : Faiblesses (et Notes)
-    html += `    <div class="args-weak">\n`;
-    html += `      <div class="args-title">❌ Faiblesses</div>\n`;
-    if (args.faiblesses.length > 0) {
-      html += `      <ul class="args-list">\n`;
-      for (const w of args.faiblesses) html += `        <li>${esc(w)}</li>\n`;
-      html += `      </ul>\n`;
-    } else {
-      html += `      <span style="font-size:0.82em;color:#8b949e;font-style:italic;padding-left:14px;">Aucune faiblesse particulière</span>\n`;
-    }
-    if (args.notes.length > 0) {
-      html += `      <div class="args-notes" style="margin-top:8px;">\n`;
-      html += `        <div class="args-title" style="color:#8b949e;font-size:0.9em;margin-bottom:2px;">ℹ Notes</div>\n`;
-      html += `        <ul class="args-list">\n`;
-      for (const n of args.notes) html += `          <li>${esc(n)}</li>\n`;
-      html += `        </ul>\n`;
-      html += `      </div>\n`;
-    }
-    html += `    </div>\n`;
+function openModal(idx) {
+  var m = MODELS[idx];
+  document.getElementById('mRank').innerHTML = idx < 3 ? '<span class="medal">' + (idx === 0 ? '🥇' : idx === 1 ? '🥈' : '🥉') + '</span>' : (idx + 1);
+  document.getElementById('mTitle').textContent = m.model;
+  var vb = document.getElementById('mVerdict');
+  vb.textContent = m.verdict.label;
+  vb.style.background = m.verdict.color;
+  document.getElementById('mCat').innerHTML = m.cat.icon + ' ' + esc(m.cat.label) + ' · ' + m.paramSize.icon + ' ' + esc(m.paramSize.label);
 
-    // Colonne 3 : Détail par école
-    html += `    <details class="ecoles-toggle" open>\n`;
-    html += `      <summary>Détail par école</summary>\n`;
-    html += `      <ul class="ecoles-list">\n`;
-    for (const ecole of e.ecoles) {
-      const g = letterGrade(ecole.pct);
-      html += `        <li>${esc(ecole.ecole)} : ${ecole.score}/${ecole.max} (${ecole.pct}%) — Note ${g.grade} | +${ecole.optionalBonus} bonus | ${ecole.globalLifeScore} PV</li>\n`;
-    }
-    html += `      </ul>\n`;
-    html += `    </details>\n`;
-    html += `  </div>\n`;
-    html += `</div>\n`;
+  var pc = pctColor(m.pct);
+  var sc = m.globalLifeScore < 0 ? '#f85149' : '#28a745';
+  var gc = gradeColor(m.grade);
+  var oc = m.mandatoryTotal > 0 ? pctColor(m.mandatoryPct) : '#6c757d';
+
+  var body = '';
+  // --- Stats complètes
+  body += '<h3>Statistiques</h3>';
+  body += '<div class="full-stats">';
+  body += statBox('Points', m.score + ' / ' + m.max);
+  body += statBoxBar('% global', m.pct + '%', pc, m.pct);
+  body += statBox('Note', '<span style="color:' + gc + ';font-size:1.4em">' + m.grade + '</span>');
+  body += statBoxBar('Obligatoire', m.mandatoryTotal > 0 ? m.mandatoryPct + '% (' + m.mandatoryPassed + '/' + m.mandatoryTotal + ')' : '—', oc, m.mandatoryPct);
+  body += statBox('Santé', '<span style="color:' + sc + '">' + m.globalLifeScore + ' PV</span>');
+  body += statBox('Bonus', m.optionalBonus > 0 ? '+' + m.optionalBonus : '—');
+  body += statBox('Aide prof.', m.helpCount > 0 ? m.helpCount + 'x' : '—');
+  body += statBox('Rattrapage', m.retriedCount > 0 ? m.retriedCount + 'x' : '—');
+  body += statBox('Écoles', m.ecoleCount);
+  body += '</div>';
+
+  // --- Forces / Faiblesses / Notes
+  body += '<h3>Forces & Faiblesses</h3>';
+  body += '<div class="args-grid">';
+  body += argsCol('args-forces', '✅ Forces', m.args.forces);
+  body += argsCol('args-weak', '❌ Faiblesses', m.args.faiblesses);
+  body += '</div>';
+  if (m.args.notes.length > 0) {
+    body += '<div class="args-block args-notes" style="margin-top:12px;">';
+    body += '<div class="args-title">ℹ Notes</div><ul class="args-list">';
+    for (var n of m.args.notes) body += '<li>' + esc(n) + '</li>';
+    body += '</ul></div>';
   }
 
-  html += `</div>
-<p class="footer">Généré par BenchGo V3 — leaderboard.js | ${entries.length} modèle(s) classé(s) du meilleur au pire</p>
-<div id="toast" class="toast"></div>
-<script>
+  // --- Détail par école
+  body += '<h3>Détail par école</h3>';
+  body += '<table class="ecoles-table"><thead><tr>' +
+    '<th>École</th><th class="num">Points</th><th>%</th><th>Note</th>' +
+    '<th class="num">Bonus</th><th class="num">Santé</th><th class="num">Aide</th><th class="num">Rat.</th><th class="num">Calib.</th><th>Date</th>' +
+    '</tr></thead><tbody>';
+  for (var e of m.ecoles) {
+    var egc = gradeColor(e.grade);
+    var epc = pctColor(e.pct);
+    body += '<tr>' +
+      '<td>' + esc(e.ecole) + '</td>' +
+      '<td class="num">' + e.score + '/' + e.max + '</td>' +
+      '<td style="color:' + epc + '">' + e.pct + '%</td>' +
+      '<td class="grade" style="color:' + egc + '">' + e.grade + '</td>' +
+      '<td class="num">' + (e.optionalBonus > 0 ? '+' + e.optionalBonus : '—') + '</td>' +
+      '<td class="num">' + e.globalLifeScore + '</td>' +
+      '<td class="num">' + (e.helpCount > 0 ? e.helpCount : '—') + '</td>' +
+      '<td class="num">' + (e.retriedCount > 0 ? e.retriedCount : '—') + '</td>' +
+      '<td class="num">' + (e.calibrationIndex != null ? 'C=' + e.calibrationIndex.toFixed(2) : '—') + '</td>' +
+      '<td>' + esc(e.date) + '</td>' +
+      '</tr>';
+  }
+  body += '</tbody></table>';
+
+  // --- Méta
+  body += '<div class="meta-line">';
+  body += 'Dernière mise à jour : ' + esc(m.lastUpdated || '—') + ' · ';
+  body += 'Nom court : <code>' + esc(m.shortName) + '</code>';
+  body += '</div>';
+
+  document.getElementById('mBody').innerHTML = body;
+  document.getElementById('modal').classList.add('show');
+  document.body.style.overflow = 'hidden';
+}
+
+function statBox(lbl, val) {
+  return '<div class="full-stat"><div class="lbl">' + lbl + '</div><div class="val">' + val + '</div></div>';
+}
+function statBoxBar(lbl, val, color, pct) {
+  return '<div class="full-stat"><div class="lbl">' + lbl + '</div><div class="val" style="color:' + color + '">' + val + '</div><div class="bar"><div style="width:' + pct + '%;background:' + color + '"></div></div></div>';
+}
+function argsCol(cls, title, items) {
+  var h = '<div class="args-block ' + cls + '"><div class="args-title">' + title + '</div>';
+  if (items.length > 0) { h += '<ul class="args-list">'; for (var it of items) h += '<li>' + esc(it) + '</li>'; h += '</ul>'; }
+  else h += '<div class="args-empty">Aucun</div>';
+  h += '</div>';
+  return h;
+}
+
+function closeModal() {
+  document.getElementById('modal').classList.remove('show');
+  document.body.style.overflow = '';
+}
+document.getElementById('modal').addEventListener('click', function(e) {
+  if (e.target === this) closeModal();
+});
+document.addEventListener('keydown', function(e) { if (e.key === 'Escape') closeModal(); });
+
+// Filtres
+document.getElementById('chips').addEventListener('click', function(e) {
+  var t = e.target.closest('.chip'); if (!t) return;
+  var chips = document.querySelectorAll('#chips .chip');
+  for (var c of chips) c.classList.remove('active');
+  t.classList.add('active');
+  renderCards();
+});
+document.getElementById('sizeChips').addEventListener('click', function(e) {
+  var t = e.target.closest('.chip'); if (!t) return;
+  var chips = document.querySelectorAll('#sizeChips .chip');
+  for (var c of chips) c.classList.remove('active');
+  t.classList.add('active');
+  renderCards();
+});
+document.getElementById('search').addEventListener('input', renderCards);
+
+// Toast + suppression
 function showToast(msg, ok) {
   var t = document.getElementById('toast');
   t.textContent = msg;
@@ -277,25 +563,17 @@ function showToast(msg, ok) {
 function deleteModel(shortName, btn) {
   if (!confirm('Supprimer le modèle "' + shortName + '" du classement ?\\nLe carnet de scores sera définitivement supprimé.')) return;
   btn.disabled = true;
-  btn.textContent = '...';
+  btn.textContent = '…';
   fetch('/api/delete?shortName=' + encodeURIComponent(shortName), { method: 'POST' })
     .then(function(r) { return r.json(); })
     .then(function(data) {
-      if (data.ok) {
-        showToast('Modèle supprimé — classement régénéré', true);
-        setTimeout(function(){ location.reload(); }, 800);
-      } else {
-        showToast('Erreur : ' + (data.error || 'inconnue'), false);
-        btn.disabled = false;
-        btn.textContent = '🗑 Supprimer';
-      }
+      if (data.ok) { showToast('Modèle supprimé — classement régénéré', true); setTimeout(function(){ location.reload(); }, 800); }
+      else { showToast('Erreur : ' + (data.error || 'inconnue'), false); btn.disabled = false; btn.textContent = '🗑'; }
     })
-    .catch(function(err) {
-      showToast('Erreur réseau', false);
-      btn.disabled = false;
-      btn.textContent = '🗑 Supprimer';
-    });
+    .catch(function() { showToast('Erreur réseau', false); btn.disabled = false; btn.textContent = '🗑'; });
 }
+
+renderCards();
 </script>
 </body>
 </html>`;
@@ -350,6 +628,158 @@ function buildLeaderboardMarkdown(entries) {
   return md;
 }
 
+// --- Export raisonnement consolidé (destiné à NotebookLM via Gemini) ---
+// Fichier Markdown détaillé par modèle : pour chaque modèle, on restitue
+//   - le nom INTÉGRAL du modèle
+//   - la date et l'heure du run
+//   - l'auto-profilage déclaré (4 compétences + justification)
+//   - pour chaque école évaluée et chaque classe (tier) traversée :
+//       * le titre du tier, le statut obligatoire/optionnel, le nom de la classe
+//       * pour chaque exercice : ID, type, points, statut, code produit par le modèle,
+//         explication d'échec le cas échéant
+//       * la réponse brute complète du modèle (raisonnement + code) pour ce tier
+//
+// Ce fichier est conçu pour être ingéré par Gemini puis alimente une base NotebookLM
+// afin d'analyser qualitativement le raisonnement de chaque LLM. Le nom du modèle
+// est toujours le nom intégral (non raccourci), la date est obligatoire, l'heure
+// est incluse quand elle est disponible.
+function buildReasoningMarkdown(entries) {
+  const now = new Date();
+  const pad = n => String(n).padStart(2, '0');
+  const genDate = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+  const genTime = `${pad(now.getHours())}-${pad(now.getMinutes())}`;
+
+  let md = `# 🧠 Raisonnements & Réponses des Modèles — BenchGo V3\n\n`;
+  md += `> Fichier consolidé destiné à l'analyse qualitative (NotebookLM via Gemini).\n`;
+  md += `> Généré le ${genDate} à ${genTime.replace('-', 'h')} — ${entries.length} modèle(s)\n\n`;
+  md += `> Chaque section décrit, pour un modèle LLM donné, l'ensemble des classes `;
+  md += `traversées, les exercices tentés, le code produit, le raisonnement brut et les `;
+  md += `explications d'échec fournies par le modèle lui-même.\n\n`;
+  md += `---\n\n`;
+
+  for (const e of entries) {
+    // e.model = nom intégral du modèle (jamais raccourci dans ce fichier)
+    md += `## ${e.model}\n\n`;
+    md += `**Nom intégral du modèle :** ${e.model}\n\n`;
+    md += `**Nom court :** ${e.shortName}\n\n`;
+    md += `- **Score global :** ${e.score}/${e.max} (${e.pct}%) — Note ${letterGrade(e.pct).grade}\n`;
+    md += `- **Score obligatoire :** ${e.mandatoryTotal > 0 ? e.mandatoryPassed + '/' + e.mandatoryTotal + ' (' + e.mandatoryPct + '%)' : 'N/A'}\n`;
+    md += `- **Santé globale :** ${e.globalLifeScore} PV\n`;
+    md += `- **Bonus optionnel :** +${e.optionalBonus}\n`;
+    md += `- **Aide du professeur :** ${e.helpCount}x | **Rattrapages :** ${e.retriedCount}x\n`;
+    md += `- **Écoles évaluées :** ${e.ecoleCount}\n\n`;
+
+    // Détail par école : on retrouve le carnet original pour accéder aux tiers
+    // (réponses brutes + raisonnement + selfProfile).
+    const ledger = loadLedgerByName(e.shortName);
+    if (!ledger) {
+      md += `> *Carnet de scores introuvable — détail des raisonnements indisponible.*\n\n---\n\n`;
+      continue;
+    }
+
+    for (const ecole of e.ecoles) {
+      const ecoleEntry = ledger.ecoles[ecole.ecole];
+      if (!ecoleEntry) continue;
+
+      const runDate = ecoleEntry.date || '—';
+      const runTime = ecoleEntry.time ? ecoleEntry.time.replace(/-/g, ':') : null;
+      md += `### École : ${ecole.ecole}\n\n`;
+      md += `**Date du run :** ${runDate}${runTime ? ' à ' + runTime : ''}\n\n`;
+      md += `- **Profil :** ${ecoleEntry.profile || '—'}\n`;
+      md += `- **Score école :** ${ecole.score}/${ecole.max} (${ecole.pct}%) — Note ${letterGrade(ecole.pct).grade}\n`;
+      md += `- **Santé école :** ${ecole.globalLifeScore} PV | **Bonus :** +${ecole.optionalBonus}\n`;
+      md += `- **Aide :** ${ecole.helpCount}x | **Rattrapage :** ${ecole.retriedCount}x\n`;
+      if (ecoleEntry.calibrationIndex != null) {
+        md += `- **Indice de Calibration :** C=${ecoleEntry.calibrationIndex.toFixed(3)} (D=${((ecoleEntry.declaredLevel || 0) * 100).toFixed(0)}%)\n`;
+      }
+
+      // Auto-profilage déclaré par le modèle pour cette école
+      if (ecoleEntry.selfProfile && ecoleEntry.selfProfile.skills) {
+        md += `\n#### Auto-profilage déclaré par le modèle\n\n`;
+        const skills = ecoleEntry.selfProfile.skills;
+        for (const [skill, label] of Object.entries({
+          javascript_basics: 'JavaScript — Bases & Algorithmique simple',
+          javascript_async: 'JavaScript Asynchrone (Promises, concurrence, retry)',
+          algorithms_advanced: 'Algorithmes & Structures de données avancées',
+          code_debugging: 'Débogage & Sécurité applicative'
+        })) {
+          const lvl = skills[skill] ? skills[skill].level : '?';
+          md += `- **${label} :** niveau ${lvl}/5\n`;
+        }
+        if (ecoleEntry.selfProfile.justification) {
+          md += `- **Justification du modèle :** ${ecoleEntry.selfProfile.justification}\n`;
+        }
+      }
+
+      // Détail par tier (classe traversée)
+      const tiers = ecoleEntry.tiers || [];
+      if (tiers.length === 0) {
+        md += `\n> *Aucun détail de tier disponible pour cette école (données antérieures à l'export raisonnement).*\n`;
+      }
+      for (const t of tiers) {
+        md += `\n#### Tier ${t.tierNum} — ${t.tierTitle}\n\n`;
+        md += `- **Classe :** ${t.className}\n`;
+        md += `- **Statut :** ${t.isMandatory ? 'Obligatoire' : 'Optionnel'}\n\n`;
+
+        // Tableau des exercices
+        const evals = t.evalResults || [];
+        if (evals.length > 0) {
+          md += `##### Exercices tentés\n\n`;
+          md += `| Exercice | Type | Points | Max | Statut | Aide | Rattrapage |\n`;
+          md += `|---|---|---:|---:|---|---|---|\n`;
+          for (const r of evals) {
+            const st = r.status === 'bypassed' ? '⊘ Bypassé' : (r.status === 'success' ? '✔ Validé' : '✘ Échec');
+            md += `| ${r.id} | ${r.taskType || '—'} | ${r.points || 0} | ${r.maxPoints || 0} | ${st} | ${r.helpUsed ? 'Oui' : 'Non'} | ${r.retried ? 'Oui' : 'Non'} |\n`;
+          }
+          md += `\n`;
+
+          // Code produit + explications d'échec pour chaque exercice
+          md += `##### Code produit par le modèle et explications\n\n`;
+          for (const r of evals) {
+            if (r.status === 'bypassed') continue;
+            md += `**Exercice ${r.id} — ${r.taskType || '—'}** (${r.status === 'success' ? 'validé' : 'échec'})\n\n`;
+            if (r.code && String(r.code).trim()) {
+              md += `Code proposé :\n\`\`\`javascript\n${String(r.code).trim()}\n\`\`\`\n\n`;
+            } else {
+              md += `*Aucun code exploitable produit.*\n\n`;
+            }
+            if (r.failureExplanation) {
+              md += `**Explication de l'échec (par le modèle) :** ${r.failureExplanation}\n\n`;
+            }
+          }
+        }
+
+        // Réponse brute complète (raisonnement + code) du modèle pour ce tier
+        if (t.rawResponse && String(t.rawResponse).trim()) {
+          md += `##### Réponse brute complète du modèle pour ce tier\n\n`;
+          md += `> Contient le raisonnement et les réponses du modèle tels que produits\n`;
+          md += `> pendant le run (concaténation des tentatives successives).\n\n`;
+          md += `\`\`\`text\n${String(t.rawResponse).trim()}\n\`\`\`\n\n`;
+        }
+      }
+
+      md += `\n---\n\n`;
+    }
+
+    md += `\n`;
+  }
+
+  return md;
+}
+
+// Charge un carnet par shortName (recherche directe du fichier .json).
+function loadLedgerByName(shortName) {
+  const file = path.join(LEDGER_DIR, shortName + '.json');
+  try {
+    if (fs.existsSync(file)) {
+      return JSON.parse(fs.readFileSync(file, 'utf8'));
+    }
+  } catch (e) {
+    logger.warn('Carnet illisible pour export raisonnement (' + shortName + ') : ' + e.message);
+  }
+  return null;
+}
+
 // Génère le classement complet (HTML + Markdown) et le sauvegarde.
 function generateLeaderboard() {
   const ledgers = loadAllLedgers();
@@ -373,18 +803,22 @@ function generateLeaderboard() {
 
   const html = buildLeaderboardHTML(entries);
   const md = buildLeaderboardMarkdown(entries);
+  const reasoningMd = buildReasoningMarkdown(entries);
 
   // Le classement est global (tous modèles confondus) → un seul fichier à la
   // racine de Export-Rapports/, écrasé à chaque génération. Pas de sous-dossier date.
   fs.mkdirSync(EXPORT_DIR, { recursive: true });
   const htmlPath = path.join(EXPORT_DIR, 'classement.html');
   const mdPath = path.join(EXPORT_DIR, 'classement.md');
+  const reasoningPath = path.join(EXPORT_DIR, 'raisonnement_modeles.md');
 
   fs.writeFileSync(htmlPath, html, 'utf8');
   fs.writeFileSync(mdPath, md, 'utf8');
+  fs.writeFileSync(reasoningPath, reasoningMd, 'utf8');
 
   const relHtml = path.relative(__dirname, htmlPath);
   const relMd = path.relative(__dirname, mdPath);
+  const relReasoning = path.relative(__dirname, reasoningPath);
 
   console.log('');
   console.log('  \x1b[1;35m━━━ CLASSEMENT BENCHGO V3 ━━━\x1b[0m');
@@ -397,11 +831,13 @@ function generateLeaderboard() {
     console.log(`  ${medal} \x1b[1m${(i + 1 + '.').padEnd(4)}\x1b[0m ${e.model.substring(0, 45).padEnd(45)} ${String(e.pct + '%').padStart(5)}  ${vColor}${verdict.label}\x1b[0m`);
   }
   console.log('');
-  console.log(`  \x1b[32mClassement HTML : ${relHtml}\x1b[0m`);
-  console.log(`  \x1b[90mClassement MD   : ${relMd}\x1b[0m`);
+  console.log(`  \x1b[32mClassement HTML       : ${relHtml}\x1b[0m`);
+  console.log(`  \x1b[90mClassement MD         : ${relMd}\x1b[0m`);
+  console.log(`  \x1b[36mRaisonnement modèles  : ${relReasoning}\x1b[0m`);
+  console.log(`  \x1b[90m  (destiné à NotebookLM via Gemini)\x1b[0m`);
   console.log('');
 
-  return { htmlPath, mdPath, entries };
+  return { htmlPath, mdPath, reasoningPath, entries };
 }
 
 // Supprime un carnet de scores par shortName, puis régénère le classement.
@@ -473,8 +909,11 @@ module.exports = {
   aggregateLedger,
   buildArguments,
   getVerdict,
+  getCategory,
+  getParamSize,
   buildLeaderboardHTML,
   buildLeaderboardMarkdown,
+  buildReasoningMarkdown,
   generateLeaderboard,
   deleteLedger,
   startServer
