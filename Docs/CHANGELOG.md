@@ -5,6 +5,34 @@
 - Le projet est en version BenchGo V3.
 - Les fichiers sources sont désormais à la racine de `benchmark-v3/` (le nom `benchmark-v2` est abandonné).
 
+## 2026-07-18 — Professeur IA correcteur (OpenRouter Free Router)
+
+### Contexte
+Lors d'un test Tier 4, un modèle (9B) avait échoué à l'exercice React et produisait une auto-analyse **partiellement fausse** : il invoquait la syntaxe JSX comme cause alors que la vraie cause était l'absence de template literal. Personne ne le corrigeait, car le « professeur » était en réalité **le même modèle que l'élève** (la fonction `askModelForFailureExplanation` réutilisait le même `queryFn`). Demande : un professeur IA indépendant et plus robuste, capable de **contredire** l'élève et de démontrer la vraie cause racine.
+
+### Actions entreprises
+- **Nouveau module `teacher-client.js`** : professeur IA cloud distinct de l'élève. Après l'auto-analyse de l'élève, le professeur relit son diagnostic, dit explicitement s'il est JUSTE / PARTIELLEMENT JUSTE / FAUX, et **démontre** la vraie cause racine en 2 à 4 phrases. Non streamé (analyse backend).
+- **Free Router** : récupère dynamiquement la liste des **modèles gratuits** d'OpenRouter via l'endpoint public `/api/v1/models` (sans clé, mis en cache 30 min), trie par préférence puis par contexte, et **rotate** jusqu'à 3 modèles distincts en cas de rate-limit/erreur (429, 5xx). Modèle par défaut : `meta-llama/llama-3.3-70b-instruct:free`.
+- **`config.js`** : ajout de `TEACHER_CONFIG` (provider `openrouter`, modèle gratuit par défaut, `maxRetries: 3`, `temperature: 0.15`, `maxTokens: 512`) + parsing des flags `--teacher-model`, `--teacher-api-key`, `--teacher-endpoint`, `--no-teacher`.
+- **`runner.js` — Configuration interactive au démarrage** : si aucune clé n'est fournie en CLI/env, l'utilisateur choisit interactivement entre (A) professeur OpenRouter Free Router (demande la clé API, compte gratuit requis) ou (B) auto-analyse classique (aucun compte). `--no-teacher` force (B) sans demander ; `--teacher-api-key=...` force (A) sans demander.
+- **`runner.js` — Flow d'échec** : après l'explication de l'élève, appel du professeur via `askTeacherToCorrectStudentAnalysis`. Affichage console `🎓 Correction du professeur`. Repli sur l'auto-analyse si OpenRouter est indisponible.
+- **`runner.js` + `leaderboard.js` — Rapports** : le rapport Markdown et le classement incluent désormais pour chaque exercice échoué : `Explication de l'élève` suivie de `🎓 Correction du professeur IA` si disponible. Nouveau champ `teacherCorrection` propagé via `evalResultsMap`.
+
+### Fichiers modifiés
+- `teacher-client.js` (nouveau — ~210 lignes)
+- `config.js` — `TEACHER_CONFIG`, parsing `--teacher-*`
+- `runner.js` — config interactive professeur, propagation à `runTierAttempt`, flow d'échec étendu, `askFreeText`, `taskTeacherCorrections`, section rapport
+- `leaderboard.js` — affichage `teacherCorrection` dans le Markdown
+- `README.md` — fonctionnalité, table des modules, structure, options CLI
+
+### Validation
+- `node --check` sur `config.js`, `teacher-client.js`, `runner.js`, `leaderboard.js` : syntaxe OK.
+- Test live du Free Router : `fetchFreeModels()` récupère 23 modèles gratuits sans clé, `meta-llama/llama-3.3-70b-instruct:free` en tête.
+- `--no-teacher` et `--teacher-api-key=...` bien détectés par `parseCliArgs`.
+
+### Note technique
+L'endpoint `/api/v1/models` d'OpenRouter est public (sans clé), mais `/chat/completions` exige une clé même pour les modèles `:free` — d'où la question interactive au démarrage et le repli sur l'auto-analyse pour les utilisateurs sans compte OpenRouter.
+
 ## 2026-07-14 — Classement des modèles (Leaderboard) + Détection de doublon
 
 ### Contexte

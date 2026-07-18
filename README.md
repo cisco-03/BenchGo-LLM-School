@@ -18,6 +18,7 @@ le tout dans un bac à sable VM isolé.
 - 🧠 **Auto-profilage & calibration** : le modèle s'auto-évalue sur 4 compétences au démarrage ; les tâches trop difficiles sont filtrées ; un Indice de Calibration C = 1 − |D − P| mesure la lucidité du modèle.
 - ❤️ **Santé globale (gamification)** : le modèle accumule des PV (succès) ou en perd (échecs). En dessous de −100 PV, élimination définitive (Game Over).
 - 🆘 **Aide du professeur & rattrapage** : un indice peut être proposé au modèle en rattrapage ; un seul réessai par exercice (`MAX_TASK_RETRIES = 1`).
+- 🎓 **Professeur IA correcteur (Free Router)** : après un échec définitif, l'élève (le modèle testé) s'auto-analyse, puis un **professeur IA indépendant** (modèle cloud via OpenRouter) relit cette analyse, dit si elle est juste/fausse et **démontre** la vraie cause racine. Rotate automatique sur les modèles gratuits d'OpenRouter (`:free`). Repli sur l'auto-analyse si aucun compte OpenRouter n'est configuré.
 - 📊 **Classement global interactif** : HTML condensé avec modale de détail, filtres par catégorie de performance et par taille de modèle, recherche texte.
 - 📝 **Exports** : rapport Markdown par run, classement HTML/Markdown global, export raisonnement consolidé (destiné à NotebookLM via Gemini).
 - ☁️ **Mode cloud** : 6 fournisseurs supportés (OpenAI, Anthropic, Groq, Together, OpenRouter, Mistral).
@@ -237,6 +238,7 @@ un **historique** des performances d'un modèle dans le temps.
 | `self-profiling.js` | Auto-profilage du modèle + filtrage dynamique des tâches |
 | `lm-studio-client.js` | Client API LM Studio (streaming SSE, budget contexte) |
 | `cloud-client.js` | Client API cloud (6 fournisseurs, OpenAI-compat + Anthropic natif) |
+| `teacher-client.js` | Professeur IA correcteur (OpenRouter Free Router, rotation sur modèles gratuits) |
 | `tier-loader.js` | Chargement des tiers JSON par profil (fallback chain) |
 | `task-evaluator.js` | Moteur d'évaluation des tâches (exec/pattern/custom) |
 | `custom-evaluators.js` | Évaluateurs comportementaux spécialisés (async, sécurité, algos) |
@@ -260,6 +262,7 @@ benchmark-v3/
 ├── self-profiling.js          ← Auto-profilage & calibration
 ├── score-ledger.js            ← Carnet de scores persistant
 ├── cloud-client.js            ← Client API cloud (6 fournisseurs)
+├── teacher-client.js           ← Professeur IA correcteur (OpenRouter Free Router)
 ├── lm-studio-client.js        ← Client API LM Studio
 ├── tier-loader.js             ← Chargement des tiers par profil
 ├── task-evaluator.js          ← Moteur d'évaluation
@@ -298,6 +301,10 @@ benchmark-v3/
 | `--provider=<NOM>` | Mode cloud (openai / anthropic / groq / together / openrouter / mistral) |
 | `--model=<NOM>` | Nom du modèle cloud |
 | `--api-key=<CLÉ>` | Clé API cloud (⚠️ visible dans le terminal — préférer les variables d'env) |
+| `--teacher-model=<NOM>` | Modèle du professeur correcteur (défaut : `meta-llama/llama-3.3-70b-instruct:free`) |
+| `--teacher-api-key=<CLÉ>` | Clé API OpenRouter pour le professeur (force le mode professeur sans interaction) |
+| `--teacher-endpoint=<URL>` | Endpoint alternatif pour le professeur (avancé) |
+| `--no-teacher` | Désactive le professeur IA (repli sur l'auto-analyse classique de l'élève) |
 
 ---
 
