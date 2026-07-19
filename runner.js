@@ -16,6 +16,9 @@ const { updateTiers } = require('./auto-updater');
 const scoreLedger = require('./score-ledger');
 const { runSelfProfiling, filterTasksByProfile, SKILL_LABELS } = require('./self-profiling');
 const leaderboard = require('./leaderboard');
+const secrets = require('./secrets');
+const { runStartupQuestionnaire } = require('./startup-questionnaire');
+const { buildExternalTeacherReport } = require('./report-teacher');
 
 const DEFAULT_CONTEXT_LIMIT_TOKENS = 16384;
 const MAX_RATTRAPAGE_ATTEMPTS = 1;
@@ -378,8 +381,11 @@ async function runTierAttempt({ tierNum, tierData, isMandatory, profileArg, cont
       dynamicPrompt += `- ID: ${t.id} | Desc: ${t.label} | Valeur: ${t.points} points\n`;
     }
     dynamicPrompt += `\nINSTRUCTIONS : Résolvez les exercices listés ci-dessus. Pour chaque exercice, écrivez la fonction JavaScript demandée.\n`;
-    dynamicPrompt += `Renvoyez vos réponses en Markdown. Pour chaque exercice, utilisez un titre avec l'ID de l'exercice (par exemple "### ${availableTasks[0]?.id || 'tache_0a'}"), suivi du code de la fonction encadré par des balises \`\`\`javascript et \`\`\`.\n`;
-    dynamicPrompt += `Exemple attendu :\n### ${availableTasks[0]?.id || 'tache_0a'}\n\`\`\`javascript\nfunction solution() { return true; }\n\`\`\`\n`;
+    dynamicPrompt += `FORMAT DE RÉPONSE — LIBRE : Vous pouvez répondre dans le format que vous préférez, tant que le code JavaScript de chaque exercice est clairement identifiable et associé à son ID. Formats acceptés :\n`;
+    dynamicPrompt += `  • Markdown : un titre avec l'ID de l'exercice (ex: "### ${availableTasks[0]?.id || 'tache_0a'}") suivi d'un bloc \`\`\`javascript ... \`\`\`.\n`;
+    dynamicPrompt += `  • JSON : un objet { "<id>": "<code>" } (le code peut être une chaîne, ou un objet { "code": "..." }).\n`;
+    dynamicPrompt += `  • Code pur : un bloc \`\`\`javascript ... \`\`\` par exercice, précédé d'une ligne mentionnant l'ID.\n`;
+    dynamicPrompt += `Exemple Markdown attendu :\n### ${availableTasks[0]?.id || 'tache_0a'}\n\`\`\`javascript\nfunction solution() { return true; }\n\`\`\`\n`;
     dynamicPrompt += `Vous pouvez résoudre un ou plusieurs exercices en une seule réponse.\n`;
     dynamicPrompt += `IMPORTANT : Vous devez écrire le code COMPLET et EXÉCUTABLE de chaque fonction (avec son corps complet entre accolades et l'instruction de retour). Ne renvoyez PAS uniquement la signature de la fonction ou des placeholders comme "...".\n`;
     dynamicPrompt += `Rappel des règles de l'exercice : ` + tierData.prompt;
@@ -768,96 +774,132 @@ async function main() {
   console.log('\x1b[36m\u2551   (VM Sandbox + Tests RFC 7946 + Flood Fill + React Sim)  \u2551\x1b[0m');
   console.log('\x1b[36m\u255A\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u255D\x1b[0m\n');
 
+  const cliArgs = parseCliArgs();
   const { tierArg, profileArgExplicit, contextLimitTokens: contextLimitFromCli, provider, model: cloudModel, apiKey, endpoint,
-           teacherModel, teacherApiKey, teacherEndpoint, teacherDisabled } = parseCliArgs();
-  const isCloudMode = Boolean(provider);
-  const providerConfig = isCloudMode ? { provider, model: cloudModel, apiKey } : null;
-  const queryFn = isCloudMode ? queryLLMCloud : queryLLMLocal;
-  let profileArg = profileArgExplicit || (isCloudMode ? 'FRONTIER' : 'STANDARD');
-  const contextLimitTokens = contextLimitFromCli || DEFAULT_CONTEXT_LIMIT_TOKENS;
-  let preKnownModelName = isCloudMode ? cloudModel : null;
+           teacherModel, teacherApiKey, teacherEndpoint, teacherDisabled } = cliArgs;
 
-  // --- Configuration du professeur (modèle cloud indépendant qui corrige l'élève) ---
-  // Au démarrage, on demande à l'utilisateur s'il veut :
-  //  (A) Professeur amélioré via OpenRouter (Free Router : rotate sur les modèles
-  //      gratuits) — nécessite une clé API OpenRouter (création de compte gratuite).
-  //  (B) Auto-analyse classique : le modèle testé s'analyse lui-même (comportement
-  //      historique, aucun compte externe requis).
-  // Override CLI : --no-teacher force (B) sans demander ; --teacher-api-key=...
-  // force (A) sans demander.
-  const teacherConfig = (() => {
-    const base = { ...TEACHER_CONFIG, enabled: false };
-    if (teacherDisabled) {
-      console.log(`  \x1b[90mProfesseur : auto-analyse classique (--no-teacher).\x1b[0m`);
-      return base;
-    }
+  // --- Questionnaire interactif au démarrage ---
+  // Si AUCUN flag significatif n'est passé (--provider, --model), on lance le
+  // questionnaire guidé. Sinon on garde le comportement CLI historique. La clé
+  // API est stockée en mémoire de session (secrets.js) pour ne pas avoir à la
+  // redemander entre deux écoles d'un même run.
+  const hasCliProvider = Boolean(provider);
+  const hasCliModel = Boolean(cloudModel);
+  let resolvedProvider = provider;
+  let resolvedCloudModel = cloudModel;
+  let resolvedApiKey = apiKey;
+  let resolvedEndpoint = endpoint;
+  let resolvedProfileArgExplicit = profileArgExplicit;
+  let resolvedContextLimit = contextLimitFromCli;
+  let teacherConfigResolved;
 
-    // Clé fournie en CLI ou en env → mode OpenRouter sans demander.
-    const envKey = process.env.OPENROUTER_API_KEY || process.env.OPENROUTER_KEY;
-    if (teacherApiKey || envKey) {
-      const resolved = { ...TEACHER_CONFIG, enabled: true };
-      if (teacherModel)    resolved.model    = teacherModel;
-      if (teacherApiKey)   resolved.apiKey   = teacherApiKey;
-      else if (envKey)     resolved.apiKey   = envKey;
-      if (teacherEndpoint) resolved.endpoint = teacherEndpoint;
-      console.log(`  \x1b[35mProfesseur : OpenRouter (Free Router) activé — clé détectée.\x1b[0m`);
-      return resolved;
-    }
-
-    // Sinon : on demande interactivement à l'utilisateur.
-    console.log(`\n  \x1b[36m━━ PROFESSEUR CORRECTEUR ━━\x1b[0m`);
-    console.log(`  \x1b[90mAprès chaque échec définitif, l'élève s'auto-analyse. Un professeur IA indépendant peut relire cette analyse et démontrer la vraie cause racine.\x1b[0m`);
-    console.log(`  \x1b[90m(A) Professeur OpenRouter (Free Router, modèles gratuits) — nécessite une clé API (création de compte gratuite sur https://openrouter.ai).\x1b[0m`);
-    console.log(`  \x1b[90m(B) Auto-analyse classique (aucun compte requis) — le modèle testé s'analyse lui-même.\x1b[0m`);
-    return (async () => {
-      const wantsOpenRouter = await askYesNo(`  Utiliser le professeur OpenRouter (Free Router) ?`, true);
-      if (!wantsOpenRouter) {
-        console.log(`  \x1b[90mProfesseur : auto-analyse classique.\x1b[0m`);
+  if (!hasCliProvider && !hasCliModel && process.stdin.isTTY && process.stdout.isTTY) {
+    logger.info('Aucun flag CLI détecté — lancement du questionnaire interactif.');
+    const qConfig = await runStartupQuestionnaire(cliArgs);
+    resolvedProvider = qConfig.provider;
+    resolvedCloudModel = qConfig.model;
+    resolvedApiKey = qConfig.apiKey;
+    resolvedEndpoint = qConfig.endpoint;
+    resolvedProfileArgExplicit = qConfig.profileArg;
+    resolvedContextLimit = qConfig.contextLimitTokens;
+    // teacherConfig construit par le questionnaire (clé mémorisée dans secrets.js)
+    teacherConfigResolved = qConfig.teacherConfig;
+    // Mémorise aussi la clé élève dans secrets pour réutilisation cross-école.
+    if (resolvedApiKey) secrets.rememberSecret(resolvedProvider, resolvedApiKey, true);
+  } else {
+    // --- Mode CLI historique : professeur OpenRouter (Free Router) ---
+    const teacherConfig = (() => {
+      const base = { ...TEACHER_CONFIG, enabled: false };
+      if (teacherDisabled) {
+        console.log(`  \x1b[90mProfesseur : auto-analyse classique (--no-teacher).\x1b[0m`);
         return base;
       }
-      const key = await askFreeText(`  Collez votre clé API OpenRouter (sk-or-v1-...) :`);
-      if (!key) {
-        console.log(`  \x1b[33mAucune clé saisie — repli sur l'auto-analyse classique.\x1b[0m`);
-        return base;
+
+      // Clé fournie en CLI ou en env → mode OpenRouter sans demander.
+      const envKey = process.env.OPENROUTER_API_KEY || process.env.OPENROUTER_KEY;
+      if (teacherApiKey || envKey) {
+        const resolved = { ...TEACHER_CONFIG, enabled: true };
+        if (teacherModel)    resolved.model    = teacherModel;
+        if (teacherApiKey)   resolved.apiKey   = teacherApiKey;
+        else if (envKey)     resolved.apiKey   = envKey;
+        if (teacherEndpoint) resolved.endpoint = teacherEndpoint;
+        secrets.rememberSecret('openrouter', resolved.apiKey, true);
+        console.log(`  \x1b[35mProfesseur : OpenRouter (Free Router) activé — clé détectée.\x1b[0m`);
+        return resolved;
       }
-      const resolved = { ...TEACHER_CONFIG, enabled: true, apiKey: key };
-      if (teacherModel)    resolved.model    = teacherModel;
-      if (teacherEndpoint) resolved.endpoint = teacherEndpoint;
-      console.log(`  \x1b[35mProfesseur : OpenRouter (Free Router) activé.\x1b[0m`);
-      return resolved;
+
+      // Sinon : on demande interactivement à l'utilisateur (saisie masquée).
+      console.log(`\n  \x1b[36m━━ PROFESSEUR CORRECTEUR ━━\x1b[0m`);
+      console.log(`  \x1b[90mAprès chaque échec définitif, l'élève s'auto-analyse. Un professeur IA indépendant peut relire cette analyse et démontrer la vraie cause racine.\x1b[0m`);
+      console.log(`  \x1b[90m(A) Professeur OpenRouter (Free Router, modèles gratuits) — nécessite une clé API (création de compte gratuite sur https://openrouter.ai).\x1b[0m`);
+      console.log(`  \x1b[90m(B) Auto-analyse classique (aucun compte requis) — le modèle testé s'analyse lui-même.\x1b[0m`);
+      return (async () => {
+        const wantsOpenRouter = await askYesNo(`  Utiliser le professeur OpenRouter (Free Router) ?`, true);
+        if (!wantsOpenRouter) {
+          console.log(`  \x1b[90mProfesseur : auto-analyse classique.\x1b[0m`);
+          return base;
+        }
+        // Saisie masquée + aperçu temporaire (repli sur askFreeText si non-TTY).
+        let key = null;
+        if (process.stdin.isTTY && process.stdout.isTTY) {
+          key = await secrets.askSecret(`  Collez votre clé API OpenRouter (saisie masquée)`, { revealMs: 3000 });
+        } else {
+          key = await askFreeText(`  Collez votre clé API OpenRouter (sk-or-v1-...) :`);
+        }
+        if (!key) {
+          console.log(`  \x1b[33mAucune clé saisie — repli sur l'auto-analyse classique.\x1b[0m`);
+          return base;
+        }
+        secrets.rememberSecret('openrouter', key);
+        console.log(`  \x1b[35mProfesseur : OpenRouter (Free Router) activé — clé mémorisée :\x1b[0m ${secrets.maskedForDisplay(key)}`);
+        const resolved = { ...TEACHER_CONFIG, enabled: true, apiKey: key };
+        if (teacherModel)    resolved.model    = teacherModel;
+        if (teacherEndpoint) resolved.endpoint = teacherEndpoint;
+        return resolved;
+      })();
     })();
-  })();
-  const teacherConfigResolved = (teacherConfig && teacherConfig.then) ? await teacherConfig : teacherConfig;
-  logger.info(`Professeur : ${teacherConfigResolved.enabled ? `activé (OpenRouter Free Router)` : 'désactivé (auto-analyse classique)'}`);
+    teacherConfigResolved = (teacherConfig && teacherConfig.then) ? await teacherConfig : teacherConfig;
+    if (resolvedApiKey) secrets.rememberSecret(resolvedProvider, resolvedApiKey, true);
+  }
+
+  const isCloudMode = Boolean(resolvedProvider);
+  const providerConfig = isCloudMode ? { provider: resolvedProvider, model: resolvedCloudModel, apiKey: resolvedApiKey } : null;
+  const queryFn = isCloudMode ? queryLLMCloud : queryLLMLocal;
+  let profileArg = resolvedProfileArgExplicit || (isCloudMode ? 'FRONTIER' : 'STANDARD');
+  const contextLimitTokens = resolvedContextLimit || DEFAULT_CONTEXT_LIMIT_TOKENS;
+  let preKnownModelName = isCloudMode ? resolvedCloudModel : null;
+  logger.info(`Professeur : ${teacherConfigResolved && teacherConfigResolved.enabled ? `activé (${teacherConfigResolved.provider || 'openrouter'})` : 'désactivé (auto-analyse classique)'}`);
 
   // Lance l'auto-updater pour ajouter les exercices manquants et les points
   updateTiers();
 
   logger.info(`Démarrage du benchmark`);
   logger.info(`Cible demandée : ${tierArg.toUpperCase()}`);
-  logger.info(`Profil explicite CLI : ${profileArgExplicit || 'AUCUN (auto-détection)'}`);
+  logger.info(`Profil explicite CLI : ${resolvedProfileArgExplicit || 'AUCUN (auto-détection)'}`);
   logger.info(`Budget contexte : ${contextLimitTokens} tokens`);
   logger.info(`Fichier de log : ${logger.getFilePath()}`);
 
   if (isCloudMode) {
     // Mode cloud : pas d'auto-détection LM Studio, le modèle est fourni explicitement
-    if (!cloudModel) {
+    if (!resolvedCloudModel) {
       console.error('\x1b[31m[ERREUR]\x1b[0m --provider spécifié sans --model. Ex: --model=gpt-4o');
       process.exit(1);
     }
-    logger.info(`Mode cloud : provider=${provider}, modèle=${cloudModel}`);
+    logger.info(`Mode cloud : provider=${resolvedProvider}, modèle=${resolvedCloudModel}`);
     console.log(`  Mode              : \x1b[1;35mCLOUD\x1b[0m`);
-    console.log(`  Fournisseur       : \x1b[1;35m${provider.toUpperCase()}\x1b[0m`);
-    console.log(`  Modèle            : \x1b[1;35m${cloudModel}\x1b[0m`);
-    if (apiKey) {
-      console.log(`  Clé API           : \x1b[33m passée en argument (visible dans le gestionnaire de tâches)\x1b[0m`);
+    console.log(`  Fournisseur       : \x1b[1;35m${resolvedProvider.toUpperCase()}\x1b[0m`);
+    console.log(`  Modèle            : \x1b[1;35m${resolvedCloudModel}\x1b[0m`);
+    if (resolvedApiKey) {
+      // Affichage masqué systématique — plus jamais la clé en clair dans le CLI.
+      const source = secrets.isCliProvided(resolvedProvider) ? 'argument CLI' : 'session';
+      console.log(`  Clé API           : ${secrets.maskedForDisplay(resolvedApiKey)} \x1b[90m(${source})\x1b[0m`);
     }
-    if (profileArgExplicit) {
+    if (resolvedProfileArgExplicit) {
       logger.info(`Profil forcé par l'utilisateur : ${PROFILES[profileArg] ? PROFILES[profileArg].label : profileArg}`);
     } else {
       logger.info(`Profil cloud auto : FRONTIER`);
     }
-  } else if (!profileArgExplicit) {
+  } else if (!resolvedProfileArgExplicit) {
     logger.info(`Aucun --profile= passé. Tentative de détection automatique via LM Studio...`);
     const detectedModelName = await fetchModelNameFromLMStudio();
     preKnownModelName = detectedModelName;
@@ -909,7 +951,7 @@ async function main() {
   if (profile.optional.length > 0) {
     console.log(`  \x1b[1;33mTiers optionnels    :\x1b[0m \x1b[1;33m${profile.optional.join(', ')}\x1b[0m`);
   }
-  console.log(`  \x1b[1;33mMode                :\x1b[0m \x1b[1;33m${isCloudMode ? `CLOUD (${provider.toUpperCase()})` : 'LOCAL (LM Studio)'}\x1b[0m`);
+  console.log(`  \x1b[1;33mMode                :\x1b[0m \x1b[1;33m${isCloudMode ? `CLOUD (${resolvedProvider.toUpperCase()})` : 'LOCAL (LM Studio)'}\x1b[0m`);
   console.log('');
 
   // --- Auto-profilage (Self-Profiling) ---
@@ -1057,7 +1099,7 @@ async function main() {
         contextLimitTokens,
         attemptNumber,
         queryFn,
-        providerConfig: isCloudMode ? { provider, model: cloudModel, apiKey, endpoint } : null,
+        providerConfig: isCloudMode ? { provider: resolvedProvider, model: resolvedCloudModel, apiKey: resolvedApiKey, endpoint: resolvedEndpoint } : null,
         gameState,
         selfProfile,
         teacherConfig: teacherConfigResolved
@@ -1322,9 +1364,11 @@ async function main() {
   const timeStr = `${pad(now.getHours())}-${pad(now.getMinutes())}-${pad(now.getSeconds())}`;
   const filename = `rapport_v3_${shortName}_${profileArg.toLowerCase()}${tierTag}_${timeStr}.md`;
 
-  // Classification : Export-Rapports/<AAAA-MM-JJ>/<ÉCOLE>/<CLASSE?>/<fichier>
-  // Le nom du fichier porte l'heure (HH-MM-SS) pour distinguer plusieurs runs
-  // d'une même journée et faire le lien avec le fichier de log associé.
+  // Classification : Export-Rapports/<AAAA-MM-JJ>/<ÉCOLE>/<NIVEAU-OU-CLASSE>/<fichier>
+  // Le dossier intermédiaire sous l'école représente soit la classe (en mode tier
+  // unique) soit le niveau/profil (en mode "all"). Le nom du fichier porte l'heure
+  // (HH-MM-SS) pour distinguer plusieurs runs d'une même journée et faire le lien
+  // avec le fichier de log associé.
   const ecole = (PROFILES[profileArg] && PROFILES[profileArg].ecole) || profileArg;
   const exportDir = path.join(__dirname, 'Export-Rapports');
   const dateDir = path.join(exportDir, dateStr);
@@ -1335,14 +1379,57 @@ async function main() {
     const tierNum = parseInt(tierArg);
     const classeLabel = (CLASSE_NAMES[profileArg] && CLASSE_NAMES[profileArg][tierNum]) || `Classe-${tierNum}`;
     targetDir = path.join(ecoleDir, classeLabel);
+  } else {
+    // Mode "all" : on range dans un sous-dossier représentant le niveau/profil
+    // (ex: "STANDARD", "LIGHT") pour ne jamais mélanger les rapports de niveaux
+    // différents dans le même dossier école.
+    const niveauLabel = profileArg || 'STANDARD';
+    targetDir = path.join(ecoleDir, niveauLabel);
   }
 
   fs.mkdirSync(targetDir, { recursive: true });
   const outputPath = path.join(targetDir, filename);
   const relPath = path.relative(__dirname, outputPath);
 
+  // --- Modèle effectif (résolu dès maintenant pour usage aval : rapport externe + carnet) ---
+  const effectiveModel = (modelName !== "Modele_En_Attente") ? modelName : (resolvedCloudModel || null);
+
+  // --- Section « Validation du professeur IA » (rédigée par un modèle externe) ---
+  // Le professeur externe prend en charge la lecture pédagogique finale : note,
+  // classement perçu, méthodologie, compréhension des exercices, recommandation.
+  // Cette section est ajoutée à la fin du rapport Markdown généré localement.
+  // Indisponible (pas de clé / provider) → repli silencieux, le rapport reste
+  // complet techniquement.
+  if (teacherConfigResolved && teacherConfigResolved.enabled) {
+    console.log(`  \x1b[35m👨‍🏫 Professeur IA : rédaction de la validation finale du rapport...\x1b[0m`);
+    try {
+      const teacherReportSection = await buildExternalTeacherReport({
+        teacherConfig: teacherConfigResolved,
+        results: {
+          modelName: effectiveModel || modelName,
+          profileLabel: profile.label,
+          ecoleLabel: ecole,
+          tierScorecard,
+          evalResults: allEvalResults,
+          globalScore,
+          calibration,
+          failureExplanations: null,
+          teacherCorrections: null
+        }
+      });
+      if (teacherReportSection) {
+        globalReport += `\n---\n\n${teacherReportSection}\n`;
+        console.log(`  \x1b[32m👨‍🏫 Validation du professeur IA ajoutée au rapport.\x1b[0m`);
+      } else {
+        console.log(`  \x1b[33m👨‍🏫 Professeur IA indisponible — rapport sans validation externe.\x1b[0m`);
+      }
+    } catch (e) {
+      logger.warn(`Validation externe du rapport échouée : ${e.message}`);
+      console.log(`  \x1b[33m👨‍🏫 Professeur IA en erreur — rapport sans validation externe.\x1b[0m`);
+    }
+  }
+
   // --- Carnet de scores persistant (cumul multi-écoles) ---
-  const effectiveModel = (modelName !== "Modele_En_Attente") ? modelName : (cloudModel || null);
   if (effectiveModel && tierArg === "all") {
     const ecoleResult = {
       profile: profileArg,

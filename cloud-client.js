@@ -12,6 +12,8 @@ const CLOUD_PROVIDERS = {
   openrouter: { url: 'https://openrouter.ai/api/v1/chat/completions',   envKey: 'OPENROUTER_API_KEY',  openaiCompat: true,  requiresAuth: true  },
   mistral:    { url: 'https://api.mistral.ai/v1/chat/completions',      envKey: 'MISTRAL_API_KEY',     openaiCompat: true,  requiresAuth: true  },
   anthropic:  { url: 'https://api.anthropic.com/v1/messages',           envKey: 'ANTHROPIC_API_KEY',   openaiCompat: false, requiresAuth: true  },
+  deepseek:   { url: 'https://api.deepseek.com/v1/chat/completions',    envKey: 'DEEPSEEK_API_KEY',    openaiCompat: true,  requiresAuth: true  },
+  cohere:     { url: 'https://api.cohere.ai/v1/chat/completions',       envKey: 'COHERE_API_KEY',      openaiCompat: true,  requiresAuth: true  },
   // Serveurs locaux OpenAI-compatibles — clé API non requise
   ollama:     { url: 'http://localhost:11434/v1/chat/completions',       envKey: null,                  openaiCompat: true,  requiresAuth: false },
   lmstudio:   { url: 'http://localhost:1234/v1/chat/completions',        envKey: null,                  openaiCompat: true,  requiresAuth: false },

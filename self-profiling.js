@@ -59,30 +59,37 @@ const SKILL_LABELS = {
   code_debugging: 'Débogage & Sécurité applicative'
 };
 
-const PROFILE_PROMPT = `Tu es un évaluateur technique objectif et lucide. Tu dois évaluer tes propres capacités de programmation et d'analyse en JavaScript.
+const PROFILE_PROMPT = `Tu es un évaluateur technique objectif, lucide et honnête. Ta tâche est d'auto-évaluer TES PROPRES capacités en programmation et analyse JavaScript, de façon réaliste (ni surévaluée ni sous-évaluée).
 
-Évalue ton niveau sur une échelle de 1 à 5 pour chacune des compétences suivantes :
-- 1 = aucune connaissance (tu ne peux pas produire de code fonctionnel)
-- 2 = débutant (code approximatif, erreurs fréquentes)
-- 3 = intermédiaire (code correct sur des cas simples)
-- 4 = avancé (code robuste et optimisé sur des cas complexes)
-- 5 = expert senior (code de production optimisé et sans bug)
+AVANT DE RÉPONDRE — réfléchis en silence à ces questions pour chaque compétence :
+  • "Si on me donnait 3 exercices de difficulté croissante dans ce domaine, lesquels réussirais-je du premier coup ?"
+  • "Quels pièges (syntaxe, async, structures de données, sécurité) m'ont déjà fait échouer par le passé ?"
+  • "Est-ce que je sais PRODUIRE le code (pas seulement le reconnaître) ?"
 
-Compétences à évaluer :
-- "javascript_basics" : Bases du langage (fonctions, tableaux, chaînes, objets) et algorithmique simple (parité, comptage, tris, recherche).
-- "javascript_async" : Programmation asynchrone (Promises, async/await, Promise.all/allSettled, concurrence limitée, retry avec backoff).
-- "algorithms_advanced" : Structures de données avancées (LRU Cache, Trie, arbres, tas) et algorithmes complexes (Dijkstra, parcours, divide & conquer, exponentiation rapide).
-- "code_debugging" : Débogage de code asynchrone (race conditions), sécurité (injection SQL, prototype pollution, XSS), scripts spécialisés (PowerShell, middleware).
+Échelle de niveau (1 à 5) :
+  - 1 = aucune connaissance : je ne peux pas produire de code fonctionnel dans ce domaine.
+  - 2 = débutant : code approximatif, erreurs fréquentes, j'ai besoin d'aide pour la syntaxe de base.
+  - 3 = intermédiaire : je produis un code correct sur les cas simples, mais je bute sur les cas atypiques et l'optimisation.
+  - 4 = avancé : je produis un code robuste, lisible et optimisé sur des cas complexes, sans erreur courante.
+  - 5 = expert senior : je produis un code de production, idiomatique, sans bug, en anticipant les cas limites.
 
-Réponds UNIQUEMENT avec un objet JSON respectant strictement ce schéma (aucun texte avant ou après) :
+Compétences à évaluer (sois précis sur chaque) :
+  - "javascript_basics" : Bases du langage (fonctions, portée, fermetures, tableaux, chaînes, objets, déstructuration) et algorithmique simple (parité, comptage, tris de base, recherche linéaire).
+  - "javascript_async" : Programmation asynchrone (Promises, async/await, Promise.all/allSettled/race, concurrence limitée, retry avec backoff exponentiel, gestion fine des erreurs asynchrones).
+  - "algorithms_advanced" : Structures de données avancées (LRU Cache, Trie, arbres binaires, tas/heap, graphes) et algorithmes complexes (Dijkstra, parcours BFS/DFS, divide & conquer, exponentiation rapide, programmation dynamique simple).
+  - "code_debugging" : Débogage de code asynchrone (race conditions), sécurité (injection SQL, prototype pollution, XSS, CSRF), scripts spécialisés (PowerShell, middleware, parseurs robustes).
+
+Sois STRICT et LUCIDE : ne te surévalue pas "pour faire plaisir", ne te sous-évalue pas par fausse modestie. Un niveau 5 est rare — ne l'attribue que si tu es VRAIMENT capable de production sans bug.
+
+Réponds UNIQUEMENT avec un objet JSON respectant STRICTEMENT ce schéma (aucun texte avant ou après, aucun Markdown, aucun bloc de code) :
 {
   "skills": {
-    "javascript_basics": { "level": <1-5> },
-    "javascript_async": { "level": <1-5> },
-    "algorithms_advanced": { "level": <1-5> },
-    "code_debugging": { "level": <1-5> }
+    "javascript_basics": { "level": <1-5>, "examples": "<1-2 exemples concrets de ce que tu sais faire>" },
+    "javascript_async": { "level": <1-5>, "examples": "<idem>" },
+    "algorithms_advanced": { "level": <1-5>, "examples": "<idem>" },
+    "code_debugging": { "level": <1-5>, "examples": "<idem>" }
   },
-  "justification": "<phrase_courte_expliquant_ton_auto_évaluation>"
+  "justification": "<phrase courte et honnête expliquant ton auto-évaluation globale>"
 }`;
 
 // Détecte la skill associée à une tâche. Retourne 'javascript_basics' par défaut
