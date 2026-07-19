@@ -4,6 +4,95 @@
 
 - Le projet est en version BenchGo V3.
 - Les fichiers sources sont désormais à la racine de `benchmark-v3/` (le nom `benchmark-v2` est abandonné).
+- Ce fichier (`Docs/CHANGELOG.md`) est le journal de versions de référence pour GitHub. Toute évolution du code doit y être consignée.
+
+## 2026-07-19 — Sécurité des clés API, questionnaire interactif, professeur rapport, auto-profilage renforcé
+
+### Contexte
+Suite au retour utilisateur (`Memories-BenchGo/Tasks1.md`), cinq axes d'amélioration ont été traités :
+1. Les clés API apparaissaient en clair dans la console (saisie `askFreeText` classique), ce qui est risqué même en local (copie d'écran, historique PowerShell, partage de terminal).
+2. L'ajout de nouveaux fournisseurs (Ollama, OpenAI, etc.) et la sélection du provider au démarrage manquaient d'un vrai questionnaire guidé.
+3. L'auto-profilage était jugé trop peu précis (prompt court, échelle vague).
+4. L'organisation des dossiers d'export ne séparait pas les niveaux dans une même école, et le rapport final n'était jamais relu par un professeur externe.
+5. Certains modèles échouaient parce que le prompt imposait un format strict (Markdown + balises ```javascript) ; il faut laisser le modèle répondre dans le format qu'il préfère.
+
+### Actions entreprises
+
+**1. `secrets.js` (nouveau) — Gestion et masquage des clés API**
+- Nouveau module dédié à la gestion des secrets en mémoire de session :
+  - `askSecret(question, { revealMs })` : lecture caractère par caractère via `stdin.setRawMode(true)` (TTY uniquement), affichage d'astérisques `*` à chaque caractère tapé, Backspace efface, Échap annule, Ctrl+C interrompt.
+  - `revealThenMask(value, ms)` : aperçu temporaire de la clé en clair pendant `revealMs` (défaut 3000 ms) avec compte à rebours, puis re-masquage sur la même ligne (`\r\x1b[K`).
+  - `maskSecret(value)` / `maskedForDisplay(value)` : masque une clé en gardant un préfixe reconnaissable (`sk-or-v1-`, `sk-`, `gsk_`, `AIza`, …) + 4 derniers caractères.
+  - `rememberSecret` / `getSecret` / `hasSecret` / `forgetSecret` : dépôt en mémoire vive, JAMAIS écrit sur disque. Survit aux changements d'école d'une même session, disparaît à la fermeture du processus.
+  - `isCliProvided(name)` : marque qu'une clé provient de la CLI pour ne pas la redemander.
+- Repli non-TTY : `readline.question` classique (sans masquage, mais le cas ne se produit que en pipe/script).
+
+**2. `startup-questionnaire.js` (nouveau) — Questionnaire interactif complet**
+- Lancé automatiquement quand aucun flag CLI significatif (`--provider`, `--model`) n'est passé ET que le terminal est un TTY.
+- Sept étapes guidées :
+  1. Fournisseur (`lmstudio` / `ollama` / `custom` / `openrouter` / `openai` / `anthropic` / `groq` / `together` / `mistral`).
+  2. Modèle (auto-détection pour `lmstudio` via `/v1/models` et `ollama` via `/api/tags` ; saisie libre sinon).
+  3. Clé API (lecture masquée via `secrets.askSecret` + aperçu 3 s ; réutilisée si déjà en mémoire de session ou en variable d'environnement).
+  4. Endpoint personnalisé (uniquement pour `custom`).
+  5. Profil (`LIGHT` / `STANDARD` / `EXPERT` / `DOCTORAT` / `FRONTIER`).
+  6. Contexte max (tokens, défaut 16384).
+  7. Professeur IA (OpenRouter Free Router, clé masquée mémorisée).
+- Récapitulatif final avant lancement.
+- La clé API élève ET la clé OpenRouter (professeur) sont mémorisées dans `secrets.js` pour la session : pas de re-saisie entre deux écoles d'un même run (répond à la contrainte utilisateur explicite).
+
+**3. `cloud-client.js` — Nouveaux fournisseurs**
+- Ajout de `deepseek` (api.deepseek.com) et `cohere` (api.cohere.ai) dans `CLOUD_PROVIDERS`. `ollama`, `lmstudio`, `custom` étaient déjà présents.
+
+**4. `self-profiling.js` — Auto-profilage renforcé**
+- Nouveau `PROFILE_PROMPT` beaucoup plus exigeant :
+  - Introduction d'une phase de réflexion silencieuse (« si on me donnait 3 exercices de difficulté croissante… »).
+  - Échelle 1-5 reformulée avec critères concrets par niveau (production vs reconnaissance, anticipation des cas limites).
+  - Descriptions des 4 compétences enrichies (portée/fermetures/déstructuration, backoff exponentiel, programmation dynamique simple, CSRF, parseurs robustes…).
+  - Demande d'exemples concrets par compétence (`"examples"`) pour forcer une auto-évaluation sincère.
+  - Consigne anti-surévaluation explicite (« un niveau 5 est rare »).
+- Le schéma JSON accepte désormais le champ `examples` (non bloquant pour `validateProfile` qui ne valide que `level`).
+
+**5. `report-teacher.js` (nouveau) — Professeur IA externe pour le rapport final**
+- Nouveau module qui délègue la rédaction de la validation pédagogique finale à un professeur IA externe (modèle cloud distinct de l'élève).
+- `buildReportTeacherPrompt({ modelName, profileLabel, ecoleLabel, tierScorecard, evalResults, globalScore, calibration })` : construit un prompt riche (tableau récap par classe, détail par exercice, auto-analyses et corrections précédentes des échecs définitifs, indice de calibration).
+- `buildExternalTeacherReport({ teacherConfig, results })` : appelle `chat/completions` (non streamé) sur le provider du professeur (OpenRouter par défaut, mais accepte `openai`, `ollama`, `custom`…), réessaie jusqu'à `maxRetries` (rotate sur rate-limit). Réutilise la clé mémorisée dans `secrets.js`.
+- La section produite suit une structure imposée : `## Validation du professeur IA` → Note finale et classement perçu → Méthodologie et compréhension → Points clés à retenir → Recommandation finale.
+- `runner.js` l'injecte à la fin du rapport Markdown généré localement (repli silencieux si indisponible).
+
+**6. `runner.js` — Intégration et assouplissements**
+- Intégration du questionnaire : remplace l'ancien bloc « PROFESSEUR CORRECTEUR » interactif (qui utilisait `askFreeText` en clair) par le questionnaire complet, ou par `secrets.askSecret` (saisie masquée + aperçu 3 s) en mode CLI historique.
+- Affichage de la clé API en CLI désormais systématiquement masqué via `secrets.maskedForDisplay()` (plus jamais en clair dans la console, même si passée en `--api-key=`).
+- Architecture d'export enrichie : `Export-Rapports/<AAAA-MM-JJ>/<ÉCOLE>/<NIVEAU-OU-CLASSE>/<fichier.md>`. En mode `all`, un sous-dossier niveau (`LIGHT`, `STANDARD`, …) est créé dans l'école pour ne plus mélanger les rapports de niveaux différents. En mode tier unique, le sous-dossier reste la classe (comportement inchangé).
+- Prompt d'exercice assoupli : le format de réponse est désormais libre (Markdown + balises, JSON, ou code pur). L'extracteur (`extractStudentCode` / `extractCodeRegex`) gérait déjà ces trois formats ; seul le prompt imposait le Markdown. Suppression de la contrainte contradictoire.
+- `effectiveModel` est désormais résolu plus tôt (avant l'injection du rapport externe) pour être réutilisable.
+
+### Fichiers modifiés
+- `secrets.js` (nouveau)
+- `startup-questionnaire.js` (nouveau)
+- `report-teacher.js` (nouveau)
+- `cloud-client.js` (ajout `deepseek`, `cohere`)
+- `self-profiling.js` (prompt renforcé)
+- `runner.js` (questionnaire + masquage + architecture export + prompt libre + rapport externe)
+
+### Validation
+- `node -c` passé sur les six fichiers (syntaxe OK).
+- `require()` de tous les modules : OK.
+- Lancement du runner (sans flag) : bannière puis entrée du questionnaire interactif confirmée.
+
+### Résultat
+- Les clés API ne sont plus jamais visibles en clair dans le CLI (saisie masquée, aperçu 3 s, affichage masqué).
+- Démarrage sans flag → questionnaire guidé complet ; la clé survit aux changements d'école d'une même session.
+- L'auto-profilage produit des auto-évaluations plus honnêtes et plus détaillées.
+- Chaque rapport final contient, quand un professeur IA est activé, une validation pédagogique externe (note, méthodologie, recommandation) en plus du rapport technique local.
+- L'organisation `Date/École/Niveau/Fichier` sépare proprement les runs par niveau.
+- Les modèles peuvent répondre dans le format de leur choix sans être pénalisés par une consigne de format trop rigide.
+
+### Leçons apprises
+- Ne jamais utiliser `readline.question` pour une clé API : préférez `stdin.setRawMode(true)` + affichage d'astérisques, avec un aperçu temporaire explicite.
+- Mémoriser les secrets en mémoire de session (jamais sur disque) évite les re-saisies frustrantes entre écoles sans compromettre la sécurité.
+- Laisser le modèle choisir son format de réponse évite les échecs artificiels liés à une consigne de format trop rigide (certains modèles ne savent produire que du JSON, d'autres que du Markdown).
+
+---
 
 ## 2026-07-18 — Professeur IA correcteur (OpenRouter Free Router)
 
