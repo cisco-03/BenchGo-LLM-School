@@ -6,6 +6,34 @@
 - Les fichiers sources sont désormais à la racine de `benchmark-v3/` (le nom `benchmark-v2` est abandonné).
 - Ce fichier (`Docs/CHANGELOG.md`) est le journal de versions de référence pour GitHub. Toute évolution du code doit y être consignée.
 
+## 2026-07-19 (i) — Correction filtre « Échec total » + suppression corbeille (erreur réseau en file://)
+
+### Contexte
+Retour utilisateur : (1) le filtre « 💥 Échec total » du classement HTML n'affichait rien alors que le compteur indiquait 1 ; (2) le bouton corbeille 🗑 renvoyait « erreur réseau » rendant la suppression impossible.
+
+### Actions entreprises
+
+**1. `leaderboard.js` — Robustesse des pourcentages négatifs (filtre catastrophe)**
+- Cause racine identifiée : un carnet pouvait stocker un `pct` négatif (ex: `-100` pour un modèle éliminé par santé ≤ -100). `aggregateLedger` recalculait déjà `pct = Math.round((score/max)*100)` → 0, mais les `pct` par école (`bPct`) et par tentative (`compactAttempt`) n'étaient pas bornés, et l'affichage JS utilisait `m.pct` directement → `-100%` affiché, barre `Math.max(2,-100)=2` mais valeur confuse, et surtout `pctColor(-100)` produisait `hsl(-120,…)` (teinte invalide).
+- Corrections :
+  - `aggregateLedger` : `pct` global ET `bPct` par école bornés à `[0, 100]` via `Math.max(0, Math.min(100, …))`.
+  - `compactAttempt` : `pct` par tentative borné à `[0, 100]`.
+  - Nouvelle fonction JS `dispPct(p)` : borne l'affichage à `[0, 100]` (sécurité côté client si un carnet ancien persiste). Appliquée à la carte (% + barre) et à la stat « % global » de la modale.
+- Le filtre « Échec total » affiche désormais correctement le modèle catastrophe (pct=0, catégorie `catastrophe`).
+
+**2. `leaderboard.js` — Message clair pour la suppression en mode file://**
+- Cause racine : le bouton 🗑 fait `fetch('/api/delete?shortName=…', { method: 'POST' })`. Si l'utilisateur ouvre `classement.html` par double-clic (protocole `file://`) sans lancer `node leaderboard.js --serve`, le fetch résout vers `file:///api/delete` → échec réseau → toast générique « Erreur réseau » sans explication.
+- Correction : `deleteModel` détecte `location.protocol === 'file:'` dans le `.catch()` et affiche un message explicite : « Suppression impossible : ouvrez le classement via le serveur (node leaderboard.js --serve) — le bouton 🗑 nécessite un serveur local. ». Si le protocole est HTTP mais le serveur injoignable : « Erreur réseau : serveur injoignable. Relancez node leaderboard.js --serve. »
+- Validé : `POST /api/delete?shortName=<correct>` via serveur → `{"ok":true}` ; la suppression fonctionne en mode `--serve`.
+
+### Fichiers modifiés
+- `leaderboard.js` (bornage pct `aggregateLedger` + `compactAttempt` + `dispPct` JS + message file:// dans `deleteModel`)
+
+### Résultat obtenu
+- Le filtre « 💥 Échec total » affiche le modèle catastrophe (pct=0, santé -100 PV, NON RECOMMANDÉ) avec sa carte complète.
+- La suppression via corbeille fonctionne en mode `--serve` ; en mode `file://` (double-clic), un message clair indique qu'il faut lancer le serveur.
+- Plus aucun pourcentage négatif absurde (-100%) affiché nulle part.
+
 ## 2026-07-19 (h) — Dégradé de couleurs fluide vert → rouge pour les pourcentages
 
 ### Contexte

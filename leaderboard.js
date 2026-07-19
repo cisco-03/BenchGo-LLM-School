@@ -51,7 +51,7 @@ function compactAttempt(a, idx, total) {
     time: a.time || null,
     score: a.score || 0,
     max: a.max || 0,
-    pct: a.max > 0 ? Math.round((a.score / a.max) * 100) : 0,
+    pct: a.max > 0 ? Math.max(0, Math.min(100, Math.round((a.score / a.max) * 100))) : 0,
     grade: letterGrade(a.max > 0 ? Math.round((a.score / a.max) * 100) : 0).grade,
     optionalBonus: a.optionalBonus || 0,
     globalLifeScore: a.globalLifeScore || 0,
@@ -85,7 +85,7 @@ function aggregateLedger(ledger) {
     retriedCount += best.retriedCount || 0;
     mandatoryPassed += best.mandatoryPassed || 0;
     mandatoryTotal += best.mandatoryTotal || 0;
-    const bPct = best.max > 0 ? Math.round((best.score / best.max) * 100) : 0;
+    const bPct = best.max > 0 ? Math.max(0, Math.min(100, Math.round((best.score / best.max) * 100))) : 0;
     ecoles.push({
       ecole: best.ecole,
       score: best.score || 0,
@@ -103,8 +103,8 @@ function aggregateLedger(ledger) {
     });
   }
 
-  const pct = max > 0 ? Math.round((score / max) * 100) : 0;
-  const mandatoryPct = mandatoryTotal > 0 ? Math.round((mandatoryPassed / mandatoryTotal) * 100) : 0;
+  const pct = max > 0 ? Math.max(0, Math.min(100, Math.round((score / max) * 100))) : 0;
+  const mandatoryPct = mandatoryTotal > 0 ? Math.max(0, Math.min(100, Math.round((mandatoryPassed / mandatoryTotal) * 100))) : 0;
 
   return {
     model: ledger.model || ledger.shortName || 'modèle_inconnu',
@@ -803,6 +803,9 @@ function pctColor(p) {
   var hue = pct * 1.2;
   return 'hsl(' + hue.toFixed(0) + ', 72%, 48%)';
 }
+// Affichage du % : borne à [0, 100] pour éviter les valeurs négatives absurdes
+// (ex: -100% si un carnet ancien stocke un pct négatif pour un modèle éliminé).
+function dispPct(p) { return Math.max(0, Math.min(100, p)); }
 function esc(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
@@ -844,7 +847,7 @@ function renderCards() {
           '<div class="badges">' + szBadge + ' ' + quantBadge + ' <button class="btn btn-icon" onclick="event.stopPropagation();copyModelName(' + i + ')" title="Copier le nom du modèle">⧉ Nom</button></div>' +
         '</div>' +
         '<div class="mini-stats">' +
-          '<div class="mini-stat"><span class="lbl">%</span><span class="val" style="color:' + pc + '">' + m.pct + '%</span><div class="pct-bar-wrap"><div class="pct-bar-fill" style="width:' + Math.max(2,m.pct) + '%;background:' + pc + '"></div></div></div>' +
+          '<div class="mini-stat"><span class="lbl">%</span><span class="val" style="color:' + pc + '">' + dispPct(m.pct) + '%</span><div class="pct-bar-wrap"><div class="pct-bar-fill" style="width:' + Math.max(2,dispPct(m.pct)) + '%;background:' + pc + '"></div></div></div>' +
           '<div class="mini-stat"><span class="lbl">Note</span><span class="val grade" style="color:' + gc + '">' + m.grade + '</span></div>' +
           '<div class="mini-stat"><span class="lbl">Santé</span><span class="val" style="color:' + sc + '">' + m.globalLifeScore + ' PV</span></div>' +
           '<div class="mini-stat"><span class="lbl">Oblig.</span><span class="val">' + (m.mandatoryTotal > 0 ? m.mandatoryPct + '%' : '—') + '</span></div>' +
@@ -880,7 +883,7 @@ function openModal(idx) {
   body += '<h3>Statistiques</h3>';
   body += '<div class="full-stats">';
   body += statBox('Points', m.score + ' / ' + m.max);
-  body += statBoxBar('% global', m.pct + '%', pc, m.pct);
+  body += statBoxBar('% global', dispPct(m.pct) + '%', pc, dispPct(m.pct));
   body += statBox('Note', '<span style="color:' + gc + ';font-size:1.4em">' + m.grade + '</span>');
   body += statBoxBar('Obligatoire', m.mandatoryTotal > 0 ? m.mandatoryPct + '% (' + m.mandatoryPassed + '/' + m.mandatoryTotal + ')' : '—', oc, m.mandatoryPct);
   body += statBox('Santé', '<span style="color:' + sc + '">' + m.globalLifeScore + ' PV</span>');
@@ -1126,7 +1129,17 @@ function deleteModel(idx, btn) {
       if (data.ok) { showToast('Modèle supprimé — classement régénéré', true); setTimeout(function(){ location.reload(); }, 800); }
       else { showToast('Erreur : ' + (data.error || 'inconnue'), false); btn.disabled = false; btn.textContent = '🗑'; }
     })
-    .catch(function() { showToast('Erreur réseau', false); btn.disabled = false; btn.textContent = '🗑'; });
+    .catch(function(err) {
+      // Erreur réseau = le HTML a été ouvert en file:// (double-clic) sans serveur.
+      // Le fetch vers /api/delete ne peut pas résoudre sans serveur HTTP local.
+      var isFileProtocol = (location.protocol === 'file:');
+      var msg = isFileProtocol
+        ? 'Suppression impossible : ouvrez le classement via le serveur (node leaderboard.js --serve) — le bouton 🗑 nécessite un serveur local.'
+        : 'Erreur réseau : serveur injoignable. Relancez node leaderboard.js --serve.';
+      showToast(msg, false);
+      btn.disabled = false;
+      btn.textContent = '🗑';
+    });
 }
 
 function copyModelName(idx) {
