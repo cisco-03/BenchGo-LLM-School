@@ -1,5 +1,6 @@
 const logger = require('./logger');
 const { extractJSON } = require('./parsing-utils');
+const { PROFILING_TIMEOUT_MS, PROFILING_MAX_TOKENS } = require('./config');
 
 // Carte statique compétence -> IDs de tâches associées (construite à partir des 18 fichiers
 // tiers/*.json). Une tâche non listée ici est classée par défaut en `javascript_basics`
@@ -59,37 +60,27 @@ const SKILL_LABELS = {
   code_debugging: 'Débogage & Sécurité applicative'
 };
 
-const PROFILE_PROMPT = `Tu es un évaluateur technique objectif, lucide et honnête. Ta tâche est d'auto-évaluer TES PROPRES capacités en programmation et analyse JavaScript, de façon réaliste (ni surévaluée ni sous-évaluée).
+const PROFILE_PROMPT = `Auto-évalue TES capacités en JavaScript de façon réaliste (1 à 5). Réponds UNIQUEMENT en JSON, sans texte avant/après, sans Markdown, sans bloc de code.
 
-AVANT DE RÉPONDRE — réfléchis en silence à ces questions pour chaque compétence :
-  • "Si on me donnait 3 exercices de difficulté croissante dans ce domaine, lesquels réussirais-je du premier coup ?"
-  • "Quels pièges (syntaxe, async, structures de données, sécurité) m'ont déjà fait échouer par le passé ?"
-  • "Est-ce que je sais PRODUIRE le code (pas seulement le reconnaître) ?"
+Échelle : 1=aucune, 2=débutant, 3=intermédiaire, 4=avancé, 5=expert senior sans bug.
 
-Échelle de niveau (1 à 5) :
-  - 1 = aucune connaissance : je ne peux pas produire de code fonctionnel dans ce domaine.
-  - 2 = débutant : code approximatif, erreurs fréquentes, j'ai besoin d'aide pour la syntaxe de base.
-  - 3 = intermédiaire : je produis un code correct sur les cas simples, mais je bute sur les cas atypiques et l'optimisation.
-  - 4 = avancé : je produis un code robuste, lisible et optimisé sur des cas complexes, sans erreur courante.
-  - 5 = expert senior : je produis un code de production, idiomatique, sans bug, en anticipant les cas limites.
+Compétences :
+- javascript_basics : bases du langage + algorithmique simple
+- javascript_async : Promises, async/await, concurrence limitée, retry/backoff
+- algorithms_advanced : LRU/Trie/arbres/heap/graphes, Dijkstra, BFS/DFS, DP simple
+- code_debugging : race conditions async, injection SQL, prototype pollution, XSS
 
-Compétences à évaluer (sois précis sur chaque) :
-  - "javascript_basics" : Bases du langage (fonctions, portée, fermetures, tableaux, chaînes, objets, déstructuration) et algorithmique simple (parité, comptage, tris de base, recherche linéaire).
-  - "javascript_async" : Programmation asynchrone (Promises, async/await, Promise.all/allSettled/race, concurrence limitée, retry avec backoff exponentiel, gestion fine des erreurs asynchrones).
-  - "algorithms_advanced" : Structures de données avancées (LRU Cache, Trie, arbres binaires, tas/heap, graphes) et algorithmes complexes (Dijkstra, parcours BFS/DFS, divide & conquer, exponentiation rapide, programmation dynamique simple).
-  - "code_debugging" : Débogage de code asynchrone (race conditions), sécurité (injection SQL, prototype pollution, XSS, CSRF), scripts spécialisés (PowerShell, middleware, parseurs robustes).
+Sois strict et lucide ; niveau 5 rare.
 
-Sois STRICT et LUCIDE : ne te surévalue pas "pour faire plaisir", ne te sous-évalue pas par fausse modestie. Un niveau 5 est rare — ne l'attribue que si tu es VRAIMENT capable de production sans bug.
-
-Réponds UNIQUEMENT avec un objet JSON respectant STRICTEMENT ce schéma (aucun texte avant ou après, aucun Markdown, aucun bloc de code) :
+Format JSON exact :
 {
   "skills": {
-    "javascript_basics": { "level": <1-5>, "examples": "<1-2 exemples concrets de ce que tu sais faire>" },
+    "javascript_basics": { "level": <1-5>, "examples": "<1-2 exemples concrets>" },
     "javascript_async": { "level": <1-5>, "examples": "<idem>" },
     "algorithms_advanced": { "level": <1-5>, "examples": "<idem>" },
     "code_debugging": { "level": <1-5>, "examples": "<idem>" }
   },
-  "justification": "<phrase courte et honnête expliquant ton auto-évaluation globale>"
+  "justification": "<phrase courte et honnête>"
 }`;
 
 // Détecte la skill associée à une tâche. Retourne 'javascript_basics' par défaut
@@ -156,9 +147,17 @@ async function runSelfProfiling(queryFn, providerConfig, contextLimitTokens) {
   // On n'envoie PAS response_format : LM Studio n'accepte que 'json_schema'/'text' (pas
   // 'json_object' propre à OpenAI), et Anthropic ne le supporte pas du tout. Le schéma
   // strict + le fallback regex couvrent tous les cas sans dépendre du format natif.
+  //
+  // PERF : timeout dédié court (60s) + max_tokens limité (600) + désactivation du
+  // raisonnement étendu. Sans cela, les modèles de raisonnement (GLM, Qwen3, DeepSeek-R1)
+  // peuvent passer 5-6 MINUTES en `reasoning_content` avant de répondre (372s observé),
+  // rendant l'auto-profilage inutilisable en pratique.
   const options = {
     contextLimitTokens,
-    providerConfig
+    providerConfig,
+    timeoutMs: PROFILING_TIMEOUT_MS,
+    maxTokens: PROFILING_MAX_TOKENS,
+    disableReasoning: true
   };
 
   let response;

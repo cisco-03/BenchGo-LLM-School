@@ -220,6 +220,13 @@ function buildLeaderboardHTML(entries) {
     const args = buildArguments(e);
     const cat = getCategory(e);
     const psize = getParamSize(e.model);
+
+    // Rapport intégral : on charge le carnet original pour accéder aux tiers
+    // (réponses brutes + raisonnement + code produit + selfProfile). Ces données
+    // sont injectées dans la modale (section repliable "Rapport intégral") pour
+    // voir le comportement/raisonnement du modèle sans ouvrir le fichier MD.
+    const ledger = loadLedgerByName(e.shortName);
+
     return {
       shortName: e.shortName,
       model: e.model,
@@ -241,21 +248,48 @@ function buildLeaderboardHTML(entries) {
       cat,
       paramSize: psize,
       args,
-      ecoles: e.ecoles.map(ec => ({
-        ecole: ec.ecole,
-        score: ec.score,
-        max: ec.max,
-        pct: ec.pct,
-        grade: letterGrade(ec.pct).grade,
-        optionalBonus: ec.optionalBonus,
-        globalLifeScore: ec.globalLifeScore,
-        helpCount: ec.helpCount,
-        retriedCount: ec.retriedCount,
-        calibrationIndex: ec.calibrationIndex,
-        date: ec.date,
-        attemptsCount: ec.attemptsCount,
-        attempts: ec.attempts
-      }))
+      ecoles: e.ecoles.map(ec => {
+        // Récupère l'entrée école du carnet pour les tiers + selfProfile.
+        const ecoleEntry = ledger
+          ? normalizeEcoleEntryLb(ledger.ecoles[ec.ecole]).best
+          : null;
+        const tiers = (ecoleEntry && ecoleEntry.tiers) || [];
+        return {
+          ecole: ec.ecole,
+          score: ec.score,
+          max: ec.max,
+          pct: ec.pct,
+          grade: letterGrade(ec.pct).grade,
+          optionalBonus: ec.optionalBonus,
+          globalLifeScore: ec.globalLifeScore,
+          helpCount: ec.helpCount,
+          retriedCount: ec.retriedCount,
+          calibrationIndex: ec.calibrationIndex,
+          date: ec.date,
+          attemptsCount: ec.attemptsCount,
+          attempts: ec.attempts,
+          selfProfile: (ecoleEntry && ecoleEntry.selfProfile) || null,
+          tiers: tiers.map(t => ({
+            tierNum: t.tierNum,
+            tierTitle: t.tierTitle,
+            className: t.className,
+            isMandatory: t.isMandatory,
+            rawResponse: t.rawResponse || null,
+            evalResults: (t.evalResults || []).map(r => ({
+              id: r.id,
+              taskType: r.taskType || null,
+              status: r.status,
+              points: r.points || 0,
+              maxPoints: r.maxPoints || 0,
+              helpUsed: !!r.helpUsed,
+              retried: !!r.retried,
+              code: r.code || null,
+              failureExplanation: r.failureExplanation || null,
+              teacherCorrection: r.teacherCorrection || null
+            }))
+          }))
+        };
+      })
     };
   });
 
@@ -266,165 +300,471 @@ function buildLeaderboardHTML(entries) {
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Classement BenchGo V3 — ${esc(now)}</title>
 <style>
+  :root {
+    /* Palette GitHub-dark raffinée */
+    --bg-0: #0a0e14;
+    --bg-1: #11161d;
+    --bg-2: #161b22;
+    --bg-3: #1c2128;
+    --bg-elev: #22272e;
+    --border: #2d333b;
+    --border-soft: #21262d;
+    --text: #e6edf3;
+    --text-muted: #8b949e;
+    --text-dim: #6e7681;
+    --accent: #58a6ff;
+    --accent-2: #1f6feb;
+    --green: #3fb950;
+    --yellow: #d29922;
+    --red: #f85149;
+    --purple: #bc8cff;
+    --gold: #ffd700;
+    --silver: #c9d1d4;
+    --bronze: #e3b341;
+
+    /* Espacements fluides (Living With Pixels) */
+    --space-xs: clamp(0.375rem, 0.3462rem + 0.1282vw, 0.5rem);
+    --space-s:  clamp(0.75rem, 0.6923rem + 0.2564vw, 1rem);
+    --space-m:  clamp(1rem, 0.8846rem + 0.5128vw, 1.5rem);
+    --space-l:  clamp(1.5rem, 1.3077rem + 1.0256vw, 2.5rem);
+    --space-xl: clamp(2.5rem, 2.1154rem + 1.6667vw, 4rem);
+
+    /* Typographie fluide (clamp) */
+    --fs-display: clamp(1.9rem, 1.5538rem + 1.5385vw, 2.75rem);
+    --fs-h1:      clamp(1.5rem, 1.3615rem + 0.6154vw, 1.85rem);
+    --fs-h2:      clamp(1.15rem, 1.0808rem + 0.3077vw, 1.3rem);
+    --fs-h3:      clamp(0.95rem, 0.9115rem + 0.1667vw, 1.05rem);
+    --fs-body:    clamp(0.9rem, 0.8808rem + 0.0833vw, 0.97rem);
+    --fs-small:   clamp(0.78rem, 0.7654rem + 0.0641vw, 0.83rem);
+    --fs-tiny:    clamp(0.68rem, 0.6692rem + 0.0449vw, 0.71rem);
+
+    /* Rayons & ombres */
+    --r-sm: 8px;
+    --r-md: 12px;
+    --r-lg: 16px;
+    --r-pill: 999px;
+    --shadow-card: 0 1px 0 rgba(255,255,255,0.03), 0 2px 8px rgba(0,0,0,0.25);
+    --shadow-elev: 0 8px 32px rgba(0,0,0,0.45);
+
+    /* Container boxed intelligent */
+    --container-max: 1120px;
+    --container-pad: clamp(0.75rem, 4vw, 2rem);
+  }
+
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: 'Segoe UI', system-ui, sans-serif; background: #0d1117; color: #c9d1d9; padding: 20px; }
-  h1 { text-align: center; color: #58a6ff; margin-bottom: 5px; }
-  .subtitle { text-align: center; color: #8b949e; margin-bottom: 18px; font-size: 0.9em; }
 
-  /* Barre de filtres + recherche */
-  .toolbar { max-width: 1100px; margin: 0 auto 18px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-  .filter-chips { display: flex; flex-wrap: wrap; gap: 6px; flex: 1; min-width: 0; }
-  .chip { padding: 6px 12px; border: 1px solid #30363d; background: #161b22; color: #c9d1d9; border-radius: 20px; font-size: 0.8em; cursor: pointer; white-space: nowrap; transition: all 0.15s; user-select: none; }
-  .chip:hover { border-color: #58a6ff; }
-  .chip.active { background: #1f6feb; border-color: #1f6feb; color: #fff; font-weight: 600; }
-  .chip .count { opacity: 0.7; margin-left: 4px; font-size: 0.85em; }
-  .search-wrap { flex: 0 0 auto; }
-  .search { padding: 7px 12px; background: #161b22; border: 1px solid #30363d; color: #c9d1d9; border-radius: 8px; font-size: 0.85em; width: 220px; }
-  .search:focus { outline: none; border-color: #58a6ff; }
-  .result-count { font-size: 0.78em; color: #8b949e; margin-left: 8px; }
+  body {
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    background:
+      radial-gradient(1200px 600px at 50% -200px, rgba(31,111,235,0.10), transparent 60%),
+      radial-gradient(900px 500px at 100% 0%, rgba(188,140,255,0.06), transparent 55%),
+      var(--bg-0);
+    color: var(--text);
+    font-size: var(--fs-body);
+    line-height: 1.5;
+    min-height: 100vh;
+    padding-block: var(--space-m);
+    -webkit-font-smoothing: antialiased;
+  }
 
-  .container { max-width: 1100px; margin: 0 auto; }
-  .empty-msg { text-align: center; color: #8b949e; padding: 40px; font-style: italic; display: none; }
+  /* Container boxed intelligent — centré, largeur fluide, padding inline clamp */
+  .wrap {
+    width: 100%;
+    max-width: var(--container-max);
+    margin-inline: auto;
+    padding-inline: var(--container-pad);
+  }
 
-  /* Carte condensée — une ligne par modèle */
-  .card { background: #161b22; border: 1px solid #30363d; border-radius: 8px; margin-bottom: 8px; transition: border-color 0.15s; }
-  .card:hover { border-color: #484f58; }
-  .card.gold { border-color: #ffd700; box-shadow: 0 0 10px rgba(255,215,0,0.12); }
-  .card.silver { border-color: #c0c0c0; }
-  .card.bronze { border-color: #cd7f32; }
-  .card-row { display: flex; align-items: center; gap: 12px; padding: 10px 14px; cursor: pointer; }
-  .rank { flex: 0 0 38px; text-align: center; font-size: 1.3em; font-weight: 700; color: #58a6ff; }
-  .medal { font-size: 1.5em; }
-  .model-name { flex: 1; min-width: 0; color: #58a6ff; font-weight: 600; font-size: 0.95em; word-break: break-all; line-height: 1.3; }
-  .model-name .cat-icon { margin-right: 5px; }
-  .mini-stats { display: flex; gap: 18px; align-items: center; flex: 0 0 auto; flex-wrap: wrap; }
-  .mini-stat { text-align: center; white-space: nowrap; }
-  .mini-stat .lbl { font-size: 0.62em; color: #8b949e; text-transform: uppercase; letter-spacing: 0.4px; display: block; }
-  .mini-stat .val { font-size: 0.95em; font-weight: 700; }
-  .mini-stat .grade { font-size: 1.2em; font-weight: 700; }
-  .size-badge { display: inline-block; font-size: 0.72em; padding: 1px 7px; border-radius: 10px; background: #21262d; color: #8b949e; border: 1px solid #30363d; vertical-align: middle; margin-left: 4px; white-space: nowrap; }
-  .size-badge.quant-badge { color: #d2a8ff; border-color: #6e7681; background: rgba(94,108,214,0.12); }
-  .pct-bar-wrap { width: 70px; height: 6px; background: #30363d; border-radius: 4px; margin-top: 3px; overflow: hidden; }
-  .pct-bar-fill { height: 100%; border-radius: 4px; }
-  .btn-detail { flex: 0 0 auto; padding: 6px 14px; border: 1px solid #388bfd; background: rgba(56,139,253,0.1); color: #58a6ff; border-radius: 6px; cursor: pointer; font-size: 0.78em; font-weight: 600; transition: all 0.15s; }
-  .btn-detail:hover { background: #1f6feb; color: #fff; }
-  .btn-delete { flex: 0 0 auto; padding: 6px 12px; border: 1px solid #f85149; background: rgba(248,81,73,0.1); color: #f85149; border-radius: 6px; cursor: pointer; font-size: 0.78em; font-weight: 600; transition: all 0.15s; }
-  .btn-delete:hover { background: #f85149; color: #fff; }
-  .btn-delete:disabled { opacity: 0.5; cursor: default; }
-  .btn-copy { flex: 0 0 auto; padding: 3px 8px; border: 1px solid #30363d; background: #21262d; color: #8b949e; border-radius: 5px; cursor: pointer; font-size: 0.7em; font-weight: 600; transition: all 0.15s; vertical-align: middle; margin-left: 6px; line-height: 1; }
-  .btn-copy:hover { background: #1f6feb; color: #fff; border-color: #1f6feb; }
-  .btn-copy:active { transform: scale(0.94); }
-  .btn-copy-all { padding: 7px 14px; border: 1px solid #388bfd; background: rgba(56,139,253,0.12); color: #58a6ff; border-radius: 8px; cursor: pointer; font-size: 0.78em; font-weight: 600; transition: all 0.15s; margin-left: 8px; }
-  .btn-copy-all:hover { background: #1f6feb; color: #fff; border-color: #1f6feb; }
-  .btn-copy-all:active { transform: scale(0.96); }
-  .btn-copy-all.done { background: #28a745; color: #fff; border-color: #28a745; }
+  /* En-tête */
+  header.hero { text-align: center; padding-block: var(--space-m) var(--space-l); }
+  header.hero .badge-top {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 4px 12px; border: 1px solid var(--border);
+    background: var(--bg-2); border-radius: var(--r-pill);
+    color: var(--text-muted); font-size: var(--fs-tiny);
+    text-transform: uppercase; letter-spacing: 1.2px; margin-bottom: var(--space-s);
+  }
+  header.hero h1 {
+    font-size: var(--fs-display); font-weight: 800; line-height: 1.05;
+    background: linear-gradient(135deg, var(--accent) 0%, var(--purple) 100%);
+    -webkit-background-clip: text; background-clip: text;
+    -webkit-text-fill-color: transparent; letter-spacing: -0.02em;
+  }
+  header.hero .subtitle { color: var(--text-muted); margin-top: 6px; font-size: var(--fs-small); }
 
-  @media (max-width: 768px) {
+  /* Toolbars (flexbox, wrap fluide) */
+  .toolbar {
+    display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-xs);
+    margin-block: var(--space-s);
+  }
+
+  /* Barre sticky — reste collée en haut au scroll (effet WordPress/admin).
+     Regroupe les filtres catégorie + taille + recherche. Fond semi-transparent
+     + backdrop blur pour lisibilité par-dessus les cartes qui défilent. */
+  .sticky-bar {
+    position: sticky; top: 0; z-index: 100;
+    background: rgba(10, 14, 20, 0.82);
+    backdrop-filter: blur(10px) saturate(140%);
+    -webkit-backdrop-filter: blur(10px) saturate(140%);
+    border-bottom: 1px solid var(--border);
+    margin-inline: calc(-1 * var(--container-pad));
+    padding-inline: var(--container-pad);
+    padding-block: var(--space-xs);
+    transition: box-shadow 0.2s ease, background 0.2s ease;
+  }
+  .sticky-bar .toolbar { margin-block: 4px; }
+  .sticky-bar .toolbar:first-child { margin-top: 6px; }
+  .sticky-bar .toolbar:last-child { margin-bottom: 6px; }
+  /* Ombre quand on scrolle (la barre "se détache" du fond) — géré via JS .stuck */
+  .sticky-bar.stuck {
+    background: rgba(10, 14, 20, 0.94);
+    box-shadow: 0 4px 18px rgba(0, 0, 0, 0.45);
+  }
+  .filter-chips { display: flex; flex-wrap: wrap; gap: 6px; flex: 1 1 auto; min-width: 0; }
+  .chip {
+    padding: 6px 12px; border: 1px solid var(--border); background: var(--bg-2);
+    color: var(--text-muted); border-radius: var(--r-pill);
+    font-size: var(--fs-small); cursor: pointer; white-space: nowrap;
+    transition: all 0.18s ease; user-select: none;
+    display: inline-flex; align-items: center; gap: 4px;
+  }
+  .chip:hover { border-color: var(--accent); color: var(--text); transform: translateY(-1px); }
+  .chip.active {
+    background: linear-gradient(135deg, var(--accent-2), var(--accent));
+    border-color: transparent; color: #fff; font-weight: 600;
+    box-shadow: 0 2px 10px rgba(31,111,235,0.35);
+  }
+  .chip .count {
+    opacity: 0.75; margin-left: 2px; font-size: 0.85em;
+    background: rgba(255,255,255,0.08); padding: 0 6px; border-radius: var(--r-pill);
+  }
+
+  .search-wrap { display: flex; align-items: center; gap: var(--space-xs); flex: 0 0 auto; }
+  .search {
+    padding: 8px 14px; background: var(--bg-2); border: 1px solid var(--border);
+    color: var(--text); border-radius: var(--r-sm);
+    font-size: var(--fs-small); width: clamp(140px, 22vw, 240px);
+    transition: all 0.18s ease;
+  }
+  .search:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(88,166,255,0.18); }
+  .result-count { font-size: var(--fs-tiny); color: var(--text-muted); }
+
+  /* Boutons */
+  .btn {
+    border: 1px solid transparent; border-radius: var(--r-sm);
+    cursor: pointer; font-weight: 600; transition: all 0.18s ease;
+    display: inline-flex; align-items: center; gap: 6px; white-space: nowrap;
+  }
+  .btn-primary {
+    padding: 8px 16px; border-color: var(--accent-2);
+    background: linear-gradient(135deg, rgba(56,139,253,0.18), rgba(31,111,235,0.12));
+    color: var(--accent); font-size: var(--fs-small);
+  }
+  .btn-primary:hover { background: linear-gradient(135deg, var(--accent-2), var(--accent)); color: #fff; box-shadow: 0 3px 12px rgba(31,111,235,0.4); }
+  .btn-primary:active { transform: scale(0.97); }
+  .btn-primary.done { background: var(--green); border-color: var(--green); color: #fff; }
+
+  .btn-icon {
+    padding: 5px 9px; background: var(--bg-3); border-color: var(--border);
+    color: var(--text-muted); font-size: var(--fs-tiny);
+  }
+  .btn-icon:hover { background: var(--accent-2); color: #fff; border-color: var(--accent-2); }
+  .btn-icon:active { transform: scale(0.92); }
+
+  .btn-danger {
+    padding: 6px 10px; border-color: rgba(248,81,73,0.4);
+    background: rgba(248,81,73,0.08); color: var(--red); font-size: var(--fs-tiny);
+  }
+  .btn-danger:hover { background: var(--red); color: #fff; }
+  .btn-danger:disabled { opacity: 0.5; cursor: default; }
+
+  /* Conteneur des cartes */
+  .cards { display: flex; flex-direction: column; gap: var(--space-s); margin-block: var(--space-m); }
+
+  /* Carte modèle — flexbox, structure claire */
+  .card {
+    background: linear-gradient(180deg, var(--bg-2), var(--bg-1));
+    border: 1px solid var(--border); border-radius: var(--r-md);
+    box-shadow: var(--shadow-card); transition: all 0.2s ease; overflow: hidden;
+    position: relative;
+  }
+  .card::before {
+    content: ''; position: absolute; inset: 0 auto 0 0; width: 3px;
+    background: transparent; transition: background 0.2s ease;
+  }
+  .card:hover { border-color: var(--border-soft); transform: translateY(-1px); box-shadow: var(--shadow-elev); }
+  .card.gold::before   { background: linear-gradient(180deg, var(--gold), transparent); }
+  .card.silver::before { background: linear-gradient(180deg, var(--silver), transparent); }
+  .card.bronze::before { background: linear-gradient(180deg, var(--bronze), transparent); }
+  .card.gold   { border-color: rgba(255,215,0,0.4); box-shadow: 0 0 24px rgba(255,215,0,0.10), var(--shadow-card); }
+  .card.silver { border-color: rgba(201,209,212,0.3); }
+  .card.bronze { border-color: rgba(227,179,65,0.35); }
+
+  .card-row { display: flex; align-items: center; gap: var(--space-s); padding: var(--space-s) var(--space-m); cursor: pointer; }
+
+  .rank {
+    flex: 0 0 auto; width: 44px; height: 44px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: var(--fs-h3); font-weight: 800; color: var(--accent);
+    background: var(--bg-3); border: 1px solid var(--border); border-radius: var(--r-sm);
+  }
+  .rank .medal { font-size: 1.5em; line-height: 1; }
+  .card.gold .rank   { background: linear-gradient(135deg, rgba(255,215,0,0.18), transparent); border-color: rgba(255,215,0,0.4); }
+  .card.silver .rank { background: linear-gradient(135deg, rgba(201,209,212,0.14), transparent); border-color: rgba(201,209,212,0.3); }
+  .card.bronze .rank { background: linear-gradient(135deg, rgba(227,179,65,0.14), transparent); border-color: rgba(227,179,65,0.3); }
+
+  .model-name {
+    flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 4px;
+  }
+  .model-name .name-line {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
+    color: var(--accent); font-weight: 700; font-size: var(--fs-body);
+    word-break: break-all; line-height: 1.3;
+  }
+  .model-name .cat-icon { margin-right: 2px; }
+  .model-name .badges { display: flex; flex-wrap: wrap; gap: 5px; }
+
+  .badge {
+    display: inline-flex; align-items: center; gap: 4px;
+    font-size: var(--fs-tiny); padding: 2px 8px; border-radius: var(--r-pill);
+    background: var(--bg-3); color: var(--text-muted); border: 1px solid var(--border);
+    white-space: nowrap; font-weight: 600;
+  }
+  .badge.quant { color: var(--purple); border-color: rgba(188,140,255,0.35); background: rgba(188,140,255,0.10); }
+
+  /* Mini-stats — flexbox grow */
+  .mini-stats { display: flex; align-items: center; gap: var(--space-m); flex: 0 0 auto; flex-wrap: wrap; }
+  .mini-stat { display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 52px; }
+  .mini-stat .lbl {
+    font-size: var(--fs-tiny); color: var(--text-dim); text-transform: uppercase;
+    letter-spacing: 0.6px; font-weight: 600;
+  }
+  .mini-stat .val { font-size: var(--fs-body); font-weight: 700; }
+  .mini-stat .val.grade { font-size: var(--fs-h3); }
+  .pct-bar-wrap { width: 64px; height: 5px; background: var(--bg-3); border-radius: var(--r-pill); margin-top: 3px; overflow: hidden; }
+  .pct-bar-fill { height: 100%; border-radius: var(--r-pill); transition: width 0.3s ease; }
+
+  .card-actions { display: flex; align-items: center; gap: 6px; flex: 0 0 auto; }
+
+  .empty-msg {
+    text-align: center; color: var(--text-muted); padding: var(--space-xl);
+    font-style: italic; display: none; font-size: var(--fs-body);
+  }
+
+  /* Responsive fluide : mini-stats passe sous le nom sur écrans étroits */
+  @media (max-width: 720px) {
     .card-row { flex-wrap: wrap; }
-    .mini-stats { gap: 12px; width: 100%; justify-content: space-between; padding-top: 6px; border-top: 1px solid #21262d; margin-top: 4px; }
-    .search { width: 140px; }
+    .mini-stats { width: 100%; justify-content: space-between; padding-top: var(--space-s); border-top: 1px solid var(--border-soft); }
   }
 
   /* Modale de détail */
-  .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); display: none; align-items: flex-start; justify-content: center; z-index: 1000; padding: 30px 16px; overflow-y: auto; }
+  .modal-overlay {
+    position: fixed; inset: 0; background: rgba(1,4,9,0.78);
+    backdrop-filter: blur(4px); display: none; align-items: flex-start; justify-content: center;
+    z-index: 1000; padding: var(--space-m) var(--space-s); overflow-y: auto;
+    scrollbar-width: none; -ms-overflow-style: none;
+  }
+  .modal-overlay::-webkit-scrollbar { width: 0; height: 0; display: none; }
   .modal-overlay.show { display: flex; }
-  .modal { background: #161b22; border: 1px solid #30363d; border-radius: 12px; max-width: 820px; width: 100%; margin: auto; overflow: hidden; }
-  .modal-head { display: flex; align-items: flex-start; gap: 12px; padding: 18px 22px; background: #1c2128; border-bottom: 1px solid #30363d; }
-  .modal-head .rank { font-size: 1.6em; }
-  .modal-head .title { flex: 1; min-width: 0; }
-  .modal-head .title h2 { color: #58a6ff; font-size: 1.1em; word-break: break-all; margin-bottom: 4px; }
-  .modal-head .title .verdict-badge { display: inline-block; padding: 3px 10px; border-radius: 5px; font-size: 0.72em; font-weight: 700; color: #fff; }
-  .modal-head .title .cat-tag { display: inline-block; margin-left: 8px; font-size: 0.78em; opacity: 0.85; }
-  .modal-close { flex: 0 0 auto; background: none; border: none; color: #8b949e; font-size: 1.6em; cursor: pointer; padding: 0 4px; line-height: 1; }
-  .modal-close:hover { color: #f85149; }
-  .modal-body { padding: 18px 22px; max-height: calc(100vh - 220px); overflow-y: auto; }
-  .modal-body h3 { color: #58a6ff; font-size: 0.85em; text-transform: uppercase; letter-spacing: 0.5px; margin: 18px 0 8px; padding-bottom: 4px; border-bottom: 1px solid #21262d; }
+  .modal {
+    background: linear-gradient(180deg, var(--bg-2), var(--bg-1));
+    border: 1px solid var(--border); border-radius: var(--r-lg);
+    max-width: 860px; width: 100%; margin: auto; overflow: hidden;
+    box-shadow: var(--shadow-elev);
+  }
+  .modal-head { display: flex; align-items: flex-start; gap: var(--space-s); padding: var(--space-m) var(--space-l); background: var(--bg-3); border-bottom: 1px solid var(--border); }
+  .modal-head .rank { flex: 0 0 auto; width: 52px; height: 52px; font-size: var(--fs-h2); }
+  .modal-head .title { flex: 1 1 auto; min-width: 0; }
+  .modal-head .title h2 { color: var(--accent); font-size: var(--fs-h1); word-break: break-all; margin-bottom: 6px; font-weight: 800; }
+  .modal-head .tags { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  .verdict-badge {
+    display: inline-block; padding: 4px 12px; border-radius: var(--r-sm);
+    font-size: var(--fs-tiny); font-weight: 700; color: #fff;
+  }
+  .cat-tag { font-size: var(--fs-small); color: var(--text-muted); }
+  .modal-close {
+    flex: 0 0 auto; background: none; border: none; color: var(--text-muted);
+    font-size: 1.6em; cursor: pointer; padding: 0 4px; line-height: 1; transition: color 0.15s;
+  }
+  .modal-close:hover { color: var(--red); }
+  .modal-body { padding: var(--space-m) var(--space-l); max-height: calc(100vh - 220px); overflow-y: auto; scrollbar-width: none; -ms-overflow-style: none; }
+  .modal-body::-webkit-scrollbar { width: 0; height: 0; display: none; }
+  .modal-body h3 {
+    color: var(--accent); font-size: var(--fs-small); text-transform: uppercase;
+    letter-spacing: 0.8px; margin: var(--space-m) 0 var(--space-s);
+    padding-bottom: 6px; border-bottom: 1px solid var(--border-soft); font-weight: 700;
+  }
   .modal-body h3:first-child { margin-top: 0; }
 
-  .full-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px; }
-  .full-stat { background: #0d1117; border: 1px solid #21262d; border-radius: 6px; padding: 8px 10px; text-align: center; }
-  .full-stat .lbl { font-size: 0.65em; color: #8b949e; text-transform: uppercase; letter-spacing: 0.4px; }
-  .full-stat .val { font-size: 1.1em; font-weight: 700; margin-top: 2px; }
-  .full-stat .bar { width: 100%; height: 5px; background: #30363d; border-radius: 3px; margin-top: 4px; overflow: hidden; }
-  .full-stat .bar > div { height: 100%; border-radius: 3px; }
+  /* Stats complètes — flexbox grow (préféré à grid) */
+  .full-stats { display: flex; flex-wrap: wrap; gap: var(--space-s); }
+  .full-stat {
+    flex: 1 1 110px; min-width: 100px;
+    background: var(--bg-1); border: 1px solid var(--border-soft);
+    border-radius: var(--r-sm); padding: var(--space-s); text-align: center;
+  }
+  .full-stat .lbl { font-size: var(--fs-tiny); color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; }
+  .full-stat .val { font-size: var(--fs-h3); font-weight: 800; margin-top: 4px; }
+  .full-stat .bar { width: 100%; height: 5px; background: var(--bg-3); border-radius: var(--r-pill); margin-top: 6px; overflow: hidden; }
+  .full-stat .bar > div { height: 100%; border-radius: var(--r-pill); }
 
-  .args-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
-  @media (max-width: 600px) { .args-grid { grid-template-columns: 1fr; } }
-  .args-block { }
-  .args-block .args-title { font-size: 0.78em; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; font-weight: 600; }
-  .args-forces .args-title { color: #28a745; }
-  .args-weak .args-title { color: #f85149; }
-  .args-notes .args-title { color: #8b949e; }
-  .args-list { list-style: none; padding-left: 16px; }
-  .args-list li { font-size: 0.85em; margin-bottom: 3px; line-height: 1.4; }
-  .args-list li::before { content: "• "; }
-  .args-empty { font-size: 0.82em; color: #8b949e; font-style: italic; padding-left: 16px; }
+  /* Forces / Faiblesses — flexbox 2 colonnes */
+  .args-grid { display: flex; flex-wrap: wrap; gap: var(--space-m); }
+  .args-block { flex: 1 1 280px; min-width: 0; }
+  .args-block .args-title {
+    font-size: var(--fs-small); text-transform: uppercase; letter-spacing: 0.6px;
+    margin-bottom: var(--space-xs); font-weight: 700;
+  }
+  .args-forces .args-title { color: var(--green); }
+  .args-weak .args-title   { color: var(--red); }
+  .args-notes .args-title  { color: var(--text-muted); }
+  .args-list { list-style: none; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+  .args-list li { font-size: var(--fs-small); line-height: 1.5; padding-left: 16px; position: relative; }
+  .args-list li::before { content: "•"; position: absolute; left: 4px; color: var(--text-dim); }
+  .args-empty { font-size: var(--fs-small); color: var(--text-dim); font-style: italic; }
 
-  .ecoles-table { width: 100%; border-collapse: collapse; font-size: 0.82em; }
-  .ecoles-table th, .ecoles-table td { padding: 7px 8px; text-align: left; border-bottom: 1px solid #21262d; }
-  .ecoles-table th { color: #8b949e; font-size: 0.75em; text-transform: uppercase; letter-spacing: 0.4px; font-weight: 600; }
+  .ecoles-table { width: 100%; border-collapse: collapse; font-size: var(--fs-small); }
+  .ecoles-table th, .ecoles-table td { padding: 9px 10px; text-align: left; border-bottom: 1px solid var(--border-soft); }
+  .ecoles-table th { color: var(--text-dim); font-size: var(--fs-tiny); text-transform: uppercase; letter-spacing: 0.5px; font-weight: 700; }
   .ecoles-table td.num { text-align: right; }
-  .ecoles-table .grade { font-weight: 700; text-align: center; }
-  .ecoles-table tr:hover { background: #161b22; }
+  .ecoles-table .grade { font-weight: 800; text-align: center; }
+  .ecoles-table tr:hover { background: var(--bg-2); }
 
-  /* Historique des tentatives (modale) */
-  .hist-toggle { display: inline-block; font-size: 0.72em; color: #58a6ff; cursor: pointer; padding: 1px 6px; border: 1px solid #30363d; border-radius: 8px; margin-left: 4px; user-select: none; }
-  .hist-toggle:hover { background: #1f6feb; color: #fff; border-color: #1f6feb; }
+  .hist-toggle {
+    display: inline-block; font-size: var(--fs-tiny); color: var(--accent); cursor: pointer;
+    padding: 2px 8px; border: 1px solid var(--border); border-radius: var(--r-pill);
+    margin-left: 6px; user-select: none; transition: all 0.15s;
+  }
+  .hist-toggle:hover { background: var(--accent-2); color: #fff; border-color: var(--accent-2); }
   .hist-row > td { padding: 0 !important; }
-  .hist-block { padding: 10px 14px; background: #0d1117; border-top: 1px solid #21262d; border-bottom: 1px solid #21262d; }
-  .hist-title { font-size: 0.78em; color: #8b949e; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.4px; }
-  .hist-table { width: 100%; border-collapse: collapse; font-size: 0.8em; }
-  .hist-table th, .hist-table td { padding: 5px 7px; text-align: left; border-bottom: 1px solid #21262d; }
-  .hist-table th { color: #8b949e; font-size: 0.72em; text-transform: uppercase; letter-spacing: 0.4px; font-weight: 600; }
+  .hist-block { padding: var(--space-s) var(--space-m); background: var(--bg-1); border-top: 1px solid var(--border-soft); border-bottom: 1px solid var(--border-soft); }
+  .hist-title { font-size: var(--fs-tiny); color: var(--text-dim); margin-bottom: var(--space-xs); text-transform: uppercase; letter-spacing: 0.5px; font-weight: 700; }
+  .hist-table { width: 100%; border-collapse: collapse; font-size: var(--fs-small); }
+  .hist-table th, .hist-table td { padding: 6px 8px; text-align: left; border-bottom: 1px solid var(--border-soft); }
+  .hist-table th { color: var(--text-dim); font-size: var(--fs-tiny); text-transform: uppercase; letter-spacing: 0.5px; font-weight: 700; }
   .hist-table td.num { text-align: right; }
   .hist-best { background: rgba(56,139,253,0.08); }
-  .best-tag { color: #ffd700; font-size: 0.9em; }
+  .best-tag { color: var(--gold); font-size: 0.9em; }
 
-  .meta-line { font-size: 0.78em; color: #8b949e; margin-top: 10px; padding-top: 8px; border-top: 1px solid #21262d; }
+  .meta-line {
+    font-size: var(--fs-tiny); color: var(--text-muted); margin-top: var(--space-m);
+    padding-top: var(--space-s); border-top: 1px solid var(--border-soft);
+  }
+  .meta-line code { background: var(--bg-3); padding: 1px 6px; border-radius: 4px; font-family: 'Cascadia Code', 'Consolas', monospace; color: var(--purple); }
 
-  .footer { text-align: center; color: #484f58; font-size: 0.75em; margin-top: 20px; }
+  /* Rapport intégral (modale) — sections repliables par école/tier */
+  .report-block { margin-top: var(--space-s); }
+  .report-school { margin-bottom: var(--space-m); border: 1px solid var(--border-soft); border-radius: var(--r-sm); overflow: hidden; }
+  .report-school-head, .report-tier-head {
+    display: flex; align-items: center; gap: var(--space-xs); cursor: pointer;
+    padding: var(--space-xs) var(--space-s); background: var(--bg-3);
+    font-weight: 700; font-size: var(--fs-small); user-select: none;
+    transition: background 0.15s;
+  }
+  .report-school-head:hover, .report-tier-head:hover { background: var(--bg-elev); }
+  .report-school-head .caret, .report-tier-head .caret { color: var(--text-dim); transition: transform 0.18s; }
+  .report-school-head.open .caret, .report-tier-head.open .caret { transform: rotate(90deg); }
+  .report-school-head .sch-title { flex: 1; min-width: 0; color: var(--accent); }
+  .report-tier-head .th-title { flex: 1; min-width: 0; color: var(--text); }
+  .report-tier-head .th-badge { font-size: var(--fs-tiny); padding: 1px 7px; border-radius: var(--r-pill); font-weight: 600; }
+  .report-tier-head .th-badge.mand { background: rgba(63,185,80,0.15); color: var(--green); border: 1px solid rgba(63,185,80,0.3); }
+  .report-tier-head .th-badge.opt  { background: rgba(210,153,34,0.15); color: var(--yellow); border: 1px solid rgba(210,153,34,0.3); }
+  .report-school-body, .report-tier-body { display: none; padding: var(--space-s); background: var(--bg-1); }
+  .report-school-body.open, .report-tier-body.open { display: block; }
+  .report-tier { margin-bottom: var(--space-xs); border: 1px solid var(--border-soft); border-radius: var(--r-sm); overflow: hidden; }
+  .report-exo { margin-block: var(--space-s); padding: var(--space-s); background: var(--bg-2); border: 1px solid var(--border-soft); border-radius: var(--r-sm); }
+  .report-exo-head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-xs); margin-bottom: var(--space-xs); font-size: var(--fs-small); }
+  .report-exo-head .exo-id { font-weight: 700; color: var(--accent); }
+  .report-exo-head .exo-status { padding: 1px 8px; border-radius: var(--r-pill); font-size: var(--fs-tiny); font-weight: 700; }
+  .report-exo-head .exo-status.success { background: rgba(63,185,80,0.15); color: var(--green); }
+  .report-exo-head .exo-status.fail    { background: rgba(248,81,73,0.15); color: var(--red); }
+  .report-exo-head .exo-status.bypass  { background: rgba(139,148,158,0.15); color: var(--text-muted); }
+  .report-exo-head .exo-pts { margin-left: auto; color: var(--text-muted); font-size: var(--fs-tiny); }
+  .report-exo-label { font-size: var(--fs-tiny); color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; margin-top: var(--space-xs); margin-bottom: 4px; font-weight: 700; }
+  .report-code {
+    background: var(--bg-0); border: 1px solid var(--border-soft); border-radius: var(--r-sm);
+    padding: var(--space-s); margin-block: 4px; overflow-x: auto;
+    font-family: 'Cascadia Code', 'Consolas', 'Courier New', monospace;
+    font-size: var(--fs-tiny); color: var(--text); line-height: 1.5;
+    white-space: pre; scrollbar-width: none; -ms-overflow-style: none;
+  }
+  .report-code::-webkit-scrollbar { width: 0; height: 0; display: none; }
+  .report-expl { font-size: var(--fs-small); color: var(--text); margin-block: 4px; padding: var(--space-xs) var(--space-s); background: rgba(248,81,73,0.06); border-left: 3px solid var(--red); border-radius: 4px; }
+  .report-teacher { font-size: var(--fs-small); color: var(--text); margin-block: 4px; padding: var(--space-xs) var(--space-s); background: rgba(188,140,255,0.08); border-left: 3px solid var(--purple); border-radius: 4px; }
+  .report-teacher b { color: var(--purple); }
+  .report-raw {
+    background: var(--bg-0); border: 1px dashed var(--border); border-radius: var(--r-sm);
+    padding: var(--space-s); margin-top: var(--space-xs);
+    font-family: 'Cascadia Code', 'Consolas', monospace; font-size: var(--fs-tiny);
+    color: var(--text-muted); line-height: 1.5; white-space: pre-wrap; word-break: break-word;
+    max-height: 400px; overflow-y: auto; scrollbar-width: none; -ms-overflow-style: none;
+  }
+  .report-raw::-webkit-scrollbar { width: 0; height: 0; display: none; }
+  .report-selfprofile { font-size: var(--fs-small); color: var(--text); margin-block: var(--space-xs); padding: var(--space-s); background: var(--bg-2); border: 1px solid var(--border-soft); border-radius: var(--r-sm); }
+  .report-selfprofile .sp-title { font-weight: 700; color: var(--accent); margin-bottom: var(--space-xs); font-size: var(--fs-small); }
+  .report-selfprofile ul { list-style: none; padding: 0; display: flex; flex-direction: column; gap: 3px; }
+  .report-selfprofile li { padding-left: 14px; position: relative; }
+  .report-selfprofile li::before { content: "•"; position: absolute; left: 2px; color: var(--text-dim); }
+  .report-empty { color: var(--text-dim); font-style: italic; font-size: var(--fs-small); padding: var(--space-s); }
 
-  .toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); padding: 10px 20px; border-radius: 8px; font-size: 0.85em; color: #fff; opacity: 0; transition: opacity 0.3s; pointer-events: none; z-index: 9999; }
-  .toast.show { opacity: 1; }
-  .toast.ok { background: #28a745; }
-  .toast.err { background: #dc3545; }
+  footer.footer {
+    text-align: center; color: var(--text-dim); font-size: var(--fs-tiny);
+    margin-top: var(--space-l); padding-block: var(--space-m);
+  }
+
+  .toast {
+    position: fixed; bottom: var(--space-m); left: 50%; transform: translateX(-50%);
+    padding: 10px 22px; border-radius: var(--r-pill); font-size: var(--fs-small);
+    color: #fff; opacity: 0; transition: opacity 0.3s, transform 0.3s;
+    pointer-events: none; z-index: 9999; box-shadow: var(--shadow-elev);
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(-4px); }
+  .toast.ok { background: var(--green); }
+  .toast.err { background: var(--red); }
 </style>
 </head>
 <body>
-<h1>🏇 Classement BenchGo V3</h1>
-<p class="subtitle">Généré le ${esc(now)} — ${entries.length} modèle${entries.length > 1 ? 's' : ''} classé${entries.length > 1 ? 's' : ''} du meilleur au pire</p>
+<div class="wrap">
+  <header class="hero">
+    <span class="badge-top">🏇 BenchGo V3 · Classement comportemental</span>
+    <h1>Classement BenchGo V3</h1>
+    <p class="subtitle">Généré le ${esc(now)} — ${entries.length} modèle${entries.length > 1 ? 's' : ''} classé${entries.length > 1 ? 's' : ''} du meilleur au pire</p>
+  </header>
 
-<div class="toolbar">
-  <div class="filter-chips" id="chips">
-    <span class="chip active" data-cat="all">Tous <span class="count">${entries.length}</span></span>
-    <span class="chip" data-cat="top">🏆 Top du top <span class="count">${catCounts.top}</span></span>
-    <span class="chip" data-cat="recommande">✅ Recommandés <span class="count">${catCounts.recommande}</span></span>
-    <span class="chip" data-cat="moyenne">📊 Dans la moyenne <span class="count">${catCounts.moyenne}</span></span>
-    <span class="chip" data-cat="rattrapage">⚠️ En rattrapage <span class="count">${catCounts.rattrapage}</span></span>
-    <span class="chip" data-cat="catastrophe">💥 Échec total <span class="count">${catCounts.catastrophe}</span></span>
+  <div class="sticky-bar" id="stickyBar">
+    <div class="toolbar">
+      <div class="filter-chips" id="chips">
+        <span class="chip active" data-cat="all">Tous <span class="count">${entries.length}</span></span>
+        <span class="chip" data-cat="top">🏆 Top du top <span class="count">${catCounts.top}</span></span>
+        <span class="chip" data-cat="recommande">✅ Recommandés <span class="count">${catCounts.recommande}</span></span>
+        <span class="chip" data-cat="moyenne">📊 Dans la moyenne <span class="count">${catCounts.moyenne}</span></span>
+        <span class="chip" data-cat="rattrapage">⚠️ En rattrapage <span class="count">${catCounts.rattrapage}</span></span>
+        <span class="chip" data-cat="catastrophe">💥 Échec total <span class="count">${catCounts.catastrophe}</span></span>
+      </div>
+    </div>
+
+    <div class="toolbar">
+      <div class="filter-chips" id="sizeChips">
+        <span class="chip active" data-size="all">Toutes tailles <span class="count">${entries.length}</span></span>
+        <span class="chip" data-size="petit">🐱 &lt; 3B <span class="count">${sizeCounts.petit}</span></span>
+        <span class="chip" data-size="standard">📦 3B–14B <span class="count">${sizeCounts.standard}</span></span>
+        <span class="chip" data-size="expert">🎓 14B–30B <span class="count">${sizeCounts.expert}</span></span>
+        <span class="chip" data-size="doctorat">🧠 &gt; 30B <span class="count">${sizeCounts.doctorat}</span></span>
+        <span class="chip" data-size="inconnu">❓ Inconnue <span class="count">${sizeCounts.inconnu}</span></span>
+      </div>
+      <div class="search-wrap">
+        <input type="text" class="search" id="search" placeholder="🔍 Rechercher un modèle…" />
+        <span class="result-count" id="resultCount"></span>
+        <button class="btn btn-primary" id="btnCopyAll" title="Copier tout le classement (texte brut) pour le partager">⧉ Copier le classement</button>
+      </div>
+    </div>
   </div>
-  <div class="search-wrap">
-    <input type="text" class="search" id="search" placeholder="🔍 Rechercher un modèle…" />
-    <span class="result-count" id="resultCount"></span>
-    <button class="btn-copy-all" id="btnCopyAll" title="Copier tout le classement (texte brut) pour le partager">⧉ Copier le classement</button>
-  </div>
+
+  <div class="cards" id="cards"></div>
+  <p class="empty-msg" id="emptyMsg">Aucun modèle ne correspond à ce filtre.</p>
+
+  <footer class="footer">Généré par BenchGo V3 — leaderboard.js · Cliquez sur une carte pour le détail complet.</footer>
 </div>
-
-<div class="toolbar" style="margin-bottom:14px;">
-  <div class="filter-chips" id="sizeChips">
-    <span class="chip active" data-size="all">Toutes tailles <span class="count">${entries.length}</span></span>
-    <span class="chip" data-size="petit">🐱 &lt; 3B <span class="count">${sizeCounts.petit}</span></span>
-    <span class="chip" data-size="standard">📦 3B–14B <span class="count">${sizeCounts.standard}</span></span>
-    <span class="chip" data-size="expert">🎓 14B–30B <span class="count">${sizeCounts.expert}</span></span>
-    <span class="chip" data-size="doctorat">🧠 &gt; 30B <span class="count">${sizeCounts.doctorat}</span></span>
-    <span class="chip" data-size="inconnu">❓ Inconnue <span class="count">${sizeCounts.inconnu}</span></span>
-  </div>
-</div>
-
-<div class="container" id="cards"></div>
-<p class="empty-msg" id="emptyMsg">Aucun modèle ne correspond à ce filtre.</p>
-
-<p class="footer">Généré par BenchGo V3 — leaderboard.js | Cliquez sur une carte ou le bouton « Détails » pour ouvrir le détail complet.</p>
 
 <div id="modal" class="modal-overlay">
   <div class="modal">
@@ -432,7 +772,7 @@ function buildLeaderboardHTML(entries) {
       <div class="rank" id="mRank"></div>
       <div class="title">
         <h2 id="mTitle"></h2>
-        <div>
+        <div class="tags">
           <span class="verdict-badge" id="mVerdict"></span>
           <span class="cat-tag" id="mCat"></span>
         </div>
@@ -449,11 +789,11 @@ function buildLeaderboardHTML(entries) {
 var MODELS = ${JSON.stringify(modelsData)};
 
 function gradeColor(g) {
-  var m = { A:'#28a745', B:'#17a2b8', C:'#ffc107', D:'#e83e8c', F:'#dc3545' };
-  return m[g] || '#6c757d';
+  var m = { A:'#3fb950', B:'#58a6ff', C:'#d29922', D:'#bc8cff', F:'#f85149' };
+  return m[g] || '#8b949e';
 }
 function pctColor(p) {
-  return p >= 80 ? '#28a745' : p >= 50 ? '#ffc107' : '#dc3545';
+  return p >= 80 ? '#3fb950' : p >= 50 ? '#d29922' : '#f85149';
 }
 function esc(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -474,32 +814,38 @@ function renderCards() {
     shown++;
 
     var cardClass = i === 0 ? 'gold' : i === 1 ? 'silver' : i === 2 ? 'bronze' : '';
-    var rankDisp = i < 3 ? '<span class="medal">' + (i === 0 ? '🥇' : i === 1 ? '🥈' : '🥉') + '</span>'
-                              : (i + 1);
+    var rankDisp = i < 3
+      ? '<span class="medal">' + (i === 0 ? '🥇' : i === 1 ? '🥈' : '🥉') + '</span>'
+      : (i + 1);
     var pc = pctColor(m.pct);
-    var sc = m.globalLifeScore < 0 ? '#f85149' : '#28a745';
+    var sc = m.globalLifeScore < 0 ? '#f85149' : '#3fb950';
     var gc = gradeColor(m.grade);
     var helpStr = (m.helpCount > 0 || m.retriedCount > 0)
       ? (m.helpCount > 0 ? 'aide:' + m.helpCount : '') + (m.retriedCount > 0 ? (m.helpCount > 0 ? ' ' : '') + 'rat.:' + m.retriedCount : '')
       : '—';
-    var szBadge = '<span class="size-badge" title="' + esc(m.paramSize.label) + '">' + m.paramSize.icon + ' ' + esc(m.paramSize.short) + '</span>';
+    var szBadge = '<span class="badge" title="' + esc(m.paramSize.label) + '">' + m.paramSize.icon + ' ' + esc(m.paramSize.short) + '</span>';
     var quantBadge = m.quantization
-      ? '<span class="size-badge quant-badge" title="Quantification du modèle (récupérée via LM Studio /api/v0/models ou saisie manuelle)">🧩 ' + esc(m.quantization) + '</span>'
+      ? '<span class="badge quant" title="Quantification du modèle (récupérée via LM Studio /api/v0/models ou saisie manuelle)">🧩 ' + esc(m.quantization) + '</span>'
       : '';
 
     var html = '<div class="card ' + cardClass + '" onclick="openModal(' + i + ')">' +
       '<div class="card-row">' +
         '<div class="rank">' + rankDisp + '</div>' +
-        '<div class="model-name"><span class="cat-icon">' + m.cat.icon + '</span>' + esc(m.model) + ' ' + szBadge + ' ' + quantBadge + ' <button class="btn-copy" onclick="event.stopPropagation();copyModelName(' + i + ')" title="Copier le nom du modèle">⧉</button></div>' +
+        '<div class="model-name">' +
+          '<div class="name-line"><span class="cat-icon">' + m.cat.icon + '</span>' + esc(m.model) + '</div>' +
+          '<div class="badges">' + szBadge + ' ' + quantBadge + ' <button class="btn btn-icon" onclick="event.stopPropagation();copyModelName(' + i + ')" title="Copier le nom du modèle">⧉ Nom</button></div>' +
+        '</div>' +
         '<div class="mini-stats">' +
-          '<div class="mini-stat"><span class="lbl">%</span><span class="val" style="color:' + pc + '">' + m.pct + '%</span><div class="pct-bar-wrap"><div class="pct-bar-fill" style="width:' + m.pct + '%;background:' + pc + '"></div></div></div>' +
-          '<div class="mini-stat"><span class="lbl">Note</span><span class="grade" style="color:' + gc + '">' + m.grade + '</span></div>' +
+          '<div class="mini-stat"><span class="lbl">%</span><span class="val" style="color:' + pc + '">' + m.pct + '%</span><div class="pct-bar-wrap"><div class="pct-bar-fill" style="width:' + Math.max(2,m.pct) + '%;background:' + pc + '"></div></div></div>' +
+          '<div class="mini-stat"><span class="lbl">Note</span><span class="val grade" style="color:' + gc + '">' + m.grade + '</span></div>' +
           '<div class="mini-stat"><span class="lbl">Santé</span><span class="val" style="color:' + sc + '">' + m.globalLifeScore + ' PV</span></div>' +
           '<div class="mini-stat"><span class="lbl">Oblig.</span><span class="val">' + (m.mandatoryTotal > 0 ? m.mandatoryPct + '%' : '—') + '</span></div>' +
-          '<div class="mini-stat"><span class="lbl">Aide/Rat.</span><span class="val" style="font-size:0.8em">' + esc(helpStr) + '</span></div>' +
+          '<div class="mini-stat"><span class="lbl">Aide/Rat.</span><span class="val" style="font-size:var(--fs-tiny)">' + esc(helpStr) + '</span></div>' +
         '</div>' +
-        '<button class="btn-detail" onclick="event.stopPropagation();openModal(' + i + ')">Détails</button>' +
-        '<button class="btn-delete" onclick="event.stopPropagation();deleteModel(' + i + ', this)">🗑</button>' +
+        '<div class="card-actions">' +
+          '<button class="btn btn-primary" onclick="event.stopPropagation();openModal(' + i + ')">Détails</button>' +
+          '<button class="btn btn-danger" onclick="event.stopPropagation();deleteModel(' + i + ', this)" title="Supprimer du classement">🗑</button>' +
+        '</div>' +
       '</div>' +
     '</div>';
     container.insertAdjacentHTML('beforeend', html);
@@ -518,12 +864,11 @@ function openModal(idx) {
   document.getElementById('mCat').innerHTML = m.cat.icon + ' ' + esc(m.cat.label) + ' · ' + m.paramSize.icon + ' ' + esc(m.paramSize.label);
 
   var pc = pctColor(m.pct);
-  var sc = m.globalLifeScore < 0 ? '#f85149' : '#28a745';
+  var sc = m.globalLifeScore < 0 ? '#f85149' : '#3fb950';
   var gc = gradeColor(m.grade);
-  var oc = m.mandatoryTotal > 0 ? pctColor(m.mandatoryPct) : '#6c757d';
+  var oc = m.mandatoryTotal > 0 ? pctColor(m.mandatoryPct) : '#8b949e';
 
   var body = '';
-  // --- Stats complètes
   body += '<h3>Statistiques</h3>';
   body += '<div class="full-stats">';
   body += statBox('Points', m.score + ' / ' + m.max);
@@ -535,23 +880,21 @@ function openModal(idx) {
   body += statBox('Aide prof.', m.helpCount > 0 ? m.helpCount + 'x' : '—');
   body += statBox('Rattrapage', m.retriedCount > 0 ? m.retriedCount + 'x' : '—');
   body += statBox('Écoles', m.ecoleCount);
-  body += statBox('Quantif.', m.quantization ? m.quantization : '—');
+  body += statBox('Quantif.', m.quantization ? '<span style="color:#bc8cff">' + esc(m.quantization) + '</span>' : '—');
   body += '</div>';
 
-  // --- Forces / Faiblesses / Notes
   body += '<h3>Forces & Faiblesses</h3>';
   body += '<div class="args-grid">';
   body += argsCol('args-forces', '✅ Forces', m.args.forces);
   body += argsCol('args-weak', '❌ Faiblesses', m.args.faiblesses);
   body += '</div>';
   if (m.args.notes.length > 0) {
-    body += '<div class="args-block args-notes" style="margin-top:12px;">';
+    body += '<div class="args-block args-notes" style="margin-top:var(--space-s);">';
     body += '<div class="args-title">ℹ Notes</div><ul class="args-list">';
     for (var n of m.args.notes) body += '<li>' + esc(n) + '</li>';
     body += '</ul></div>';
   }
 
-  // --- Détail par école (avec historique des tentatives de re-test)
   body += '<h3>Détail par école</h3>';
   body += '<table class="ecoles-table"><thead><tr>' +
     '<th>École</th><th class="num">Points</th><th>%</th><th>Note</th>' +
@@ -579,7 +922,6 @@ function openModal(idx) {
       '<td>' + esc(e.date) + '</td>' +
       '<td class="num">' + attempts.length + '</td>' +
       '</tr>';
-    // Ligne d'historique repliable (uniquement si > 1 tentative)
     if (hasHistory) {
       body += '<tr class="hist-row" style="display:none;"><td colspan="11">' +
         '<div class="hist-block">' +
@@ -611,7 +953,82 @@ function openModal(idx) {
   }
   body += '</tbody></table>';
 
-  // --- Méta
+  // --- Rapport intégral : tiers, exercices, code, raisonnement, corrections
+  body += '<h3>📋 Rapport intégral (comportement & raisonnement)</h3>';
+  body += '<div class="report-block">';
+  var hasAnyTier = false;
+  for (var e of m.ecoles) {
+    var tiers = e.tiers || [];
+    var sp = e.selfProfile;
+    if (tiers.length === 0 && !sp) continue;
+    hasAnyTier = true;
+    body += '<div class="report-school">';
+    body += '<div class="report-school-head" onclick="toggleReport(this)"><span class="caret">▶</span><span class="sch-title">🏫 ' + esc(e.ecole) + '</span><span class="exo-pts">' + tiers.length + ' tier(s)</span></div>';
+    body += '<div class="report-school-body">';
+    if (sp && sp.skills) {
+      body += '<div class="report-selfprofile">';
+      body += '<div class="sp-title">🧠 Auto-profilage déclaré par le modèle</div><ul>';
+      var spLabels = {
+        javascript_basics: 'JavaScript — Bases & Algorithmique simple',
+        javascript_async: 'JavaScript Asynchrone (Promises, concurrence, retry)',
+        algorithms_advanced: 'Algorithmes & Structures de données avancées',
+        code_debugging: 'Débogage & Sécurité applicative'
+      };
+      for (var sk in spLabels) {
+        var lvl = sp.skills[sk] ? sp.skills[sk].level : '?';
+        body += '<li><b>' + esc(spLabels[sk]) + '</b> : niveau ' + lvl + '/5</li>';
+      }
+      if (sp.justification) body += '<li><i>Justification :</i> ' + esc(sp.justification) + '</li>';
+      body += '</ul></div>';
+    }
+    for (var t of tiers) {
+      body += '<div class="report-tier">';
+      var mandBadge = t.isMandatory
+        ? '<span class="th-badge mand">Obligatoire</span>'
+        : '<span class="th-badge opt">Optionnel</span>';
+      body += '<div class="report-tier-head" onclick="toggleReport(this)"><span class="caret">▶</span><span class="th-title">Tier ' + esc(String(t.tierNum)) + ' — ' + esc(t.tierTitle || '') + ' (' + esc(t.className || '') + ')</span>' + mandBadge + '</div>';
+      body += '<div class="report-tier-body">';
+      var evals = t.evalResults || [];
+      if (evals.length > 0) {
+        body += '<div class="report-exo-label">Exercices tentés (' + evals.length + ')</div>';
+        for (var r of evals) {
+          var stCls = r.status === 'success' ? 'success' : (r.status === 'bypassed' ? 'bypass' : 'fail');
+          var stTxt = r.status === 'success' ? '✔ Validé' : (r.status === 'bypassed' ? '⊘ Bypassé' : '✘ Échec');
+          body += '<div class="report-exo">';
+          body += '<div class="report-exo-head"><span class="exo-id">' + esc(r.id) + '</span>' + (r.taskType ? '<span class="badge">' + esc(r.taskType) + '</span>' : '') + '<span class="exo-status ' + stCls + '">' + stTxt + '</span><span class="exo-pts">' + r.points + '/' + r.maxPoints + ' pts' + (r.helpUsed ? ' · aide' : '') + (r.retried ? ' · rattrapage' : '') + '</span></div>';
+          if (r.status === 'bypassed') { body += '<div class="report-empty">Exercice bypassé (non exécuté).</div>'; body += '</div>'; continue; }
+          if (r.code && String(r.code).trim()) {
+            body += '<div class="report-exo-label">Code proposé</div>';
+            body += '<pre class="report-code">' + esc(String(r.code).trim()) + '</pre>';
+          } else {
+            body += '<div class="report-empty">Aucun code exploitable produit.</div>';
+          }
+          if (r.failureExplanation) {
+            body += '<div class="report-exo-label">Explication de l\\'échec (par l\\'élève)</div>';
+            body += '<div class="report-expl">' + esc(r.failureExplanation) + '</div>';
+          }
+          if (r.teacherCorrection) {
+            body += '<div class="report-exo-label">🎓 Correction du professeur IA</div>';
+            body += '<div class="report-teacher">' + esc(r.teacherCorrection) + '</div>';
+          }
+          body += '</div>';
+        }
+      } else {
+        body += '<div class="report-empty">Aucun exercice enregistré pour ce tier.</div>';
+      }
+      if (t.rawResponse && String(t.rawResponse).trim()) {
+        body += '<div class="report-exo-label">💭 Réponse brute complète du modèle (raisonnement + code)</div>';
+        body += '<pre class="report-raw">' + esc(String(t.rawResponse).trim()) + '</pre>';
+      }
+      body += '</div></div>';
+    }
+    body += '</div></div>';
+  }
+  if (!hasAnyTier) {
+    body += '<div class="report-empty">Aucun rapport intégral disponible pour ce modèle (données antérieures à l\\'export du raisonnement, ou carnet introuvable).</div>';
+  }
+  body += '</div>';
+
   body += '<div class="meta-line">';
   body += 'Dernière mise à jour : ' + esc(m.lastUpdated || '—') + ' · ';
   body += 'Nom court : <code>' + esc(m.shortName) + '</code>';
@@ -626,7 +1043,7 @@ function statBox(lbl, val) {
   return '<div class="full-stat"><div class="lbl">' + lbl + '</div><div class="val">' + val + '</div></div>';
 }
 function statBoxBar(lbl, val, color, pct) {
-  return '<div class="full-stat"><div class="lbl">' + lbl + '</div><div class="val" style="color:' + color + '">' + val + '</div><div class="bar"><div style="width:' + pct + '%;background:' + color + '"></div></div></div>';
+  return '<div class="full-stat"><div class="lbl">' + lbl + '</div><div class="val" style="color:' + color + '">' + val + '</div><div class="bar"><div style="width:' + Math.max(2,pct) + '%;background:' + color + '"></div></div></div>';
 }
 function argsCol(cls, title, items) {
   var h = '<div class="args-block ' + cls + '"><div class="args-title">' + title + '</div>';
@@ -640,7 +1057,6 @@ function closeModal() {
   document.getElementById('modal').classList.remove('show');
   document.body.style.overflow = '';
 }
-// Bascule l'affichage de l'historique des tentatives d'une école dans la modale.
 function toggleHistory(el) {
   var mainRow = el.closest('tr.ecole-main');
   if (!mainRow) return;
@@ -651,12 +1067,20 @@ function toggleHistory(el) {
   el.textContent = (shown ? '▸' : '▾') + ' ' + (el.getAttribute('data-n') || (el.textContent.match(/(\d+)/) || [,''])[1]) + ' tentatives';
   el.setAttribute('data-n', el.textContent.match(/(\d+)/) ? el.textContent.match(/(\d+)/)[1] : '');
 }
+// Plier/déplier les sections du rapport intégral (école + tier) dans la modale.
+// el = en-tête cliqué (.report-school-head ou .report-tier-head) ; le body est
+// le prochain sibling. La classe .open fait pivoter le caret et affiche le body.
+function toggleReport(el) {
+  var body = el.nextElementSibling;
+  if (!body) return;
+  var isOpen = body.classList.toggle('open');
+  el.classList.toggle('open', isOpen);
+}
 document.getElementById('modal').addEventListener('click', function(e) {
   if (e.target === this) closeModal();
 });
 document.addEventListener('keydown', function(e) { if (e.key === 'Escape') closeModal(); });
 
-// Filtres
 document.getElementById('chips').addEventListener('click', function(e) {
   var t = e.target.closest('.chip'); if (!t) return;
   var chips = document.querySelectorAll('#chips .chip');
@@ -673,7 +1097,6 @@ document.getElementById('sizeChips').addEventListener('click', function(e) {
 });
 document.getElementById('search').addEventListener('input', renderCards);
 
-// Toast + suppression
 function showToast(msg, ok) {
   var t = document.getElementById('toast');
   t.textContent = msg;
@@ -694,7 +1117,6 @@ function deleteModel(idx, btn) {
     .catch(function() { showToast('Erreur réseau', false); btn.disabled = false; btn.textContent = '🗑'; });
 }
 
-// Copie le nom intégral du modèle dans le presse-papiers.
 function copyModelName(idx) {
   var name = MODELS[idx].model;
   if (navigator.clipboard && navigator.clipboard.writeText) {
@@ -710,11 +1132,8 @@ function fallbackCopy(text) {
   document.body.removeChild(ta);
 }
 
-// Copie tout le classement (tel qu'affiché, filtres actifs compris) en texte brut
-// pour le partager (chat, mail, document). Format tabulaire lisible.
 function copyLeaderboard() {
   var btn = document.getElementById('btnCopyAll');
-  // Respecte les filtres/recherche actifs pour copier ce que l'utilisateur voit.
   var activeCat = document.querySelector('#chips .chip.active').getAttribute('data-cat');
   var activeSize = document.querySelector('#sizeChips .chip.active').getAttribute('data-size');
   var q = document.getElementById('search').value.trim().toLowerCase();
@@ -738,7 +1157,7 @@ function copyLeaderboard() {
   lines.push('');
   lines.push('Total : ' + copied + ' modèle(s) — généré par BenchGo V3');
 
-  var text = lines.join('\n');
+  var text = lines.join('\\n');
   var finish = function(ok) {
     if (ok) {
       showToast('Classement copié (' + copied + ' modèle' + (copied > 1 ? 's' : '') + ')', true);
@@ -754,6 +1173,19 @@ function copyLeaderboard() {
   }
 }
 document.getElementById('btnCopyAll').addEventListener('click', copyLeaderboard);
+
+// Barre sticky : ajoute la classe .stuck dès qu'on scrolle pour renforcer le
+// contraste (fond + opaque + ombre) et signaler visuellement le "détachement".
+(function() {
+  var bar = document.getElementById('stickyBar');
+  if (!bar) return;
+  function onScroll() {
+    if (window.scrollY > 4) bar.classList.add('stuck');
+    else bar.classList.remove('stuck');
+  }
+  window.addEventListener('scroll', onScroll, { passive: true });
+  onScroll();
+})();
 
 renderCards();
 </script>
@@ -1015,7 +1447,8 @@ function generateLeaderboard() {
     const verdict = getVerdict(e);
     const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : '  ';
     const vColor = verdict.rank === 1 ? '\x1b[32m' : verdict.rank === 2 ? '\x1b[33m' : '\x1b[31m';
-    console.log(`  ${medal} \x1b[1m${(i + 1 + '.').padEnd(4)}\x1b[0m ${e.model.substring(0, 45).padEnd(45)} ${String(e.pct + '%').padStart(5)}  ${vColor}${verdict.label}\x1b[0m`);
+    const quant = e.quantization ? `\x1b[35m${e.quantization.padEnd(8)}\x1b[0m ` : '\x1b[90m—       \x1b[0m ';
+    console.log(`  ${medal} \x1b[1m${(i + 1 + '.').padEnd(4)}\x1b[0m ${e.model.substring(0, 45).padEnd(45)} ${quant}${String(e.pct + '%').padStart(5)}  ${vColor}${verdict.label}\x1b[0m`);
   }
   console.log('');
   console.log(`  \x1b[32mClassement HTML       : ${relHtml}\x1b[0m`);

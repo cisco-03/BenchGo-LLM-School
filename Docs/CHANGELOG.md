@@ -6,6 +6,122 @@
 - Les fichiers sources sont désormais à la racine de `benchmark-v3/` (le nom `benchmark-v2` est abandonné).
 - Ce fichier (`Docs/CHANGELOG.md`) est le journal de versions de référence pour GitHub. Toute évolution du code doit y être consignée.
 
+## 2026-07-19 (f) — Rapport intégral dans la modale de détail (comportement & raisonnement du modèle)
+
+### Contexte
+Retour utilisateur : la modale de détail du classement HTML n'affichait que les stats globales et le tableau des écoles. L'utilisateur voulait voir **le rapport intégral** (raisonnement, code produit, calculs, réactions du modèle) directement dans la modale puisqu'on peut y scroller — sans ouvrir le fichier `raisonnement_modeles.md` séparément.
+
+### Actions entreprises
+**`leaderboard.js` — Section « Rapport intégral » dans la modale**
+- `modelsData` enrichi côté serveur : pour chaque école, on charge le carnet original (`loadLedgerByName`) et on injecte le `selfProfile` (auto-profilage déclaré) + les `tiers` complets ( `tierNum`, `tierTitle`, `className`, `isMandatory`, `rawResponse`, `evalResults` avec `id`, `taskType`, `status`, `points`, `maxPoints`, `helpUsed`, `retried`, `code`, `failureExplanation`, `teacherCorrection`). Sérialisé une seule fois dans le JSON inline du HTML.
+- Nouvelle section `<h3>📋 Rapport intégral (comportement & raisonnement)</h3>` dans `openModal()`, après le tableau « Détail par école » et avant la méta-line.
+- Structure repliable (accordéon) :
+  - **Niveau école** (`.report-school`) : en-tête `🏫 <école> — N tier(s)`, déplie le corps contenant l'auto-profilage déclaré (4 compétences + justification) puis la liste des tiers.
+  - **Niveau tier** (`.report-tier`) : en-tête `Tier N — <titre> (<classe>)` + badge Obligatoire/Optionnel, déplie les exercices.
+  - **Niveau exercice** (`.report-exo`) : ID + type + statut (✔ Validé / ✘ Échec / ⊘ Bypassé) + points, puis blocs :
+    - **Code proposé** (balise `<pre class="report-code">` avec mono font, scroll-x invisible).
+    - **Explication de l'échec (par l'élève)** (encadré rouge, bordure gauche).
+    - **🎓 Correction du professeur IA** (encadré violet, bordure gauche).
+    - **💭 Réponse brute complète du modèle** (raisonnement + code concaténé, `<pre class="report-raw">` scrollable avec ascenseur invisible, max-height 400px).
+- Fonction JS `toggleReport(el)` : bascule la classe `.open` sur l'en-tête et le body (le caret `▶` pivote à 90° via CSS `transform`).
+- CSS complet : variables `clamp()` héritées, ascenseurs invisibles (`scrollbar-width: none` + `::-webkit-scrollbar`) sur `.report-code` et `.report-raw`, badges de statut colorés, bordures gauche sémantiques (rouge = échec, violet = professeur).
+- Correction incident : apostrophes non échappées dans les chaînes JS single-quoted du template literal (`l'export`, `l'échec`, `l'élève`) → `\\'` pour produire `\'` valide dans le HTML généré.
+
+### Fichiers modifiés
+- `leaderboard.js` (enrichissement `modelsData` avec `tiers` + `selfProfile` + section modale « Rapport intégral » + fonction `toggleReport` + CSS report)
+
+### Résultat obtenu
+- En cliquant sur n'importe quel modèle du classement, la modale affiche désormais le **rapport intégral** repliable : auto-profilage, tous les tiers/classes, chaque exercice avec son code, ses explications d'échec, la correction du professeur, et la réponse brute complète du modèle. Ascenseurs invisibles, scroll fluide. Plus besoin d'ouvrir `raisonnement_modeles.md` séparément.
+
+## 2026-07-19 (e) — Ascenseurs invisibles dans la modale de détail du classement
+
+### Contexte
+Retour utilisateur : les scrollbars (ascenseurs) visibles dans la modale de détail du classement HTML étaient jugées disgracieuses et devaient être masquées, tout en gardant le scroll fonctionnel.
+
+### Actions entreprises
+**`leaderboard.js` — Scrollbars invisibles (cross-browser)**
+- `.modal-overlay` et `.modal-body` reçoivent `scrollbar-width: none` (Firefox) + `-ms-overflow-style: none` (IE/Edge ancien) pour masquer l'ascenseur.
+- Règle `::-webkit-scrollbar { width: 0; height: 0; display: none; }` ajoutée pour `.modal-overlay` et `.modal-body` (Chrome, Edge Chromium, Safari).
+- Le scroll reste entièrement fonctionnel via molette, clavier (Flèches/PgUp/PgDown) et tactile — seul l'ascenseur visuel disparaît.
+
+### Fichiers modifiés
+- `leaderboard.js` (CSS `.modal-overlay` + `.modal-body` + règles `::-webkit-scrollbar`)
+
+### Résultat obtenu
+- La modale de détail défile sans ascenseur visible, rendu épuré sur tous les navigateurs modernes.
+
+## 2026-07-19 (d) — Menu sticky dans le classement HTML (barre de filtres collée en haut au scroll)
+
+### Contexte
+Retour utilisateur : avec une longue liste de modèles, la barre de filtres/recherche disparaissait en haut de la page dès qu'on scrollait vers le bas. Pour changer de filtre ou relancer une recherche, il fallait rescroller jusqu'en haut — friction inacceptable sur un classement de 7+ modèles.
+
+### Actions entreprises
+**`leaderboard.js` — Barre sticky (effet WordPress/admin)**
+- Les deux toolbars (filtres catégorie + filtres taille/recherche) sont regroupées dans un conteneur `<div class="sticky-bar" id="stickyBar">`.
+- CSS `position: sticky; top: 0; z-index: 100` : la barre reste collée en haut du viewport pendant le scroll.
+- Fond semi-transparent `rgba(10,14,20,0.82)` + `backdrop-filter: blur(10px) saturate(140%)` pour garder la lisibilité par-dessus les cartes qui défilent (effet "glass").
+- Extension latérale `margin-inline: calc(-1 * var(--container-pad)); padding-inline: var(--container-pad)` pour que la barre colle aux bords du container `.wrap` (pleine largeur du container).
+- JS : un listener `scroll` (passif) ajoute la classe `.stuck` dès `window.scrollY > 4`, qui renforce l'opacité (`0.94`) et ajoute une ombre portée `0 4px 18px rgba(0,0,0,0.45)` — signale visuellement le "détachement" de la barre du fond, comme les headers WordPress qui changent d'aspect au scroll.
+
+### Fichiers modifiés
+- `leaderboard.js` (CSS `.sticky-bar` + wrapper HTML des deux toolbars + listener scroll `.stuck`)
+
+### Résultat obtenu
+- La barre de filtres + recherche reste toujours visible et accessible pendant le scroll, quelle que soit la longueur du classement. Plus besoin de rescroller pour filtrer ou rechercher.
+
+## 2026-07-19 (c) — Auto-profilage rapide, classement --serve débloqué, quantification CLI, refonte HTML flexbox
+
+### Contexte
+Suite au retour utilisateur (`Memories-BenchGo/Tasks1.md`), trois axes ont été traités :
+1. L'auto-profilage prenait jusqu'à **372 secondes** sur les modèles de raisonnement (GLM, Qwen3, DeepSeek-R1) — le modèle passait tout ce temps en `reasoning_content` avant de produire le JSON de profil. Inacceptable pour un utilisateur en CLI.
+2. Le mode serveur `node leaderboard.js --serve` était **complètement bloqué** : les boutons s'affichaient mais aucun classement n'apparaissait, et aucun bouton ne réagissait.
+3. La quantification des modèles n'était pas affichée dans le **classement CLI** (console), seulement dans le HTML — impossible de distinguer les quantifications en invite de commande.
+4. Le HTML du classement avait un rendu « brouillon » non conforme au protocole responsive `Admin/Flexbox-Responsive.md`.
+
+### Actions entreprises
+
+**1. `config.js` + `lm-studio-client.js` + `cloud-client.js` + `self-profiling.js` + `runner.js` — Auto-profilage rapide**
+- Nouvelles constantes dans `config.js` : `PROFILING_TIMEOUT_MS = 60000` (timeout dédié 60 s) et `PROFILING_MAX_TOKENS = 600` (limite stricte de sortie — le JSON de profil fait ~200 tokens).
+- `lm-studio-client.js` et `cloud-client.js` : `queryLLM` accepte désormais `options.timeoutMs` (override du `API_TIMEOUT_MS` global) et `options.maxTokens` (override du calcul depuis le budget contexte). Le message d'erreur de timeout affiche la vraie limite utilisée.
+- Désactivation du raisonnement étendu pour l'auto-profilage : `options.disableReasoning = true` injecte `chat_template_kwargs = { enable_thinking: false }` dans le body de la requête (LM Studio propage ce paramètre au template du modèle ; les modèles non compatibles l'ignorent silencieusement). Évite les 5-6 minutes de pensée inutile.
+- `self-profiling.js` : prompt `PROFILE_PROMPT` raccourci (~40% de tokens en moins) — suppressions des questions de réflexion préalable et des descriptions verbeuses. Passage de `options = { timeoutMs, maxTokens, disableReasoning }` à l'appel `queryFn`. Le fallback regex et la validation du profil sont inchangés.
+- `runner.js` : import de `PROFILING_TIMEOUT_MS`, message console mis à jour (« ~10-30s (timeout 60s max) » au lieu de « 10 à 15 secondes »).
+
+**2. `leaderboard.js` — Correction du bug `--serve` (JS cassé)**
+- Cause racine : dans `buildLeaderboardHTML`, la ligne `var text = lines.join('\n')` était écrite à l'intérieur d'un template literal JS `` `...` ``. Le `\n` était donc interprété par le template literal parent comme un **véritable caractère de saut de ligne**, produisant dans le HTML généré : `var text = lines.join('<saut de ligne réel>')` → **SyntaxError JS** au chargement de la page → tout le script inline explosait → aucun classement rendu, aucun bouton fonctionnel.
+- Correction : échappement du backslash → `lines.join('\\n')` pour que le HTML de sortie contienne bien `lines.join('\n')` (séquence d'échappement JS valide).
+- Validation : `new Function(js)` sur le JS inline extrait du HTML généré → syntaxe OK. Test du serveur via `fetch('http://localhost:3993/')` → HTML servi avec `var MODELS`, `renderCards()`, et API `/api/delete` (POST) fonctionnelle.
+
+**3. `leaderboard.js` — Quantification dans le classement CLI**
+- La boucle d'affichage console affiche désormais la quantification entre le nom du modèle et le % : `mythos-9b-unhinged  Q4_K_M  100%  RECOMMANDÉ` (couleur magenta, colonne fixe 8 chars). Les modèles sans quantification affichent `—`.
+- Cohérent avec le badge `🧩 Q4_K_M` déjà présent dans le HTML et la colonne « Quantif. » du Markdown.
+
+**4. `leaderboard.js` — Refonte HTML aux normes flexbox/fluid (CSS pur adapté)**
+- Application du protocole `Admin/Flexbox-Responsive.md` (Living With Pixels) en **CSS pur inline** (le classement est un fichier standalone sans build Tailwind) :
+  - Variables CSS `clamp()` pour tous les espacements (`--space-xs` à `--space-xl`), la typographie (`--fs-display` à `--fs-tiny`) et le padding du container.
+  - Container boxed intelligent : `.wrap { max-width: 1120px; margin-inline: auto; padding-inline: clamp(0.75rem, 4vw, 2rem); }`.
+  - **Flexbox préféré à Grid** : `.full-stats` et `.args-grid` passent de `display: grid` à `display: flex; flex-wrap: wrap` avec `flex: 1 1 <min>px` (grow fluide).
+  - Typographie fluide 7 niveaux via `clamp()` sur tous les textes.
+  - Padding sections fluide (`.card-row`, `.modal-head`, `.modal-body` utilisent `var(--space-m)` etc.).
+- Refonte visuelle : header « hero » avec badge, titre en dégradé bleu→violet, palette GitHub-dark raffinée, cartes avec barre latérale colorée (or/argent/bronze), badges `.badge` / `.badge.quant` unifiés, ombres et transitions, modale avec `backdrop-filter: blur(4px)`, toast pill animé.
+- Quantification mise en avant dans la modale (couleur violet `--purple`).
+- Responsive fluide : unique media query `@media (max-width: 720px)` pour faire passer les mini-stats sous le nom du modèle sur écran étroit — pas de breakpoints fixes multiples.
+- Les barres de % ont désormais un `min-width` de 2% pour rester visibles même à 0%.
+
+### Fichiers modifiés
+- `config.js` (constantes `PROFILING_TIMEOUT_MS`, `PROFILING_MAX_TOKENS` + exports)
+- `lm-studio-client.js` (`options.timeoutMs`, `options.maxTokens`, `options.disableReasoning` + message timeout dynamique)
+- `cloud-client.js` (idem + `max_tokens` et `chat_template_kwargs` dans le body OpenAI-compat)
+- `self-profiling.js` (prompt raccourci + passage des options perf + import config)
+- `runner.js` (import `PROFILING_TIMEOUT_MS` + message console)
+- `leaderboard.js` (fix `\\n` + quantification CLI + refonte HTML complète flexbox/fluid)
+
+### Résultat obtenu
+- L'auto-profilage est limité à 60 s max (vs 372 s observés) et désactive le raisonnement étendu — réponse attendue en ~10-30 s sur la plupart des modèles.
+- `node leaderboard.js --serve` fonctionne : le classement s'affiche, les filtres/recherche boutons Détails/Supprimer/Copier sont opérationnels, l'API `/api/delete` répond.
+- Le classement CLI affiche la quantification de chaque modèle.
+- Le classement HTML adopte un design moderne fluide (clamp + flexbox), responsive sans breakpoints excessifs, conforme aux principes du protocole `Admin/Flexbox-Responsive.md`.
+
 ## 2026-07-19 (b) — Correction diplôme école, quantification des modèles, écoles séquentielles, bouton copier le classement
 
 ### Contexte

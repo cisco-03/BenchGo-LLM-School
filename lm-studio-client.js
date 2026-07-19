@@ -92,7 +92,12 @@ async function streamLLMResponse(response, spinner) {
 async function queryLLM(prompt, difficulty, tierId, isMandatory, spinner, options = {}) {
   const startTime = Date.now();
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), API_TIMEOUT_MS);
+  // Timeout dédié (auto-profilage) sinon timeout global API. Permet de couper
+  // court aux modèles de raisonnement qui passent plusieurs minutes en pensée.
+  const timeoutMs = Number.isInteger(options.timeoutMs) && options.timeoutMs > 0
+    ? options.timeoutMs
+    : API_TIMEOUT_MS;
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
   const contextLimitTokens = Number.isInteger(options.contextLimitTokens) && options.contextLimitTokens > 0
     ? options.contextLimitTokens
     : 16384;
@@ -101,7 +106,10 @@ async function queryLLM(prompt, difficulty, tierId, isMandatory, spinner, option
   // Réserve un peu de marge pour les métadonnées/messages système.
   const estimatedInputTokens = estimateTokens(systemPrompt) + estimateTokens(prompt) + 128;
   const availableForOutput = contextLimitTokens - estimatedInputTokens;
-  const maxTokens = Math.max(256, Math.min(4096, availableForOutput));
+  // maxTokens explicite (auto-profilage) sinon calculé depuis le budget contexte.
+  const maxTokens = Number.isInteger(options.maxTokens) && options.maxTokens > 0
+    ? options.maxTokens
+    : Math.max(256, Math.min(4096, availableForOutput));
 
   try {
     if (estimatedInputTokens >= (contextLimitTokens - 256)) {
@@ -124,6 +132,13 @@ async function queryLLM(prompt, difficulty, tierId, isMandatory, spinner, option
     // response_format optionnel (auto-profilage JSON) — supporté par LM Studio (OpenAI-compat)
     if (options.responseFormat) {
       requestBody.response_format = options.responseFormat;
+    }
+    // Désactivation du raisonnement étendu (auto-profilage) pour les modèles
+    // de raisonnement (GLM, Qwen3, DeepSeek-R1...) via chat_template_kwargs.
+    // LM Studio propage ce paramètre au template du modèle ; les modèles non
+    // compatibles l'ignorent silencieusement. Évite les 372s de pensée inutile.
+    if (options.disableReasoning) {
+      requestBody.chat_template_kwargs = { enable_thinking: false };
     }
 
     const response = await fetch(LM_STUDIO_API_URL, {
@@ -157,7 +172,7 @@ async function queryLLM(prompt, difficulty, tierId, isMandatory, spinner, option
     const duration = Date.now() - startTime;
     const isTimeout = error.name === 'AbortError';
     const reason = isTimeout
-      ? `Timeout après ${API_TIMEOUT_MS / 1000}s — le modèle n'a pas répondu dans le délai imparti`
+      ? `Timeout après ${timeoutMs / 1000}s — le modèle n'a pas répondu dans le délai imparti`
       : error.message;
 
     logger.apiRequest(tierId || '?', duration, 'ERREUR');
@@ -167,7 +182,7 @@ async function queryLLM(prompt, difficulty, tierId, isMandatory, spinner, option
       console.error(`\n\x1b[31m[ERREUR API]\x1b[0m ${reason}`);
       console.error(`  -> Vérifiez que LM Studio tourne sur le port 1234.`);
       if (isTimeout) {
-        console.error(`  -> Le modèle a mis plus de ${API_TIMEOUT_MS / 1000}s à répondre. Augmenter API_TIMEOUT_MS ou utiliser un profil inférieur.`);
+        console.error(`  -> Le modèle a mis plus de ${timeoutMs / 1000}s à répondre. Augmenter API_TIMEOUT_MS ou utiliser un profil inférieur.`);
       }
       process.exit(1);
     } else {

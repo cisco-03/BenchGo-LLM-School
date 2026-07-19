@@ -183,8 +183,12 @@ async function queryLLM(prompt, difficulty, tierId, isMandatory, spinner, option
   }
 
   const systemPrompt = getSystemPrompt(difficulty);
+  // Timeout dédié (auto-profilage) sinon timeout global API.
+  const timeoutMs = Number.isInteger(options.timeoutMs) && options.timeoutMs > 0
+    ? options.timeoutMs
+    : API_TIMEOUT_MS;
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), API_TIMEOUT_MS);
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
     logger.promptHash(tierId, prompt);
@@ -209,6 +213,16 @@ async function queryLLM(prompt, difficulty, tierId, isMandatory, spinner, option
         temperature: 0.1,
         stream: true
       };
+      // max_tokens explicite (auto-profilage) — limite la sortie pour forcer une
+      // réponse concise et éviter les longues générations inutiles.
+      if (Number.isInteger(options.maxTokens) && options.maxTokens > 0) {
+        requestBody.max_tokens = options.maxTokens;
+      }
+      // Désactivation du raisonnement étendu (auto-profilage) pour les modèles
+      // de raisonnement (GLM, Qwen3, DeepSeek-R1...) via chat_template_kwargs.
+      if (options.disableReasoning) {
+        requestBody.chat_template_kwargs = { enable_thinking: false };
+      }
       // response_format optionnel (auto-profilage JSON) — supporté par les APIs OpenAI-compat
       if (options.responseFormat) {
         requestBody.response_format = options.responseFormat;
@@ -266,7 +280,7 @@ async function queryLLM(prompt, difficulty, tierId, isMandatory, spinner, option
     const duration = Date.now() - startTime;
     const isTimeout = error.name === 'AbortError';
     const reason = isTimeout
-      ? `Timeout après ${API_TIMEOUT_MS / 1000}s — le modèle cloud n'a pas répondu dans le délai imparti`
+      ? `Timeout après ${timeoutMs / 1000}s — le modèle cloud n'a pas répondu dans le délai imparti`
       : error.message;
 
     logger.apiRequest(tierId || '?', duration, 'ERREUR');

@@ -8,6 +8,13 @@ const LM_STUDIO_MODELS_URL = "http://localhost:1234/v1/models";
 const LM_STUDIO_MODELS_V0_URL = "http://localhost:1234/api/v0/models";
 const EVAL_TIMEOUT_MS = 5000;
 const API_TIMEOUT_MS = 900000;
+// Auto-profilage : budget temps/tokens STRICT. Le profil JSON attendu est court
+// (~200 tokens), et les modèles de raisonnement (GLM, Qwen3, DeepSeek-R1) peuvent
+// sinon passer plusieurs MINUTES en `reasoning_content` avant de répondre —
+// jusqu'à 372s observé. On coupe court à 60s et on limite la sortie à 600 tokens
+// pour forcer une réponse concise et éviter l'attente insupportable.
+const PROFILING_TIMEOUT_MS = 60000;
+const PROFILING_MAX_TOKENS = 600;
 const OPTIONAL_BONUS_PCT = 0.20; // Bonus appliqué aux exercices optionnels réussis (20% des points de base)
 
 // --- Professeur (correcteur IA distinct de l'élève) ---
@@ -213,6 +220,8 @@ module.exports = {
   LM_STUDIO_MODELS_V0_URL,
   EVAL_TIMEOUT_MS,
   API_TIMEOUT_MS,
+  PROFILING_TIMEOUT_MS,
+  PROFILING_MAX_TOKENS,
   OPTIONAL_BONUS_PCT,
   PROFILES,
   CLASSE_NAMES,
