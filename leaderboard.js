@@ -109,6 +109,7 @@ function aggregateLedger(ledger) {
   return {
     model: ledger.model || ledger.shortName || 'modèle_inconnu',
     shortName: ledger.shortName || shortenModelName(ledger.model || 'inconnu'),
+    quantization: ledger.quantization || null,
     score, max, pct,
     mandatoryPassed, mandatoryTotal, mandatoryPct,
     globalLifeScore, optionalBonus, helpCount, retriedCount,
@@ -222,6 +223,7 @@ function buildLeaderboardHTML(entries) {
     return {
       shortName: e.shortName,
       model: e.model,
+      quantization: e.quantization || null,
       pct: e.pct,
       score: e.score,
       max: e.max,
@@ -301,6 +303,7 @@ function buildLeaderboardHTML(entries) {
   .mini-stat .val { font-size: 0.95em; font-weight: 700; }
   .mini-stat .grade { font-size: 1.2em; font-weight: 700; }
   .size-badge { display: inline-block; font-size: 0.72em; padding: 1px 7px; border-radius: 10px; background: #21262d; color: #8b949e; border: 1px solid #30363d; vertical-align: middle; margin-left: 4px; white-space: nowrap; }
+  .size-badge.quant-badge { color: #d2a8ff; border-color: #6e7681; background: rgba(94,108,214,0.12); }
   .pct-bar-wrap { width: 70px; height: 6px; background: #30363d; border-radius: 4px; margin-top: 3px; overflow: hidden; }
   .pct-bar-fill { height: 100%; border-radius: 4px; }
   .btn-detail { flex: 0 0 auto; padding: 6px 14px; border: 1px solid #388bfd; background: rgba(56,139,253,0.1); color: #58a6ff; border-radius: 6px; cursor: pointer; font-size: 0.78em; font-weight: 600; transition: all 0.15s; }
@@ -311,6 +314,10 @@ function buildLeaderboardHTML(entries) {
   .btn-copy { flex: 0 0 auto; padding: 3px 8px; border: 1px solid #30363d; background: #21262d; color: #8b949e; border-radius: 5px; cursor: pointer; font-size: 0.7em; font-weight: 600; transition: all 0.15s; vertical-align: middle; margin-left: 6px; line-height: 1; }
   .btn-copy:hover { background: #1f6feb; color: #fff; border-color: #1f6feb; }
   .btn-copy:active { transform: scale(0.94); }
+  .btn-copy-all { padding: 7px 14px; border: 1px solid #388bfd; background: rgba(56,139,253,0.12); color: #58a6ff; border-radius: 8px; cursor: pointer; font-size: 0.78em; font-weight: 600; transition: all 0.15s; margin-left: 8px; }
+  .btn-copy-all:hover { background: #1f6feb; color: #fff; border-color: #1f6feb; }
+  .btn-copy-all:active { transform: scale(0.96); }
+  .btn-copy-all.done { background: #28a745; color: #fff; border-color: #28a745; }
 
   @media (max-width: 768px) {
     .card-row { flex-wrap: wrap; }
@@ -399,6 +406,7 @@ function buildLeaderboardHTML(entries) {
   <div class="search-wrap">
     <input type="text" class="search" id="search" placeholder="🔍 Rechercher un modèle…" />
     <span class="result-count" id="resultCount"></span>
+    <button class="btn-copy-all" id="btnCopyAll" title="Copier tout le classement (texte brut) pour le partager">⧉ Copier le classement</button>
   </div>
 </div>
 
@@ -475,11 +483,14 @@ function renderCards() {
       ? (m.helpCount > 0 ? 'aide:' + m.helpCount : '') + (m.retriedCount > 0 ? (m.helpCount > 0 ? ' ' : '') + 'rat.:' + m.retriedCount : '')
       : '—';
     var szBadge = '<span class="size-badge" title="' + esc(m.paramSize.label) + '">' + m.paramSize.icon + ' ' + esc(m.paramSize.short) + '</span>';
+    var quantBadge = m.quantization
+      ? '<span class="size-badge quant-badge" title="Quantification du modèle (récupérée via LM Studio /api/v0/models ou saisie manuelle)">🧩 ' + esc(m.quantization) + '</span>'
+      : '';
 
     var html = '<div class="card ' + cardClass + '" onclick="openModal(' + i + ')">' +
       '<div class="card-row">' +
         '<div class="rank">' + rankDisp + '</div>' +
-        '<div class="model-name"><span class="cat-icon">' + m.cat.icon + '</span>' + esc(m.model) + ' ' + szBadge + ' <button class="btn-copy" onclick="event.stopPropagation();copyModelName(' + i + ')" title="Copier le nom du modèle">⧉</button></div>' +
+        '<div class="model-name"><span class="cat-icon">' + m.cat.icon + '</span>' + esc(m.model) + ' ' + szBadge + ' ' + quantBadge + ' <button class="btn-copy" onclick="event.stopPropagation();copyModelName(' + i + ')" title="Copier le nom du modèle">⧉</button></div>' +
         '<div class="mini-stats">' +
           '<div class="mini-stat"><span class="lbl">%</span><span class="val" style="color:' + pc + '">' + m.pct + '%</span><div class="pct-bar-wrap"><div class="pct-bar-fill" style="width:' + m.pct + '%;background:' + pc + '"></div></div></div>' +
           '<div class="mini-stat"><span class="lbl">Note</span><span class="grade" style="color:' + gc + '">' + m.grade + '</span></div>' +
@@ -524,6 +535,7 @@ function openModal(idx) {
   body += statBox('Aide prof.', m.helpCount > 0 ? m.helpCount + 'x' : '—');
   body += statBox('Rattrapage', m.retriedCount > 0 ? m.retriedCount + 'x' : '—');
   body += statBox('Écoles', m.ecoleCount);
+  body += statBox('Quantif.', m.quantization ? m.quantization : '—');
   body += '</div>';
 
   // --- Forces / Faiblesses / Notes
@@ -698,6 +710,51 @@ function fallbackCopy(text) {
   document.body.removeChild(ta);
 }
 
+// Copie tout le classement (tel qu'affiché, filtres actifs compris) en texte brut
+// pour le partager (chat, mail, document). Format tabulaire lisible.
+function copyLeaderboard() {
+  var btn = document.getElementById('btnCopyAll');
+  // Respecte les filtres/recherche actifs pour copier ce que l'utilisateur voit.
+  var activeCat = document.querySelector('#chips .chip.active').getAttribute('data-cat');
+  var activeSize = document.querySelector('#sizeChips .chip.active').getAttribute('data-size');
+  var q = document.getElementById('search').value.trim().toLowerCase();
+
+  var lines = [];
+  lines.push('🏇 Classement BenchGo V3 — ' + new Date().toLocaleString('fr-FR'));
+  lines.push('Filtre catégorie : ' + (activeCat === 'all' ? 'tous' : activeCat) + ' | Taille : ' + (activeSize === 'all' ? 'toutes' : activeSize) + (q ? ' | Recherche : ' + q : ''));
+  lines.push('');
+  lines.push('Rang | Modèle | Quantif. | Points | % | Note | Oblig. | Santé | Écoles | Verdict');
+  lines.push('---|---|---|---|---|---|---|---|---|---');
+  var copied = 0;
+  for (var i = 0; i < MODELS.length; i++) {
+    var m = MODELS[i];
+    if (activeCat !== 'all' && m.cat.key !== activeCat) continue;
+    if (activeSize !== 'all' && m.paramSize.key !== activeSize) continue;
+    if (q && m.model.toLowerCase().indexOf(q) === -1 && m.shortName.toLowerCase().indexOf(q) === -1) continue;
+    var rank = copied < 3 ? ['🥇','🥈','🥉'][copied] : ('' + (copied + 1));
+    lines.push(rank + ' | ' + m.model + ' | ' + (m.quantization || '—') + ' | ' + m.score + '/' + m.max + ' | ' + m.pct + '% | ' + m.grade + ' | ' + (m.mandatoryTotal > 0 ? m.mandatoryPct + '%' : '—') + ' | ' + m.globalLifeScore + ' PV | ' + m.ecoleCount + ' | ' + m.verdict.label);
+    copied++;
+  }
+  lines.push('');
+  lines.push('Total : ' + copied + ' modèle(s) — généré par BenchGo V3');
+
+  var text = lines.join('\n');
+  var finish = function(ok) {
+    if (ok) {
+      showToast('Classement copié (' + copied + ' modèle' + (copied > 1 ? 's' : '') + ')', true);
+      if (btn) { btn.classList.add('done'); btn.textContent = '✓ Copié !'; setTimeout(function(){ btn.classList.remove('done'); btn.textContent = '⧉ Copier le classement'; }, 2000); }
+    } else {
+      showToast('Copie impossible', false);
+    }
+  };
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(function(){ finish(true); }, function(){ fallbackCopy(text); finish(true); });
+  } else {
+    fallbackCopy(text); finish(true);
+  }
+}
+document.getElementById('btnCopyAll').addEventListener('click', copyLeaderboard);
+
 renderCards();
 </script>
 </body>
@@ -709,8 +766,8 @@ renderCards();
 function buildLeaderboardMarkdown(entries) {
   let md = `# 🏇 Classement BenchGo V3\n\n`;
   md += `> Généré le ${new Date().toLocaleString('fr-FR')} — ${entries.length} modèle(s) classé(s)\n\n`;
-  md += `| Rang | Modèle | Points | % | Note | Oblig. | Santé | Bonus | Aide | Rat. | Écoles | Verdict | Forces & Faiblesses |\n`;
-  md += `|---:|---|---|---:|:---:|---:|---:|---:|---:|---:|---:|---|---|\n`;
+  md += `| Rang | Modèle | Quantif. | Points | % | Note | Oblig. | Santé | Bonus | Aide | Rat. | Écoles | Verdict | Forces & Faiblesses |\n`;
+  md += `|---:|---|:---:|---|---:|:---:|---:|---:|---:|---:|---:|---:|---|---|\n`;
 
   for (let i = 0; i < entries.length; i++) {
     const e = entries[i];
@@ -719,12 +776,13 @@ function buildLeaderboardMarkdown(entries) {
     const args = buildArguments(e);
 
     const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : String(i + 1);
+    const quant = e.quantization || '—';
     const argsText = [];
     if (args.forces.length > 0) argsText.push('**Forces :** ' + args.forces.join(', '));
     if (args.faiblesses.length > 0) argsText.push('**Faiblesses :** ' + args.faiblesses.join(', '));
     if (args.notes.length > 0) argsText.push('*' + args.notes.join(', ') + '*');
 
-    md += `| ${medal} | ${e.model} | ${e.score}/${e.max} | ${e.pct}% | ${grade.grade} | ${e.mandatoryTotal > 0 ? e.mandatoryPct + '%' : '—'} | ${e.globalLifeScore} | ${e.optionalBonus > 0 ? '+' + e.optionalBonus : '—'} | ${e.helpCount || '—'} | ${e.retriedCount || '—'} | ${e.ecoleCount} | ${verdict.label} | ${argsText.join(' · ')} |\n`;
+    md += `| ${medal} | ${e.model} | ${quant} | ${e.score}/${e.max} | ${e.pct}% | ${grade.grade} | ${e.mandatoryTotal > 0 ? e.mandatoryPct + '%' : '—'} | ${e.globalLifeScore} | ${e.optionalBonus > 0 ? '+' + e.optionalBonus : '—'} | ${e.helpCount || '—'} | ${e.retriedCount || '—'} | ${e.ecoleCount} | ${verdict.label} | ${argsText.join(' · ')} |\n`;
   }
 
   md += `\n---\n\n## Détail par modèle\n\n`;
@@ -733,6 +791,7 @@ function buildLeaderboardMarkdown(entries) {
     const grade = letterGrade(e.pct);
     const args = buildArguments(e);
     md += `### ${e.model}\n\n`;
+    md += `- **Quantification :** ${e.quantization || '—'}\n`;
     md += `- **Score global :** ${e.score}/${e.max} (${e.pct}%) — Note ${grade.grade}\n`;
     md += `- **Obligatoire :** ${e.mandatoryTotal > 0 ? e.mandatoryPassed + '/' + e.mandatoryTotal + ' (' + e.mandatoryPct + '%)' : 'N/A'}\n`;
     md += `- **Santé :** ${e.globalLifeScore} PV | **Bonus :** +${e.optionalBonus}\n`;

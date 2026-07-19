@@ -1,6 +1,11 @@
 
 const LM_STUDIO_API_URL = "http://localhost:1234/v1/chat/completions";
 const LM_STUDIO_MODELS_URL = "http://localhost:1234/v1/models";
+// Endpoint v0 de LM Studio : expose des métadonnées plus riches que /v1/models,
+// notamment la quantification (Q4_K_M, Q5_K_S, Q8_0...), l'architecture, l'éditeur
+// et l'état (loaded / not-loaded). /v1/models (compatible OpenAI) ne renvoie que
+// l'id du modèle, sans la quantification — d'où l'usage de /api/v0/models ici.
+const LM_STUDIO_MODELS_V0_URL = "http://localhost:1234/api/v0/models";
 const EVAL_TIMEOUT_MS = 5000;
 const API_TIMEOUT_MS = 900000;
 const OPTIONAL_BONUS_PCT = 0.20; // Bonus appliqué aux exercices optionnels réussis (20% des points de base)
@@ -87,6 +92,12 @@ function parseCliArgs() {
   const teacherEndpointRaw = (() => { const a = rawArgs.find(r => r.startsWith('--teacher-endpoint=')); return a ? a.split('=').slice(1).join('=') : null; })();
   const teacherDisabledRaw = rawArgs.includes('--no-teacher');
 
+  // Quantification du modèle (ex: Q4_K_M, Q5_K_S, Q8_0...). Les serveurs locaux
+  // (LM Studio, Ollama) ne l'exposent pas toujours dans le nom du modèle, et
+  // /v1/models (OpenAI-compat) ne la renvoie pas non plus. On la récupère via
+  // /api/v0/models (LM Studio) ou on la prend depuis ce flag CLI / le questionnaire.
+  const quantizationRaw = (() => { const a = rawArgs.find(r => r.startsWith('--quantization=')); return a ? a.split('=').slice(1).join('=') : null; })();
+
   const profileArgExplicit = profileArgRaw ? profileArgRaw.toUpperCase() : null;
   const parsedContextLimit = contextLimitRaw ? parseInt(contextLimitRaw, 10) : null;
   const contextLimitTokens = Number.isInteger(parsedContextLimit) && parsedContextLimit > 0
@@ -102,7 +113,7 @@ function parseCliArgs() {
 
   return { tierArg, profileArg, profileArgExplicit, contextLimitTokens, provider, model, apiKey, endpoint,
            teacherModel: teacherModelRaw, teacherApiKey: teacherApiKeyRaw, teacherEndpoint: teacherEndpointRaw,
-           teacherDisabled: teacherDisabledRaw };
+           teacherDisabled: teacherDisabledRaw, quantization: quantizationRaw };
 }
 
 function detectProfileFromModelName(modelName) {
@@ -149,9 +160,57 @@ async function fetchModelNameFromLMStudio() {
   }
 }
 
+// Récupère les métadonnées riches d'un modèle depuis l'endpoint v0 de LM Studio.
+// Contrairement à /v1/models (qui ne donne que l'id), /api/v0/models renvoie la
+// quantification (Q4_K_M, Q5_K_S, Q8_0...), l'architecture, l'éditeur et l'état.
+//
+// @param {string|null} modelId - id du modèle à cibler (ex: "mythos-9b-unhinged").
+//   Si null/undefined : renvoie le premier modèle "loaded", sinon le premier tout
+//   court.
+// @returns {Promise<object|null>} { name, quantization, arch, publisher, state,
+//   maxContextLength } ou null si indisponible (LM Studio éteint, endpoint absent,
+//   modèle introuvable).
+async function fetchModelMetadataFromLMStudio(modelId) {
+  try {
+    const response = await fetch(LM_STUDIO_MODELS_V0_URL, {
+      method: "GET",
+      headers: { "Content-Type": "application/json" }
+    });
+    if (!response.ok) return null;
+    const data = await response.json();
+    if (!data.data || data.data.length === 0) return null;
+
+    // Cherche l'entrée correspondant à modelId (priorité au modèle chargé si
+    // plusieurs partagent le même id). Si modelId est absent, on prend le premier
+    // modèle "loaded", sinon le premier de la liste.
+    let entry = null;
+    if (modelId) {
+      const matches = data.data.filter(m => m.id === modelId);
+      if (matches.length > 0) {
+        entry = matches.find(m => m.state === 'loaded') || matches[0];
+      }
+    }
+    if (!entry) {
+      entry = data.data.find(m => m.state === 'loaded') || data.data[0];
+    }
+
+    return {
+      name: entry.id || null,
+      quantization: entry.quantization || null,
+      arch: entry.arch || null,
+      publisher: entry.publisher || null,
+      state: entry.state || null,
+      maxContextLength: entry.max_context_length || null
+    };
+  } catch (e) {
+    return null;
+  }
+}
+
 module.exports = {
   LM_STUDIO_API_URL,
   LM_STUDIO_MODELS_URL,
+  LM_STUDIO_MODELS_V0_URL,
   EVAL_TIMEOUT_MS,
   API_TIMEOUT_MS,
   OPTIONAL_BONUS_PCT,
@@ -164,5 +223,6 @@ module.exports = {
   parseCliArgs,
   detectProfileFromModelName,
   fetchModelNameFromLMStudio,
+  fetchModelMetadataFromLMStudio,
   selfProfiling
 };

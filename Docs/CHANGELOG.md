@@ -6,6 +6,60 @@
 - Les fichiers sources sont désormais à la racine de `benchmark-v3/` (le nom `benchmark-v2` est abandonné).
 - Ce fichier (`Docs/CHANGELOG.md`) est le journal de versions de référence pour GitHub. Toute évolution du code doit y être consignée.
 
+## 2026-07-19 (b) — Correction diplôme école, quantification des modèles, écoles séquentielles, bouton copier le classement
+
+### Contexte
+Suite à un retour utilisateur (`Memories-BenchGo/Tasks1.md`) décrivant un comportement étrange : un modèle (mythos-9b-unhinged) lancé en mode classe unique sur le collège-lycée s'arrêtait à la 6ème (tier 0) et obtenait le diplôme complet de l'école avec les honneurs, sans avoir continué les autres classes. Quatre axes ont été traités :
+1. Le diplôme de l'école était attribué à tort sur une seule classe réussie (mode tier unique à 100%).
+2. La quantification des modèles (Q4_K_M, Q5_K_S, Q8_0...) n'était jamais récupérée ni affichée — or elle impacte fortement les performances et n'apparaît pas dans le nom des modèles locaux.
+3. Le runner ne savait pas enchaîner deux écoles (Primaire + Collège-Lycée) dans le même run, forçant l'utilisateur à relancer manuellement.
+4. Le classement HTML n'offrait pas de moyen de copier l'ensemble du classement pour le partager.
+
+### Actions entreprises
+
+**1. `runner.js` — Correction du diplôme de l'école (bug d'arrêt à la 6ème)**
+- Le bloc « Gamification Niveau 3 : Grosse Recompense d'Ecole » se déclenchait sur la seule condition `pctGlobal >= 100`, ce qui en mode tier unique donnait un faux diplôme (un seul tier à 100% → `pctGlobal = 100`).
+- Nouvelle logique : le diplôme n'est décerné qu'en mode `all` ET si tous les tiers obligatoires du profil ont été exécutés ET validés ET `pctGlobal >= 100`.
+- En mode tier unique à 100%, un message distinct « CLASSE VALIDÉE : <classe> — diplôme de l'école non attribué (mode classe unique) » remplace le faux diplôme.
+- Traçabilité : `Memories-BenchGo/issues-fixes/2026-07-19-diplome-ecole-sur-une-seule-classe.md`.
+
+**2. `config.js` + `startup-questionnaire.js` + `score-ledger.js` + `leaderboard.js` + `runner.js` — Quantification des modèles**
+- Nouvel endpoint `LM_STUDIO_MODELS_V0_URL = http://localhost:1234/api/v0/models` dans `config.js` : l'API v0 de LM Studio expose la quantification (`Q4_K_M`, `Q4_K_XL`, `Q4_K_S`, `Q8_0`...), l'architecture, l'éditeur et l'état (loaded/not-loaded) — contrairement à `/v1/models` (compatible OpenAI) qui ne renvoie que l'id.
+- Nouvelle fonction `fetchModelMetadataFromLMStudio(modelId)` : renvoie `{ name, quantization, arch, publisher, state, maxContextLength }` pour le modèle ciblé (priorité au modèle chargé si plusieurs partagent le même id).
+- Nouveau flag CLI `--quantization=` (ex: `--quantization=Q5_K_S`) pour forcer la quantification en mode CLI historique ou pour les serveurs qui ne l'exposent pas.
+- `startup-questionnaire.js` : nouvelle étape « 2b. Quantification » — auto-détection via `/api/v0/models` pour LM Studio, saisie manuelle pour Ollama/custom, affichage de l'architecture et de l'éditeur si disponibles.
+- `runner.js` : auto-détection de la quantification en mode CLI local (fallback si pas de `--quantization=` ni de questionnaire), affichage dans la bannière de configuration et dans `logger.runConfig`.
+- `score-ledger.js` : `saveResult` et `saveAndBuildBilan` acceptent un paramètre `quantization`, stocké au niveau du carnet (par modèle, pas par école — la quantification est une propriété du modèle physique).
+- `leaderboard.js` : la quantification est affichée comme badge `🧩 Q4_K_M` à côté du badge de taille de paramètres sur chaque carte, dans les stats de la modale de détail, et dans le classement Markdown (colonne « Quantif. »).
+- Migration one-shot des carnets existants : un script a rempli `ledger.quantization` pour les 6 modèles locaux présents (Q4_K_M / Q4_K_XL / Q4_K_S) à partir de `/api/v0/models`.
+
+**3. `runner.js` — Écoles séquentielles (Primaire + Collège-Lycée) dans le même run**
+- Refactorisation : extraction du flux d'exécution d'une école en fonction imbriquée `runSchool(schoolProfileArg, { isSecondSchool })`. Closure : hérite de toute la config résolue (provider, modèle, clés, queryFn, auto-profilage, professeur, quantification) — pas de re-saisie ni de re-profilage entre écoles.
+- `gameState` (santé PV) est réinitialisé à chaque école (chaque école démarre à 0 PV) — état indépendant par école.
+- Au démarrage, si le modèle fait > 3B paramètres (profil STANDARD ou supérieur) ET mode `all` ET terminal interactif : proposition d'enchaîner Primaire (LIGHT) puis Collège-Lycée (STANDARD) séquentiellement. L'utilisateur peut refuser pour rester sur l'école unique.
+- Bannières de configuration séparées : `main()` affiche la config globale (cible, mode, contexte, quantification) une fois ; `runSchool()` affiche la config spécifique à chaque école (profil, école, tiers).
+- Arrêt propre : si le modèle est éliminé (santé ≤ -100) pendant une école, les écoles suivantes ne sont pas lancées.
+- Le classement est régénéré après le run complet (comme avant), cumulant les résultats de toutes les écoles dans le carnet persistant.
+
+**4. `leaderboard.js` — Bouton « Copier le classement »**
+- Nouveau bouton « ⧉ Copier le classement » dans la barre d'outils (à côté de la recherche).
+- Copie tout le classement en texte brut tabulaire (rang, modèle, quantification, points, %, note, obligatoire, santé, écoles, verdict) dans le presse-papiers — respecte les filtres actifs (catégorie, taille, recherche) pour copier ce que l'utilisateur voit.
+- Feedback visuel : le bouton passe en vert « ✓ Copié ! » pendant 2 s, toast de confirmation avec le nombre de modèles copiés. Fallback `document.execCommand('copy')` si l'API Clipboard n'est pas disponible.
+
+### Fichiers modifiés
+- `runner.js` (diplôme école + refactor runSchool + écoles séquentielles + quantification auto-détection + affichage config)
+- `config.js` (endpoint v0 + `fetchModelMetadataFromLMStudio` + flag `--quantization=`)
+- `startup-questionnaire.js` (étape 2b quantification + retour `quantization`)
+- `score-ledger.js` (`saveResult` / `saveAndBuildBilan` acceptent `quantization`)
+- `leaderboard.js` (badge quantification carte + modale + markdown + bouton copier le classement + CSS)
+- `Memories-BenchGo/issues-fixes/2026-07-19-diplome-ecole-sur-une-seule-classe.md` (nouveau)
+
+### Résultat obtenu
+- Un modèle lancé sur une seule classe ne reçoit plus le diplôme complet de l'école — seulement une mention de classe validée.
+- La quantification de chaque modèle est désormais visible dans le classement (badge 🧩 + colonne Markdown) et dans le carnet persistant, ce qui permet de comparer des runs de quantifications différentes du même modèle.
+- Un modèle > 3B paramètres peut être évalué sur Primaire puis Collège-Lycée d'un seul run, sans re-saisir la configuration ni relancer l'auto-profilage.
+- Le classement peut être copié en un clic pour être partagé dans un chat ou un document.
+
 ## 2026-07-19 — Sécurité des clés API, questionnaire interactif, professeur rapport, auto-profilage renforcé
 
 ### Contexte

@@ -21,7 +21,7 @@
 
 const readline = require('readline');
 const secrets = require('./secrets');
-const { PROFILES } = require('./config');
+const { PROFILES, fetchModelMetadataFromLMStudio } = require('./config');
 const { CLOUD_PROVIDERS } = require('./cloud-client');
 const logger = require('./logger');
 
@@ -224,6 +224,44 @@ async function runStartupQuestionnaire(cliArgs) {
   }
   console.log('');
 
+  // --- 2b. Quantification ---
+  // La quantification (Q4_K_M, Q5_K_S, Q8_0...) n'est JAMAIS dans le nom du modèle
+  // pour les serveurs locaux, et /v1/models (OpenAI-compat) ne l'expose pas non
+  // plus. On la récupère automatiquement via /api/v0/models (LM Studio) ; pour
+  // Ollama / custom, on demande la saisie manuelle (l'utilisateur peut lire la
+  // valeur dans l'UI de son serveur). La quantification est importante car elle
+  // impacte fortement les performances : un Q4_K_M n'a pas le même comportement
+  // qu'un Q8_0, et deux runs du même modèle avec deux quantifications différentes
+  // ne sont pas comparables.
+  let quantization = cliArgs.quantization || null;
+  if (quantization) {
+    console.log('  \x1b[1;33m2b. Quantification\x1b[0m');
+    console.log(`  \x1b[90mQuantification passée en CLI : ${quantization}\x1b[0m`);
+    console.log('');
+  } else if (provider === 'lmstudio') {
+    console.log('  \x1b[1;33m2b. Quantification\x1b[0m');
+    const meta = await fetchModelMetadataFromLMStudio(model);
+    if (meta && meta.quantization) {
+      quantization = meta.quantization;
+      console.log(`  \x1b[32mQuantification détectée automatiquement (LM Studio /api/v0/models) : ${quantization}\x1b[0m`);
+      if (meta.arch)        console.log(`  \x1b[90m  Architecture : ${meta.arch}\x1b[0m`);
+      if (meta.publisher)  console.log(`  \x1b[90m  Éditeur      : ${meta.publisher}\x1b[0m`);
+      if (meta.state)       console.log(`  \x1b[90m  État         : ${meta.state}\x1b[0m`);
+    } else {
+      console.log('  \x1b[33mQuantification non détectable automatiquement (LM Studio injoignable ou endpoint /api/v0 absent).\x1b[0m');
+      const q = await _askFreeText('  Saisissez la quantification (ex: Q4_K_M, Q5_K_S, Q8_0) — laissez vide si inconnue :', { allowEmpty: true });
+      if (q) quantization = q;
+    }
+    console.log('');
+  } else if (provider === 'ollama' || provider === 'custom') {
+    console.log('  \x1b[1;33m2b. Quantification\x1b[0m');
+    console.log('  \x1b[90mLa quantification n\'est pas lisible dans le nom du modèle ni via l\'API OpenAI-compat.\x1b[0m');
+    console.log('  \x1b[90mVous pouvez la lire dans l\'interface de votre serveur (LM Studio : panneau de droite ; Ollama : nom du fichier).\x1b[0m');
+    const q = await _askFreeText('  Saisissez la quantification (ex: Q4_K_M, Q5_K_S, Q8_0) — laissez vide si inconnue :', { allowEmpty: true });
+    if (q) quantization = q;
+    console.log('');
+  }
+
   // --- 3. Clé API ---
   let apiKey = cliArgs.apiKey;
   if (apiKey) {
@@ -320,6 +358,7 @@ async function runStartupQuestionnaire(cliArgs) {
   console.log('  \x1b[1;36m━━━━━━━━━━━━━ RÉCAPITULATIF ━━━━━━━━━━━━━\x1b[0m');
   console.log(`  Fournisseur   : ${provider}`);
   console.log(`  Modèle        : ${model || '(non précisé)'}`);
+  console.log(`  Quantification: ${quantization || '\x1b[90m— (inconnue)\x1b[0m'}`);
   console.log(`  Clé API élève : ${apiKey ? secrets.maskedForDisplay(apiKey) : '\x1b[90m—\x1b[0m'}`);
   console.log(`  Endpoint      : ${endpoint || '\x1b[90m(par défaut)\x1b[0m'}`);
   console.log(`  Profil        : ${profileArg}`);
@@ -335,6 +374,7 @@ async function runStartupQuestionnaire(cliArgs) {
     profileArg,
     contextLimitTokens,
     teacherConfig,
+    quantization,
     isInteractive: true
   };
 }

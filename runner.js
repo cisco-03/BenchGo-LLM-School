@@ -3,7 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const readline = require('readline');
 const logger = require('./logger');
-const { PROFILES, CLASSE_NAMES, parseCliArgs, detectProfileFromModelName, fetchModelNameFromLMStudio, OPTIONAL_BONUS_PCT, selfProfiling, TEACHER_CONFIG } = require('./config');
+const { PROFILES, CLASSE_NAMES, parseCliArgs, detectProfileFromModelName, fetchModelNameFromLMStudio, fetchModelMetadataFromLMStudio, OPTIONAL_BONUS_PCT, selfProfiling, TEACHER_CONFIG } = require('./config');
 const { ProgressBar, Spinner, letterGrade } = require('./progress-bar');
 const { extractJSON, extractCodeRegex } = require('./parsing-utils');
 const { queryLLM: queryLLMLocal } = require('./lm-studio-client');
@@ -776,7 +776,7 @@ async function main() {
 
   const cliArgs = parseCliArgs();
   const { tierArg, profileArgExplicit, contextLimitTokens: contextLimitFromCli, provider, model: cloudModel, apiKey, endpoint,
-           teacherModel, teacherApiKey, teacherEndpoint, teacherDisabled } = cliArgs;
+           teacherModel, teacherApiKey, teacherEndpoint, teacherDisabled, quantization: cliQuantization } = cliArgs;
 
   // --- Questionnaire interactif au démarrage ---
   // Si AUCUN flag significatif n'est passé (--provider, --model), on lance le
@@ -791,6 +791,7 @@ async function main() {
   let resolvedEndpoint = endpoint;
   let resolvedProfileArgExplicit = profileArgExplicit;
   let resolvedContextLimit = contextLimitFromCli;
+  let resolvedQuantization = cliQuantization || null;
   let teacherConfigResolved;
 
   if (!hasCliProvider && !hasCliModel && process.stdin.isTTY && process.stdout.isTTY) {
@@ -802,6 +803,7 @@ async function main() {
     resolvedEndpoint = qConfig.endpoint;
     resolvedProfileArgExplicit = qConfig.profileArg;
     resolvedContextLimit = qConfig.contextLimitTokens;
+    if (qConfig.quantization) resolvedQuantization = qConfig.quantization;
     // teacherConfig construit par le questionnaire (clé mémorisée dans secrets.js)
     teacherConfigResolved = qConfig.teacherConfig;
     // Mémorise aussi la clé élève dans secrets pour réutilisation cross-école.
@@ -918,6 +920,23 @@ async function main() {
       logger.warn(`Impossible de joindre /v1/models. Fallback sur STANDARD.`);
       profileArg = 'STANDARD';
     }
+    // --- Auto-détection de la quantification (LM Studio /api/v0/models) ---
+    // En mode CLI local sans --quantization=, on interroge l'endpoint v0 de LM
+    // Studio pour récupérer la quantification du modèle chargé. Elle n'est pas
+    // dans le nom du modèle ni dans /v1/models, donc sans ça deux runs du même
+    // modèle avec des quantifications différentes seraient indiscernables.
+    if (!resolvedQuantization && preKnownModelName) {
+      try {
+        const meta = await fetchModelMetadataFromLMStudio(preKnownModelName);
+        if (meta && meta.quantization) {
+          resolvedQuantization = meta.quantization;
+          logger.info(`Quantification détectée via /api/v0/models : ${resolvedQuantization}${meta.arch ? ' (arch=' + meta.arch + ')' : ''}`);
+          console.log(`  Quantification détectée : \x1b[1;35m${resolvedQuantization}\x1b[0m \x1b[90m(${meta.publisher || '?'} · ${meta.arch || '?'})\x1b[0m`);
+        }
+      } catch (e) {
+        logger.warn(`Quantification non récupérable : ${e.message}`);
+      }
+    }
   } else {
     logger.info(`Profil forcé par l'utilisateur : ${PROFILES[profileArg] ? PROFILES[profileArg].label : profileArg}`);
   }
@@ -929,29 +948,27 @@ async function main() {
 
   const profile = PROFILES[profileArg];
 
-  // --- Affichage IMMÉDIAT de la configuration (priorité absolue) ---
+  // --- Affichage IMMÉDIAT de la configuration globale (priorité absolue) ---
   // Avant toute chose (et surtout avant l'auto-profilage qui peut prendre 10-15s),
-  // on affiche à l'utilisateur toutes les infos essentielles du run. Ainsi, même
-  // pendant que le modèle réfléchit à son auto-profilage, l'utilisateur sait
-  // exactement ce qui se passe : cible, tokens, profil, école, tiers.
+  // on affiche à l'utilisateur les infos GLOBALES du run : cible, mode, contexte,
+  // quantification. Les infos spécifiques à chaque école (profil, école, tiers)
+  // sont affichées par runSchool() au début de chaque école — ainsi un run
+  // multi-écoles affiche la bonne école pour chaque phase.
   logger.runConfig({
     'Cible': tierArg,
-    'Profil': profile.label,
+    'Profil principal': profile.label,
     'Budget contexte': `${contextLimitTokens} tokens`,
-    'Tiers obligatoires': profile.mandatory.join(','),
-    'Tiers optionnels': profile.optional.join(',') || 'aucun'
+    'Quantification': resolvedQuantization || 'inconnue'
   });
 
   console.log(`  \x1b[1;36m━━━ CONFIGURATION DU RUN ━━━\x1b[0m`);
   console.log(`  \x1b[1;33mCible demandée      :\x1b[0m \x1b[1;33m${tierArg.toUpperCase()}\x1b[0m`);
-  console.log(`  \x1b[1;33mProfil d'évaluation :\x1b[0m \x1b[1;33m${profile.label}\x1b[0m`);
-  console.log(`  \x1b[1;33mÉcole               :\x1b[0m \x1b[1;33m${profile.ecole}\x1b[0m`);
-  console.log(`  \x1b[1;33mContexte max        :\x1b[0m \x1b[1;33m${contextLimitTokens} tokens\x1b[0m`);
-  console.log(`  \x1b[1;33mTiers obligatoires  :\x1b[0m \x1b[1;33m${profile.mandatory.join(', ')}\x1b[0m`);
-  if (profile.optional.length > 0) {
-    console.log(`  \x1b[1;33mTiers optionnels    :\x1b[0m \x1b[1;33m${profile.optional.join(', ')}\x1b[0m`);
-  }
   console.log(`  \x1b[1;33mMode                :\x1b[0m \x1b[1;33m${isCloudMode ? `CLOUD (${resolvedProvider.toUpperCase()})` : 'LOCAL (LM Studio)'}\x1b[0m`);
+  if (isCloudMode && resolvedCloudModel) {
+    console.log(`  \x1b[1;33mModèle              :\x1b[0m \x1b[1;33m${resolvedCloudModel}\x1b[0m`);
+  }
+  console.log(`  \x1b[1;33mContexte max        :\x1b[0m \x1b[1;33m${contextLimitTokens} tokens\x1b[0m`);
+  console.log(`  \x1b[1;33mQuantification      :\x1b[0m ${resolvedQuantization ? `\x1b[1;35m${resolvedQuantization}\x1b[0m` : '\x1b[90m— (inconnue)\x1b[0m'}`);
   console.log('');
 
   // --- Auto-profilage (Self-Profiling) ---
@@ -1013,6 +1030,31 @@ async function main() {
     }
   }
 
+  // --- runSchool : exécute UNE école (un profil) de bout en bout.
+  // Fonction imbriquée dans main() pour hériter (closure) de toute la config
+  // résolue : provider, modèle, clés, queryFn, auto-profilage, professeur,
+  // quantification. On passe juste le profil/école à exécuter. Permet d'enchaîner
+  // plusieurs écoles (ex: Primaire puis Collège-Lycée) dans le même run, sans
+  // re-saisir la configuration ni relancer l'auto-profilage.
+  async function runSchool(schoolProfileArg, { isSecondSchool = false } = {}) {
+    // Ombre locale : toutes les références `profileArg` dans ce bloc désignent
+    // l'école courante, pas l'école principale du run.
+    let profileArg = schoolProfileArg;
+    const profile = PROFILES[profileArg];
+    const ecoleLabel = PROFILES[profileArg]?.ecole || profileArg;
+
+    // Bannière de configuration de l'école. Affichée pour CHAQUE école (1re
+    // comprise) : profil, école et tiers de l'école courante. La config globale
+    // (mode, contexte, quantification) a déjà été affichée par main() une fois.
+    console.log(`  \x1b[1;36m━━━ CONFIGURATION DE L'ÉCOLE ━━━\x1b[0m`);
+    console.log(`  \x1b[1;33mÉcole              :\x1b[0m \x1b[1;33m${profile.ecole}\x1b[0m`);
+    console.log(`  \x1b[1;33mProfil             :\x1b[0m \x1b[1;33m${profile.label}\x1b[0m`);
+    console.log(`  \x1b[1;33mTiers obligatoires  :\x1b[0m \x1b[1;33m${profile.mandatory.join(', ')}\x1b[0m`);
+    if (profile.optional.length > 0) {
+      console.log(`  \x1b[1;33mTiers optionnels    :\x1b[0m \x1b[1;33m${profile.optional.join(', ')}\x1b[0m`);
+    }
+    console.log('');
+
   const tiers = loadTiers(profileArg);
   let tierKeys = Object.keys(tiers).map(Number).sort();
 
@@ -1027,7 +1069,7 @@ async function main() {
 
   if (tierKeys.length === 0) {
     console.log(`\x1b[31mAucun tier applicable pour la cible '${tierArg}' avec le profil ${profileArg}.\x1b[0m`);
-    return;
+    return { ecoleLabel, profileArg, skipped: true };
   }
 
   let globalReport = `# Rapport d'Évaluation V3\n\n`;
@@ -1054,7 +1096,6 @@ async function main() {
   let allEvalResults = [];      // Agrégation pour le calcul de calibration (status: success/failed/bypassed)
   let allFilterDecisions = [];  // Décisions de filtrage pour la section rapport calibration
   let allTierResponses = [];    // Réponses brutes + raisonnement par tier (pour l'export raisonnement NotebookLM)
-  const ecoleLabel = PROFILES[profileArg]?.ecole || profileArg;
 
   // --- Détection de doublon (modèle déjà testé sur cette école) ---
   // Vérifie le carnet de scores persistant : si une entrée existe déjà pour ce
@@ -1075,8 +1116,9 @@ async function main() {
         console.log(`  \x1b[36mTest annulé : le score existant est conservé.\x1b[0m`);
         console.log(`  \x1b[90mAstuce : relancez avec un autre modèle ou profil pour comparer.\x1b[0m\n`);
         logger.info(`Test annulé : doublon détecté pour ${preKnownModelName} sur ${ecoleLabel}, utilisateur a refusé de forcer.`);
-        logger.close();
-        return;
+        // On ne ferme PAS le logger (d'autres écoles peuvent suivre). On renvoie
+        // null pour skipper cette école sans interrompre le run multi-écoles.
+        return { ecoleLabel, profileArg, skipped: true };
       }
       logger.info(`Re-test demandé pour ${preKnownModelName} sur ${ecoleLabel} (tentative #${existingAttempts.length + 1}).`);
       console.log(`  \x1b[33mRe-test lancé — tentative #${existingAttempts.length + 1} (le meilleur score est conservé pour le classement).\x1b[0m\n`);
@@ -1294,10 +1336,29 @@ async function main() {
   }
 
   // Gamification Niveau 3 : Grosse Recompense d'Ecole
-  if (pctGlobal >= 100) {
+  // Le diplôme de l'école ne s'obtient qu'en mode "all" (toutes les classes de
+  // l'école traversées) ET si TOUS les tiers obligatoires du profil ont été
+  // validés. En mode tier unique (ex: --tier=0), on ne décerne qu'une mention
+  // « classe validée » — jamais le diplôme complet de l'école, sinon un modèle
+  // qui ne ferait que la 6ème (tier 0) à 100% recevrait le diplôme du Collège-Lycée.
+  const isAllMode = (tierArg === "all");
+  const mandatoryTiersAttempted = profile.mandatory.every(t => tierKeys.includes(t));
+  const allMandatoryPassed = tierScorecard
+    .filter(e => e.mandatory)
+    .every(e => e.passed);
+  const diplomaEligible = isAllMode && mandatoryTiersAttempted && allMandatoryPassed && (pctGlobal >= 100);
+
+  if (diplomaEligible) {
     const recompense = `Diplôme de l'école ${PROFILES[profileArg]?.ecole || profileArg} décerné au modèle avec les honneurs !`;
     console.log(`\x1b[36m\u2551  \x1b[35m\u2588\u2588\u2588 TROPHÉE OBTENU : ${recompense} \u2588\u2588\u2588\x1b[0m\x1b[36m \u2551\x1b[0m`);
     globalReport += `\n> **🏆 Trophée Majeur :** ${recompense}\n`;
+  } else if (pctGlobal >= 100 && !isAllMode) {
+    // En mode tier unique avec 100% sur la classe ciblée : on félicite pour la
+    // classe, sans attribuer le diplôme complet de l'école (pour éviter un
+    // faux diplôme sur une seule classe).
+    const classeLabel = getClassName(profileArg, parseInt(tierArg));
+    console.log(`\x1b[36m\u2551  \x1b[35m\u2588\u2588\u2588 CLASSE VALIDÉE : ${classeLabel} (100%) — diplôme de l'école non attribué (mode classe unique) \u2588\u2588\u2588\x1b[0m\x1b[36m \u2551\x1b[0m`);
+    globalReport += `\n> **✔ Classe validée :** ${classeLabel} (100%). Le diplôme complet de l'école ${PROFILES[profileArg]?.ecole || profileArg} n'est attribué qu'en mode "all" (toutes les classes obligatoires réussies).\n`;
   }
 
   console.log('\x1b[36m\u255A\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u255D\x1b[0m\n');
@@ -1449,9 +1510,10 @@ async function main() {
       time: timeStr,
       reportFile: relPath,
       selfProfile: selfProfile || null,
-      tiers: allTierResponses
+      tiers: allTierResponses,
+      quantization: resolvedQuantization || null
     };
-    const bilanMd = scoreLedger.saveAndBuildBilan(shortName, effectiveModel, ecoleResult);
+    const bilanMd = scoreLedger.saveAndBuildBilan(shortName, effectiveModel, ecoleResult, resolvedQuantization || null);
     if (bilanMd) globalReport += bilanMd;
   }
 
@@ -1472,7 +1534,76 @@ async function main() {
     leaderboard.generateLeaderboard();
   }
 
-  logger.info(`Benchmark terminé. Score global : ${globalScore.passed}/${globalScore.total} (${pctGlobal}%). Score obligatoire : ${globalScore.mandatoryPassed}/${globalScore.mandatoryTotal} (${pctMandatory}%).`);
+  logger.info(`Benchmark terminé (${ecoleLabel}). Score global : ${globalScore.passed}/${globalScore.total} (${pctGlobal}%). Score obligatoire : ${globalScore.mandatoryPassed}/${globalScore.mandatoryTotal} (${pctMandatory}%).`);
+
+  // --- Fin de runSchool : on renvoie un résumé à main() ---
+  // On NE ferme PAS le logger ici (plusieurs écoles peuvent s'enchaîner).
+  return {
+    ecoleLabel,
+    profileArg,
+    pctGlobal,
+    pctMandatory,
+    globalScore: { ...globalScore },
+    effectiveModel,
+    shortName: shortName || null,
+    eliminated: stopGlobalEval
+  };
+  } // fin de runSchool
+
+  // --- Décision : quelles écoles lancer ? ---
+  // Par défaut, une seule école (le profil résolu). Mais si le modèle fait > 3B
+  // paramètres (profil STANDARD ou supérieur), on propose d'enchaîner Primaire
+  // (LIGHT) puis Collège-Lycée (STANDARD) dans le même run — même clé, même
+  // auto-profilage, gameState réinitialisé entre écoles. Utile pour benchmarker
+  // un modèle sur deux niveaux scolaires d'un coup.
+  let schoolsToRun = [profileArg];
+  const modelIsBigEnough = (profileArg !== 'LIGHT'); // > 3B → STANDARD ou plus
+  const isInteractive = process.stdin.isTTY && process.stdout.isTTY;
+
+  if (tierArg === "all" && modelIsBigEnough && isInteractive) {
+    console.log(`\n  \x1b[1;36m━━━ ÉCOLES À ÉVALUER ━━━\x1b[0m`);
+    console.log(`  \x1b[90mLe modèle (${profile.label}) est supérieur à 3B paramètres : il peut être évalué sur plusieurs écoles.\x1b[0m`);
+    console.log(`  \x1b[90m(A) ${profile.label} uniquement (école courante)\x1b[0m`);
+    console.log(`  \x1b[90m(B) Primaire (LIGHT) puis ${profile.label} — évaluation séquentielle des deux écoles\x1b[0m`);
+    const wantsTwoSchools = await askYesNo(`  Lancer les deux écoles (Primaire + ${profile.ecole}) séquentiellement dans ce run ?`, true);
+    if (wantsTwoSchools) {
+      // On exécute d'abord Primaire (LIGHT), puis l'école principale (profileArg).
+      // Set() évite tout doublon si profileArg était déjà LIGHT (impossible ici
+      // car modelIsBigEnough exclut LIGHT, mais on garde la sécurité).
+      schoolsToRun = [...new Set(['LIGHT', profileArg])];
+      console.log(`  \x1b[1;35m→ ${schoolsToRun.length} écoles seront évaluées : ${schoolsToRun.map(p => PROFILES[p].ecole).join(' → ')}\x1b[0m\n`);
+    } else {
+      console.log(`  \x1b[90m→ École unique : ${profile.ecole}\x1b[0m\n`);
+    }
+  }
+
+  // --- Exécution séquentielle des écoles ---
+  let lastResult = null;
+  for (let si = 0; si < schoolsToRun.length; si++) {
+    const schoolProfile = schoolsToRun[si];
+    const isSecondSchool = (si > 0);
+    if (schoolsToRun.length > 1) {
+      console.log(`\n  \x1b[1;35m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\x1b[0m`);
+      console.log(`  \x1b[1;35m  ÉCOLE ${si + 1}/${schoolsToRun.length} — ${PROFILES[schoolProfile].ecole}\x1b[0m`);
+      console.log(`  \x1b[1;35m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\x1b[0m`);
+      if (isSecondSchool) {
+        console.log(`  \x1b[90m gameState réinitialisé pour cette école. Clé, auto-profilage et professeur conservés.\x1b[0m`);
+      }
+    }
+    try {
+      lastResult = await runSchool(schoolProfile, { isSecondSchool });
+      // Si le modèle a été éliminé pendant cette école, on n'enchaîne pas la suite.
+      if (lastResult && lastResult.eliminated) {
+        console.log(`  \x1b[31mModèle éliminé sur ${lastResult.ecoleLabel} — arrêt des écoles suivantes.\x1b[0m`);
+        break;
+      }
+    } catch (e) {
+      logger.error(`Erreur fatale sur l'école ${PROFILES[schoolProfile].ecole} : ${e.message}`);
+      console.error(`\x1b[31m[ERREUR]\x1b[0m École ${PROFILES[schoolProfile].ecole} : ${e.message}`);
+      break;
+    }
+  }
+
   logger.close();
 }
 

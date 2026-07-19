@@ -63,10 +63,20 @@ function pickBest(attempts) {
 
 // Conserve TOUTES les tentatives par école (historique des re-tests), la meilleure
 // est référencée par `best` pour le classement global. Migration auto des anciens carnets.
-function saveResult(shortName, modelName, result) {
+// `quantization` (optionnel) est stockée au niveau du carnet (par modèle) : un même
+// modèle testé avec plusieurs quantifications verra sa dernière quantification connue
+// mise à jour. C'est au niveau du résultat qu'elle est aussi conservée, pour l'historique.
+function saveResult(shortName, modelName, result, quantization) {
   const ledger = loadLedger(shortName);
   ledger.model = modelName;
   ledger.shortName = shortName;
+  // La quantification est une propriété du modèle physique (pas de l'école). On la
+  // conserve au niveau du carnet pour que le classement puisse l'afficher même sans
+  // recharger tous les résultats. Si fournie, on écrase la valeur précédente (la
+  // dernière connue prime).
+  if (quantization) {
+    ledger.quantization = quantization;
+  }
   const entry = normalizeEcoleEntry(ledger.ecoles[result.ecole]);
   entry.attempts.push(result);
   const newBest = pickBest(entry.attempts);
@@ -170,8 +180,8 @@ function buildBilanMarkdown(shortName, modelName) {
 }
 
 // Sauvegarde le résultat courant puis renvoie le markdown du bilan (pour l'ajouter au rapport).
-function saveAndBuildBilan(shortName, modelName, result) {
-  saveResult(shortName, modelName, result);
+function saveAndBuildBilan(shortName, modelName, result, quantization) {
+  saveResult(shortName, modelName, result, quantization);
   return buildBilanMarkdown(shortName, modelName);
 }
 
