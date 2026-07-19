@@ -654,6 +654,8 @@ function buildLeaderboardHTML(entries) {
 
   /* Rapport intégral (modale) — sections repliables par école/tier */
   .report-block { margin-top: var(--space-s); }
+  .report-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-s); margin-bottom: var(--space-s); }
+  .report-actions-hint { font-size: var(--fs-tiny); color: var(--text-dim); font-style: italic; }
   .report-school { margin-bottom: var(--space-m); border: 1px solid var(--border-soft); border-radius: var(--r-sm); overflow: hidden; }
   .report-school-head, .report-tier-head {
     display: flex; align-items: center; gap: var(--space-xs); cursor: pointer;
@@ -793,7 +795,13 @@ function gradeColor(g) {
   return m[g] || '#8b949e';
 }
 function pctColor(p) {
-  return p >= 80 ? '#3fb950' : p >= 50 ? '#d29922' : '#f85149';
+  var pct = Math.max(0, Math.min(100, p));
+  // Dégradé fluide vert → rouge : 100% = vert (hue 120), 0% = rouge (hue 0).
+  // Interpolation linéaire dans l'espace HSL (saturation/lightness constantses
+  // pour un rendu vif et lisible sur fond sombre). Évite les 3 paliers discrets
+  // (vert/jaune/rouge) au profit d'un dégradé continu où chaque % a sa teinte.
+  var hue = pct * 1.2;
+  return 'hsl(' + hue.toFixed(0) + ', 72%, 48%)';
 }
 function esc(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -955,6 +963,10 @@ function openModal(idx) {
 
   // --- Rapport intégral : tiers, exercices, code, raisonnement, corrections
   body += '<h3>📋 Rapport intégral (comportement & raisonnement)</h3>';
+  body += '<div class="report-actions">';
+  body += '<button class="btn btn-primary" id="btnExportReport" onclick="exportReport(' + idx + ')" title="Télécharger le rapport intégral (Markdown) prêt à transmettre à Gemini/ChatGPT pour analyse → NotebookLM">⬇ Exporter le rapport intégral</button>';
+  body += '<span class="report-actions-hint">Télécharge un fichier .md à envoyer à un modèle cloud (Gemini, ChatGPT…) pour analyse → verdict → NotebookLM.</span>';
+  body += '</div>';
   body += '<div class="report-block">';
   var hasAnyTier = false;
   for (var e of m.ecoles) {
@@ -1123,6 +1135,100 @@ function copyModelName(idx) {
     navigator.clipboard.writeText(name).then(function() { showToast('Nom copié : ' + name, true); }, function() { fallbackCopy(name); });
   } else { fallbackCopy(name); }
 }
+
+// Exporte le rapport intégral d'un modèle : déclenche le téléchargement d'un
+// fichier Markdown généré à la volée par le serveur (/api/report?shortName=...).
+// Le fichier contient l'auto-profilage, toutes les écoles, tous les tiers, tous
+// les exercices avec code + explications + corrections + réponses brutes.
+// Il est conçu pour être transmis à un modèle cloud (Gemini, ChatGPT, Claude…)
+// qui l'analysera puis produira un verdict à injecter dans NotebookLM.
+function exportReport(idx) {
+  var m = MODELS[idx];
+  var shortName = encodeURIComponent(m.shortName);
+  var btn = document.getElementById('btnExportReport');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Génération…'; }
+  // Désactive le mode serveur (ouverture locale du HTML) : on construit le MD
+  // côté client à partir des données déjà présentes dans MODELS, puis on
+  // déclenche le téléchargement via un Blob. En mode --serve, on fetch le
+  // serveur qui génère le MD complet (idem raisonnement_modeles.md par modèle).
+  function downloadBlob(md, filename) {
+    var blob = new Blob([md], { type: 'text/markdown;charset=utf-8' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click();
+    document.body.removeChild(a);
+    setTimeout(function(){ URL.revokeObjectURL(url); }, 1500);
+    showToast('Rapport téléchargé : ' + filename, true);
+    if (btn) { btn.disabled = false; btn.textContent = '⬇ Exporter le rapport intégral'; }
+  }
+  function clientFallback() {
+    // Repli : génère un MD minimal côté client (les données MODELS contiennent
+    // déjà les tiers/exercices/code/rawResponse). Moins riche que la version
+    // serveur mais fonctionnel si on ouvre le HTML sans serveur.
+    var md = '# Rapport intégral — ' + m.model + '\\n\\n';
+    md += '**Nom court :** ' + m.shortName + '\\n';
+    md += '- Score global : ' + m.score + '/' + m.max + ' (' + m.pct + '%) — Note ' + m.grade + '\\n';
+    md += '- Quantification : ' + (m.quantization || '—') + '\\n\\n';
+    for (var i = 0; i < m.ecoles.length; i++) {
+      var ec = m.ecoles[i];
+      md += '### École : ' + ec.ecole + '\\n\\n';
+      if (ec.selfProfile && ec.selfProfile.skills) {
+        md += '#### Auto-profilage déclaré\\n';
+        var sp = ec.selfProfile.skills;
+        md += '- javascript_basics : ' + (sp.javascript_basics ? sp.javascript_basics.level : '?') + '/5\\n';
+        md += '- javascript_async : ' + (sp.javascript_async ? sp.javascript_async.level : '?') + '/5\\n';
+        md += '- algorithms_advanced : ' + (sp.algorithms_advanced ? sp.algorithms_advanced.level : '?') + '/5\\n';
+        md += '- code_debugging : ' + (sp.code_debugging ? sp.code_debugging.level : '?') + '/5\\n';
+        if (ec.selfProfile.justification) md += '- Justification : ' + ec.selfProfile.justification + '\\n';
+        md += '\\n';
+      }
+      for (var j = 0; j < (ec.tiers || []).length; j++) {
+        var t = ec.tiers[j];
+        md += '#### Tier ' + t.tierNum + ' — ' + (t.tierTitle || '') + ' (' + (t.className || '') + ')\\n\\n';
+        md += '- Statut : ' + (t.isMandatory ? 'Obligatoire' : 'Optionnel') + '\\n\\n';
+        var evals = t.evalResults || [];
+        if (evals.length > 0) {
+          md += '| Exercice | Type | Points | Max | Statut |\\n|---|---|---:|---:|---|\\n';
+          for (var k = 0; k < evals.length; k++) {
+            var r = evals[k];
+            var st = r.status === 'success' ? '✔ Validé' : (r.status === 'bypassed' ? '⊘ Bypassé' : '✘ Échec');
+            md += '| ' + r.id + ' | ' + (r.taskType || '—') + ' | ' + r.points + ' | ' + r.maxPoints + ' | ' + st + ' |\\n';
+          }
+          md += '\\n';
+          for (var k2 = 0; k2 < evals.length; k2++) {
+            var r2 = evals[k2];
+            if (r2.status === 'bypassed') continue;
+            md += '**Exercice ' + r2.id + '** (' + (r2.status === 'success' ? 'validé' : 'échec') + ')\\n\\n';
+            if (r2.code && String(r2.code).trim()) md += '\`\`\`javascript\\n' + String(r2.code).trim() + '\\n\`\`\`\\n\\n';
+            if (r2.failureExplanation) md += '**Explication échec :** ' + r2.failureExplanation + '\\n\\n';
+            if (r2.teacherCorrection) md += '**🎓 Correction professeur :** ' + r2.teacherCorrection + '\\n\\n';
+          }
+        }
+        if (t.rawResponse && String(t.rawResponse).trim()) md += '##### Réponse brute\\n\\n\`\`\`text\\n' + String(t.rawResponse).trim() + '\\n\`\`\`\\n\\n';
+      }
+      md += '---\\n\\n';
+    }
+    var safe = String(m.shortName || 'modele').replace(/[^a-zA-Z0-9._-]/g, '_');
+    var d = new Date();
+    var p = function(n){ return String(n).padStart(2,'0'); };
+    var fn = 'rapport_integral_' + safe + '_' + d.getFullYear() + '-' + p(d.getMonth()+1) + '-' + p(d.getDate()) + '.md';
+    downloadBlob(md, fn);
+  }
+  // Tente d'abord le serveur (rapport complet identique à raisonnement_modeles.md).
+  fetch('/api/report?shortName=' + shortName)
+    .then(function(r) {
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      var cd = r.headers.get('Content-Disposition') || '';
+      var mFn = cd.match(/filename="([^"]+)"/);
+      var filename = mFn ? mFn[1] : ('rapport_integral_' + m.shortName + '.md');
+      return r.text().then(function(txt) { downloadBlob(txt, filename); });
+    })
+    .catch(function(err) {
+      // Hors serveur (ouverture locale du fichier HTML) ou serveur injoignable.
+      clientFallback();
+    });
+}
 function fallbackCopy(text) {
   var ta = document.createElement('textarea');
   ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
@@ -1274,113 +1380,128 @@ function buildReasoningMarkdown(entries) {
   md += `---\n\n`;
 
   for (const e of entries) {
-    // e.model = nom intégral du modèle (jamais raccourci dans ce fichier)
-    md += `## ${e.model}\n\n`;
-    md += `**Nom intégral du modèle :** ${e.model}\n\n`;
-    md += `**Nom court :** ${e.shortName}\n\n`;
-    md += `- **Score global :** ${e.score}/${e.max} (${e.pct}%) — Note ${letterGrade(e.pct).grade}\n`;
-    md += `- **Score obligatoire :** ${e.mandatoryTotal > 0 ? e.mandatoryPassed + '/' + e.mandatoryTotal + ' (' + e.mandatoryPct + '%)' : 'N/A'}\n`;
-    md += `- **Santé globale :** ${e.globalLifeScore} PV\n`;
-    md += `- **Bonus optionnel :** +${e.optionalBonus}\n`;
-    md += `- **Aide du professeur :** ${e.helpCount}x | **Rattrapages :** ${e.retriedCount}x\n`;
-    md += `- **Écoles évaluées :** ${e.ecoleCount}\n\n`;
-
-    // Détail par école : on retrouve le carnet original pour accéder aux tiers
-    // (réponses brutes + raisonnement + selfProfile).
-    const ledger = loadLedgerByName(e.shortName);
-    if (!ledger) {
-      md += `> *Carnet de scores introuvable — détail des raisonnements indisponible.*\n\n---\n\n`;
-      continue;
-    }
-
-    for (const ecole of e.ecoles) {
-      const ecoleEntry = normalizeEcoleEntryLb(ledger.ecoles[ecole.ecole]).best;
-      if (!ecoleEntry) continue;
-
-      const runDate = ecoleEntry.date || '—';
-      const runTime = ecoleEntry.time ? ecoleEntry.time.replace(/-/g, ':') : null;
-      md += `### École : ${ecole.ecole}\n\n`;
-      md += `**Date du run :** ${runDate}${runTime ? ' à ' + runTime : ''}\n\n`;
-      md += `- **Profil :** ${ecoleEntry.profile || '—'}\n`;
-      md += `- **Score école :** ${ecole.score}/${ecole.max} (${ecole.pct}%) — Note ${letterGrade(ecole.pct).grade}\n`;
-      md += `- **Santé école :** ${ecole.globalLifeScore} PV | **Bonus :** +${ecole.optionalBonus}\n`;
-      md += `- **Aide :** ${ecole.helpCount}x | **Rattrapage :** ${ecole.retriedCount}x\n`;
-      if (ecoleEntry.calibrationIndex != null) {
-        md += `- **Indice de Calibration :** C=${ecoleEntry.calibrationIndex.toFixed(3)} (D=${((ecoleEntry.declaredLevel || 0) * 100).toFixed(0)}%)\n`;
-      }
-
-      // Auto-profilage déclaré par le modèle pour cette école
-      if (ecoleEntry.selfProfile && ecoleEntry.selfProfile.skills) {
-        md += `\n#### Auto-profilage déclaré par le modèle\n\n`;
-        const skills = ecoleEntry.selfProfile.skills;
-        for (const [skill, label] of Object.entries({
-          javascript_basics: 'JavaScript — Bases & Algorithmique simple',
-          javascript_async: 'JavaScript Asynchrone (Promises, concurrence, retry)',
-          algorithms_advanced: 'Algorithmes & Structures de données avancées',
-          code_debugging: 'Débogage & Sécurité applicative'
-        })) {
-          const lvl = skills[skill] ? skills[skill].level : '?';
-          md += `- **${label} :** niveau ${lvl}/5\n`;
-        }
-        if (ecoleEntry.selfProfile.justification) {
-          md += `- **Justification du modèle :** ${ecoleEntry.selfProfile.justification}\n`;
-        }
-      }
-
-      // Détail par tier (classe traversée)
-      const tiers = ecoleEntry.tiers || [];
-      if (tiers.length === 0) {
-        md += `\n> *Aucun détail de tier disponible pour cette école (données antérieures à l'export raisonnement).*\n`;
-      }
-      for (const t of tiers) {
-        md += `\n#### Tier ${t.tierNum} — ${t.tierTitle}\n\n`;
-        md += `- **Classe :** ${t.className}\n`;
-        md += `- **Statut :** ${t.isMandatory ? 'Obligatoire' : 'Optionnel'}\n\n`;
-
-        // Tableau des exercices
-        const evals = t.evalResults || [];
-        if (evals.length > 0) {
-          md += `##### Exercices tentés\n\n`;
-          md += `| Exercice | Type | Points | Max | Statut | Aide | Rattrapage |\n`;
-          md += `|---|---|---:|---:|---|---|---|\n`;
-          for (const r of evals) {
-            const st = r.status === 'bypassed' ? '⊘ Bypassé' : (r.status === 'success' ? '✔ Validé' : '✘ Échec');
-            md += `| ${r.id} | ${r.taskType || '—'} | ${r.points || 0} | ${r.maxPoints || 0} | ${st} | ${r.helpUsed ? 'Oui' : 'Non'} | ${r.retried ? 'Oui' : 'Non'} |\n`;
-          }
-          md += `\n`;
-
-          // Code produit + explications d'échec pour chaque exercice
-          md += `##### Code produit par le modèle et explications\n\n`;
-          for (const r of evals) {
-            if (r.status === 'bypassed') continue;
-            md += `**Exercice ${r.id} — ${r.taskType || '—'}** (${r.status === 'success' ? 'validé' : 'échec'})\n\n`;
-            if (r.code && String(r.code).trim()) {
-              md += `Code proposé :\n\`\`\`javascript\n${String(r.code).trim()}\n\`\`\`\n\n`;
-            } else {
-              md += `*Aucun code exploitable produit.*\n\n`;
-            }
-            if (r.failureExplanation) {
-              md += `**Explication de l'échec (par l'élève) :** ${r.failureExplanation}\n\n`;
-            }
-            if (r.teacherCorrection) {
-              md += `**🎓 Correction du professeur IA :** ${r.teacherCorrection}\n\n`;
-            }
-          }
-        }
-
-        // Réponse brute complète (raisonnement + code) du modèle pour ce tier
-        if (t.rawResponse && String(t.rawResponse).trim()) {
-          md += `##### Réponse brute complète du modèle pour ce tier\n\n`;
-          md += `> Contient le raisonnement et les réponses du modèle tels que produits\n`;
-          md += `> pendant le run (concaténation des tentatives successives).\n\n`;
-          md += `\`\`\`text\n${String(t.rawResponse).trim()}\n\`\`\`\n\n`;
-        }
-      }
-
-      md += `\n---\n\n`;
-    }
-
+    md += buildModelReportMarkdown(e);
     md += `\n`;
+  }
+
+  return md;
+}
+
+// Génère le rapport intégral Markdown d'UN SEUL modèle (auto-profilage, toutes
+// écoles, tous tiers, tous exercices avec code + explications + corrections +
+// réponses brutes). Réutilisé par :
+//   - buildReasoningMarkdown (consolidation globale)
+//   - la route /api/report du serveur (téléchargement par modèle depuis la modale)
+// Le rapport est conçu pour être transmis à un modèle cloud (Gemini, ChatGPT…)
+// qui l'analysera puis produira un verdict à injecter dans NotebookLM.
+function buildModelReportMarkdown(e) {
+  const now = new Date();
+  const pad = n => String(n).padStart(2, '0');
+  const genDate = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+  const genTime = `${pad(now.getHours())}h${pad(now.getMinutes())}`;
+
+  let md = `## ${e.model}\n\n`;
+  md += `**Nom intégral du modèle :** ${e.model}\n\n`;
+  md += `**Nom court :** ${e.shortName}\n\n`;
+  md += `**Rapport généré le :** ${genDate} à ${genTime}\n\n`;
+  md += `- **Quantification :** ${e.quantization || '—'}\n`;
+  md += `- **Score global :** ${e.score}/${e.max} (${e.pct}%) — Note ${letterGrade(e.pct).grade}\n`;
+  md += `- **Score obligatoire :** ${e.mandatoryTotal > 0 ? e.mandatoryPassed + '/' + e.mandatoryTotal + ' (' + e.mandatoryPct + '%)' : 'N/A'}\n`;
+  md += `- **Santé globale :** ${e.globalLifeScore} PV\n`;
+  md += `- **Bonus optionnel :** +${e.optionalBonus}\n`;
+  md += `- **Aide du professeur :** ${e.helpCount}x | **Rattrapages :** ${e.retriedCount}x\n`;
+  md += `- **Écoles évaluées :** ${e.ecoleCount}\n\n`;
+
+  // Détail par école : on retrouve le carnet original pour accéder aux tiers
+  // (réponses brutes + raisonnement + selfProfile).
+  const ledger = loadLedgerByName(e.shortName);
+  if (!ledger) {
+    md += `> *Carnet de scores introuvable — détail des raisonnements indisponible.*\n\n---\n\n`;
+    return md;
+  }
+
+  for (const ecole of e.ecoles) {
+    const ecoleEntry = normalizeEcoleEntryLb(ledger.ecoles[ecole.ecole]).best;
+    if (!ecoleEntry) continue;
+
+    const runDate = ecoleEntry.date || '—';
+    const runTime = ecoleEntry.time ? ecoleEntry.time.replace(/-/g, ':') : null;
+    md += `### École : ${ecole.ecole}\n\n`;
+    md += `**Date du run :** ${runDate}${runTime ? ' à ' + runTime : ''}\n\n`;
+    md += `- **Profil :** ${ecoleEntry.profile || '—'}\n`;
+    md += `- **Score école :** ${ecole.score}/${ecole.max} (${ecole.pct}%) — Note ${letterGrade(ecole.pct).grade}\n`;
+    md += `- **Santé école :** ${ecole.globalLifeScore} PV | **Bonus :** +${ecole.optionalBonus}\n`;
+    md += `- **Aide :** ${ecole.helpCount}x | **Rattrapage :** ${ecole.retriedCount}x\n`;
+    if (ecoleEntry.calibrationIndex != null) {
+      md += `- **Indice de Calibration :** C=${ecoleEntry.calibrationIndex.toFixed(3)} (D=${((ecoleEntry.declaredLevel || 0) * 100).toFixed(0)}%)\n`;
+    }
+
+    // Auto-profilage déclaré par le modèle pour cette école
+    if (ecoleEntry.selfProfile && ecoleEntry.selfProfile.skills) {
+      md += `\n#### Auto-profilage déclaré par le modèle\n\n`;
+      const skills = ecoleEntry.selfProfile.skills;
+      for (const [skill, label] of Object.entries({
+        javascript_basics: 'JavaScript — Bases & Algorithmique simple',
+        javascript_async: 'JavaScript Asynchrone (Promises, concurrence, retry)',
+        algorithms_advanced: 'Algorithmes & Structures de données avancées',
+        code_debugging: 'Débogage & Sécurité applicative'
+      })) {
+        const lvl = skills[skill] ? skills[skill].level : '?';
+        md += `- **${label} :** niveau ${lvl}/5\n`;
+      }
+      if (ecoleEntry.selfProfile.justification) {
+        md += `- **Justification du modèle :** ${ecoleEntry.selfProfile.justification}\n`;
+      }
+    }
+
+    // Détail par tier (classe traversée)
+    const tiers = ecoleEntry.tiers || [];
+    if (tiers.length === 0) {
+      md += `\n> *Aucun détail de tier disponible pour cette école (données antérieures à l'export raisonnement).*\n`;
+    }
+    for (const t of tiers) {
+      md += `\n#### Tier ${t.tierNum} — ${t.tierTitle}\n\n`;
+      md += `- **Classe :** ${t.className}\n`;
+      md += `- **Statut :** ${t.isMandatory ? 'Obligatoire' : 'Optionnel'}\n\n`;
+
+      const evals = t.evalResults || [];
+      if (evals.length > 0) {
+        md += `##### Exercices tentés\n\n`;
+        md += `| Exercice | Type | Points | Max | Statut | Aide | Rattrapage |\n`;
+        md += `|---|---|---:|---:|---|---|---|\n`;
+        for (const r of evals) {
+          const st = r.status === 'bypassed' ? '⊘ Bypassé' : (r.status === 'success' ? '✔ Validé' : '✘ Échec');
+          md += `| ${r.id} | ${r.taskType || '—'} | ${r.points || 0} | ${r.maxPoints || 0} | ${st} | ${r.helpUsed ? 'Oui' : 'Non'} | ${r.retried ? 'Oui' : 'Non'} |\n`;
+        }
+        md += `\n`;
+
+        md += `##### Code produit par le modèle et explications\n\n`;
+        for (const r of evals) {
+          if (r.status === 'bypassed') continue;
+          md += `**Exercice ${r.id} — ${r.taskType || '—'}** (${r.status === 'success' ? 'validé' : 'échec'})\n\n`;
+          if (r.code && String(r.code).trim()) {
+            md += `Code proposé :\n\`\`\`javascript\n${String(r.code).trim()}\n\`\`\`\n\n`;
+          } else {
+            md += `*Aucun code exploitable produit.*\n\n`;
+          }
+          if (r.failureExplanation) {
+            md += `**Explication de l'échec (par l'élève) :** ${r.failureExplanation}\n\n`;
+          }
+          if (r.teacherCorrection) {
+            md += `**🎓 Correction du professeur IA :** ${r.teacherCorrection}\n\n`;
+          }
+        }
+      }
+
+      if (t.rawResponse && String(t.rawResponse).trim()) {
+        md += `##### Réponse brute complète du modèle pour ce tier\n\n`;
+        md += `> Contient le raisonnement et les réponses du modèle tels que produits\n`;
+        md += `> pendant le run (concaténation des tentatives successives).\n\n`;
+        md += `\`\`\`text\n${String(t.rawResponse).trim()}\n\`\`\`\n\n`;
+      }
+    }
+
+    md += `\n---\n\n`;
   }
 
   return md;
@@ -1472,7 +1593,8 @@ function deleteLedger(shortName) {
   return { ok: true };
 }
 
-// Démarre un mini-serveur HTTP servant le classement HTML + l'API de suppression.
+// Démarre un mini-serveur HTTP servant le classement HTML + l'API de suppression
+// + l'API d'export du rapport intégral d'un modèle (téléchargement Markdown).
 function startServer(port) {
   port = port || 3939;
   const htmlPath = path.join(EXPORT_DIR, 'classement.html');
@@ -1491,6 +1613,46 @@ function startServer(port) {
       const result = deleteLedger(shortName);
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify(result));
+      return;
+    }
+
+    // API : export du rapport intégral d'un modèle (téléchargement Markdown).
+    // Génère à la volée le rapport complet (auto-profilage, toutes écoles, tous
+    // tiers, exercices, code, raisonnement brut) prêt à transmettre à un modèle
+    // cloud (Gemini, ChatGPT…) pour analyse → verdict → NotebookLM.
+    if (url.pathname === '/api/report' && req.method === 'GET') {
+      const shortName = url.searchParams.get('shortName');
+      if (!shortName) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: false, error: 'shortName manquant' }));
+        return;
+      }
+      const entry = getModelEntryByShortName(shortName);
+      if (!entry) {
+        res.writeHead(404, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: false, error: 'Modèle introuvable : ' + shortName }));
+        return;
+      }
+      // En-tête Markdown global + rapport du modèle
+      const now = new Date();
+      const pad = n => String(n).padStart(2, '0');
+      const genDate = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+      const genTime = `${pad(now.getHours())}h${pad(now.getMinutes())}`;
+      let md = `# 🧠 Rapport intégral — ${entry.model}\n\n`;
+      md += `> Fichier généré le ${genDate} à ${genTime} — destiné à l'analyse qualitative\n`;
+      md += `> par un modèle cloud (Gemini, ChatGPT, Claude…) puis injection dans NotebookLM.\n`;
+      md += `> Transmettez ce fichier au modèle et demandez une analyse du raisonnement,\n`;
+      md += `> des échecs, du code produit et un verdict qualitatif global.\n\n`;
+      md += `---\n\n`;
+      md += buildModelReportMarkdown(entry);
+
+      const safeName = String(entry.shortName || 'modele').replace(/[^a-zA-Z0-9._-]/g, '_');
+      const filename = `rapport_integral_${safeName}_${genDate}.md`;
+      res.writeHead(200, {
+        'Content-Type': 'text/markdown; charset=utf-8',
+        'Content-Disposition': `attachment; filename="${filename}"`
+      });
+      res.end(md, 'utf8');
       return;
     }
 
@@ -1514,6 +1676,7 @@ function startServer(port) {
     console.log('  \x1b[1;35m━━━ CLASSEMENT INTERACTIF — BenchGo V3 ━━━\x1b[0m');
     console.log(`  \x1b[32mServeur démarré : ${url}\x1b[0m`);
     console.log('  \x1b[90mOuvrez le navigateur. Cliquez sur "🗑 Supprimer" pour retirer un modèle.\x1b[0m');
+    console.log('  \x1b[90mModale → bouton "⬇ Exporter le rapport intégral" pour télécharger le MD.\x1b[0m');
     console.log('  \x1b[90mCtrl+C pour arrêter le serveur.\x1b[0m\n');
 
     // Ouvre le navigateur par défaut
@@ -1522,6 +1685,14 @@ function startServer(port) {
       : `xdg-open ${url}`;
     exec(cmd, () => {});
   });
+}
+
+// Retrouve l'entry agrégée d'un modèle par shortName (charge + agrège les carnets).
+// Utilisé par la route /api/report pour générer le rapport intégral d'un modèle.
+function getModelEntryByShortName(shortName) {
+  const ledgers = loadAllLedgers();
+  const entry = ledgers.map(aggregateLedger).filter(Boolean).find(e => e.shortName === shortName);
+  return entry || null;
 }
 
 module.exports = {

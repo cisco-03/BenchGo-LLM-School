@@ -6,6 +6,58 @@
 - Les fichiers sources sont désormais à la racine de `benchmark-v3/` (le nom `benchmark-v2` est abandonné).
 - Ce fichier (`Docs/CHANGELOG.md`) est le journal de versions de référence pour GitHub. Toute évolution du code doit y être consignée.
 
+## 2026-07-19 (h) — Dégradé de couleurs fluide vert → rouge pour les pourcentages
+
+### Contexte
+Retour utilisateur : les couleurs des pourcentages dans le classement HTML utilisaient 3 paliers discrets (vert ≥ 80%, jaune ≥ 50%, rouge < 50%). L'utilisateur voulait un **dégradé continu** : 100% = vert pur, plus on descend en % plus la couleur vire au rouge, avec une teinte unique par %.
+
+### Actions entreprises
+**`leaderboard.js` — `pctColor` en dégradé HSL continu**
+- Remplacement des 3 paliers discrets par une interpolation linéaire dans l'espace HSL : `hue = pct * 1.2` → 100% = hue 120 (vert), 50% = hue 60 (jaune), 0% = hue 0 (rouge). Saturation 72% et lightness 48% constantes pour un rendu vif et lisible sur fond sombre.
+- Aucun palier : chaque pourcentage a sa teinte propre (ex: 90% = vert-jaune clair, 70% = jaune-vert, 40% = orange, 20% = orange-rouge).
+- Appliqué automatiquement partout où `pctColor()` est utilisé : barres de % des cartes, valeur % des mini-stats, stats de la modale (% global, obligatoire, par école, historique des tentatives).
+
+### Fichiers modifiés
+- `leaderboard.js` (fonction `pctColor` en HSL continu)
+
+### Résultat obtenu
+- Le classement HTML affiche un dégradé de couleurs fluide du vert (100%) au rouge (0%) en passant par le jaune/orange, sans sauts visuels. La lecture du niveau de performance est immédiate et intuitive.
+
+## 2026-07-19 (g) — Bouton « Exporter le rapport intégral » dans la modale (téléchargement Markdown pour Gemini/NotebookLM)
+
+### Contexte
+Suite à l'ajout du rapport intégral dans la modale (entrée (f)), l'utilisateur veut pouvoir **exporter ce rapport** sous forme de fichier transmissible à un modèle cloud plus élaboré (Gemini, ChatGPT, Claude…) qui l'analysera et produira un verdict à injecter dans NotebookLM. Le flux durable du projet (`workflow_gemini_notebooklm` dans la mémoire) est respecté : rapports datés → Gemini → NotebookLM.
+
+### Actions entreprises
+
+**1. `leaderboard.js` — Refactorisation `buildReasoningMarkdown` → `buildModelReportMarkdown`**
+- Extraction de la logique par-modèle de `buildReasoningMarkdown` vers une nouvelle fonction `buildModelReportMarkdown(e)` : génère le rapport Markdown intégral d'un seul modèle (en-tête avec date de génération, quantification, score global/obligatoire/santé/bonus/aide/rattrapages, auto-profilage déclaré, toutes les écoles, tous les tiers, tous les exercices avec code + explications d'échec + corrections professeur + réponses brutes).
+- `buildReasoningMarkdown` devient une simple boucle qui appelle `buildModelReportMarkdown` pour chaque modèle (DRY). `raisonnement_modeles.md` est toujours généré à l'identique (validé : 225 KB, sections École/Tier/Auto-profilage préservées).
+
+**2. `leaderboard.js` — Route serveur `/api/report` (téléchargement Markdown)**
+- Nouvelle route `GET /api/report?shortName=<shortName>` dans `startServer` : génère à la volée le rapport intégral du modèle via `buildModelReportMarkdown`, avec un en-tête explicatif (« destiné à l'analyse qualitative par un modèle cloud → NotebookLM »).
+- Réponse HTTP avec `Content-Type: text/markdown; charset=utf-8` + `Content-Disposition: attachment; filename="rapport_integral_<shortName>_<date>.md"` → déclenche le téléchargement dans le navigateur.
+- Nouvelle fonction `getModelEntryByShortName(shortName)` : charge + agrège les carnets et retrouve l'entry d'un modèle par shortName.
+- Gestion d'erreurs : 400 si `shortName` manquant, 404 si modèle introuvable (JSON `{ ok: false, error }`).
+- Validé : `GET /api/report?shortName=mythos-9b-unhinged` → 200, 42 KB, Content-Disposition correct, body contient École/Tier/Auto-profilage/Réponse brute.
+
+**3. `leaderboard.js` — Bouton « ⬇ Exporter le rapport intégral » dans la modale**
+- Nouveau bouton `.btn-primary` dans la section « Rapport intégral » de la modale (`id="btnExportReport"`), avec hint explicatif : « Télécharge un fichier .md à envoyer à un modèle cloud (Gemini, ChatGPT…) pour analyse → verdict → NotebookLM ».
+- Fonction JS `exportReport(idx)` :
+  - En mode serveur (`--serve`) : `fetch('/api/report?shortName=...')` → récupère le Markdown complet généré côté serveur → téléchargement via `Blob` + `<a download>`. Récupère le nom de fichier depuis le header `Content-Disposition`.
+  - En mode hors-serveur (ouverture locale du fichier HTML) : repli côté client qui reconstruit un Markdown à partir des données `MODELS` déjà sérialisées dans la page (tiers + exercices + code + rawResponse présents dans le JSON inline). Moins riche que la version serveur mais fonctionnel sans serveur.
+  - Feedback : bouton « ⏳ Génération… » pendant la requête, toast « Rapport téléchargé : <filename> » en succès.
+- CSS `.report-actions` (flexbox, wrap) + `.report-actions-hint` (italique, muted).
+- Correction incident : backticks dans les chaînes JS single-quoted du template literal parent (`` ```javascript ``) → échappés en `` \` `` pour ne pas terminer le template literal.
+- Message de démarrage du serveur mis à jour : « Modale → bouton "⬇ Exporter le rapport intégral" pour télécharger le MD ».
+
+### Fichiers modifiés
+- `leaderboard.js` (refactor `buildReasoningMarkdown` + `buildModelReportMarkdown` + `getModelEntryByShortName` + route `/api/report` + bouton modale + fonction `exportReport` + CSS)
+
+### Résultat obtenu
+- Dans la modale de détail de n'importe quel modèle, le bouton « ⬇ Exporter le rapport intégral » télécharge un fichier `rapport_integral_<modèle>_<date>.md` contenant l'auto-profilage, toutes les écoles, tous les tiers, tous les exercices (code + explications + corrections professeur) et les réponses brutes du modèle. Ce fichier est prêt à être transmis à Gemini (ou ChatGPT/Claude) pour analyse qualitative → verdict → injection dans NotebookLM, conformément au flux durable du projet.
+- Fonctionne en mode serveur (`--serve`, rapport complet côté serveur) ET en ouverture locale du HTML (repli côté client).
+
 ## 2026-07-19 (f) — Rapport intégral dans la modale de détail (comportement & raisonnement du modèle)
 
 ### Contexte
