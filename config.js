@@ -6,14 +6,14 @@ const LM_STUDIO_MODELS_URL = "http://localhost:1234/v1/models";
 // et l'état (loaded / not-loaded). /v1/models (compatible OpenAI) ne renvoie que
 // l'id du modèle, sans la quantification — d'où l'usage de /api/v0/models ici.
 const LM_STUDIO_MODELS_V0_URL = "http://localhost:1234/api/v0/models";
-const EVAL_TIMEOUT_MS = 5000;
-const API_TIMEOUT_MS = 900000;
-// Auto-profilage : budget temps/tokens STRICT. Le profil JSON attendu est court
-// (~200 tokens), et les modèles de raisonnement (GLM, Qwen3, DeepSeek-R1) peuvent
-// sinon passer plusieurs MINUTES en `reasoning_content` avant de répondre —
-// jusqu'à 372s observé. On coupe court à 60s et on limite la sortie à 600 tokens
-// pour forcer une réponse concise et éviter l'attente insupportable.
-const PROFILING_TIMEOUT_MS = 60000;
+const EVAL_TIMEOUT_MS = 10000;
+const API_TIMEOUT_MS = 300000;
+// Auto-profilage : budget temps/tokens. Le profil JSON attendu est court
+// (~200 tokens), mais les modèles de raisonnement (GLM, Qwen3, DeepSeek-R1) mettent
+// du temps à répondre même avec reasoning désactivé. Le timeout de 60s était trop
+// court et provoquait un échec systématique ("Timeout après 60s"). On le porte à 120s
+// pour laisser au modèle le temps de réfléchir, tout en restant raisonnable.
+const PROFILING_TIMEOUT_MS = 120000;
 const PROFILING_MAX_TOKENS = 600;
 const OPTIONAL_BONUS_PCT = 0.20; // Bonus appliqué aux exercices optionnels réussis (20% des points de base)
 

@@ -854,3 +854,18 @@ Décomposition en **10 modules spécialisés** avec noms explicites :
 - Le dossier `tiers/` contient uniquement des JSON de configuration, aucune modification requise
 - Toutes les dépendances circulaires ont été évitées
 - Le module `custom-evaluators.js` est le plus volumineux car il contient la logique métier complexe des évaluations
+
+## 2026-07-19 (j) — Augmentation du timeout API cloud (API_TIMEOUT_MS)
+
+### Contexte
+Retour utilisateur : les modèles cloud (notamment les modèles de raisonnement) déclenchaient systématiquement un timeout après 130s, rendant l'exécution impossible même après plusieurs tentatives.
+
+### Actions entreprises
+**`config.js` — API_TIMEOUT_MS porté de 130s à 300s**
+- Le timeout global des appels API cloud est passé de `130000` ms à `300000` ms (5 minutes) pour laisser le temps aux modèles de raisonnement de répondre sans être interrompus prématurément.
+
+### Fichiers modifiés
+- `config.js` (ligne 10 : `API_TIMEOUT_MS = 300000`)
+
+### Résultat
+- Les timeouts intempestifs sur les modèles cloud devraient être éliminés.

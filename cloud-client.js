@@ -289,7 +289,10 @@ async function queryLLM(prompt, difficulty, tierId, isMandatory, spinner, option
     if (isMandatory) {
       console.error(`\n\x1b[31m[ERREUR CLOUD]\x1b[0m ${reason}`);
       if (isTimeout) {
-        console.error(`  -> Vérifiez votre connexion internet ou augmentez API_TIMEOUT_MS dans config.js.`);
+        // Le timeout utilisé dépend du contexte : auto-profilage (PROFILING_TIMEOUT_MS)
+        // ou appel normal (API_TIMEOUT_MS). On indique les deux au cas où.
+        const timeoutName = timeoutMs === API_TIMEOUT_MS ? 'API_TIMEOUT_MS' : 'timeoutMs';
+        console.error(`  -> Vérifiez votre connexion internet ou augmentez ${timeoutName} dans config.js.`);
       }
       process.exit(1);
     } else {
