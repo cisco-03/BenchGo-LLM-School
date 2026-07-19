@@ -775,8 +775,9 @@ async function main() {
   console.log('\x1b[36m\u255A\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u255D\x1b[0m\n');
 
   const cliArgs = parseCliArgs();
-  const { tierArg, profileArgExplicit, contextLimitTokens: contextLimitFromCli, provider, model: cloudModel, apiKey, endpoint,
+  const { tierArg: tierArgRaw, profileArgExplicit, contextLimitTokens: contextLimitFromCli, provider, model: cloudModel, apiKey, endpoint,
            teacherModel, teacherApiKey, teacherEndpoint, teacherDisabled, quantization: cliQuantization } = cliArgs;
+  let tierArg = tierArgRaw;
 
   // --- Questionnaire interactif au démarrage ---
   // Si AUCUN flag significatif n'est passé (--provider, --model), on lance le
@@ -806,6 +807,12 @@ async function main() {
     if (qConfig.quantization) resolvedQuantization = qConfig.quantization;
     // teacherConfig construit par le questionnaire (clé mémorisée dans secrets.js)
     teacherConfigResolved = qConfig.teacherConfig;
+    // Cible (tier) explicite issue du questionnaire. Prioritaire sur la valeur
+    // résiduelle de parseCliArgs() pour éviter qu'un argument positionnel
+    // parasite (ex: "node runner.js 0") ne restreigne silencieusement le run à
+    // une seule classe. En interactif, seul un choix explicite de l'utilisateur
+    // restreint la cible ; sinon on reste sur "all".
+    if (qConfig.tierArg) tierArg = qConfig.tierArg;
     // Mémorise aussi la clé élève dans secrets pour réutilisation cross-école.
     if (resolvedApiKey) secrets.rememberSecret(resolvedProvider, resolvedApiKey, true);
   } else {

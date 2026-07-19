@@ -1,5 +1,49 @@
 # CHANGELOG - Carnet de Notes BenchGo
 
+## 2026-07-19 (l) — Questionnaire : choix explicite de la cible (tier) + fix Report-teacher (ByteString)
+
+### Contexte
+Retour utilisateur : après un run interactif (LM Studio, profil LIGHT), seules les exercices de la maternelle (Tier 0) s'exécutaient, puis le run s'arrêtait avec un `Score global : 475/475 (100%)` trompeur. Aucune autre classe n'était évaluée. Le log (`logs/benchgo_2026-07-19T16-44-58-647Z.log`) montrait `Cible demandée : 0`. Par ailleurs, le `Report-teacher` (professeur IA de fin de rapport) échouait deux fois de suite avec `Cannot convert argument to a ByteString because the character at index 11 has a value of 8212 which is greater than 255`.
+
+### Cause racine
+1. **Saut de classes** : `parseCliArgs()` prend le premier argument positionnel non préfixé par `--` comme valeur de `tierArg` (`config.js:87`). Or le questionnaire interactif (`startup-questionnaire.js`) ne demandait JAMAIS la cible tier. En mode interactif, `tierArg` provenait donc uniquement d'un éventuel argument résiduel sur la ligne de commande (ex: `node runner.js 0`). Quand ce résidu valait `0`, `runner.js:1061` (`if (tierArg !== "all")`) restreignait le run au seul Tier 0 → maternelle seule, puis `Score global : 475/475 (100%)` calculé sur une seule classe sans indication claire que les autres étaient sautées.
+2. **Report-teacher** : le header HTTP `X-Title: 'BenchGo V3 — Professeur rapport'` (`report-teacher.js:116`) contenait un em dash `—` (U+2012, valeur 8212) à l'index 11. `fetch` impose que les headers soient des ByteStrings (Latin-1, ≤ 255) ; le caractère > 255 lève l'erreur `Cannot convert argument to a ByteString` avant même l'envoi de la requête. Les 2 essais (maxRetries=2) échouaient donc systématiquement.
+
+### Actions entreprises
+
+**1. `startup-questionnaire.js` — Nouvelle section « 8. Cible (classe / tier) »**
+- Ajoute une question interactive après le choix du contexte, demandant explicitement la cible. `Entrée` = `all` (toutes les classes du profil, recommandé). Sinon saisie d'un numéro de tier (0, 1, 2…) pour une seule classe. Valeurs non reconnues (`all`, `*`) repli sur `all` avec message d'avertissement.
+- `runStartupQuestionnaire()` renvoie désormais `tierArg` dans son objet de retour, et le récapitulatif affiche la cible.
+
+**2. `runner.js` — Propagation du `tierArg` du questionnaire**
+- `main()` déstructure maintenant `tierArg: tierArgRaw` puis `let tierArg = tierArgRaw`. En mode interactif, `qConfig.tierArg` (si défini) remplace la valeur résiduelle issue de `parseCliArgs()`. Ainsi un argument positionnel parasite (`0`) est écrasé par le choix explicite de l'utilisateur, et le défaut `all` est conservé si l'utilisateur ne saisit rien.
+
+**3. `report-teacher.js` — Header X-Title en Latin-1**
+- Remplacement de `'BenchGo V3 — Professeur rapport'` par `'BenchGo V3 - Professeur rapport'` (tiret ASCII). Les en-têtes OpenRouter (`HTTP-Referer`, `X-Title`) sont désormais compatibles ByteString.
+
+### Fichiers modifiés
+- `startup-questionnaire.js` (nouvelle section 8 + `tierArg` retourné)
+- `runner.js` (`main()` : `tierArg` mutable + propagation du questionnaire)
+- `report-teacher.js` (ligne 116 : `X-Title` en ASCII)
+
+### Résultat
+- En mode interactif sans argument positionnel, la cible demandée par défaut est `all` (toutes les classes du profil). Le saut silencieux des classes n'est plus possible. L'utilisateur peut toujours choisir une seule classe via le questionnaire, ou via `node runner.js <tier>` en mode CLI.
+- Le `Report-teacher` OpenRouter peut à nouveau être contacté en fin de run sans erreur ByteString.
+
+## 2026-07-19 (k) — Augmentation du timeout d'auto-profilage (PROFILING_TIMEOUT_MS)
+
+### Contexte
+Retour utilisateur : l'auto-profilage échouait systématiquement pour tous les modèles (raisonnement notamment) avec « Timeout après ~60s » puis fallback silencieux sur toutes les tâches. Cause racine : `PROFILING_TIMEOUT_MS = 120000` (2 min) restait trop court pour les modèles de raisonnement qui mettent du temps à répondre même avec `disableReasoning` activé.
+
+### Actions entreprises
+**`config.js` — PROFILING_TIMEOUT_MS porté de 120000 à 300000 (5 min)** pour aligner avec `API_TIMEOUT_MS` et laisser aux modèles le temps de s'auto-profiler sans coupure prématurée.
+
+### Fichiers modifiés
+- `config.js` (ligne 16 : `PROFILING_TIMEOUT_MS = 300000`)
+
+### Résultat
+- L'auto-profilage dispose désormais de 5 minutes ; plus d'échec intempestif sur les modèles de raisonnement.
+
 ## Note de nommage
 
 - Le projet est en version BenchGo V3.

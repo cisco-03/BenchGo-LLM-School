@@ -11,9 +11,9 @@ const API_TIMEOUT_MS = 300000;
 // Auto-profilage : budget temps/tokens. Le profil JSON attendu est court
 // (~200 tokens), mais les modèles de raisonnement (GLM, Qwen3, DeepSeek-R1) mettent
 // du temps à répondre même avec reasoning désactivé. Le timeout de 60s était trop
-// court et provoquait un échec systématique ("Timeout après 60s"). On le porte à 120s
+// court et provoquait un échec systématique ("Timeout après 60s"). On le porte à 300s
 // pour laisser au modèle le temps de réfléchir, tout en restant raisonnable.
-const PROFILING_TIMEOUT_MS = 120000;
+const PROFILING_TIMEOUT_MS = 300000;
 const PROFILING_MAX_TOKENS = 600;
 const OPTIONAL_BONUS_PCT = 0.20; // Bonus appliqué aux exercices optionnels réussis (20% des points de base)
 

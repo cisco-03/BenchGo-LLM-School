@@ -354,6 +354,34 @@ async function runStartupQuestionnaire(cliArgs) {
   }
   console.log('');
 
+  // --- 8. Cible (classe / tier) ---
+  // En mode interactif, on demande explicitement quelle classe cibler. Par
+  // défaut on reste sur "all" (toutes les classes obligatoires + optionnelles
+  // du profil). Si l'utilisateur tape un numéro de tier, on restreint le run à
+  // cette seule classe. Cela évite le piège d'un argument positionnel résiduel
+  // (ex: "node runner.js 0") qui silencieusement ne lance qu'une seule classe
+  // et fait croire à un 100% trompeur.
+  _printSection('8. Cible (classe / tier)');
+  console.log("  \x1b[90m« all » = toutes les classes du profil (recommandé). Sinon un numéro de tier (0, 1, 2…) pour une seule classe.\x1b[0m");
+  const tierRaw = await _askFreeText('  Cible (Entrée = all) :', { allowEmpty: true });
+  let tierArg = 'all';
+  if (tierRaw) {
+    const v = tierRaw.trim().toLowerCase();
+    if (v === 'all' || v === '*') {
+      tierArg = 'all';
+    } else {
+      const n = parseInt(v, 10);
+      if (Number.isInteger(n) && n >= 0) {
+        tierArg = String(n);
+      } else {
+        console.log(`  \x1b[33mValeur '${v}' non reconnue — fallback sur « all ».\x1b[0m`);
+        tierArg = 'all';
+      }
+    }
+  }
+  console.log(`  \x1b[1;35m→ Cible : ${tierArg}\x1b[0m`);
+  console.log('');
+
   // --- Récapitulatif ---
   console.log('  \x1b[1;36m━━━━━━━━━━━━━ RÉCAPITULATIF ━━━━━━━━━━━━━\x1b[0m');
   console.log(`  Fournisseur   : ${provider}`);
@@ -363,6 +391,7 @@ async function runStartupQuestionnaire(cliArgs) {
   console.log(`  Endpoint      : ${endpoint || '\x1b[90m(par défaut)\x1b[0m'}`);
   console.log(`  Profil        : ${profileArg}`);
   console.log(`  Contexte max  : ${contextLimitTokens} tokens`);
+  console.log(`  Cible         : ${tierArg}`);
   console.log(`  Professeur    : ${teacherConfig.enabled ? 'OpenRouter (Free Router)' : 'auto-analyse classique'}`);
   console.log('');
 
@@ -375,6 +404,7 @@ async function runStartupQuestionnaire(cliArgs) {
     contextLimitTokens,
     teacherConfig,
     quantization,
+    tierArg,
     isInteractive: true
   };
 }

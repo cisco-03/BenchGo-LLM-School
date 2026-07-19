@@ -113,7 +113,9 @@ async function _callChatCompletion({ url, apiKey, model, systemPrompt, userPromp
     if (apiKey) headers['Authorization'] = `Bearer ${apiKey}`;
     if (url.includes('openrouter.ai')) {
       headers['HTTP-Referer'] = 'https://benchgo-v3';
-      headers['X-Title'] = 'BenchGo V3 — Professeur rapport';
+      // X-Title doit être un ByteString (Latin-1) : pas d'em dash ni d'accent.
+      // On utilise un tiret ASCII simple pour rester compatible avec fetch.
+      headers['X-Title'] = 'BenchGo V3 - Professeur rapport';
     }
     const res = await fetch(url, {
       method: 'POST',
