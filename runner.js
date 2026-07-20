@@ -589,18 +589,20 @@ async function runTierAttempt({ tierNum, tierData, isMandatory, profileArg, cont
              const retryCount = taskRetryMap[task.id];
              taskLastError[task.id] = errors;
 
-              if (retryCount > MAX_TASK_RETRIES) {
-                 // Échec définitif après réessai — le modèle abandonne
-                 console.log(`  \x1b[31m✘ Échec définitif sur l'exercice ${task.id} après ${retryCount} tentatives !\x1b[0m`);
-                 console.log(`    \x1b[90mErreur technique brute du moteur : ${errors.substring(0, 120)}\x1b[0m`);
-                 console.log(`  \x1b[33m🏳️ L'élève déclare avoir terminé : impossible de résoudre l'exercice ${task.id}.\x1b[0m`);
+               if (retryCount > MAX_TASK_RETRIES) {
+                  // Échec définitif après réessai — le modèle abandonne
+                  console.log(`  \x1b[31m✘ Échec définitif sur l'exercice ${task.id} après ${retryCount} tentatives !\x1b[0m`);
+                  console.log(`  \x1b[33m🏳️ L'élève déclare avoir terminé : impossible de résoudre l'exercice ${task.id}.\x1b[0m`);
 
-                 // --- Le professeur exige une explication pédagogique de l'échec ---
-                 // Interdit : afficher une erreur brute sans explication (l'utilisateur
-                 // croirait que le benchmark a planté). Le modèle doit justifier lui-même
-                 // pourquoi il n'y arrive pas. Le professeur relaie l'erreur technique au
-                 // modèle et exige une analyse de la cause racine.
-                 console.log(`  \x1b[36m👨‍🏫 Professeur : le modèle doit expliquer la cause de son échec sur ${task.id}.\x1b[0m`);
+                  // --- Le professeur exige une explication pédagogique de l'échec ---
+                  // Interdit : afficher une erreur brute sans explication (l'utilisateur
+                  // croirait que le benchmark a planté). Le modèle doit justifier lui-même
+                  // pourquoi il n'y arrive pas. Le professeur relaie l'erreur technique au
+                  // modèle et exige une analyse de la cause racine.
+                  // On ne JAMAIS afficher l'erreur brute du sandbox (ex: "Invalid or
+                  // unexpected token") seule : elle est cryptique et fait croire à un bug
+                  // du moteur BenchGo. L'explication pédagogique ci-dessous la remplace.
+                  console.log(`  \x1b[36m👨‍🏫 Professeur : le modèle doit expliquer la cause de son échec sur ${task.id}.\x1b[0m`);
                  let failureExplanation = null;
                  try {
                    failureExplanation = await askModelForFailureExplanation({
@@ -682,7 +684,10 @@ async function runTierAttempt({ tierNum, tierData, isMandatory, profileArg, cont
                 gameState.globalLifeScore -= pts;
                 taskNetPoints[task.id] = (taskNetPoints[task.id] || 0) - pts;
                 console.log(`  \x1b[31m✘ Échec sur l'exercice ${task.id} ! Pénalité : -${pts} Points (Tier: ${tierScore}, Santé: ${gameState.globalLifeScore})\x1b[0m`);
-                console.log(`    \x1b[90mRaison: ${errors.substring(0, 80)}\x1b[0m`);
+                // Explication pédagogique de l'erreur (jamais d'erreur brute seule,
+                // qui ferait croire à un bug du moteur BenchGo).
+                const reasonBrief = explainTechnicalError(errors, task);
+                console.log(`    \x1b[90mRaison : ${reasonBrief.substring(0, 160)}\x1b[0m`);
                 console.log(`  \x1b[33m⚡ Une nouvelle tentative sera proposée pour l'exercice ${task.id} (${MAX_TASK_RETRIES} réessai restant).\x1b[0m`);
              }
           }

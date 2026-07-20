@@ -16,7 +16,7 @@ le tout dans un bac à sable VM isolé.
 
 - 🎓 **Métaphore scolaire** : 5 profils = 5 écoles (Primaire → Collège/Lycée → Université → Thèse → Post-Doc), chaque tier = une classe avec ses propres exercices.
 - 🧠 **Auto-profilage & calibration** : le modèle s'auto-évalue sur 4 compétences au démarrage ; les tâches trop difficiles sont filtrées ; un Indice de Calibration C = 1 − |D − P| mesure la lucidité du modèle.
-- ❤️ **Santé globale (gamification)** : le modèle accumule des PV (succès) ou en perd (échecs). En dessous de −100 PV, élimination définitive (Game Over).
+- ❤️ **Santé globale (gamification)** : le modèle accumule des PV (succès) ou en perd (échecs). En dessous de −100 PV, élimination définitive (Game Over). 👉 [Système de points complet](./Docs/Apps-Fonctions/systeme-points.md) — calcul par exercice, classe, école et cumul multi-écoles.
 - 🆘 **Aide du professeur & rattrapage** : un indice peut être proposé au modèle en rattrapage ; un seul réessai par exercice (`MAX_TASK_RETRIES = 1`).
 - 🎓 **Professeur IA correcteur (Free Router)** : après un échec définitif, l'élève (le modèle testé) s'auto-analyse, puis un **professeur IA indépendant** (modèle cloud via OpenRouter) relit cette analyse, dit si elle est juste/fausse et **démontre** la vraie cause racine. Rotate automatique sur les modèles gratuits d'OpenRouter (`:free`). Repli sur l'auto-analyse si aucun compte OpenRouter n'est configuré.
 - 📊 **Classement global interactif** : HTML condensé avec modale de détail, filtres par catégorie de performance et par taille de modèle, recherche texte, **badge de quantification** (Q4_K_M, Q5_K_S, Q8_0...) pour chaque modèle, et **bouton « Copier le classement »** pour partager l'ensemble du classement en texte brut.
@@ -290,6 +290,7 @@ benchmark-v3/
 - [Manuel utilisateur](./Docs/Manuel-utilisateur/README.md) — Démarrage, commandes, fonctionnement, lecture des résultats, dépannage, référence des tiers
 - [CHANGELOG](./Docs/CHANGELOG.md) — Historique chronologique des modifications
 - [Système de gamification & santé](./Docs/Apps-Fonctions/gamification-sante.md) — Fonctionnement des PV, pénalités et élimination
+- [Système de points](./Docs/Apps-Fonctions/systeme-points.md) — Calcul des points par exercice, classe, école et cumul multi-écoles (sans-faute, bonus optionnel, diplôme, notes A–F)
 
 ---
 

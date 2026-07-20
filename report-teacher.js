@@ -19,6 +19,7 @@
 const logger = require('./logger');
 const secrets = require('./secrets');
 const { CLOUD_PROVIDERS } = require('./cloud-client');
+const { fetchFreeModels } = require('./teacher-client');
 
 const TEACHER_REPORT_SYSTEM_PROMPT =
   "Vous êtes un professeur principal expérimenté, bienveillant mais rigoureux. " +
@@ -180,9 +181,24 @@ async function buildExternalTeacherReport({ teacherConfig, results }) {
     return null;
   }
 
-  const model = teacherConfig.model || (provider === 'openrouter' ? 'meta-llama/llama-3.3-70b-instruct:free' : null);
-  if (!model) {
-    logger.warn('Report-teacher : aucun modèle spécifié.');
+  const model = teacherConfig.model || (provider === 'openrouter' ? null : null);
+  // Pour OpenRouter, on ne hardcode plus un slug :free (souvent dépublié → 404).
+  // On récupère dynamiquement les modèles gratuits réellement disponibles via
+  // fetchFreeModels(), qui filtre déjà la modality texte->texte et la denylist.
+  let candidates = [];
+  if (model) candidates.push(model);
+  if (provider === 'openrouter') {
+    try {
+      const free = await fetchFreeModels();
+      for (const id of free) {
+        if (!candidates.includes(id)) candidates.push(id);
+      }
+    } catch (e) {
+      logger.warn(`Report-teacher : Free Router indisponible (${e.message}) — seuls les modèles explicites seront essayés.`);
+    }
+  }
+  if (candidates.length === 0) {
+    logger.warn('Report-teacher : aucun modèle disponible.');
     return null;
   }
 
@@ -194,19 +210,20 @@ async function buildExternalTeacherReport({ teacherConfig, results }) {
 
   const prompt = buildReportTeacherPrompt(results);
 
-  const maxAttempts = Math.max(1, teacherConfig.maxRetries || 2);
+  const maxAttempts = Math.min(candidates.length, Math.max(1, teacherConfig.maxRetries || 3));
   let lastError = '';
   for (let i = 0; i < maxAttempts; i++) {
+    const tryModel = candidates[i];
     try {
-      logger.info(`Report-teacher : essai ${i + 1}/${maxAttempts} avec ${model} sur ${provider}.`);
+      logger.info(`Report-teacher : essai ${i + 1}/${maxAttempts} avec ${tryModel} sur ${provider}.`);
       const content = await _callChatCompletion({
-        url, apiKey, model,
+        url, apiKey, model: tryModel,
         systemPrompt: TEACHER_REPORT_SYSTEM_PROMPT,
         userPrompt: prompt,
         maxTokens: 1800,
         temperature: 0.3
       });
-      logger.info(`Report-teacher : ${model} a répondu (${content.length} chars).`);
+      logger.info(`Report-teacher : ${tryModel} a répondu (${content.length} chars).`);
       // S'assure que la section commence bien par le bon titre.
       if (!/^#\s*Validation du professeur/i.test(content)) {
         return `## Validation du professeur IA\n\n${content.trim()}\n`;
@@ -214,8 +231,10 @@ async function buildExternalTeacherReport({ teacherConfig, results }) {
       return content.trim() + '\n';
     } catch (e) {
       lastError = e.message;
-      logger.warn(`Report-teacher : ${model} a échoué : ${lastError}`);
+      logger.warn(`Report-teacher : ${tryModel} a échoué : ${lastError}`);
       if (e.httpStatus === 401 || e.httpStatus === 403) break;
+      // 404 = modèle indisponible (slug :free dépublié) → on rotate vers le suivant.
+      if (e.httpStatus === 404) continue;
       if (i < maxAttempts - 1) await new Promise(r => setTimeout(r, 800));
     }
   }

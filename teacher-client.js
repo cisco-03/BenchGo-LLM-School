@@ -39,6 +39,36 @@ const FREE_MODELS_DENYLIST = new Set([
   'openai/chatgpt-4o-2024-08-06:free', // très limité en débit
 ]);
 
+/**
+ * Filtre de modality : ne garde que les modèles qui acceptent du texte en
+ * entrée ET produisent du texte en sortie. Les modèles audio/image (ex:
+ * google/lyria-3-*, qui émettent de l'audio) sont inutilisables pour une
+ * correction de code et échouent systématiquement, même s'ils sont gratuits.
+ */
+function isTextInOutTextModel(m) {
+  // architecture.input_modalities / output_modalities (format courant OpenRouter)
+  const inMod = m?.architecture?.input_modalities || m?.architecture?.modality;
+  const outMod = m?.architecture?.output_modalities;
+  const modalityStr = m?.architecture?.modality || '';
+
+  // Modality au format "text->text" : on accepte si l'entrée contient text
+  // et la sortie est text. Les modality "text+image->text+audio" sont rejetées
+  // car elles émettent de l'audio (inutilisable en chat/completions texte).
+  if (typeof modalityStr === 'string' && modalityStr.includes('->')) {
+    const [_in, out] = modalityStr.split('->');
+    const hasTextInput = (_in || '').split('+').includes('text');
+    const outputs = (out || '').split('+');
+    const isTextOnlyOut = outputs.length === 1 && outputs[0] === 'text';
+    return hasTextInput && isTextOnlyOut;
+  }
+  // Repli : tableaux input_modalities / output_modalities.
+  const ins = Array.isArray(inMod) ? inMod : [];
+  const outs = Array.isArray(outMod) ? outMod : [];
+  const hasTextInput = ins.includes('text');
+  const isTextOnlyOut = outs.length > 0 && outs.every(x => x === 'text');
+  return hasTextInput && isTextOnlyOut;
+}
+
 // Préférence : modèles connus robustes en français + raisonnement technique.
 // Si présents dans la liste free, on les met en tête avant le tri générique.
 const FREE_MODELS_PREFERRED = [
@@ -79,6 +109,10 @@ async function fetchFreeModels() {
     const free = all
       .filter(m => m?.id && m?.pricing?.prompt === '0' && m?.pricing?.completion === '0')
       .filter(m => !FREE_MODELS_DENYLIST.has(m.id))
+      // Ne garder que les modèles texte->texte : les modèles audio/image
+      // (ex: google/lyria-3-*) sont gratuits mais inutilisables pour une
+      // correction de code et échouent à chaque appel.
+      .filter(isTextInOutTextModel)
       .map(m => ({
         id: m.id,
         context: m.context_length || m.top_provider?.context_length || 0
@@ -139,7 +173,9 @@ async function callOpenRouter({ model, apiKey, prompt, temperature, maxTokens })
   const headers = { 'Content-Type': 'application/json' };
   if (apiKey) headers['Authorization'] = `Bearer ${apiKey}`;
   headers['HTTP-Referer'] = 'https://benchgo-v3';
-  headers['X-Title'] = 'BenchGo V3 — Professeur';
+  // X-Title doit être un ByteString (Latin-1) : pas d'em dash ni d'accent.
+  // On utilise un tiret ASCII simple pour rester compatible avec fetch.
+  headers['X-Title'] = 'BenchGo V3 - Professeur';
 
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 60000);

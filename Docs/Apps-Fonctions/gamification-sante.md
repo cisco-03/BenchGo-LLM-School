@@ -1,5 +1,10 @@
 # Système de Gamification et de Santé Globale (BenchGo V3)
 
+> Ce document couvre la **Santé Globale (PV)** et l'**élimination**. Pour le calcul
+> complet des **points** (par exercice, classe, école, cumul multi-écoles, bonus
+> optionnel, sans-faute, diplôme, notes A–F), voir
+> [`systeme-points.md`](./systeme-points.md).
+
 Le système de notation de BenchGo V3 est conçu pour émuler un "Professeur" évaluant ses élèves de manière humaine, équitable, mais exigeante.
 
 ## 1. La Santé Globale (Le Buffer de Survie)

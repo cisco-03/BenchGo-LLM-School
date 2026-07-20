@@ -18,17 +18,29 @@ Le score obligatoire est la reference principale pour juger le modele.
 
 ## Echelle de notes
 
-- A: >= 90%
-- B: 70-89%
-- C: 50-69%
-- D: 30-49%
-- F: < 30%
+L'echelle est calculee sur le pourcentage (code `letterGrade` dans `progress-bar.js`).
+C'est un seuillage descendant : chaque palier est >= sa valeur, donc A prime sur B, etc.
+
+- A : >= 90%
+- B : >= 80%
+- C : >= 70%
+- D : >= 60%
+- F : < 60%
+
+> Note : une ancienne version de ce manuel donnait une echelle incorrecte
+> (A>=90 / B=70-89 / C=50-69 / D=30-49 / F<30). Les seuils ci-dessus sont les
+> seuils reels du code (corriges le 2026-07-20). Voir aussi
+> [Système de points](../Apps-Fonctions/systeme-points.md) pour le calcul
+> complet (points par exercice, classe, ecole et cumul multi-ecoles).
 
 ## Regle du verdict
 
-- >= 80% obligatoire: MODELE RECOMMANDE
-- 50-79% obligatoire: MODELE PARTIEL - RESERVES
-- < 50% obligatoire: MODELE NON RECOMMANDE
+Le verdict s'appuie sur le **pourcentage obligatoire** s'il y a des tiers
+obligatoires pour le profil, sinon sur le pourcentage global :
+
+- >= 80% : MODELE RECOMMANDE
+- 50-79% : MODELE PARTIEL - RESERVES
+- < 50% : MODELE NON RECOMMANDE
 
 ## Lecture des resultats par tier
 

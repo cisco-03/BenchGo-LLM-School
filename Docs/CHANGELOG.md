@@ -1,5 +1,105 @@
 # CHANGELOG - Carnet de Notes BenchGo
 
+## 2026-07-20 — Documentation du système de points (calcul, classes, écoles, cumul) + correction de l'échelle de notes A–F
+
+### Contexte
+Retour utilisateur : le système de points n'était **pas documenté** de manière exhaustive dans l'application. Les utilisateurs ne savaient pas combien de points vaut une classe, une école, comment se calcule un « sans-faute », ni comment s'additionnent plusieurs écoles dans le carnet. Par ailleurs, l'échelle de notes A–F du manuel `04-lecture-resultats.md` était **fausse** (elle ne correspondait pas au code `letterGrade`).
+
+### Problèmes relevés
+1. **Pas de doc points centralisée** : la gamification (PV, élimination) était documentée dans `Docs/Apps-Fonctions/gamification-sante.md`, mais le **calcul des points** (par exercice, classe, école, cumul, bonus optionnel, sans-faute, diplôme, notes) n'existait nulle part.
+2. **Échelle de notes erronée** dans `04-lecture-resultats.md` : indiquait `A>=90 / B=70-89 / C=50-69 / D=30-49 / F<30` alors que `progress-bar.js:200-206` donne `A>=90 / B>=80 / C>=70 / D>=60 / F<60`.
+3. **Seuil de tier erroné** dans `Memories-BenchGo/README.md` : indiquait « seuil de validation = 70 points » au lieu de « 70 % du total possible » (le total est aléatoire, il n'y a pas de seuil fixe en points).
+4. **Verdict** documenté en « obligatoire » uniquement, alors que le verdict s'appuie sur `pctMandatory` **s'il y a des tiers obligatoires**, sinon `pctGlobal`.
+
+### Actions entreprises
+
+**1. Création de `Docs/Apps-Fonctions/systeme-points.md`**
+Nouveau document exhaustif (10 sections) couvrant :
+- Points par exercice (30–60 aléatoires, effets succès/échec/inexploitable).
+- Points par classe (tier) : total possible, seuil 70 %, bypassés exclus, sans-faute = 100 % (plafond, pas de surplus).
+- Points par école : score global vs score obligatoire, table du nombre d'exercices par profil (LIGHT 60, STANDARD 60, EXPERT 41, FRONTIER 11), tiers obligatoires/optionnels par profil.
+- Bonus optionnel (20 % sur les optionnels réussis) : ajouté à la **Santé**, pas à `tierScore` (le seul « surplus », qui ne fait pas dépasser 100 %).
+- Santé globale : réinitialisée à chaque école, élimination à −100 PV.
+- Notes A–F (seuils réels du code).
+- Verdict (RECOMMANDÉ ≥80 %, PARTIEL 50–79 %, NON RECOMMANDÉ <50 %, sur `pctMandatory` ou `pctGlobal`).
+- Diplôme de l'école (mode `all` + tous obligatoires validés + `pctGlobal >= 100 %`).
+- Cumul multi-écoles : carnet `{ best, attempts }`, `best` = pct max, classement basé sur `best`, bilan global = somme pondérée des `best`.
+- Récapitulatif visuel du calcul.
+
+**2. Correction de `Docs/Manuel-utilisateur/04-lecture-resultats.md`**
+- Échelle de notes remplacée par les seuils réels (A≥90, B≥80, C≥70, D≥60, F<60).
+- Verdict précisé : s'appuie sur le **pourcentage obligatoire** s'il y a des tiers obligatoires, sinon sur le global.
+- Lien vers le nouveau document `systeme-points.md`.
+
+**3. Correction de `Memories-BenchGo/README.md`**
+- « Seuil de validation = 70 points » → « 70 % du total possible » (le total est aléatoire).
+- Ajout d'un lien renvoyant vers `Docs/Apps-Fonctions/systeme-points.md`.
+
+**4. Maillage de la documentation**
+- `README.md` (racine) : ajout du lien dans la fonctionnalité « Santé globale » + dans la section Documentation.
+- `Docs/Manuel-utilisateur/README.md` : ajout du parcours « En complément : le système de points ».
+- `Docs/Apps-Fonctions/gamification-sante.md` : en-tête renvoyant vers `systeme-points.md` pour la partie calcul des points.
+
+### Fichiers modifiés
+- `Docs/Apps-Fonctions/systeme-points.md` *(nouveau)*
+- `Docs/Manuel-utilisateur/04-lecture-resultats.md` (échelle corrigée, lien ajouté)
+- `Docs/Manuel-utilisateur/README.md` (parcours complémentaire)
+- `README.md` (2 liens vers la doc points)
+- `Docs/Apps-Fonctions/gamification-sante.md` (renvoi)
+- `Memories-BenchGo/README.md` (seuil corrigé, lien ajouté)
+
+### Résultat attendu
+- Tout utilisateur (GitHub ou local) dispose désormais d'un document unique et précis expliquant le calcul des points à tous les niveaux, référençant les sources de code exactes.
+- L'échelle de notes affichée par le code correspond désormais à celle documentée.
+- Le seuil de validation d'un tier est correctement décrit comme un pourcentage (70 %), pas un nombre fixe de points.
+
+## 2026-07-20 — Professeur IA (OpenRouter Free Router) : ByteString, modality texte seul, slug :free dépublié, plus d'erreur brute du moteur
+
+### Contexte
+Retour utilisateur via `logs/benchgo_2026-07-20T13-05-57-738Z.log` (run `mythos-9b-unhinged`, profil STANDARD, école College-Lycee, score 91 %). Quatre problèmes distincts et cumulatifs rendaient le Professeur IA totalement indisponible et affichaient une erreur technique brute interdite.
+
+1. **Erreur brute `Invalid or unexpected token` affichée seule** à l'utilisateur sur l'échec définitif (`runner.js:595`) et au premier échec (`runner.js:687`). Erreur cryptique du sandbox VM qui fait croire à un bug du moteur BenchGo — l'utilisateur ne veut plus la voir.
+2. **`Cannot convert argument to a ByteString because the character at index 11 has a value of 8212`** sur **tous** les essais Teacher (Professeur IA de correction) — `teacher-client.js:142` utilisait `X-Title: 'BenchGo V3 — Professeur'` avec un em dash U+2014 (valeur 8212). Le fix ByteString du 19/07 n'avait été appliqué qu'à `report-teacher.js`, pas à `teacher-client.js`. `fetch` impose des headers Latin-1 (≤ 255), lève l'erreur avant même l'envoi de la requête.
+3. **Modèles non-texte sélectionnés en tête par le Free Router** — `google/lyria-3-pro-preview` et `google/lyria-3-clip-preview` (modality `text+image -> text+audio`) sont gratuits et ont un contexte énorme (1 048 576), donc le tri par contexte décroissant les mettait en position 1 et 2. Ils sont inutilisables pour une correction de code et échouaient systématiquement → 3 essais gaspillés, repli sur auto-analyse.
+4. **Slug `:free` dépublié pour le Report-teacher** — `report-teacher.js:183` hardcodait `meta-llama/llama-3.3-70b-instruct:free` comme modèle par défaut. Ce modèle n'est plus gratuit sur OpenRouter (HTTP 404 : *"This model is unavailable for free"*) ; le Report-teacher ne faisait pas de rotation dynamique et échouait 2 fois puis abandonnait.
+
+### Cause racine
+- Le fix ByteString du 19/07 a été appliqué à un seul des deux clients OpenRouter (`report-teacher.js`), pas à `teacher-client.js` (copier-coller manqué).
+- Le filtre `fetchFreeModels` ne vérifiait que `pricing.prompt === "0"` ; il ne lisait pas `architecture.modality` / `input_modalities` / `output_modalities`, donc les modèles audio/image passaient.
+- `report-teacher.js` utilisait un modèle par défaut codé en dur au lieu de réutiliser la liste dynamique déjà disponible dans `teacher-client.fetchFreeModels()`.
+- L'affichage de l'erreur brute (`runner.js:595` et `:687`) précédait l'explication pédagogique demandée au modèle : redondant et trompeur.
+
+### Actions entreprises
+
+**1. `teacher-client.js` — Header X-Title en Latin-1**
+- Remplacement de `'BenchGo V3 — Professeur'` par `'BenchGo V3 - Professeur'` (tiret ASCII), avec commentaire rappelant la contrainte ByteString. Cohérent avec le fix déjà appliqué à `report-teacher.js`.
+
+**2. `teacher-client.js` — Filtre de modality texte→texte**
+- Nouvelle fonction `isTextInOutTextModel(m)` : lit `architecture.modality` (format `text->text`) ou `input_modalities`/`output_modalities` (tableaux). Garde uniquement les modèles qui acceptent `text` en entrée et produisent **uniquement** `text` en sortie. Les modèles `text+image -> text+audio` (Lyria) sont rejetés.
+- Ajout du filtre `.filter(isTextInOutTextModel)` dans `fetchFreeModels` après le filtre de pricing.
+
+**3. `report-teacher.js` — Rotation dynamique sur les modèles gratuits réels**
+- Import de `fetchFreeModels` depuis `teacher-client.js` (réutilisation, pas de duplication).
+- Suppression du slug hardcoded `meta-llama/llama-3.3-70b-instruct:free`.
+- Construction dynamique de la liste des candidats : modèle explicite (override) + modèles gratuits réellement disponibles (filtrés par modality + denylist).
+- `maxAttempts` calculé sur `Math.min(candidates.length, maxRetries||3)`, rotation sur 404 (slug dépublié) en plus des 429/5xx. Le Report-teacher ne tombe plus jamais sur un slug 404 figé.
+
+**4. `runner.js` — Fin de l'erreur brute du moteur**
+- Suppression de la ligne `Erreur technique brute du moteur : ${errors.substring(0, 120)}` sur l'échec définitif. Seule l'explication pédagogique (demandée au modèle, avec repli sur `explainTechnicalError`) est affichée.
+- Remplacement de `Raison: ${errors.substring(0, 80)}` (premier échec) par `Raison : ${explainTechnicalError(errors, task)}` : explication humaine au lieu de l'erreur brute.
+- L'erreur technique reste envoyée au modèle dans le prompt d'explication (nécessaire pour le diagnostic) et reste dans le log fichier, mais n'est plus affichée seule à l'utilisateur.
+
+### Fichiers modifiés
+- `teacher-client.js` (header X-Title ligne 142, filtre modality `fetchFreeModels`)
+- `report-teacher.js` (import `fetchFreeModels`, rotation dynamique candidats)
+- `runner.js` (suppression des 2 affichages d'erreur brute du sandbox)
+
+### Résultat attendu
+- Plus aucune ligne `Erreur technique brute du moteur` dans le CLI ; seules des explications pédagogiques (modèle ou repli professeur) sont affichées.
+- Le Professeur IA de correction contacte désormais des modèles texte→texte réels et ne tombe plus sur les modèles audio Lyria.
+- Le Report-teacher ne tombe plus sur un slug `:free` 404 dépublié et peut rédiger la validation finale.
+- Sans ces 4 erreurs, le run `mythos-9b-unhinged` (95 % cumulé) aurait bénéficié d'une relecture critique du Professeur IA sur les 2 échecs (`math`, `info`), sans impact sur le score (les échecs étaient de vraies erreurs techniques du sandbox : commentaire `###` invalide, classe utilisée avant déclaration).
+
 ## 2026-07-20 — Gestion propre du port occupé (EADDRINUSE) dans leaderboard.js
 
 ### Contexte

@@ -11,6 +11,10 @@ Ce dossier contient la documentation utilisateur complète pour lancer et exploi
 5. Résoudre les incidents avec [05-depannage.md](05-depannage.md)
 6. Voir le détail des épreuves dans [06-reference-tiers.md](06-reference-tiers.md)
 
+### En complément : le système de points
+- [Système de points (calcul, classes, écoles, cumul)](../Apps-Fonctions/systeme-points.md) — combien de points par exercice, par classe, par école, comment s'additionnent plusieurs écoles, que devient un sans-faute, le bonus optionnel, le diplôme et les notes A–F.
+- [Système de gamification & santé](../Apps-Fonctions/gamification-sante.md) — fonctionnement des PV, pénalités et élimination.
+
 ## Public cible
 
 - Utilisateurs qui veulent évaluer un modèle local via LM Studio
