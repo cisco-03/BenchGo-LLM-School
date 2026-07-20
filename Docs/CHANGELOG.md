@@ -1,5 +1,77 @@
 # CHANGELOG - Carnet de Notes BenchGo
 
+## 2026-07-20 — Auto-profilage robuste + détection doublon précoce + presets/clés API persistants + retry anti-timeout
+
+### Contexte
+Retour utilisateur via le log `logs/benchgo_2026-07-20T07-31-39-885Z.log` : quatre problèmes bloquants et fastidieux.
+1. **Auto-profilage échoué systématiquement** (`Auto-profilage échoué en 94.8s`) — NON NÉGOCIABLE : le modèle `microsoft/phi-4-reasoning-plus` répond en 94s, 2275 chars, mais le parsing JSON échoue puis le fallback regex échoue → filtrage désactivé.
+2. **Modèle déjà testé découvert trop tard** — l'utilisateur remplit tout le questionnaire, attend 94s l'auto-profilage, puis seulement découvre que le modèle a déjà un carnet. Fastidieux.
+3. **Pas de presets / clés persistantes** — à chaque `node runner.js` dans la même fenêtre CMD, il faut tout re-saisir (fournisseur, modèle, profil, clés API). Trop long.
+4. **Timeout Tier 1 → exit immédiat** — le modèle dépasse 300s sur un tier obligatoire, `process.exit(1)` sans retry.
+
+### Cause racine
+1. **Auto-profilage** : `runSelfProfiling` ne tentait qu'une seule stratégie (texte + reasoning off) avec `max_tokens=600` (tronquait le JSON), et le fallback regex `[^}]` ne traversait pas les retours-ligne. Le modèle enrobait le JSON dans du markdown → parsing échouait.
+2. **Doublon tardif** : la détection de doublon existait dans `runSchool` mais APRÈS l'auto-profilage (~95s) et le questionnaire.
+3. **Pas de persistance** : `secrets.js` stocke les clés en mémoire de session uniquement ; pas de fichier de preset ni de magasin de clés.
+4. **Exit sur timeout** : `queryLLM` avec `isMandatory=true` fait `process.exit(1)` sur timeout, sans retry.
+
+### Actions entreprises
+
+**1. `self-profiling.js` — Auto-profilage multi-stratégies (carte blanche)**
+- `PROFILING_MAX_TOKENS = 0` : sortie ILLIMITÉE (carte blanche demandée par l'utilisateur). Ne plus tronquer le JSON.
+- Nouveau `PROFILING_RETRY_MAX = 3` : on essaie jusqu'à 3 stratégies avant de baisser les bras.
+- Stratégies ordonnées : (1) `json_schema` strict + reasoning off → (2) texte pur + reasoning off → (3) carte blanche (reasoning on).
+- Schéma JSON strict `PROFILING_JSON_SCHEMA` forcé via `response_format` (supporté par LM Studio / OpenAI-compat).
+- Fallback regex `[\s\S]*?` tolérant aux retours-ligne et au markdown autour du JSON ; extraction de la `justification`.
+
+**2. `lm-studio-client.js` / `cloud-client.js` — max_tokens illimité**
+- `maxTokens=0` (ou falsy) → on n'envoie PAS le champ `max_tokens` (sortie illimitée), au lieu de recalculer 4096.
+
+**3. `runner.js` — Détection doublon AVANT l'auto-profilage**
+- Nouvelle vérification du carnet (`scoreLedger.loadLedger`) juste avant l'auto-profilage : si le modèle a déjà un carnet, on alerte et propose d'annuler (exit 0) ou de continuer (cumul). Fini l'attente de 95s pour rien.
+
+**4. `presets.js` (nouveau) + `api-keys-store.js` (nouveau) — Persistance locale**
+- `presets.js` : fichier `.presets.json` (ignoré par git via `.gitignore` règle `*`) stocke des configs nommées. Flags : `--preset=nom`, `--save-preset=nom`, `--list-presets`, `--delete-preset=nom`.
+- `api-keys-store.js` : fichier `.api-keys.json` (ignoré par git) stocke les clés API de TOUS les providers. Flags : `--list-keys`, `--forget-key=provider`, `--no-save-keys`.
+- Au démarrage, `restoreIntoSession()` recharge toutes les clés dans `secrets.js` (mémoire de session) : fini la re-saisie dans la même fenêtre OU une nouvelle fenêtre.
+- Proposition interactive de mémorisation avec message explicatif : « si vous ouvrez une nouvelle fenêtre, il faudra remettre les paramètres, mais la clé sera retrouvée ».
+- SÉCURITÉ : `.presets.json` et `.api-keys.json` sont ignorés par git (vérifié via `git check-ignore`) → jamais poussés sur GitHub. Les clés ne sont JAMAIS incluses dans les presets.
+- Dans le questionnaire interactif, si des presets existent, on les propose en choix avant le questionnaire complet (choix 1..N, ou 0 = manuel).
+
+**5. `runner.js` — Retry anti-timeout sur tiers obligatoire**
+- Dans `runTierAttempt`, l'appel `queryFn` est wrappé : 1re tentative normale, en cas de timeout (AbortError) on réessaie avec `disableReasoning: true` (coupe la pensée étendue). On récupère l'erreur (`isMandatory=false`) au lieu de `process.exit(1)`.
+
+**6. `config.js` — Nouveaux flags CLI + messages pédagogiques**
+- `parseCliArgs` expose : `preset`, `savePreset`, `deletePreset`, `listPresets`, `forgetKey`, `listKeys`, `noSaveKeys`.
+- `PROFILING_MAX_TOKENS = 0`, `PROFILING_RETRY_MAX = 3` ajoutés aux exports.
+- Nouveaux catalogues `PROFILING_WAITING_MESSAGES`, `POST_PROFILING_WAITING_MESSAGES`, `GENERIC_WAITING_MESSAGES` : phrases pédagogiques non-humoristiques (décision spinner_no_humor) qui tournent pendant les temps morts pour tenir l'utilisateur en haleine.
+
+**7. `progress-bar.js` — Spinner avec messages pédagogiques rotatifs**
+- `Spinner.setWaitingMessages(messages)` : affiche une phrase pédagogique en gris sous le label du spinner, qui tourne toutes les ~7s (entre 5 et 10s) pour donner un sentiment de progression pendant les temps morts longs (auto-profilage 10-90s, chargement des exercices).
+- Nettoyage propre des 2 lignes (label + message) sur `stop()`/`fail()`/`beginStreaming()`.
+
+**8. `runner.js` — Branchement des messages rotatifs**
+- Spinner d'auto-profilage : `PROFILING_WAITING_MESSAGES` (« Je consulte mes compétences... »).
+- Spinner post-profilage (`prepSpinner`) avant la boucle des écoles : `POST_PROFILING_WAITING_MESSAGES` (« Je prends connaissance de mes exercices... »). L'utilisateur n'est plus laissé sans rien à l'écran pendant le creux entre l'auto-profilage et le 1er exercice.
+
+### Fichiers modifiés
+- `self-profiling.js` (refonte `runSelfProfiling` multi-stratégies + `parseProfileFallback` robuste + `PROFILING_JSON_SCHEMA`)
+- `lm-studio-client.js` (`max_tokens` illimité quand `maxTokens=0`)
+- `cloud-client.js` (`max_tokens` illimité quand `maxTokens=0`)
+- `config.js` (`PROFILING_MAX_TOKENS=0`, `PROFILING_RETRY_MAX`, nouveaux flags CLI, messages pédagogiques)
+- `progress-bar.js` (`Spinner.setWaitingMessages` + rotation ~7s + nettoyage 2 lignes)
+- `runner.js` (doublon précoce, presets, clés persistantes, retry anti-timeout, messages rotatifs, imports)
+- `presets.js` (nouveau module)
+- `api-keys-store.js` (nouveau module)
+
+### Résultat
+- L'auto-profilage tente 3 stratégies (json_schema → texte → carte blanche) avec sortie illimitée : le JSON n'est plus tronqué, le parsing tolère le markdown.
+- Un modèle déjà testé est détecté AVANT l'auto-profilage : l'utilisateur peut annuler en 2s au lieu d'attendre 95s.
+- Les clés API et la config sont persistées localement (hors git) : un run dans la même fenêtre ou une nouvelle fenêtre retrouve tout sans re-saisie.
+- Un timeout sur un tier obligatoire déclenche un retry automatique avec raisonnement désactivé avant d'abandonner.
+
+---
+
 ## 2026-07-19 (l) — Questionnaire : choix explicite de la cible (tier) + fix Report-teacher (ByteString)
 
 ### Contexte

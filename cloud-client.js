@@ -214,7 +214,8 @@ async function queryLLM(prompt, difficulty, tierId, isMandatory, spinner, option
         stream: true
       };
       // max_tokens explicite (auto-profilage) — limite la sortie pour forcer une
-      // réponse concise et éviter les longues générations inutiles.
+      // réponse concise. maxTokens=0 (ou non entier >0) = sortie ILLIMITÉE
+      // (carte blanche auto-profilage) : on n'envoie pas le champ.
       if (Number.isInteger(options.maxTokens) && options.maxTokens > 0) {
         requestBody.max_tokens = options.maxTokens;
       }

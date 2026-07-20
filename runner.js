@@ -3,7 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const readline = require('readline');
 const logger = require('./logger');
-const { PROFILES, CLASSE_NAMES, parseCliArgs, detectProfileFromModelName, fetchModelNameFromLMStudio, fetchModelMetadataFromLMStudio, OPTIONAL_BONUS_PCT, selfProfiling, TEACHER_CONFIG, PROFILING_TIMEOUT_MS } = require('./config');
+const { PROFILES, CLASSE_NAMES, parseCliArgs, detectProfileFromModelName, fetchModelNameFromLMStudio, fetchModelMetadataFromLMStudio, OPTIONAL_BONUS_PCT, selfProfiling, TEACHER_CONFIG, PROFILING_TIMEOUT_MS, PROFILING_WAITING_MESSAGES, POST_PROFILING_WAITING_MESSAGES } = require('./config');
 const { ProgressBar, Spinner, letterGrade } = require('./progress-bar');
 const { extractJSON, extractCodeRegex } = require('./parsing-utils');
 const { queryLLM: queryLLMLocal } = require('./lm-studio-client');
@@ -19,6 +19,8 @@ const leaderboard = require('./leaderboard');
 const secrets = require('./secrets');
 const { runStartupQuestionnaire } = require('./startup-questionnaire');
 const { buildExternalTeacherReport } = require('./report-teacher');
+const presets = require('./presets');
+const apiKeysStore = require('./api-keys-store');
 
 const DEFAULT_CONTEXT_LIMIT_TOKENS = 16384;
 const MAX_RATTRAPAGE_ATTEMPTS = 1;
@@ -405,14 +407,63 @@ async function runTierAttempt({ tierNum, tierData, isMandatory, profileArg, cont
 
     try {
       const startTime = performance.now();
-      const responseData = await queryFn(
-        dynamicPrompt,
-        tierData.difficulty,
-        tierNum,
-        isMandatory,
-        spinner,
-        { contextLimitTokens, providerConfig }
-      );
+      // Retry automatique en cas de timeout : les modèles de raisonnement locaux
+      // (phi-4-reasoning-plus, GLM, Qwen3, DeepSeek-R1) peuvent dépasser le
+      // timeout API (300s) sur un tier obligatoire et faire process.exit(1) sans
+      // retry (cf. log benchgo_2026-07-20T07-31-39 Tier 1 = ERREUR timeout).
+      // On appelle queryFn avec isMandatory=false pour RÉCUPÉRER l'erreur de
+      // timeout au lieu de process.exit, puis on réessaie avec disableReasoning
+      // (coupe la pensée étendue) pour forcer une réponse plus rapide.
+      let responseData = null;
+      let tierRetryReason = null;
+      for (let tierAttempt = 1; tierAttempt <= 2; tierAttempt++) {
+        const tierAttemptTag = tierAttempt > 1 ? ` (retry anti-timeout, reasoning off)` : '';
+        const spinner2 = tierAttempt > 1
+          ? new Spinner(`Tier ${tierNum} — Essais restants: ${attemptsLeft} | Score Tier: ${tierScore}/${totalPossiblePoints} | Santé: ${gameState.globalLifeScore}${tierAttemptTag}`)
+          : spinner;
+        if (tierAttempt === 1) {
+          // spinner déjà démarré plus haut (avant la génération du prompt)
+        } else {
+          spinner2.start();
+          console.log(`  \x1b[33m[RETRY ANTI-TIMEOUT]\x1b[0m Tier ${tierNum} — nouvelle tentative avec raisonnement désactivé (le modèle avait dépassé le délai).`);
+        }
+        const callOptions = tierAttempt === 1
+          ? { contextLimitTokens, providerConfig }
+          : { contextLimitTokens, providerConfig, disableReasoning: true };
+        try {
+          responseData = await queryFn(
+            dynamicPrompt,
+            tierData.difficulty,
+            tierNum,
+            false,            // isMandatory=false pour récupérer l'erreur au lieu d'exit
+            spinner2,
+            callOptions
+          );
+          if (responseData) {
+            if (tierAttempt > 1) spinner.stop(`Tier ${tierNum} — Réponse reçue (retry réussi)`);
+            break;
+          }
+        } catch (tierCallErr) {
+          // Récupéré ici (isMandatory=false). Si timeout → retry ; sinon on remonte.
+          const isTimeoutErr = tierCallErr && tierCallErr.name === 'AbortError';
+          if (tierAttempt === 1 && isTimeoutErr) {
+            tierRetryReason = 'timeout';
+            spinner.fail(`Tier ${tierNum} — timeout dépassé, retry avec raisonnement off...`);
+            continue;
+          }
+          // Autre erreur ou 2e tentative → on remonte en mode mandatory réel.
+          if (tierAttempt > 1) {
+            // 2e échec : on remet le spinner d'origine et on sort pour laisser
+            // queryFn gérer l'erreur (exit si mandatory).
+            spinner.fail(`Tier ${tierNum} — échec définitif après retry : ${tierCallErr.message}`);
+          }
+          // Relance avec isMandatory=true pour le comportement historique (exit).
+          responseData = await queryFn(
+            dynamicPrompt, tierData.difficulty, tierNum, isMandatory, spinner, { contextLimitTokens, providerConfig }
+          );
+          break;
+        }
+      }
       const endTime = performance.now();
       const inferenceTimeMs = Math.round(endTime - startTime);
 
@@ -776,8 +827,58 @@ async function main() {
 
   const cliArgs = parseCliArgs();
   const { tierArg: tierArgRaw, profileArgExplicit, contextLimitTokens: contextLimitFromCli, provider, model: cloudModel, apiKey, endpoint,
-           teacherModel, teacherApiKey, teacherEndpoint, teacherDisabled, quantization: cliQuantization } = cliArgs;
+           teacherModel, teacherApiKey, teacherEndpoint, teacherDisabled, quantization: cliQuantization,
+           preset: presetName, savePreset: savePresetName, deletePreset: deletePresetName, listPresets: listPresetsFlag,
+           forgetKey: forgetKeyName, listKeys: listKeysFlag, noSaveKeys: noSaveKeysFlag } = cliArgs;
   let tierArg = tierArgRaw;
+
+  // --- Flags d'action unique : traités puis sortie immédiate ---
+  // --list-presets / --list-keys : affichage puis exit.
+  // --delete-preset=nom / --forget-key=provider : suppression puis exit.
+  if (listPresetsFlag) {
+    presets.printPresets();
+    logger.close();
+    process.exit(0);
+  }
+  if (deletePresetName) {
+    const ok = presets.deletePreset(deletePresetName);
+    console.log(ok ? `  \x1b[32mPreset '${deletePresetName}' supprimé.\x1b[0m`
+                   : `  \x1b[33mAucun preset nommé '${deletePresetName}'.\x1b[0m`);
+    logger.close();
+    process.exit(0);
+  }
+  if (listKeysFlag) {
+    const stored = apiKeysStore.loadAllKeys();
+    const names = Object.keys(stored);
+    if (names.length === 0) {
+      console.log('  \x1b[90mAucune clé API mémorisée.\x1b[0m');
+      console.log('  \x1b[90mLes clés saisies seront proposées pour mémorisation (sauf --no-save-keys).\x1b[0m');
+    } else {
+      console.log('  \x1b[1;36m━━━ CLÉS API MÉMORISÉES (locales, hors GitHub) ━━━\x1b[0m');
+      for (const n of names) {
+        console.log(`  \x1b[1m${n.padEnd(20)}\x1b[0m ${secrets.maskedForDisplay(stored[n])}`);
+      }
+      console.log('');
+      console.log('  \x1b[90mEffacer une clé : node runner.js --forget-key=provider\x1b[0m');
+    }
+    logger.close();
+    process.exit(0);
+  }
+  if (forgetKeyName) {
+    const existed = apiKeysStore.forgetKey(forgetKeyName);
+    console.log(existed ? `  \x1b[32mClé '${forgetKeyName}' effacée du magasin local.\x1b[0m`
+                        : `  \x1b[33mAucune clé mémorisée pour '${forgetKeyName}'.\x1b[0m`);
+    logger.close();
+    process.exit(0);
+  }
+
+  // --- Restauration des clés API mémorisées dans la mémoire de session ---
+  // Avant toute chose : on recharge toutes les clés persistées (.api-keys.json)
+  // dans secrets.js (mémoire de session). Ainsi un run dans la MÊME fenêtre ou une
+  // NOUVELLE fenêtre retrouve les clés sans re-saisie. L'utilisateur n'a à saisir
+  // une clé que la 1re fois, puis on lui propose de la mémoriser (message
+  // interactif cf. plus bas). --no-save-keys désactive la mémorisation.
+  apiKeysStore.restoreIntoSession(secrets);
 
   // --- Questionnaire interactif au démarrage ---
   // Si AUCUN flag significatif n'est passé (--provider, --model), on lance le
@@ -795,26 +896,105 @@ async function main() {
   let resolvedQuantization = cliQuantization || null;
   let teacherConfigResolved;
 
-  if (!hasCliProvider && !hasCliModel && process.stdin.isTTY && process.stdout.isTTY) {
-    logger.info('Aucun flag CLI détecté — lancement du questionnaire interactif.');
-    const qConfig = await runStartupQuestionnaire(cliArgs);
-    resolvedProvider = qConfig.provider;
-    resolvedCloudModel = qConfig.model;
-    resolvedApiKey = qConfig.apiKey;
-    resolvedEndpoint = qConfig.endpoint;
-    resolvedProfileArgExplicit = qConfig.profileArg;
-    resolvedContextLimit = qConfig.contextLimitTokens;
-    if (qConfig.quantization) resolvedQuantization = qConfig.quantization;
-    // teacherConfig construit par le questionnaire (clé mémorisée dans secrets.js)
-    teacherConfigResolved = qConfig.teacherConfig;
-    // Cible (tier) explicite issue du questionnaire. Prioritaire sur la valeur
-    // résiduelle de parseCliArgs() pour éviter qu'un argument positionnel
-    // parasite (ex: "node runner.js 0") ne restreigne silencieusement le run à
-    // une seule classe. En interactif, seul un choix explicite de l'utilisateur
-    // restreint la cible ; sinon on reste sur "all".
-    if (qConfig.tierArg) tierArg = qConfig.tierArg;
-    // Mémorise aussi la clé élève dans secrets pour réutilisation cross-école.
-    if (resolvedApiKey) secrets.rememberSecret(resolvedProvider, resolvedApiKey, true);
+  if (presetName) {
+    // --- Mode preset : charge un preset nommé sans questionnaire ---
+    const p = presets.loadPreset(presetName);
+    if (!p) {
+      console.error(`\x1b[31m[ERREUR]\x1b[0m Aucun preset nommé '${presetName}'.`);
+      console.log(`  \x1b[90mLancez --list-presets pour voir les presets disponibles, ou --save-preset=${presetName} après un run.\x1b[0m`);
+      logger.close();
+      process.exit(1);
+    }
+    logger.info(`Preset '${presetName}' chargé (clés API non incluses — restaurées depuis .api-keys.json).`);
+    console.log(`  \x1b[1;32m━━━ PRESET '${presetName}' CHARGÉ ━━━\x1b[0m`);
+    resolvedProvider = p.provider || null;
+    resolvedCloudModel = p.model || null;
+    resolvedEndpoint = p.endpoint || null;
+    resolvedProfileArgExplicit = p.profile || null;
+    resolvedContextLimit = p.contextLimitTokens || null;
+    resolvedQuantization = p.quantization || null;
+    if (p.tier && p.tier !== 'all') tierArg = p.tier;
+    // La clé API est restaurée depuis .api-keys.json (déjà fait plus haut dans
+    // secrets). On la récupère ici pour resolvedApiKey.
+    resolvedApiKey = secrets.getSecret(resolvedProvider);
+    // Professeur : on reconstruit depuis le preset + clé OpenRouter restaurée.
+    if (p.teacherEnabled === false) {
+      teacherConfigResolved = { ...TEACHER_CONFIG, enabled: false };
+      console.log(`  \x1b[90mProfesseur : auto-analyse classique (preset).\x1b[0m`);
+    } else {
+      const teacherKey = secrets.getSecret('openrouter') || secrets.getSecret('teacher-openrouter');
+      teacherConfigResolved = { ...TEACHER_CONFIG, enabled: Boolean(teacherKey), apiKey: teacherKey || null };
+      if (p.teacherModel)    teacherConfigResolved.model    = p.teacherModel;
+      if (p.teacherEndpoint) teacherConfigResolved.endpoint = p.teacherEndpoint;
+      console.log(`  \x1b[90mProfesseur : ${teacherConfigResolved.enabled ? 'OpenRouter activé (clé restaurée)' : 'auto-analyse classique (pas de clé OpenRouter mémorisée)'}.\x1b[0m`);
+    }
+    console.log('');
+  } else if (!hasCliProvider && !hasCliModel && process.stdin.isTTY && process.stdout.isTTY) {
+    // --- Mode questionnaire interactif : on propose d'abord les presets existants ---
+    const existing = presets.listPresets();
+    let chosenPreset = null;
+    if (existing.length > 0) {
+      console.log('  \x1b[1;36m━━━ PRESETS DISPONIBLES ━━━\x1b[0m');
+      console.log('  \x1b[90mUn preset recharge la config (fournisseur, modèle, profil...) sans la re-saisir.\x1b[0m');
+      console.log('  \x1b[90mLes clés API sont restaurées automatiquement depuis le magasin local.\x1b[0m\n');
+      existing.forEach((p, i) => {
+        console.log(`    \x1b[1m${String(i + 1).padStart(2)}.\x1b[0m ${p.name} \x1b[90m(${p.provider} · ${p.model} · ${p.profile} · tier=${p.tier})\x1b[0m`);
+      });
+      console.log(`    \x1b[1m 0.\x1b[0m Aucun — configurer manuellement (questionnaire complet)\n`);
+      const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+      const idx = await new Promise(resolve => {
+        rl.question('  Choix (Entrée = manuel) : ', a => { rl.close(); resolve((a || '').trim()); });
+      });
+      const n = parseInt(idx, 10);
+      if (Number.isInteger(n) && n >= 1 && n <= existing.length) {
+        chosenPreset = existing[n - 1].name;
+      }
+    }
+    if (chosenPreset) {
+      logger.info(`Preset '${chosenPreset}' chargé depuis le questionnaire interactif.`);
+      const p = presets.loadPreset(chosenPreset);
+      resolvedProvider = p.provider || null;
+      resolvedCloudModel = p.model || null;
+      resolvedEndpoint = p.endpoint || null;
+      resolvedProfileArgExplicit = p.profile || null;
+      resolvedContextLimit = p.contextLimitTokens || null;
+      resolvedQuantization = p.quantization || null;
+      if (p.tier && p.tier !== 'all') tierArg = p.tier;
+      resolvedApiKey = secrets.getSecret(resolvedProvider);
+      if (p.teacherEnabled === false) {
+        teacherConfigResolved = { ...TEACHER_CONFIG, enabled: false };
+      } else {
+        const teacherKey = secrets.getSecret('openrouter') || secrets.getSecret('teacher-openrouter');
+        teacherConfigResolved = { ...TEACHER_CONFIG, enabled: Boolean(teacherKey), apiKey: teacherKey || null };
+        if (p.teacherModel)    teacherConfigResolved.model    = p.teacherModel;
+        if (p.teacherEndpoint) teacherConfigResolved.endpoint = p.teacherEndpoint;
+      }
+      console.log(`  \x1b[1;32m→ Preset '${chosenPreset}' chargé.\x1b[0m`);
+      console.log(`  \x1b[90mFournisseur : ${resolvedProvider || '?'} · Modèle : ${resolvedCloudModel || '?'} · Profil : ${resolvedProfileArgExplicit || 'auto'}\x1b[0m`);
+      if (resolvedApiKey) console.log(`  \x1b[90mClé ${resolvedProvider} : restaurée (${secrets.maskedForDisplay(resolvedApiKey)})\x1b[0m`);
+      else if (resolvedProvider && !['lmstudio', 'ollama', 'custom'].includes(resolvedProvider)) console.log(`  \x1b[33mClé ${resolvedProvider} : non mémorisée — elle sera demandée.\x1b[0m`);
+      console.log('');
+    } else {
+      logger.info('Aucun flag CLI détecté — lancement du questionnaire interactif.');
+      const qConfig = await runStartupQuestionnaire(cliArgs);
+      resolvedProvider = qConfig.provider;
+      resolvedCloudModel = qConfig.model;
+      resolvedApiKey = qConfig.apiKey;
+      resolvedEndpoint = qConfig.endpoint;
+      resolvedProfileArgExplicit = qConfig.profileArg;
+      resolvedContextLimit = qConfig.contextLimitTokens;
+      if (qConfig.quantization) resolvedQuantization = qConfig.quantization;
+      // teacherConfig construit par le questionnaire (clé mémorisée dans secrets.js)
+      teacherConfigResolved = qConfig.teacherConfig;
+      // Cible (tier) explicite issue du questionnaire. Prioritaire sur la valeur
+      // résiduelle de parseCliArgs() pour éviter qu'un argument positionnel
+      // parasite (ex: "node runner.js 0") ne restreigne silencieusement le run à
+      // une seule classe. En interactif, seul un choix explicite de l'utilisateur
+      // restreint la cible ; sinon on reste sur "all".
+      if (qConfig.tierArg) tierArg = qConfig.tierArg;
+      // Mémorise aussi la clé élève dans secrets pour réutilisation cross-école.
+      if (resolvedApiKey) secrets.rememberSecret(resolvedProvider, resolvedApiKey, true);
+    }
   } else {
     // --- Mode CLI historique : professeur OpenRouter (Free Router) ---
     const teacherConfig = (() => {
@@ -878,6 +1058,61 @@ async function main() {
   const contextLimitTokens = resolvedContextLimit || DEFAULT_CONTEXT_LIMIT_TOKENS;
   let preKnownModelName = isCloudMode ? resolvedCloudModel : null;
   logger.info(`Professeur : ${teacherConfigResolved && teacherConfigResolved.enabled ? `activé (${teacherConfigResolved.provider || 'openrouter'})` : 'désactivé (auto-analyse classique)'}`);
+
+  // --- Proposition de mémorisation des clés API (tous providers) ---
+  // Message interactif explicatif : on explique le compromis fenêtre/paramètres.
+  // Une clé saisie pour la 1re fois (pas déjà dans .api-keys.json) se voit
+  // proposer d'être mémorisée localement pour les prochains runs. --no-save-keys
+  // désactive cette proposition (ex: machine partagée).
+  if (!noSaveKeysFlag && process.stdin.isTTY && process.stdout.isTTY) {
+    const _offerKeyMemorization = async (providerName, keyValue, label) => {
+      if (!providerName || !keyValue) return;
+      // Déjà mémorisée ? On ne redemande pas.
+      if (apiKeysStore.getKey(providerName)) return;
+      console.log(`  \x1b[36m━━ MÉMORISATION DE LA CLÉ ${label} (${providerName}) ━━\x1b[0m`);
+      console.log(`  \x1b[90mLa clé ${label} n'est pas encore mémorisée localement.\x1b[0m`);
+      console.log(`  \x1b[90m• Si vous la mémorisez : les prochains runs (même fenêtre OU nouvelle fenêtre) la retrouveront automatiquement.\x1b[0m`);
+      console.log(`  \x1b[90m• Si vous refusez : la clé reste en mémoire pour CE run uniquement — si vous ouvrez une nouvelle fenêtre, il faudra la re-saisir.\x1b[0m`);
+      console.log(`  \x1b[90m• Sécurité : la clé est stockée dans .api-keys.json (local, ignoré par git — jamais sur GitHub). Effaçable via --forget-key=${providerName}.\x1b[0m`);
+      const memorize = await askYesNo(`  Mémoriser cette clé ${label} localement pour les prochains runs ?`, false);
+      if (memorize) {
+        apiKeysStore.saveKey(providerName, keyValue);
+        console.log(`  \x1b[32mClé ${label} mémorisée dans .api-keys.json (${secrets.maskedForDisplay(keyValue)}).\x1b[0m\n`);
+      } else {
+        console.log(`  \x1b[90mClé ${label} non mémorisée — session uniquement.\x1b[0m\n`);
+      }
+    };
+    // Clé élève (provider du modèle testé).
+    await _offerKeyMemorization(resolvedProvider, resolvedApiKey, 'API élève');
+    // Clé professeur OpenRouter.
+    if (teacherConfigResolved && teacherConfigResolved.enabled && teacherConfigResolved.apiKey) {
+      await _offerKeyMemorization('openrouter', teacherConfigResolved.apiKey, 'API professeur');
+    }
+  }
+
+  // --- --save-preset : sauvegarde la config courante et quitte ---
+  // Permet de créer un preset depuis un run configuré (interactif ou CLI).
+  // Les clés API ne sont JAMAIS incluses dans le preset (filtré dans presets.js).
+  if (savePresetName) {
+    const presetConfig = {
+      provider: resolvedProvider,
+      model: resolvedCloudModel,
+      endpoint: resolvedEndpoint,
+      profile: resolvedProfileArgExplicit || profileArg,
+      contextLimitTokens,
+      quantization: resolvedQuantization,
+      tier: tierArg,
+      teacherEnabled: Boolean(teacherConfigResolved && teacherConfigResolved.enabled),
+      teacherModel: teacherConfigResolved && teacherConfigResolved.model,
+      teacherEndpoint: teacherConfigResolved && teacherConfigResolved.endpoint
+    };
+    presets.savePreset(savePresetName, presetConfig);
+    console.log(`  \x1b[32mPreset '${savePresetName}' sauvegardé.\x1b[0m`);
+    console.log(`  \x1b[90mRelancez avec : node runner.js --preset=${savePresetName}\x1b[0m`);
+    console.log(`  \x1b[90m(Clés API non incluses — restaurées depuis .api-keys.json.)\x1b[0m`);
+    logger.close();
+    process.exit(0);
+  }
 
   // Lance l'auto-updater pour ajouter les exercices manquants et les points
   updateTiers();
@@ -978,6 +1213,37 @@ async function main() {
   console.log(`  \x1b[1;33mQuantification      :\x1b[0m ${resolvedQuantization ? `\x1b[1;35m${resolvedQuantization}\x1b[0m` : '\x1b[90m— (inconnue)\x1b[0m'}`);
   console.log('');
 
+  // --- Vérification anticipée : modèle déjà testé (avant l'auto-profilage) ---
+  // On consulte le carnet de scores AVANT de lancer l'auto-profilage (~95s) et
+  // avant d'exécuter quoi que ce soit. Sinon l'utilisateur remplit tout le
+  // questionnaire, attend l'auto-profilage, puis découvre que le modèle a déjà
+  // été testé — fastidieux (cf. log benchgo_2026-07-20T07-31-39).
+  // preKnownModelName est déjà résolu ici : cloud (resolvedCloudModel) ou local
+  // (détection /v1/models). On ne peut pas encore connaître le modelName exact
+  // en mode local tant qu'aucun appel n'a été fait, mais preKnownModelName suffit.
+  if (preKnownModelName) {
+    const preShortName = shortenModelName(preKnownModelName);
+    const preLedger = scoreLedger.loadLedger(preShortName);
+    const preEcoles = Object.keys(preLedger.ecoles || {});
+    if (preEcoles.length > 0) {
+      const grandTotal = scoreLedger.computeGrandTotal(preLedger);
+      console.log('');
+      console.log(`  \x1b[33m━━━ MODÈLE DÉJÀ TESTÉ ━━━\x1b[0m`);
+      console.log(`  \x1b[33m${preKnownModelName} a déjà un carnet de scores (${preEcoles.length} école(s) :\x1b[0m ${preEcoles.join(', ')}).`);
+      console.log(`  \x1b[90m  Score cumulé précédent : ${grandTotal.score}/${grandTotal.max} (${grandTotal.pct}%) — ${preEcoles.length} école(s).\x1b[0m`);
+      const proceedAnyways = await askYesNo(`  Continuer quand même (un nouveau test sera cumulé à l'historique) ?`, true);
+      if (!proceedAnyways) {
+        console.log(`  \x1b[36mRun annulé : carnet existant conservé.\x1b[0m`);
+        console.log(`  \x1b[90mAstuce : changez de modèle (--model=...) ou supprimez le carnet pour repartir de zéro.\x1b[0m`);
+        logger.info(`Run annulé avant auto-profilage : ${preKnownModelName} déjà testé (carnet ${preShortName}).`);
+        logger.close();
+        process.exit(0);
+      }
+      logger.info(`Re-test confirmé pour ${preKnownModelName} (carnet existant détecté avant auto-profilage).`);
+      console.log(`  \x1b[33mRe-test confirmé — les nouvelles tentatives seront cumulées (meilleur score conservé).\x1b[0m\n`);
+    }
+  }
+
   // --- Auto-profilage (Self-Profiling) ---
   // Interroge le modèle au démarrage pour qu'il s'auto-évalue sur 4 compétences clés.
   // Le profil obtenu sert ensuite à filtrer les tâches trop difficiles et à calculer
@@ -994,6 +1260,10 @@ async function main() {
     console.log(`  \x1b[90mCompétences évaluées : JavaScript Bases, Async, Algorithmes avancés, Débogage/Sécurité.\x1b[0m\n`);
 
     const profileSpinner = new Spinner('Auto-profilage : interview JSON du modèle en cours');
+    // Messages pédagogiques rotatifs PENDANT l'auto-profilage (temps mort de 10-90s).
+    // Tournent toutes les ~7s pour tenir l'utilisateur en haleine et lui expliquer
+    // ce que fait le modèle. Sans cela, l'utilisateur croit que le CLI a planté.
+    profileSpinner.setWaitingMessages(PROFILING_WAITING_MESSAGES);
     profileSpinner.start();
     const profileStartTime = Date.now();
     try {
@@ -1585,7 +1855,21 @@ async function main() {
   }
 
   // --- Exécution séquentielle des écoles ---
+  // Petit spinner pédagogique post-profilage : entre la fin de l'auto-profilage
+  // et le 1er exercice, il y a un creux (décision écoles, chargement des tiers,
+  // détection doublon par école). On tient l'utilisateur en haleine avec des
+  // messages rotatifs (« Je prends connaissance de mes exercices... ») pour qu'il
+  // ne croie pas que le CLI a planté et ne ferme pas la fenêtre.
   let lastResult = null;
+  const prepSpinner = new Spinner('Préparation de la session d\'examen');
+  prepSpinner.setWaitingMessages(POST_PROFILING_WAITING_MESSAGES);
+  prepSpinner.start();
+  // Laisse un instant les messages s'afficher pendant le travail préparatoire
+  // (loadTiers, détection doublon) — ces opérations sont synchrones/rapides mais
+  // donnent un sentiment d'activité si le modèle est déjà testé (question doublon).
+  // On arrête le spinner juste avant l'affichage de la config de l'école (runSchool).
+  await sleep(1200);
+  prepSpinner.stop('Préparation terminée — démarrage de l\'examen');
   for (let si = 0; si < schoolsToRun.length; si++) {
     const schoolProfile = schoolsToRun[si];
     const isSecondSchool = (si > 0);

@@ -1,6 +1,6 @@
 const logger = require('./logger');
 const { extractJSON } = require('./parsing-utils');
-const { PROFILING_TIMEOUT_MS, PROFILING_MAX_TOKENS } = require('./config');
+const { PROFILING_TIMEOUT_MS, PROFILING_MAX_TOKENS, PROFILING_RETRY_MAX } = require('./config');
 
 // Carte statique compétence -> IDs de tâches associées (construite à partir des 18 fichiers
 // tiers/*.json). Une tâche non listée ici est classée par défaut en `javascript_basics`
@@ -105,14 +105,18 @@ function validateProfile(parsed) {
 }
 
 // Fallback regex : extrait les niveaux déclarés si JSON.parse échoue.
-// Cherche des motifs "javascript_basics" ... "level": 3
+// Cherche des motifs "javascript_basics" ... "level": 3 en tolérant du texte
+// (raisononnement, markdown, commentaires) autour du JSON. Robuste aux modèles
+// qui enrobent le JSON dans du prose (phi-4-reasoning-plus, DeepSeek-R1...).
 function parseProfileFallback(text) {
   if (!text) return null;
   const result = { skills: {}, justification: 'Extrait via fallback regex' };
   const skills = ['javascript_basics', 'javascript_async', 'algorithms_advanced', 'code_debugging'];
   let found = 0;
   for (const skill of skills) {
-    const re = new RegExp('"' + skill + '"\\s*:\\s*\\{[^}]*?"level"\\s*:\\s*(\\d+)', 'i');
+    // Tolérant aux espaces, retours ligne, et tout caractère non-accolade entre
+    // la clé et "level". [\s\S] = tout y compris \n ; [^}] = jusqu'à l'accolade.
+    const re = new RegExp('"' + skill + '"\\s*:\\s*\\{[\\s\\S]*?"level"\\s*:\\s*(\\d+)', 'i');
     const m = text.match(re);
     if (m) {
       const level = parseInt(m[1], 10);
@@ -127,38 +131,95 @@ function parseProfileFallback(text) {
   for (const skill of skills) {
     if (!result.skills[skill]) result.skills[skill] = { level: 3 };
   }
+  // Tente d'extraire la justification si présente.
+  const justMatch = text.match(/"justification"\s*:\s*"((?:\\.|[^"\\])*)"/i);
+  if (justMatch && justMatch[1]) {
+    try { result.justification = JSON.parse('"' + justMatch[1] + '"'); }
+    catch (_) { result.justification = justMatch[1]; }
+  }
   return result;
 }
 
-// Exécute l'interview d'auto-profilage auprès du modèle.
-// queryFn : fonction queryLLM (locale ou cloud) — même signature que lm-studio-client.queryLLM.
-// Retourne le profil validé { skills, justification } ou null en cas d'échec (graceful).
-async function runSelfProfiling(queryFn, providerConfig, contextLimitTokens) {
-  if (!queryFn) return null;
+// Schéma JSON strict pour l'auto-profilage (LM Studio / OpenAI-compat acceptent
+// response_format: { type: 'json_schema' }). Force la sortie en JSON valide,
+// évite le prose/markdown qui faisait échouer le parsing (phi-4-reasoning-plus).
+const PROFILING_JSON_SCHEMA = {
+  type: 'json_schema',
+  json_schema: {
+    name: 'self_profiling',
+    strict: true,
+    schema: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['skills', 'justification'],
+      properties: {
+        skills: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['javascript_basics', 'javascript_async', 'algorithms_advanced', 'code_debugging'],
+          properties: {
+            javascript_basics: {
+              type: 'object',
+              additionalProperties: false,
+              required: ['level', 'examples'],
+              properties: {
+                level: { type: 'integer', minimum: 1, maximum: 5 },
+                examples: { type: 'string' }
+              }
+            },
+            javascript_async: {
+              type: 'object',
+              additionalProperties: false,
+              required: ['level', 'examples'],
+              properties: {
+                level: { type: 'integer', minimum: 1, maximum: 5 },
+                examples: { type: 'string' }
+              }
+            },
+            algorithms_advanced: {
+              type: 'object',
+              additionalProperties: false,
+              required: ['level', 'examples'],
+              properties: {
+                level: { type: 'integer', minimum: 1, maximum: 5 },
+                examples: { type: 'string' }
+              }
+            },
+            code_debugging: {
+              type: 'object',
+              additionalProperties: false,
+              required: ['level', 'examples'],
+              properties: {
+                level: { type: 'integer', minimum: 1, maximum: 5 },
+                examples: { type: 'string' }
+              }
+            }
+          }
+        },
+        justification: { type: 'string' }
+      }
+    }
+  }
+};
 
-  // Spinner factice : l'appelant gère le spinner réel. On passe un objet minimal
-  // compatible avec l'interface attendue par queryFn (updateTokens, start/stop no-op).
-  const noopSpinner = {
-    start() {}, stop() {}, fail() {}, updateTokens() {}, _modelName: null,
-    beginStreaming() {}, appendStreamChunk() {}, endStreaming() {}
-  };
-
-  // Le prompt impose déjà le format JSON, et un fallback regex gère les modèles non-JSON.
-  // On n'envoie PAS response_format : LM Studio n'accepte que 'json_schema'/'text' (pas
-  // 'json_object' propre à OpenAI), et Anthropic ne le supporte pas du tout. Le schéma
-  // strict + le fallback regex couvrent tous les cas sans dépendre du format natif.
-  //
-  // PERF : timeout dédié court (60s) + max_tokens limité (600) + désactivation du
-  // raisonnement étendu. Sans cela, les modèles de raisonnement (GLM, Qwen3, DeepSeek-R1)
-  // peuvent passer 5-6 MINUTES en `reasoning_content` avant de répondre (372s observé),
-  // rendant l'auto-profilage inutilisable en pratique.
+// Exécute une seule tentative d'auto-profilage avec une stratégie donnée.
+// strategy = { name, responseFormat, disableReasoning, maxTokens }
+// Retourne le profil validé ou null.
+async function _profilingAttempt(queryFn, providerConfig, contextLimitTokens, strategy, attemptNum) {
   const options = {
     contextLimitTokens,
     providerConfig,
     timeoutMs: PROFILING_TIMEOUT_MS,
-    maxTokens: PROFILING_MAX_TOKENS,
-    disableReasoning: true
+    disableReasoning: strategy.disableReasoning,
   };
+  // maxTokens : 0 = illimité (carte blanche). On ne limite JAMAIS la sortie de
+  // l'auto-profilage (sinon le JSON est tronqué → parsing échoue → échec systématique).
+  options.maxTokens = PROFILING_MAX_TOKENS;
+  if (strategy.responseFormat) {
+    options.responseFormat = strategy.responseFormat;
+  }
+
+  logger.info(`Auto-profilage tentative ${attemptNum}/${PROFILING_RETRY_MAX} — stratégie: ${strategy.name}.`);
 
   let response;
   try {
@@ -166,21 +227,23 @@ async function runSelfProfiling(queryFn, providerConfig, contextLimitTokens) {
       PROFILE_PROMPT,
       'EASY',
       'PROFILAGE',
-      true,            // isMandatory=true pour récupérer l'erreur plutôt que process.exit
-      noopSpinner,
+      true,
+      { start(){}, stop(){}, fail(){}, updateTokens(){}, _modelName: null,
+        beginStreaming(){}, appendStreamChunk(){}, endStreaming(){} },
       options
     );
   } catch (e) {
-    logger.warn(`Auto-profilage : échec de l'appel API (${e.message}).`);
+    logger.warn(`Auto-profilage tentative ${attemptNum} : échec de l'appel API (${e.message}).`);
     return null;
   }
 
   if (!response || !response.content) {
-    logger.warn('Auto-profilage : réponse vide du modèle.');
+    logger.warn(`Auto-profilage tentative ${attemptNum} : réponse vide.`);
     return null;
   }
 
   const content = response.content;
+  logger.info(`Auto-profilage tentative ${attemptNum} : ${content.length} chars reçus.`);
 
   // Tentative 1 : JSON strict
   let parsed = null;
@@ -188,23 +251,52 @@ async function runSelfProfiling(queryFn, providerConfig, contextLimitTokens) {
     parsed = JSON.parse(extractJSON(content));
   } catch (_) { }
 
-  // Tentative 2 : fallback regex si le JSON échoue (modèle non-JSON natif)
+  // Tentative 2 : fallback regex si le JSON échoue
   if (!validateProfile(parsed)) {
-    logger.warn('Auto-profilage : JSON invalide, tentative de fallback regex.');
+    logger.info(`Auto-profilage tentative ${attemptNum} : JSON strict échoué, fallback regex.`);
     parsed = parseProfileFallback(content);
   }
 
   if (!validateProfile(parsed)) {
-    logger.warn('Auto-profilage : impossible d extraire un profil valide. Filtrage désactivé.');
+    logger.warn(`Auto-profilage tentative ${attemptNum} : profil toujours invalide.`);
     return null;
   }
 
-  logger.info('Auto-profilage réussi : ' + JSON.stringify(parsed.skills));
+  logger.info(`Auto-profilage tentative ${attemptNum} RÉUSSI : ${JSON.stringify(parsed.skills)}`);
   if (parsed.justification) {
-    logger.info('Auto-profilage justification : ' + parsed.justification);
+    logger.info(`Auto-profilage justification : ${parsed.justification}`);
+  }
+  return parsed;
+}
+
+// Exécute l'interview d'auto-profilage auprès du modèle.
+// queryFn : fonction queryLLM (locale ou cloud) — même signature que lm-studio-client.queryLLM.
+// Retourne le profil validé { skills, justification } ou null en cas d'échec (graceful).
+//
+// NON NÉGOCIABLE : on essaie jusqu'à PROFILING_RETRY_MAX stratégies différentes
+// avant de baisser les bras. Le log benchgo_2026-07-20T07-31-39 montrait un échec
+// systématique car une seule stratégie était tentée et le parsing ne tolérait pas
+// le markdown autour du JSON.
+async function runSelfProfiling(queryFn, providerConfig, contextLimitTokens) {
+  if (!queryFn) return null;
+
+  // Stratégies ordonnées : de la plus contrainte à la plus permissive.
+  // 1. json_schema + reasoning off : force le JSON, coupe la pensée (rapide).
+  // 2. texte pur + reasoning off : pas de contrainte de format mais coupe la pensée.
+  // 3. texte pur + reasoning on (carte blanche) : le modèle réfléchit librement.
+  const strategies = [
+    { name: 'json_schema + reasoning off', responseFormat: PROFILING_JSON_SCHEMA, disableReasoning: true },
+    { name: 'texte + reasoning off', responseFormat: null, disableReasoning: true },
+    { name: 'carte blanche (reasoning on)', responseFormat: null, disableReasoning: false },
+  ];
+
+  for (let i = 0; i < strategies.length && i < PROFILING_RETRY_MAX; i++) {
+    const parsed = await _profilingAttempt(queryFn, providerConfig, contextLimitTokens, strategies[i], i + 1);
+    if (parsed) return parsed;
   }
 
-  return parsed;
+  logger.warn(`Auto-profilage : échec après ${Math.min(strategies.length, PROFILING_RETRY_MAX)} tentatives. Filtrage désactivé.`);
+  return null;
 }
 
 // Filtre les tâches d'un tier selon le profil auto-déclaré.

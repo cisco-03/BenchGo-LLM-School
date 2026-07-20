@@ -8,13 +8,20 @@ const LM_STUDIO_MODELS_URL = "http://localhost:1234/v1/models";
 const LM_STUDIO_MODELS_V0_URL = "http://localhost:1234/api/v0/models";
 const EVAL_TIMEOUT_MS = 10000;
 const API_TIMEOUT_MS = 300000;
-// Auto-profilage : budget temps/tokens. Le profil JSON attendu est court
-// (~200 tokens), mais les modèles de raisonnement (GLM, Qwen3, DeepSeek-R1) mettent
-// du temps à répondre même avec reasoning désactivé. Le timeout de 60s était trop
-// court et provoquait un échec systématique ("Timeout après 60s"). On le porte à 300s
-// pour laisser au modèle le temps de réfléchir, tout en restant raisonnable.
+// Auto-profilage : budget temps. Le profil JSON attendu est court, mais on ne
+// limite PLUS max_tokens (carte blanche) : limiter la sortie tronque le JSON chez
+// les modèles bavards et provoque l'erreur systématique observée dans le log
+// benchgo_2026-07-20T07-31-39. On laisse le modèle répondre complètement.
+// Timeout généreux : les modèles de raisonnement (GLM, Qwen3, DeepSeek-R1,
+// phi-4-reasoning-plus) mettent du temps même avec reasoning désactivé. 60s était
+// trop court → échec systématique. 300s laisse le temps de répondre sans bloquer
+// indéfiniment.
 const PROFILING_TIMEOUT_MS = 300000;
-const PROFILING_MAX_TOKENS = 600;
+const PROFILING_MAX_TOKENS = 0;  // 0 = illimité (carte blanche, ne pas tronquer le JSON)
+// Nombre de tentatives d'auto-profilage avant de baisser les bras. Chaque
+// tentative change de stratégie (json_schema → texte → raisonnement activé).
+// L'auto-profilage est NON NÉGOCIABLE : on essaie plusieurs approches.
+const PROFILING_RETRY_MAX = 3;
 const OPTIONAL_BONUS_PCT = 0.20; // Bonus appliqué aux exercices optionnels réussis (20% des points de base)
 
 // --- Professeur (correcteur IA distinct de l'élève) ---
@@ -67,6 +74,43 @@ const SPINNER_FRAMES = '\u2588';
 
 const SPINNER_CHARS = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
 
+// Messages pédagogiques rotatifs affichés pendant les temps morts (avant/après
+// l'auto-profilage) pour tenir l'utilisateur en haleine. PAS d'humour (conformément
+// à la décision spinner_no_humor) : phrases informatives et rassurantes qui
+// expliquent ce que le modèle fait. Chaque phase a sa propre liste. Les phrases
+// tournent toutes les ~5-10s pour donner un sentiment de progression et d'activité.
+const PROFILING_WAITING_MESSAGES = [
+  "Je consulte mes compétences en JavaScript...",
+  "J'évalue mon niveau sur 4 domaines clés : Bases, Async, Algorithmes, Débogage.",
+  "Auto-évaluation en cours — je dois être lucide et honnête sur mes capacités.",
+  "Cette étape détermine quels exercices me seront accessibles pendant l'examen.",
+  "Je passe en revue Promises, async/await, concurrence limitée et retry/backoff.",
+  "J'estime ma maîtrise des LRU, Trie, arbres, heap, graphes, Dijkstra, BFS/DFS...",
+  "Veuillez patienter, je m'auto-évalue pour ne pas attaquer des exercices trop difficiles.",
+  "Un niveau 5 est rare — je reste prudent dans mon auto-jugement.",
+  "Bientôt : je saurai exactement quelles classes je peux tenter."
+];
+
+const POST_PROFILING_WAITING_MESSAGES = [
+  "Je prends connaissance de mes exercices à réaliser...",
+  "Préparation de la session d'examen — chargement des classes du profil...",
+  "Veuillez patienter, je découvre mon programme d'évaluation.",
+  "Chargement des exercices : mathématiques, français, sciences, algorithmique...",
+  "Mise en place de l'environnement de test (bac à sable VM)...",
+  "Je m'installe à ma table d'examen, prête à commencer.",
+  "Presque prêt — les premiers exercices arrivent.",
+  "Veuillez patienter, je classe les exercices par ordre de difficulté.",
+  "L'examen va commencer, merci de rester avec moi."
+];
+
+// Messages pédagogiques génériques pour n'importe quelle phase d'attente longue
+// (ex: chargement des tiers, génération de rapport). Pas d'humour, informatifs.
+const GENERIC_WAITING_MESSAGES = [
+  "Traitement en cours, veuillez patienter...",
+  "Le modèle travaille, merci de patienter...",
+  "Opération en cours, ne fermez pas la fenêtre..."
+];
+
 const WAITING_MESSAGES = [
   "Veuillez patienter, je réfléchis très fort...",
   "Consultation des circuits neuronaux en cours...",
@@ -105,6 +149,20 @@ function parseCliArgs() {
   // /api/v0/models (LM Studio) ou on la prend depuis ce flag CLI / le questionnaire.
   const quantizationRaw = (() => { const a = rawArgs.find(r => r.startsWith('--quantization=')); return a ? a.split('=').slice(1).join('=') : null; })();
 
+  // --- Presets de configuration (fichiers locaux non-commités) ---
+  const presetRaw          = (() => { const a = rawArgs.find(r => r.startsWith('--preset='));           return a ? a.split('=').slice(1).join('=') : null; })();
+  const savePresetRaw       = (() => { const a = rawArgs.find(r => r.startsWith('--save-preset='));     return a ? a.split('=').slice(1).join('=') : null; })();
+  const deletePresetRaw    = (() => { const a = rawArgs.find(r => r.startsWith('--delete-preset='));   return a ? a.split('=').slice(1).join('=') : null; })();
+  const listPresetsFlag    = rawArgs.includes('--list-presets');
+
+  // --- Clés API persistantes (tous providers) ---
+  // --forget-key=provider efface une clé mémorisée localement et quitte.
+  // --list-keys affiche les providers dont une clé est mémorisée et quitte.
+  // --no-save-keys désactive la proposition de mémorisation des clés ce run.
+  const forgetKeyRaw   = (() => { const a = rawArgs.find(r => r.startsWith('--forget-key='));         return a ? a.split('=').slice(1).join('=') : null; })();
+  const listKeysFlag   = rawArgs.includes('--list-keys');
+  const noSaveKeysFlag = rawArgs.includes('--no-save-keys');
+
   const profileArgExplicit = profileArgRaw ? profileArgRaw.toUpperCase() : null;
   const parsedContextLimit = contextLimitRaw ? parseInt(contextLimitRaw, 10) : null;
   const contextLimitTokens = Number.isInteger(parsedContextLimit) && parsedContextLimit > 0
@@ -120,7 +178,9 @@ function parseCliArgs() {
 
   return { tierArg, profileArg, profileArgExplicit, contextLimitTokens, provider, model, apiKey, endpoint,
            teacherModel: teacherModelRaw, teacherApiKey: teacherApiKeyRaw, teacherEndpoint: teacherEndpointRaw,
-           teacherDisabled: teacherDisabledRaw, quantization: quantizationRaw };
+           teacherDisabled: teacherDisabledRaw, quantization: quantizationRaw,
+           preset: presetRaw, savePreset: savePresetRaw, deletePreset: deletePresetRaw, listPresets: listPresetsFlag,
+           forgetKey: forgetKeyRaw, listKeys: listKeysFlag, noSaveKeys: noSaveKeysFlag };
 }
 
 function detectProfileFromModelName(modelName) {
@@ -222,12 +282,16 @@ module.exports = {
   API_TIMEOUT_MS,
   PROFILING_TIMEOUT_MS,
   PROFILING_MAX_TOKENS,
+  PROFILING_RETRY_MAX,
   OPTIONAL_BONUS_PCT,
   PROFILES,
   CLASSE_NAMES,
   SPINNER_FRAMES,
   SPINNER_CHARS,
   WAITING_MESSAGES,
+  PROFILING_WAITING_MESSAGES,
+  POST_PROFILING_WAITING_MESSAGES,
+  GENERIC_WAITING_MESSAGES,
   TEACHER_CONFIG,
   parseCliArgs,
   detectProfileFromModelName,

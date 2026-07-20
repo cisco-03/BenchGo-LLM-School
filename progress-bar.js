@@ -2,6 +2,11 @@ const { SPINNER_CHARS } = require('./config');
 
 const BAR_WIDTH = 30;
 
+// Intervalle de rotation des messages pédagogiques (ms). Le label fixe reste
+// affiché (⠋ <label>...), et une phrase pédagogique change sous lui toutes les
+// ~5s pour tenir l'utilisateur en haleine pendant les temps morts longs.
+const MESSAGE_ROTATION_MS = 5000;
+
 class ProgressBar {
   constructor(label, total) {
     this.label = label;
@@ -38,9 +43,44 @@ class Spinner {
     this._streamingKind = null;       // 'reasoning' | 'content'
     this._lastStatsTime = 0;          // dernier affichage des stats (throttle)
     this._reasoningTokensWindow = []; // fenêtre glissante 3s pour tg_3s
+
+    // Messages pédagogiques rotatifs (temps morts). Affichés sous le label fixe,
+    // ils tournent toutes les ~5-10s pour tenir l'utilisateur en haleine et donner
+    // un sentiment de progression. PAS d'humour (décision spinner_no_humor).
+    this._waitingMessages = null;    // tableau de phrases ou null (désactivé)
+    this._messageIndex = 0;
+    this._messageRotationMs = 7000;  // ~7s entre deux phrases (entre 5 et 10s)
+    this._lastMessageTime = 0;
+  }
+
+  // Active/désactive la rotation de messages pédagogiques pendant l'attente.
+  // Passez un tableau de phrases (non vide) pour activer, null/[] pour stopper.
+  setWaitingMessages(messages) {
+    if (Array.isArray(messages) && messages.length > 0) {
+      this._waitingMessages = messages;
+      this._messageIndex = 0;
+      this._lastMessageTime = Date.now();
+    } else {
+      this._waitingMessages = null;
+    }
+    return this;
+  }
+
+  // Renvoie la phrase pédagogique courante (ou '' si aucune). Fait tourner
+  // l'index toutes les ~7s pour donner un sentiment d'activité à l'utilisateur
+  // pendant les temps morts longs (auto-profilage, chargement des exercices).
+  _currentWaitingMessage() {
+    if (!this._waitingMessages || this._waitingMessages.length === 0) return '';
+    const now = Date.now();
+    if (now - this._lastMessageTime >= this._messageRotationMs) {
+      this._messageIndex = (this._messageIndex + 1) % this._waitingMessages.length;
+      this._lastMessageTime = now;
+    }
+    return this._waitingMessages[this._messageIndex] || '';
   }
 
   start() {
+    this._lastMessageTime = Date.now();
     this.interval = setInterval(() => {
       // Pendant le streaming, le spinner est arrêté — on n'affiche rien ici.
       if (this._streamingActive) return;
@@ -49,8 +89,14 @@ class Spinner {
       const status = this.tokenCount > 0
         ? `${this.label}... (${this.tokenCount} tokens, ${this.charCount} chars)`
         : `${this.label}...`;
-      const line = `  \x1b[35m${frame}\x1b[0m ${status}`;
-      process.stdout.write(`\r${line}`.padEnd(120));
+      const msg = this._currentWaitingMessage();
+      const line = msg
+        ? `  \x1b[35m${frame}\x1b[0m ${status}\n  \x1b[90m${msg}\x1b[0m`
+        : `  \x1b[35m${frame}\x1b[0m ${status}`;
+      // Efface 2 lignes (label + message) avant de réécrire pour un rendu propre.
+      if (msg) process.stdout.write('\r\x1b[K\x1b[1A\r\x1b[K\r');
+      else process.stdout.write('\r\x1b[K\r');
+      process.stdout.write(line.padEnd(120));
     }, 100);
   }
 
@@ -65,10 +111,11 @@ class Spinner {
     this._streamStartTime = Date.now();
     this._lastStatsTime = 0;
     this._reasoningTokensWindow = [];
+    this._waitingMessages = null;  // stoppe la rotation pendant le streaming
     // Arrête le spinner pour libérer la console
     if (this.interval) { clearInterval(this.interval); this.interval = null; }
-    // Efface la ligne du spinner
-    process.stdout.write(`\r${' '.repeat(120)}\r`);
+    // Efface la ligne du spinner (et la ligne de message s'il y en avait une)
+    process.stdout.write('\r\x1b[K\x1b[1A\r\x1b[K\r');
   }
 
   // Affiche un fragment du raisonnement/réponse directement dans la console,
@@ -121,20 +168,31 @@ class Spinner {
   }
 
   stop(finalLabel) {
+    const hadMessage = Boolean(this._waitingMessages);
     if (this.interval) clearInterval(this.interval);
     if (this._streamingActive) {
       process.stdout.write('\n');
       this._streamingActive = false;
+      this._streamingKind = null;
     }
+    // Efface proprement les 2 lignes (spinner + message) avant le résultat final.
+    process.stdout.write('\r\x1b[K');
+    if (hadMessage) process.stdout.write('\x1b[1A\r\x1b[K');
+    this._waitingMessages = null;
     process.stdout.write(`\r  \x1b[32m✔\x1b[0m ${finalLabel || this.label} (${this.tokenCount} tokens)`.padEnd(120) + '\n');
   }
 
   fail(finalLabel) {
+    const hadMessage = Boolean(this._waitingMessages);
     if (this.interval) clearInterval(this.interval);
     if (this._streamingActive) {
       process.stdout.write('\n');
       this._streamingActive = false;
+      this._streamingKind = null;
     }
+    process.stdout.write('\r\x1b[K');
+    if (hadMessage) process.stdout.write('\x1b[1A\r\x1b[K');
+    this._waitingMessages = null;
     process.stdout.write(`\r  \x1b[31m✘\x1b[0m ${finalLabel || this.label}`.padEnd(120) + '\n');
   }
 }

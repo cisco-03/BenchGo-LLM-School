@@ -107,8 +107,13 @@ async function queryLLM(prompt, difficulty, tierId, isMandatory, spinner, option
   const estimatedInputTokens = estimateTokens(systemPrompt) + estimateTokens(prompt) + 128;
   const availableForOutput = contextLimitTokens - estimatedInputTokens;
   // maxTokens explicite (auto-profilage) sinon calculé depuis le budget contexte.
-  const maxTokens = Number.isInteger(options.maxTokens) && options.maxTokens > 0
+  // maxTokens=0 (ou falsy) = sortie ILLIMITÉE (carte blanche auto-profilage) :
+  // on n'envoie pas le champ max_tokens pour ne pas tronquer le JSON du modèle.
+  const maxTokensExplicit = Number.isInteger(options.maxTokens) && options.maxTokens > 0
     ? options.maxTokens
+    : null;
+  const maxTokens = maxTokensExplicit != null
+    ? maxTokensExplicit
     : Math.max(256, Math.min(4096, availableForOutput));
 
   try {
@@ -117,7 +122,7 @@ async function queryLLM(prompt, difficulty, tierId, isMandatory, spinner, option
     }
 
     logger.promptHash(tierId, prompt);
-    logger.info(`Tier ${tierId} — Budget contexte: limite=${contextLimitTokens}, entrée~${estimatedInputTokens}, sortie max=${maxTokens} tokens.`);
+    logger.info(`Tier ${tierId} — Budget contexte: limite=${contextLimitTokens}, entrée~${estimatedInputTokens}, sortie max=${maxTokensExplicit == null ? maxTokens + ' (auto)' : 'illimitée (carte blanche)'} tokens.`);
 
     const requestBody = {
       model: "local-model",
@@ -126,9 +131,13 @@ async function queryLLM(prompt, difficulty, tierId, isMandatory, spinner, option
         { role: "user", content: prompt }
       ],
       temperature: 0.1,
-      max_tokens: maxTokens,
       stream: true
     };
+    // max_tokens : uniquement si on a une limite explicite. maxTokens=0 = pas de
+    // champ (sortie illimitée, auto-profilage carte blanche).
+    if (maxTokensExplicit != null) {
+      requestBody.max_tokens = maxTokensExplicit;
+    }
     // response_format optionnel (auto-profilage JSON) — supporté par LM Studio (OpenAI-compat)
     if (options.responseFormat) {
       requestBody.response_format = options.responseFormat;
