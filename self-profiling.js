@@ -343,5 +343,7 @@ module.exports = {
   PROFILE_PROMPT,
   runSelfProfiling,
   filterTasksByProfile,
-  getTaskSkill
+  getTaskSkill,
+  validateProfile,
+  parseProfileFallback
 };

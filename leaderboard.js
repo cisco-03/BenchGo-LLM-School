@@ -64,6 +64,52 @@ function compactAttempt(a, idx, total) {
   };
 }
 
+// --- Tendance (progression / régression / redoublement) ---
+// Compare la dernière tentative à la précédente pour une école ou au niveau
+// global. Détecte :
+//   - progression (▲) : le % a augmenté entre l'avant-dernier et le dernier test.
+//   - régression (▼) : le % a baissé (modèle régressé après une mise à jour HF).
+//   - stable (═) : aucun changement.
+//   - redoublement : la note A-F a baissé d'au moins un cran (A→B, B→C, etc.).
+//   - promotion : la note a monté d'au moins un cran.
+// Retourne null si moins de 2 tentatives (pas assez d'historique).
+function computeTrend(attempts) {
+  if (!attempts || attempts.length < 2) return null;
+  const sorted = attempts.slice().sort((a, b) => {
+    // Tri chronologique : date + time.
+    const da = (a.date || '') + (a.time || '');
+    const db = (b.date || '') + (b.time || '');
+    return da.localeCompare(db);
+  });
+  const prev = sorted[sorted.length - 2];
+  const last = sorted[sorted.length - 1];
+  const deltaPct = (last.pct || 0) - (prev.pct || 0);
+  const prevGrade = prev.grade || letterGrade(prev.pct || 0).grade;
+  const lastGrade = last.grade || letterGrade(last.pct || 0).grade;
+  const gradeOrder = ['A', 'B', 'C', 'D', 'F'];
+  const prevIdx = gradeOrder.indexOf(prevGrade);
+  const lastIdx = gradeOrder.indexOf(lastGrade);
+  let direction = 'stable';
+  if (deltaPct > 0) direction = 'up';
+  else if (deltaPct < 0) direction = 'down';
+  let gradeChange = 'stable';
+  if (prevIdx !== -1 && lastIdx !== -1) {
+    if (lastIdx > prevIdx) gradeChange = 'redoublement'; // A→B = index augmente = note baisse
+    else if (lastIdx < prevIdx) gradeChange = 'promotion'; // B→A = index diminue = note monte
+  }
+  return {
+    deltaPct,
+    direction,
+    gradeChange,
+    prevPct: prev.pct || 0,
+    lastPct: last.pct || 0,
+    prevGrade,
+    lastGrade,
+    prevDate: prev.date || '—',
+    lastDate: last.date || '—'
+  };
+}
+
 // Agrège un carnet en une entrée de classement (utilise la meilleure tentative par école).
 function aggregateLedger(ledger) {
   const rawEntries = Object.values(ledger.ecoles || {});
@@ -86,6 +132,7 @@ function aggregateLedger(ledger) {
     mandatoryPassed += best.mandatoryPassed || 0;
     mandatoryTotal += best.mandatoryTotal || 0;
     const bPct = best.max > 0 ? Math.max(0, Math.min(100, Math.round((best.score / best.max) * 100))) : 0;
+    const compacted = attempts.map((a, i) => compactAttempt(a, i, attempts.length));
     ecoles.push({
       ecole: best.ecole,
       score: best.score || 0,
@@ -99,12 +146,34 @@ function aggregateLedger(ledger) {
       date: best.date || '—',
       reportFile: best.reportFile || null,
       attemptsCount: attempts.length,
-      attempts: attempts.map((a, i) => compactAttempt(a, i, attempts.length))
+      attempts: compacted,
+      trend: computeTrend(compacted)
     });
   }
 
   const pct = max > 0 ? Math.max(0, Math.min(100, Math.round((score / max) * 100))) : 0;
   const mandatoryPct = mandatoryTotal > 0 ? Math.max(0, Math.min(100, Math.round((mandatoryPassed / mandatoryTotal) * 100))) : 0;
+
+  // --- Tendance globale : synthèse des tendances par école ---
+  // Si au moins une école a un trend, on agrège : redoublement si au moins une
+  // école a régressé de note, promotion si au moins une a progressé de note.
+  const ecoleTrends = ecoles.map(e => e.trend).filter(Boolean);
+  let globalTrend = null;
+  if (ecoleTrends.length > 0) {
+    const anyRedoublement = ecoleTrends.some(t => t.gradeChange === 'redoublement');
+    const anyPromotion = ecoleTrends.some(t => t.gradeChange === 'promotion');
+    const avgDelta = ecoleTrends.reduce((s, t) => s + t.deltaPct, 0) / ecoleTrends.length;
+    let direction = 'stable';
+    if (avgDelta > 0) direction = 'up';
+    else if (avgDelta < 0) direction = 'down';
+    globalTrend = {
+      direction,
+      avgDeltaPct: Math.round(avgDelta * 10) / 10,
+      redoublement: anyRedoublement,
+      promotion: anyPromotion,
+      ecoleCount: ecoleTrends.length
+    };
+  }
 
   return {
     model: ledger.model || ledger.shortName || 'modèle_inconnu',
@@ -115,6 +184,7 @@ function aggregateLedger(ledger) {
     globalLifeScore, optionalBonus, helpCount, retriedCount,
     ecoleCount: ecoles.length,
     ecoles,
+    trend: globalTrend,
     lastUpdated: ledger.lastUpdated || null
   };
 }
@@ -150,6 +220,21 @@ function buildArguments(entry) {
 
   if (entry.pct < 50) faiblesses.push('plus de la moitié des exercices échoués');
   if (entry.ecoleCount > 1) notes.push('évalué sur ' + entry.ecoleCount + ' écoles');
+
+  // --- Tendance (progression / régression / redoublement) ---
+  // Détectée à partir de l'historique des re-tests du carnet.
+  if (entry.trend) {
+    const t = entry.trend;
+    if (t.redoublement) {
+      faiblesses.push('A REDOUBLÉ : régression de note au dernier re-test (mise à jour HF dégradante ?)');
+    } else if (t.promotion) {
+      forces.push('A ÉTÉ PROMU : progression de note au dernier re-test');
+    } else if (t.direction === 'up') {
+      forces.push('en progression (' + (t.avgDeltaPct >= 0 ? '+' : '') + t.avgDeltaPct + '% au dernier re-test)');
+    } else if (t.direction === 'down') {
+      faiblesses.push('en régression (' + t.avgDeltaPct + '% au dernier re-test — mise à jour HF dégradante ?)');
+    }
+  }
 
   return { forces, faiblesses, notes };
 }
@@ -244,6 +329,7 @@ function buildLeaderboardHTML(entries) {
       retriedCount: e.retriedCount,
       ecoleCount: e.ecoleCount,
       lastUpdated: e.lastUpdated,
+      trend: e.trend || null,
       verdict,
       cat,
       paramSize: psize,
@@ -268,6 +354,7 @@ function buildLeaderboardHTML(entries) {
           date: ec.date,
           attemptsCount: ec.attemptsCount,
           attempts: ec.attempts,
+          trend: ec.trend || null,
           selfProfile: (ecoleEntry && ecoleEntry.selfProfile) || null,
           tiers: tiers.map(t => ({
             tierNum: t.tierNum,
@@ -531,6 +618,9 @@ function buildLeaderboardHTML(entries) {
     white-space: nowrap; font-weight: 600;
   }
   .badge.quant { color: var(--purple); border-color: rgba(188,140,255,0.35); background: rgba(188,140,255,0.10); }
+  .badge.trend-up   { color: #3fb950; border-color: rgba(63,185,80,0.35); background: rgba(63,185,80,0.10); }
+  .badge.trend-down { color: #f85149; border-color: rgba(248,81,73,0.35); background: rgba(248,81,73,0.10); }
+  .badge.trend-stable { color: #8b949e; border-color: var(--border); background: var(--bg-3); }
 
   /* Mini-stats — flexbox grow */
   .mini-stats { display: flex; align-items: center; gap: var(--space-m); flex: 0 0 auto; flex-wrap: wrap; }
@@ -838,13 +928,30 @@ function renderCards() {
     var quantBadge = m.quantization
       ? '<span class="badge quant" title="Quantification du modèle (récupérée via LM Studio /api/v0/models ou saisie manuelle)">🧩 ' + esc(m.quantization) + '</span>'
       : '';
+    // Badge de tendance (progression / régression / redoublement) basé sur
+    // l'historique des re-tests du carnet. Ne s'affiche que si au moins 2 tentatives.
+    var trendBadge = '';
+    if (m.trend) {
+      var t = m.trend;
+      if (t.redoublement) {
+        trendBadge = '<span class="badge trend-down" title="Régression de note entre le dernier test et le précédent (mise à jour HF ?)">📉 Redoublement</span>';
+      } else if (t.promotion) {
+        trendBadge = '<span class="badge trend-up" title="Progression de note entre le dernier test et le précédent">📈 Promotion</span>';
+      } else if (t.direction === 'up') {
+        trendBadge = '<span class="badge trend-up" title="Progression de ' + t.avgDeltaPct + '% entre le dernier test et le précédent">▲ +' + t.avgDeltaPct + '%</span>';
+      } else if (t.direction === 'down') {
+        trendBadge = '<span class="badge trend-down" title="Régression de ' + Math.abs(t.avgDeltaPct) + '% entre le dernier test et le précédent (mise à jour HF ?)">▼ ' + t.avgDeltaPct + '%</span>';
+      } else {
+        trendBadge = '<span class="badge trend-stable" title="Score stable entre les deux derniers tests">═ Stable</span>';
+      }
+    }
 
     var html = '<div class="card ' + cardClass + '" onclick="openModal(' + i + ')">' +
       '<div class="card-row">' +
         '<div class="rank">' + rankDisp + '</div>' +
         '<div class="model-name">' +
           '<div class="name-line"><span class="cat-icon">' + m.cat.icon + '</span>' + esc(m.model) + '</div>' +
-          '<div class="badges">' + szBadge + ' ' + quantBadge + ' <button class="btn btn-icon" onclick="event.stopPropagation();copyModelName(' + i + ')" title="Copier le nom du modèle">⧉ Nom</button></div>' +
+          '<div class="badges">' + szBadge + ' ' + quantBadge + ' ' + trendBadge + ' <button class="btn btn-icon" onclick="event.stopPropagation();copyModelName(' + i + ')" title="Copier le nom du modèle">⧉ Nom</button></div>' +
         '</div>' +
         '<div class="mini-stats">' +
           '<div class="mini-stat"><span class="lbl">%</span><span class="val" style="color:' + pc + '">' + dispPct(m.pct) + '%</span><div class="pct-bar-wrap"><div class="pct-bar-fill" style="width:' + Math.max(2,dispPct(m.pct)) + '%;background:' + pc + '"></div></div></div>' +
@@ -894,6 +1001,29 @@ function openModal(idx) {
   body += statBox('Quantif.', m.quantization ? '<span style="color:#bc8cff">' + esc(m.quantization) + '</span>' : '—');
   body += '</div>';
 
+  // --- Section Tendance (progression / régression / redoublement) ---
+  // Affichée uniquement si au moins une école a un historique de re-tests.
+  if (m.trend) {
+    var t = m.trend;
+    body += '<h3>📈 Tendance (re-tests)</h3>';
+    body += '<div class="full-stats">';
+    if (t.redoublement) {
+      body += statBox('Verdict', '<span style="color:#f85149;font-weight:700">📉 Redoublement</span>');
+    } else if (t.promotion) {
+      body += statBox('Verdict', '<span style="color:#3fb950;font-weight:700">📈 Promotion</span>');
+    } else if (t.direction === 'up') {
+      body += statBox('Verdict', '<span style="color:#3fb950">▲ En progression</span>');
+    } else if (t.direction === 'down') {
+      body += statBox('Verdict', '<span style="color:#f85149">▼ En régression</span>');
+    } else {
+      body += statBox('Verdict', '<span style="color:#8b949e">═ Stable</span>');
+    }
+    body += statBox('Évolution moyenne', (t.avgDeltaPct >= 0 ? '+' : '') + t.avgDeltaPct + '%');
+    body += statBox('Écoles avec historique', t.ecoleCount + '/' + m.ecoleCount);
+    body += '</div>';
+    body += '<p style="color:var(--text-dim);font-size:var(--fs-small);margin-top:var(--space-s);">Comparaison entre le dernier test et le précédent. Une régression peut indiquer qu'une mise à jour du modèle sur Hugging Face a dégradé ses performances.</p>';
+  }
+
   body += '<h3>Forces & Faiblesses</h3>';
   body += '<div class="args-grid">';
   body += argsCol('args-forces', '✅ Forces', m.args.forces);
@@ -909,7 +1039,7 @@ function openModal(idx) {
   body += '<h3>Détail par école</h3>';
   body += '<table class="ecoles-table"><thead><tr>' +
     '<th>École</th><th class="num">Points</th><th>%</th><th>Note</th>' +
-    '<th class="num">Bonus</th><th class="num">Santé</th><th class="num">Aide</th><th class="num">Rat.</th><th class="num">Calib.</th><th>Date</th><th>Tent.</th>' +
+    '<th class="num">Bonus</th><th class="num">Santé</th><th class="num">Aide</th><th class="num">Rat.</th><th class="num">Calib.</th><th>Date</th><th>Tent.</th><th>Tendance</th>' +
     '</tr></thead><tbody>';
   for (var e of m.ecoles) {
     var egc = gradeColor(e.grade);
@@ -919,6 +1049,22 @@ function openModal(idx) {
     var ecoleCell = esc(e.ecole);
     if (hasHistory) {
       ecoleCell += ' <span class="hist-toggle" onclick="toggleHistory(this)" title="Voir l&#39;historique des re-tests">▸ ' + attempts.length + ' tentatives</span>';
+    }
+    // Badge de tendance par école (comparaison dernier vs précédent test).
+    var trendCell = '—';
+    if (e.trend) {
+      var et = e.trend;
+      if (et.gradeChange === 'redoublement') {
+        trendCell = '<span style="color:#f85149" title="Régression de note (' + et.prevGrade + '→' + et.lastGrade + ') le ' + esc(et.lastDate) + '">📉 ' + esc(et.prevGrade) + '→' + esc(et.lastGrade) + '</span>';
+      } else if (et.gradeChange === 'promotion') {
+        trendCell = '<span style="color:#3fb950" title="Progression de note (' + et.prevGrade + '→' + et.lastGrade + ') le ' + esc(et.lastDate) + '">📈 ' + esc(et.prevGrade) + '→' + esc(et.lastGrade) + '</span>';
+      } else if (et.direction === 'up') {
+        trendCell = '<span style="color:#3fb950" title="+' + et.deltaPct + '% le ' + esc(et.lastDate) + '">▲ +' + et.deltaPct + '%</span>';
+      } else if (et.direction === 'down') {
+        trendCell = '<span style="color:#f85149" title="' + et.deltaPct + '% le ' + esc(et.lastDate) + '">▼ ' + et.deltaPct + '%</span>';
+      } else {
+        trendCell = '<span style="color:#8b949e" title="Stable">═</span>';
+      }
     }
     body += '<tr' + (hasHistory ? ' class="ecole-main"' : '') + '>' +
       '<td>' + ecoleCell + '</td>' +
@@ -932,9 +1078,10 @@ function openModal(idx) {
       '<td class="num">' + (e.calibrationIndex != null ? 'C=' + e.calibrationIndex.toFixed(2) : '—') + '</td>' +
       '<td>' + esc(e.date) + '</td>' +
       '<td class="num">' + attempts.length + '</td>' +
+      '<td>' + trendCell + '</td>' +
       '</tr>';
     if (hasHistory) {
-      body += '<tr class="hist-row" style="display:none;"><td colspan="11">' +
+      body += '<tr class="hist-row" style="display:none;"><td colspan="12">' +
         '<div class="hist-block">' +
         '<div class="hist-title">Historique des ' + attempts.length + ' tentatives (chronologique) :</div>' +
         '<table class="hist-table"><thead><tr>' +

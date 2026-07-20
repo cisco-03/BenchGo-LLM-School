@@ -15,6 +15,7 @@ const { buildTierReport, shortenModelName, buildCalibrationReport } = require('.
 const { updateTiers } = require('./auto-updater');
 const scoreLedger = require('./score-ledger');
 const { runSelfProfiling, filterTasksByProfile, SKILL_LABELS } = require('./self-profiling');
+const { runExternalProfiling } = require('./external-profiling');
 const leaderboard = require('./leaderboard');
 const secrets = require('./secrets');
 const { runStartupQuestionnaire } = require('./startup-questionnaire');
@@ -288,6 +289,11 @@ async function askModelForFailureExplanation({ queryFn, providerConfig, contextL
 }
 
 async function runTierAttempt({ tierNum, tierData, isMandatory, profileArg, contextLimitTokens, attemptNumber, queryFn, providerConfig, gameState, selfProfile, teacherConfig }) {
+  // NOTE : `selfProfile` est le profil utilisé pour le FILTRAGE des tâches.
+  // Il peut provenir de l'auto-profilage (élève) OU du profilage externe
+  // (professeur IA) si ce dernier était disponible. La variable a gardé son
+  // nom historique pour ne pas casser l'appel, mais elle désigne le profil
+  // de filtrage effectif.
   const attemptTag = attemptNumber > 1 ? ` (RATTRAPAGE ${attemptNumber - 1}/${MAX_RATTRAPAGE_ATTEMPTS})` : '';
 
   console.log(`\x1b[33m━━ TIER ${tierNum} : ${tierData.title}${attemptTag} ━━\x1b[0m`);
@@ -1312,6 +1318,83 @@ async function main() {
     }
   }
 
+  // --- Profilage externe (par un professeur IA) ---
+  // L'auto-profilage par le modèle lui-même comporte un risque d'erreur
+  // d'appréciation (surconfiance, fausse modestie). Pour fiabiliser le filtrage
+  // des tâches, on demande à un PROFESSEUR IA externe d'évaluer les compétences
+  // de l'élève à partir de son auto-évaluation. Le profil externe remplace
+  // l'auto-profilage pour le FILTRAGE des tâches ; l'auto-profilage est conservé
+  // pour le calcul de l'Indice de Calibration (écart auto vs réel).
+  // Sans professeur activé → repli sur l'auto-profilage pour le filtrage.
+  let filterProfile = selfProfile; // profil utilisé pour filtrer les tâches
+  if (teacherConfigResolved && teacherConfigResolved.enabled && selfProfiling.enabled) {
+    console.log(`  \x1b[1;35m━━━ PROFILAGE EXTERNE PAR LE PROFESSEUR IA ━━━\x1b[0m`);
+    console.log(`  \x1b[35mLe professeur IA va évaluer objectivement les compétences de l'élève.\x1b[0m`);
+    console.log(`  \x1b[35mCette étape prend ~5-20s — merci de patienter.\x1b[0m`);
+    console.log(`  \x1b[90mLe profil externe remplace l'auto-profilage pour le filtrage des tâches.\x1b[0m`);
+    console.log(`  \x1b[90mL'auto-profilage est conservé pour calculer l'Indice de Calibration.\x1b[0m\n`);
+
+    const extSpinner = new Spinner('Profilage externe : le professeur évalue l\'élève');
+    extSpinner.start();
+    const extStartTime = Date.now();
+    let externalProfile = null;
+    try {
+      externalProfile = await runExternalProfiling({
+        teacherConfig: teacherConfigResolved,
+        studentSelfProfile: selfProfile,
+        studentModelName: preKnownModelName || resolvedCloudModel || null
+      });
+    } catch (e) {
+      logger.warn(`Profilage externe échoué : ${e.message}. Repli sur l'auto-profilage.`);
+    }
+    const extDurationSec = ((Date.now() - extStartTime) / 1000).toFixed(1);
+
+    if (externalProfile) {
+      extSpinner.stop(`Profilage externe réussi en ${extDurationSec}s`);
+      filterProfile = externalProfile;
+      const skills = externalProfile.skills || {};
+      console.log('');
+      console.log(`  \x1b[1;36m━━━ PROFIL EXTERNE (PROFESSEUR IA) ━━━\x1b[0m`);
+      console.log(`  \x1b[36mCompétences évaluées par le professeur :\x1b[0m`);
+      let levelSum = 0;
+      let levelCount = 0;
+      for (const [skill, label] of Object.entries(SKILL_LABELS)) {
+        const lvl = skills[skill] ? skills[skill].level : '?';
+        if (typeof lvl === 'number') { levelSum += lvl; levelCount++; }
+        const bar = typeof lvl === 'number' ? '█'.repeat(lvl) + '░'.repeat(5 - lvl) : '░░░░░';
+        const lvlStr = typeof lvl === 'number' ? String(lvl) : '?';
+        console.log(`    \x1b[90m${label.padEnd(48)}\x1b[0m \x1b[1;33m[${bar}] ${lvlStr}/5\x1b[0m`);
+      }
+      if (levelCount > 0) {
+        const avg = (levelSum / levelCount).toFixed(2);
+        console.log(`    \x1b[90m${'Niveau moyen externe'.padEnd(48)}\x1b[0m \x1b[1;33m${avg}/5\x1b[0m`);
+      }
+      if (externalProfile.justification) {
+        console.log(`  \x1b[36mJustification du professeur :\x1b[0m \x1b[90m${externalProfile.justification}\x1b[0m`);
+      }
+      // Comparaison auto vs externe si les deux existent
+      if (selfProfile && selfProfile.skills) {
+        const diffs = [];
+        for (const skill of Object.keys(SKILL_LABELS)) {
+          const a = selfProfile.skills[skill] ? selfProfile.skills[skill].level : null;
+          const e = externalProfile.skills[skill] ? externalProfile.skills[skill].level : null;
+          if (a !== null && e !== null && a !== e) {
+            diffs.push(`${skill}: auto=${a} → externe=${e}`);
+          }
+        }
+        if (diffs.length > 0) {
+          console.log(`  \x1b[33mÉcarts auto vs externe : ${diffs.join(', ')}\x1b[0m`);
+        } else {
+          console.log(`  \x1b[32mAuto-évaluation et évaluation externe concordent.\x1b[0m`);
+        }
+      }
+      console.log('');
+    } else {
+      extSpinner.stop(`Profilage externe échoué en ${extDurationSec}s (repli sur l'auto-profilage)`);
+      console.log(`  \x1b[90mLe professeur n'a pas pu évaluer l'élève — filtrage basé sur l'auto-profilage.\x1b[0m\n`);
+    }
+  }
+
   // --- runSchool : exécute UNE école (un profil) de bout en bout.
   // Fonction imbriquée dans main() pour hériter (closure) de toute la config
   // résolue : provider, modèle, clés, queryFn, auto-profilage, professeur,
@@ -1407,6 +1490,15 @@ async function main() {
     }
   }
 
+  // --- File d'attente des tiers en rattrapage ---
+  // Conformément à la demande utilisateur, on ne propose PLUS le rattrapage
+  // immédiatement après l'échec d'un tier (cela coupe le rythme de l'examen).
+  // On collecte les tiers échoués (non éliminés) pendant le run principal, puis
+  // on propose UNE seule séance de rattrapage globale à la fin de tous les tiers.
+  // Cela évite les coupures et permet à l'élève d'enchaîner tous les exercices
+  // sans interruption.
+  let rattrapageQueue = []; // { tierNum, tierData, isMandatory, attemptNumber }
+
   for (const tierNum of tierKeys) {
     const tierData = tiers[tierNum];
     const isMandatory = profile.mandatory.includes(tierNum);
@@ -1414,131 +1506,231 @@ async function main() {
     let attemptNumber = 1;
     let bestResult = null;
 
-    while (true) {
-      const attemptResult = await runTierAttempt({
-        tierNum,
-        tierData,
-        isMandatory,
-        profileArg,
-        contextLimitTokens,
-        attemptNumber,
-        queryFn,
-        providerConfig: isCloudMode ? { provider: resolvedProvider, model: resolvedCloudModel, apiKey: resolvedApiKey, endpoint: resolvedEndpoint } : null,
-        gameState,
-        selfProfile,
-        teacherConfig: teacherConfigResolved
-      });
-
-      if (attemptResult.responseModelName && modelName === "Modele_En_Attente") {
-        modelName = attemptResult.responseModelName;
-        globalReport = `# Rapport d'Évaluation V3 — ${modelName}\n\n` +
-          `**Date :** ${new Date().toLocaleString('fr-FR')}\n` +
-          `**Log :** ${path.basename(logger.getFilePath())}\n` +
-          `**Profil :** ${profile.label}\n\n---\n\n`;
-      }
-
-      if (!attemptResult.skippedOptional && shouldReplaceBestResult(bestResult, attemptResult)) {
-        bestResult = attemptResult;
-      }
-      
-      if (attemptResult.eliminated) {
-        console.log(`\n  \x1b[31m[ARRET FATAL] Le test complet est stoppé car le modèle a été éliminé (score <= -100).\x1b[0m\n`);
-        stopGlobalEval = true;
-        break;
-      }
-
-      if (attemptResult.skippedOptional || attemptResult.allPassed) {
-        break;
-      }
-
-      // Simulation de l'arrêt complet (ERREUR FATALE constatée par l'utilisateur au niveau CE2 / Tier 3)
-      // Si on échoue un tier obligatoire, on stoppe l'exécution globale plutôt que de continuer aveuglément !
-      if (isMandatory) {
-        console.log(`\n  \x1b[31m[ARRET] L'évaluation s'arrête ici car le tier obligatoire ${tierNum} a échoué.\x1b[0m\n`);
-        stopGlobalEval = true;
-        break;
-      }
-
-      if (!rattrapageEnabled || attemptNumber > MAX_RATTRAPAGE_ATTEMPTS) {
-        break;
-      }
-
-      const wantsRetry = await askYesNo(`  Voulez-vous lancer une séance de rattrapage pour le Tier ${tierNum} ?`, true);
-      logger.info(`Tier ${tierNum} — rattrapage demandé: ${wantsRetry ? 'oui' : 'non'}`);
-      if (!wantsRetry) {
-        break;
-      }
-
-      attemptNumber += 1;
-      logger.info(`Tier ${tierNum} — lancement du rattrapage ${attemptNumber - 1}/${MAX_RATTRAPAGE_ATTEMPTS}.`);
-      console.log('');
-    }
-
-    if (!bestResult || bestResult.skippedOptional) {
-      if (stopGlobalEval) break;
-      continue;
-    }
-
-    if (attemptNumber > 1) {
-      console.log(`  \x1b[36mScore retenu (meilleure tentative) : ${bestResult.tierPassedCount}/${bestResult.tierTotalCount} (${bestResult.tierPct}%).\x1b[0m\n`);
-    }
-
-    globalReport += bestResult.report;
-
-    globalScore.passed += bestResult.tierPassedCount;
-    globalScore.total += bestResult.tierTotalCount;
-
-    if (isMandatory) {
-      globalScore.mandatoryPassed += bestResult.tierPassedCount;
-      globalScore.mandatoryTotal += bestResult.tierTotalCount;
-    }
-
-    tierScorecard.push({
+    const attemptResult = await runTierAttempt({
       tierNum,
-      className: getClassName(profileArg, tierNum),
-      score: bestResult.tierPassedCount,
-      max: bestResult.tierTotalCount,
-      pct: bestResult.tierPct,
-      passed: bestResult.allPassed,
-      mandatory: isMandatory,
-      helpUsedCount: bestResult.helpUsedCount || 0,
-      retriedCount: bestResult.retriedCount || 0,
-      optionalBonus: bestResult.optionalBonus || 0,
-      annotations: bestResult.tierAnnotations || []
+      tierData,
+      isMandatory,
+      profileArg,
+      contextLimitTokens,
+      attemptNumber,
+      queryFn,
+      providerConfig: isCloudMode ? { provider: resolvedProvider, model: resolvedCloudModel, apiKey: resolvedApiKey, endpoint: resolvedEndpoint } : null,
+      gameState,
+      selfProfile: filterProfile,
+      teacherConfig: teacherConfigResolved
     });
-    globalHelpCount += bestResult.helpUsedCount || 0;
-    globalRetriedCount += bestResult.retriedCount || 0;
-    globalOptionalBonus += bestResult.optionalBonus || 0;
 
-    // Agrégation pour la calibration (status: success/failed/bypassed)
-    if (bestResult.evalResults && bestResult.evalResults.length > 0) {
-      for (const er of bestResult.evalResults) {
-        er._tierNum = tierNum;
+    if (attemptResult.responseModelName && modelName === "Modele_En_Attente") {
+      modelName = attemptResult.responseModelName;
+      globalReport = `# Rapport d'Évaluation V3 — ${modelName}\n\n` +
+        `**Date :** ${new Date().toLocaleString('fr-FR')}\n` +
+        `**Log :** ${path.basename(logger.getFilePath())}\n` +
+        `**Profil :** ${profile.label}\n\n---\n\n`;
+    }
+
+    if (!attemptResult.skippedOptional && shouldReplaceBestResult(bestResult, attemptResult)) {
+      bestResult = attemptResult;
+    }
+
+    if (attemptResult.eliminated) {
+      console.log(`\n  \x1b[31m[ARRET FATAL] Le test complet est stoppé car le modèle a été éliminé (score <= -100).\x1b[0m\n`);
+      stopGlobalEval = true;
+    }
+
+    // Si le tier est échoué (non validé, non éliminé, non skipé), on le met en
+    // file d'attente pour le rattrapage final. On ne pose PLUS la question ici.
+    if (!stopGlobalEval && !attemptResult.skippedOptional && !attemptResult.allPassed && !attemptResult.eliminated) {
+      if (isMandatory) {
+        // Tier obligatoire échoué : on stoppe le run principal (comportement
+        // inchangé), mais on permet le rattrapage final avant de conclure.
+        console.log(`\n  \x1b[31m[ARRET] Le tier obligatoire ${tierNum} a échoué — arrêt du run principal.\x1b[0m`);
+        stopGlobalEval = true;
       }
-      allEvalResults = allEvalResults.concat(bestResult.evalResults);
-    }
-    if (bestResult.filterDecisions && bestResult.filterDecisions.length > 0) {
-      allFilterDecisions = allFilterDecisions.concat(bestResult.filterDecisions);
+      if (rattrapageEnabled) {
+        rattrapageQueue.push({ tierNum, tierData, isMandatory, attemptNumber: 2 });
+      }
     }
 
-    // Agrégation des réponses brutes + raisonnement par tier (pour l'export
-    // raisonnement consolidé destiné à NotebookLM via Gemini).
-    if (bestResult.rawResponse) {
-      allTierResponses.push({
+    if (bestResult && !bestResult.skippedOptional) {
+      globalReport += bestResult.report;
+      globalScore.passed += bestResult.tierPassedCount;
+      globalScore.total += bestResult.tierTotalCount;
+      if (isMandatory) {
+        globalScore.mandatoryPassed += bestResult.tierPassedCount;
+        globalScore.mandatoryTotal += bestResult.tierTotalCount;
+      }
+      tierScorecard.push({
         tierNum,
-        tierTitle: tierData.title,
-        isMandatory,
         className: getClassName(profileArg, tierNum),
-        rawResponse: bestResult.rawResponse,
-        evalResults: bestResult.evalResults || []
+        score: bestResult.tierPassedCount,
+        max: bestResult.tierTotalCount,
+        pct: bestResult.tierPct,
+        passed: bestResult.allPassed,
+        mandatory: isMandatory,
+        helpUsedCount: bestResult.helpUsedCount || 0,
+        retriedCount: bestResult.retriedCount || 0,
+        optionalBonus: bestResult.optionalBonus || 0,
+        annotations: bestResult.tierAnnotations || []
       });
+      globalHelpCount += bestResult.helpUsedCount || 0;
+      globalRetriedCount += bestResult.retriedCount || 0;
+      globalOptionalBonus += bestResult.optionalBonus || 0;
+      if (bestResult.evalResults && bestResult.evalResults.length > 0) {
+        for (const er of bestResult.evalResults) er._tierNum = tierNum;
+        allEvalResults = allEvalResults.concat(bestResult.evalResults);
+      }
+      if (bestResult.filterDecisions && bestResult.filterDecisions.length > 0) {
+        allFilterDecisions = allFilterDecisions.concat(bestResult.filterDecisions);
+      }
+      if (bestResult.rawResponse) {
+        allTierResponses.push({
+          tierNum,
+          tierTitle: tierData.title,
+          isMandatory,
+          className: getClassName(profileArg, tierNum),
+          rawResponse: bestResult.rawResponse,
+          evalResults: bestResult.evalResults || []
+        });
+      }
+      printScorecard(tierScorecard, ecoleLabel, false, gameState.globalLifeScore);
     }
-
-    printScorecard(tierScorecard, ecoleLabel, false, gameState.globalLifeScore);
 
     if (stopGlobalEval) {
       globalReport += `\n> **⚠️ ARRÊT PRÉMATURÉ :** L'évaluation a été stoppée (Modèle éliminé ou Tier obligatoire échoué).\n`;
-      break;
+    }
+  }
+
+  // --- Séance de rattrapage automatique (tous tiers confondus) ---
+  // La décision de lancer un rattrapage est désormais AUTOMATIQUE, basée sur des
+  // règles objectives. Aucune question posée à l'utilisateur (gain de temps).
+  // Critères (cumulatifs — un seul suffit pour déclencher) :
+  //   1. Au moins un tier OBLIGATOIRE échoué dans la file d'attente.
+  //   2. Santé globale de l'élève < 0 après l'examen (élève en difficulté).
+  //   3. >= 40% des exercices de l'examen ont échoué (échec massif).
+  // Si aucun critère n'est rempli, l'élève s'en sort bien → pas de rattrapage.
+  if (rattrapageEnabled && rattrapageQueue.length > 0 && gameState.globalLifeScore > -100) {
+    const tierLabels = rattrapageQueue.map(q => `Tier ${q.tierNum} (${getClassName(profileArg, q.tierNum)})`).join(', ');
+
+    // --- Évaluation automatique des critères ---
+    const hasMandatoryFail = rattrapageQueue.some(q => q.isMandatory);
+    const healthCritical = gameState.globalLifeScore < 0;
+    const totalExercises = allEvalResults.length;
+    const failedExercises = allEvalResults.filter(r => r.status === 'failed').length;
+    const failedRatio = totalExercises > 0 ? (failedExercises / totalExercises) : 0;
+    const massFailure = failedRatio >= 0.40;
+
+    const shouldRetry = hasMandatoryFail || healthCritical || massFailure;
+    const reasons = [];
+    if (hasMandatoryFail) reasons.push('tier obligatoire échoué');
+    if (healthCritical)   reasons.push(`santé critique (${gameState.globalLifeScore} PV)`);
+    if (massFailure)      reasons.push(`échec massif (${Math.round(failedRatio * 100)}% des exercices)`);
+
+    console.log('');
+    console.log(`  \x1b[1;36m━━━━━━━━━━━━━ SÉANCE DE RATTRAPAGE ━━━━━━━━━━━━━\x1b[0m`);
+    console.log(`  \x1b[36mTiers échoués éligibles au rattrapage : ${tierLabels}\x1b[0m`);
+    console.log(`  \x1b[90mÉvaluation automatique des critères :\x1b[0m`);
+    console.log(`    \x1b[90m• Tier obligatoire échoué : ${hasMandatoryFail ? 'OUI' : 'non'}\x1b[0m`);
+    console.log(`    \x1b[90m• Santé \u003c 0 : ${healthCritical ? 'OUI (' + gameState.globalLifeScore + ' PV)' : 'non (' + gameState.globalLifeScore + ' PV)'}\x1b[0m`);
+    console.log(`    \x1b[90m• Échec massif (\u003e= 40%) : ${massFailure ? 'OUI (' + Math.round(failedRatio * 100) + '%)' : 'non (' + Math.round(failedRatio * 100) + '%)'}\x1b[0m`);
+
+    if (shouldRetry) {
+      console.log(`  \x1b[1;32m→ Rattrapage AUTOMATIQUE déclenché : ${reasons.join(', ')}.\x1b[0m`);
+      logger.info(`Rattrapage automatique déclenché pour ${rattrapageQueue.length} tier(s) [${rattrapageQueue.map(q => q.tierNum).join(',')}] — raisons : ${reasons.join('; ')}`);
+      for (const item of rattrapageQueue) {
+        const { tierNum, tierData, isMandatory } = item;
+        logger.info(`Tier ${tierNum} — lancement du rattrapage (séance finale).`);
+        console.log('');
+        const retryResult = await runTierAttempt({
+          tierNum,
+          tierData,
+          isMandatory,
+          profileArg,
+          contextLimitTokens,
+          attemptNumber: 2,
+          queryFn,
+          providerConfig: isCloudMode ? { provider: resolvedProvider, model: resolvedCloudModel, apiKey: resolvedApiKey, endpoint: resolvedEndpoint } : null,
+          gameState,
+          selfProfile: filterProfile,
+          teacherConfig: teacherConfigResolved
+        });
+
+        if (!retryResult.skippedOptional && shouldReplaceBestResult(null, retryResult)) {
+          // On remplace le résultat précédent du tier par le rattrapage s'il est meilleur.
+          const prevIdx = tierScorecard.findIndex(t => t.tierNum === tierNum);
+          if (prevIdx !== -1) {
+            const prev = tierScorecard[prevIdx];
+            globalScore.passed -= prev.score;
+            globalScore.total -= prev.max;
+            if (isMandatory) {
+              globalScore.mandatoryPassed -= prev.score;
+              globalScore.mandatoryTotal -= prev.max;
+            }
+            globalHelpCount -= prev.helpUsedCount || 0;
+            globalRetriedCount -= prev.retriedCount || 0;
+            globalOptionalBonus -= prev.optionalBonus || 0;
+            tierScorecard.splice(prevIdx, 1);
+            // Retire aussi les evalResults de ce tier pour réinjecter les nouveaux.
+            allEvalResults = allEvalResults.filter(r => r._tierNum !== tierNum);
+          }
+          globalReport += retryResult.report;
+          globalScore.passed += retryResult.tierPassedCount;
+          globalScore.total += retryResult.tierTotalCount;
+          if (isMandatory) {
+            globalScore.mandatoryPassed += retryResult.tierPassedCount;
+            globalScore.mandatoryTotal += retryResult.tierTotalCount;
+          }
+          tierScorecard.push({
+            tierNum,
+            className: getClassName(profileArg, tierNum),
+            score: retryResult.tierPassedCount,
+            max: retryResult.tierTotalCount,
+            pct: retryResult.tierPct,
+            passed: retryResult.allPassed,
+            mandatory: isMandatory,
+            helpUsedCount: retryResult.helpUsedCount || 0,
+            retriedCount: (retryResult.retriedCount || 0) + 1,
+            optionalBonus: retryResult.optionalBonus || 0,
+            annotations: [...(retryResult.tierAnnotations || []), 'rattrapage final']
+          });
+          globalHelpCount += retryResult.helpUsedCount || 0;
+          globalRetriedCount += (retryResult.retriedCount || 0) + 1;
+          globalOptionalBonus += retryResult.optionalBonus || 0;
+          if (retryResult.evalResults && retryResult.evalResults.length > 0) {
+            for (const er of retryResult.evalResults) er._tierNum = tierNum;
+            allEvalResults = allEvalResults.concat(retryResult.evalResults);
+          }
+          if (retryResult.filterDecisions && retryResult.filterDecisions.length > 0) {
+            allFilterDecisions = allFilterDecisions.concat(retryResult.filterDecisions);
+          }
+          if (retryResult.rawResponse) {
+            allTierResponses.push({
+              tierNum,
+              tierTitle: tierData.title,
+              isMandatory,
+              className: getClassName(profileArg, tierNum),
+              rawResponse: retryResult.rawResponse,
+              evalResults: retryResult.evalResults || []
+            });
+          }
+          console.log(`  \x1b[36mScore retenu (rattrapage) : ${retryResult.tierPassedCount}/${retryResult.tierTotalCount} (${retryResult.tierPct}%).\x1b[0m`);
+        } else {
+          console.log(`  \x1b[90mRattrapage du Tier ${tierNum} sans amélioration — score initial conservé.\x1b[0m`);
+        }
+
+        if (retryResult.eliminated) {
+          console.log(`\n  \x1b[31m[ARRET FATAL] Élimination pendant le rattrapage (score <= -100).\x1b[0m\n`);
+          stopGlobalEval = true;
+          break;
+        }
+      }
+      // Réimprime le tableau de scores mis à jour après le rattrapage.
+      if (tierScorecard.length > 0) {
+        printScorecard(tierScorecard, ecoleLabel, false, gameState.globalLifeScore);
+      }
+    } else {
+      console.log(`  \x1b[1;90m→ Pas de rattrapage : l'élève s'en sort suffisamment bien (aucun critère rempli).\x1b[0m`);
+      console.log(`  \x1b[90m  Les scores initiaux sont conservés.\x1b[0m`);
+      logger.info(`Rattrapage non déclenché : aucun critère rempli (mandatory=${hasMandatoryFail}, health=${gameState.globalLifeScore}PV, failedRatio=${Math.round(failedRatio * 100)}%).`);
     }
   }
 

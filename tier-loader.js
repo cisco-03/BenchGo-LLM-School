@@ -7,12 +7,20 @@ const TIERS_DIR = path.join(__dirname, 'tiers');
 /**
  * Charge les tiers adaptés au profil demandé.
  * Priorité : tier{N}_{profile}.json > tier{N}_{fallback}.json
- * Fallback chain : DOCTORAT → EXPERT → STANDARD → LIGHT
+ * Fallback chain : DOCTORAT → EXPERT → STANDARD → LIGHT → MASTER
+ * Le niveau "master" (tier6_master.json) est le fichier partagé pour le tier 6
+ * (Expertise & Résistance) utilisé par STANDARD, EXPERT, DOCTORAT et FRONTIER.
  */
 function loadTiers(profileArg) {
   const profile = (profileArg || 'LIGHT').toUpperCase();
-  const fallbackChain = { FRONTIER: ['FRONTIER','DOCTORAT','EXPERT','STANDARD','LIGHT'], DOCTORAT: ['DOCTORAT','EXPERT','STANDARD','LIGHT'], EXPERT: ['EXPERT','STANDARD','LIGHT'], STANDARD: ['STANDARD','LIGHT'], LIGHT: ['LIGHT'] };
-  const chain = fallbackChain[profile] || ['LIGHT'];
+  const fallbackChain = {
+    FRONTIER: ['FRONTIER','DOCTORAT','EXPERT','STANDARD','LIGHT','MASTER'],
+    DOCTORAT: ['DOCTORAT','EXPERT','STANDARD','LIGHT','MASTER'],
+    EXPERT: ['EXPERT','STANDARD','LIGHT','MASTER'],
+    STANDARD: ['STANDARD','LIGHT','MASTER'],
+    LIGHT: ['LIGHT','MASTER']
+  };
+  const chain = fallbackChain[profile] || ['LIGHT','MASTER'];
 
   const tiers = {};
 

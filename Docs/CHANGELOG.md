@@ -1,5 +1,200 @@
 # CHANGELOG - Carnet de Notes BenchGo
 
+## 2026-07-20 (soir 4) — Redoublement & promotion dans le classement HTML (tendance des re-tests)
+
+### Contexte
+L'utilisateur a demandé si les élèves (modèles) peuvent « redoubler » une classe ou une école comme dans la réalité, et s'ils peuvent régresser au niveau score dans le temps par rapport aux mises à jour des modèles sur Hugging Face. Le carnet de scores conservait déjà l'historique des tentatives par école (`attempts[]`), mais aucune comparaison chronologique n'était affichée. La tendance était invisible.
+
+### Actions entreprises
+
+**1. `leaderboard.js` — Fonction `computeTrend()`**
+- Nouvelle fonction qui compare la dernière tentative à la précédente pour une école donnée :
+  - **deltaPct** : différence de % entre le dernier et l'avant-dernier test.
+  - **direction** : `up` (progression), `down` (régression), `stable` (aucun changement).
+  - **gradeChange** : `redoublement` (note A-F a baissé d'au moins un cran), `promotion` (note a monté), `stable`.
+  - Retourne `null` si moins de 2 tentatives (pas d'historique).
+- Tri chronologique par date + time pour garantir la comparaison correcte.
+
+**2. `aggregateLedger()` — Tendance par école + tendance globale**
+- Chaque école reçoit un champ `trend` (résultat de `computeTrend` sur ses tentatives compactées).
+- Tendance globale agrégée au niveau du modèle :
+  - `redoublement` : au moins une école a régressé de note.
+  - `promotion` : au moins une école a progressé de note.
+  - `avgDeltaPct` : moyenne des deltas % sur toutes les écoles avec historique.
+  - `direction` : `up` / `down` / `stable` selon la moyenne.
+
+**3. `buildArguments()` — Forces/faiblesses liées à la tendance**
+- Redoublement → faiblesse : « A REDOUBLÉ : régression de note au dernier re-test (mise à jour HF dégradante ?) ».
+- Promotion → force : « A ÉTÉ PROMU : progression de note au dernier re-test ».
+- Progression (sans changement de note) → force : « en progression (+X% au dernier re-test) ».
+- Régression → faiblesse : « en régression (-X% au dernier re-test — mise à jour HF dégradante ?) ».
+
+**4. Affichage HTML — Cartes + modale**
+- **Cartes** : badge de tendance à côté des badges taille/quantification :
+  - 📉 Redoublement (rouge) si note en baisse.
+  - 📈 Promotion (vert) si note en hausse.
+  - ▲ +X% (vert) si progression de % sans changement de note.
+  - ▼ -X% (rouge) si régression de %.
+  - ═ Stable (gris) si aucun changement.
+- **Modale — section « Tendance (re-tests) »** : verdict global (Redoublement/Promotion/En progression/En régression/Stable), évolution moyenne, nombre d'écoles avec historique, note explicative sur les mises à jour HF.
+- **Modale — tableau « Détail par école »** : nouvelle colonne « Tendance » avec indicateur par école (ex: `📉 A→B`, `📈 B→A`, `▲ +5%`, `▼ -5%`, `═`).
+- Nouveaux styles CSS : `.badge.trend-up` (vert), `.badge.trend-down` (rouge), `.badge.trend-stable` (gris).
+- Sérialisation : `trend` ajouté au niveau modèle ET au niveau école dans `modelsData`.
+
+### Fichiers modifiés
+- `leaderboard.js` — `computeTrend()`, tendance dans `aggregateLedger()`, `buildArguments()`, affichage cartes + modale + tableau écoles, styles CSS, sérialisation
+
+### Validation
+- `node -c leaderboard.js` : syntaxe OK.
+- `generateLeaderboard()` : génération réussie.
+- Vérification des carnets existants : 2 modèles avec historique (gemma-4-12b stable 96%, mythos-9b régression 91%→86%). Les tendances sont calculées et présentes dans le HTML généré.
+
+### Résultat
+- Le classement HTML affiche désormais la progression/régression des modèles entre leurs re-tests.
+- Un modèle qui régresse après une mise à jour Hugging Face affiche « 📉 Redoublement » sur sa carte et dans sa modale.
+- Un modèle qui progresse affiche « 📈 Promotion ».
+- Le tableau par école montre la tendance précise par école (ex: `📉 A→B` sur College-Lycee).
+- La métaphore scolaire du redoublement/promotion est désormais visible dans le classement.
+
+### Leçons apprises
+- L'historique des tentatives était déjà stocké mais inexploité pour la comparaison chronologique. Une simple fonction `computeTrend` suffit à transformer l'historique en indicateur visuel exploitable.
+- La métaphore scolaire (redoublement/promotion) rend la régression d'un modèle après mise à jour HF immédiatement compréhensible pour l'utilisateur.
+
+---
+
+## 2026-07-20 (soir 3) — Rattrapage automatique (règles objectives, plus de question manuelle)
+
+### Contexte
+Le rattrapage manuel (question posée à l'utilisateur à la fin de chaque école) est fatigant à long terme et interrompt le workflow. L'utilisateur a demandé que la décision soit automatique, mais s'est interrogé sur les critères pertinents pour déclencher un rattrapage. Choix retenu : règles automatiques objectives, sans professeur IA, prévisibles et sans appel API supplémentaire.
+
+### Actions entreprises
+
+**`runner.js` — Décision automatique de rattrapage**
+- Remplacement de la question manuelle (`askYesNo`) par une évaluation automatique basée sur trois critères cumulatifs (un seul suffit pour déclencher) :
+  1. **Tier obligatoire échoué** dans la file d'attente → rattrapage automatique (l'élève doit rattraper une matière obligatoire).
+  2. **Santé globale < 0** après l'examen → rattrapage automatique (élève en difficulté, mérite une seconde chance).
+  3. **≥ 40% des exercices échoués** → rattrapage automatique (échec massif, l'élève a besoin de reprendre).
+- Si aucun critère n'est rempli, l'élève s'en sort suffisamment bien → pas de rattrapage (scores initiaux conservés).
+- Affichage console explicite : chaque critère est affiché avec son résultat (OUI/non), puis la décision finale avec les raisons qui l'ont déclenchée.
+- Journalisation : `logger.info` avec le détail des critères évalués (pour traçabilité dans le fichier de log).
+- Le rattrapage reste désactivé en mode cloud et limité aux profils LIGHT/STANDARD (`isRattrapageEligibleProfile`).
+
+### Fichiers modifiés
+- `runner.js` — bloc de décision de rattrapage (suppression `askYesNo`, ajout règles automatiques)
+
+### Validation
+- `node -c runner.js` : syntaxe OK.
+
+### Résultat
+- Plus aucune question posée pendant le rattrapage : la décision est automatique et transparente (critères affichés).
+- Un élève qui réussit bien n'est pas rattrapé inutilement ; un élève en difficulté (tier obligatoire échoué, santé négative, ou échec massif) est automatiquement rattrapé.
+- L'utilisateur peut faire autre chose pendant que l'élève fait ses exercices ET son rattrapage, sans intervention.
+
+### Leçons apprises
+- Un rattrapage manuel interrompt le workflow et fatigue l'utilisateur sur des runs longs. Des règles objectives (tier obligatoire échoué, santé critique, échec massif) suffisent à décider sans subjectivité ni appel API.
+- Afficher les critères évalués (OUI/non) rend la décision transparente et auditable.
+
+---
+
+## 2026-07-20 (soir 2) — Profilage externe par le professeur IA (hybride)
+
+### Contexte
+L'auto-profilage par le modèle lui-même comporte un risque d'erreur d'appréciation : surconfiance (un petit modèle se déclare niveau 5), fausse modestie (un bon modèle se sous-évalue), ou mauvaise lucidité sur ses propres capacités. Pour fiabiliser le filtrage des tâches, l'utilisateur a demandé que le profilage soit fait par un modèle externe plus gros. L'Indice de Calibration (écart auto vs réel) doit toutefois être conservé.
+
+### Actions entreprises
+
+**1. `external-profiling.js` (nouveau) — Profilage externe des compétences**
+- Nouveau module qui demande à un PROFESSEUR IA externe (modèle cloud distinct de l'élève) d'évaluer objectivement les compétences de l'élève à partir de son auto-évaluation.
+- `buildExternalProfilePrompt({ studentSelfProfile, studentModelName })` : construit un prompt qui fournit l'auto-évaluation de l'élève au professeur et lui demande de la critiquer (surévaluation ? sous-évaluation ? honnête ?). Le professeur peut ajuster les niveaux à la hausse ou à la baisse.
+- `runExternalProfiling({ teacherConfig, studentSelfProfile, studentModelName })` : appelle `chat/completions` sur le provider du professeur (OpenRouter par défaut), réessaie jusqu'à `maxRetries`, réutilise la clé mémorisée dans `secrets.js`.
+- Réutilise `validateProfile` et `parseProfileFallback` de `self-profiling.js` (désormais exportés).
+
+**2. `self-profiling.js` — Export de `validateProfile` et `parseProfileFallback`**
+- Ajout de `validateProfile` et `parseProfileFallback` dans `module.exports` pour permettre leur réutilisation par `external-profiling.js`.
+
+**3. `runner.js` — Intégration du profilage hybride**
+- Après l'auto-profilage, si un professeur IA est activé, on lance le profilage externe. Le profil externe remplace l'auto-profilage pour le FILTRAGE des tâches (`filterProfile`), tandis que l'auto-profilage (`selfProfile`) est conservé pour le calcul de l'Indice de Calibration.
+- Affichage console : comparaison explicite des écarts auto vs externe (ex: « Écarts auto vs externe : javascript_basics: auto=4 → externe=2 ») pour montrer à l'utilisateur comment le professeur a ajusté l'évaluation de l'élève.
+- Repli silencieux : si le professeur est indisponible, le filtrage utilise l'auto-profilage (comportement historique).
+- Les appels à `runTierAttempt` passent désormais `selfProfile: filterProfile` (le profil de filtrage effectif, externe ou auto).
+
+### Fichiers modifiés
+- `external-profiling.js` (nouveau)
+- `self-profiling.js` (export de `validateProfile`, `parseProfileFallback`)
+- `runner.js` (profilage hybride : externe pour filtrage, auto pour calibration)
+
+### Validation
+- `node -c` : syntaxe OK sur les 3 fichiers.
+- `require()` : OK.
+- `filterProfile` accessible dans `runSchool` via closure.
+
+### Résultat
+- Quand un professeur IA est activé, le filtrage des tâches est basé sur l'évaluation objective d'un modèle externe, plus fiable que l'auto-évaluation de l'élève.
+- L'Indice de Calibration continue de mesurer la lucidité du modèle sur lui-même (auto-profilage conservé).
+- L'utilisateur voit les écarts entre l'auto-évaluation et l'évaluation externe, ce qui révèle la surconfiance ou la sous-évaluation de l'élève.
+
+### Leçons apprises
+- Un modèle qui s'auto-évalue n'est pas fiable pour le filtrage de ses propres tâches : il peut se surévaluer (niveau 5 pour un modèle 7B) ou se sous-évaluer. Un tiers externe est plus objectif.
+- Conserver l'auto-profilage en parallèle permet de mesurer la lucidité (Indice de Calibration) sans compromettre la fiabilité du filtrage.
+
+---
+
+## 2026-07-20 (soir) — Tier 6 reconnu (Classe Terminale) + rattrapage différé en fin d'examen
+
+### Contexte
+Deux problèmes remontés par l'utilisateur :
+1. `node runner.js 6 --profile=STANDARD` échouait avec `Aucun fichier trouvé pour tier 6 avec le profil STANDARD.` : le fichier `tiers/tier6_master.json` existait mais le `tier-loader.js` ne connaissait pas le niveau `master` dans sa chaîne de fallback. La Classe 6 (Terminale — Expertise & Résistance, 5 axes) était donc invisible pour les profils STANDARD, EXPERT, DOCTORAT et FRONTIER.
+2. Le rattrapage était proposé **immédiatement** après l'échec d'un tier, ce qui coupait le rythme de l'examen. L'utilisateur veut que toutes les séances de rattrapage se fassent **à la fin** de l'examen, sans coupure, avec une seule question globale (même pour deux écoles).
+
+### Actions entreprises
+
+**1. `tier-loader.js` — Chaîne de fallback étendue avec `MASTER`**
+- Ajout du niveau `MASTER` à la fin de chaque chaîne de fallback :
+  - `FRONTIER` → FRONTIER, DOCTORAT, EXPERT, STANDARD, LIGHT, MASTER
+  - `DOCTORAT` → DOCTORAT, EXPERT, STANDARD, LIGHT, MASTER
+  - `EXPERT` → EXPERT, STANDARD, LIGHT, MASTER
+  - `STANDARD` → STANDARD, LIGHT, MASTER
+  - `LIGHT` → LIGHT, MASTER
+- `tier6_master.json` est désormais chargé pour tous les profils (via le fallback `MASTER`) quand aucun `tier6_<profil>.json` n'existe. La Classe 6 (Terminale) est de nouveau accessible en optionnel pour `--profile=STANDARD`.
+
+**2. `runner.js` — Rattrapage différé en fin d'examen**
+- Suppression de la question de rattrapage intermédiaire (`Voulez-vous lancer une séance de rattrapage pour le Tier X ?`) qui coupait le rythme après chaque tier échoué.
+- Nouvelle logique en deux phases :
+  1. **Phase principale** : tous les tiers sont exécutés d'affilée, sans interruption. Les tiers échoués (non éliminés) sont collectés dans une file d'attente `rattrapageQueue` (avec leur `tierNum`, `tierData`, `isMandatory`).
+  2. **Phase de rattrapage finale** : une fois tous les tiers terminés (ou arrêt du run principal), une seule question globale est posée : « Lancer une séance de rattrapage pour ces N tier(s) ? ». Si oui, chaque tier en file est rejoué une fois, et le meilleur résultat remplace le score initial.
+- Le rattrapage reste désactivé en mode cloud (coût par appel API) et limité aux profils LIGHT/STANDARD (`isRattrapageEligibleProfile`).
+- Pour les runs multi-écoles (Primaire + Collège-Lycée), la question de rattrapage est posée à la fin de chaque école séparément, ce qui est cohérent (chaque école a ses propres tiers).
+
+**3. Audit des fichiers de tiers**
+- Audit exhaustif des 18 fichiers JSON du dossier `tiers/` via un sous-agent :
+  - Validation JSON : tous les fichiers sont syntaxiquement valides.
+  - Caractères non-ASCII : seuls des tirets longs (—) dans les titres/labels (non exécutables) ; aucun caractère parasite dans les champs `assert`, `call`, `setup`.
+  - Asserts vides : présents dans les fichiers expert/frontier/master (évaluations de type `pattern`/`custom` sans `assert`) — non bloquant car le runner gère ces types séparément.
+  - Cohérence prompt ↔ call : vérifiée, noms de fonctions cohérents.
+  - Comparaison type `result === '1010'` dans tier5 : le prompt demande explicitement une « string representation », l'assert est cohérent.
+- Conclusion : les fichiers standard et light sont irréprochables côté syntaxe des évaluateurs. L'erreur « Invalid or unexpected token » signalée par l'utilisateur vient du code produit par le modèle, pas des fichiers de tiers.
+
+### Fichiers modifiés
+- `tier-loader.js` — chaîne de fallback avec `MASTER`
+- `runner.js` — rattrapage différé en fin d'examen (suppression question intermédiaire + file d'attente + séance finale)
+
+### Validation
+- `node -c runner.js` : syntaxe OK.
+- `node -c tier-loader.js` : syntaxe OK.
+- `require('./tier-loader.js')` : OK.
+- Audit tiers : 18 fichiers validés.
+
+### Résultat
+- `node runner.js 6 --profile=STANDARD` charge désormais `tier6_master.json` (Tier 6 — Doctorat / Expertise & Résistance, 5 axes) en optionnel.
+- Le rattrapage ne coupe plus le rythme de l'examen : une seule question est posée à la fin de tous les tiers, pour tous les tiers échoués d'un coup.
+- Les exercices des tiers standard et light sont irréprochables (aucune erreur de syntaxe dans les évaluateurs).
+
+### Leçons apprises
+- Un niveau de fallback non listé dans `tier-loader.js` rend un fichier de tier invisible, même s'il existe sur disque. Toujours inclure tous les niveaux de fallback possibles (y compris les niveaux « partagés » comme `master`).
+- Différer le rattrapage en fin d'examen améliore l'expérience utilisateur (pas de coupure) et reste pédagogiquement cohérent (l'élève enchaîne tous ses exercices avant de reprendre ceux ratés).
+
+---
+
 ## 2026-07-20 — Documentation du système de points (calcul, classes, écoles, cumul) + correction de l'échelle de notes A–F
 
 ### Contexte
