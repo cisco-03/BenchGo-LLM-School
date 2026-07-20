@@ -1683,6 +1683,22 @@ function startServer(port) {
     res.end(content);
   });
 
+  server.on('error', (err) => {
+    if (err.code === 'EADDRINUSE') {
+      console.log('');
+      console.log(`  \x1b[31mErreur : le port ${port} est déjà utilisé.\x1b[0m`);
+      console.log('  \x1b[33mUn serveur occupe déjà ce port (peut-être une session précédente non fermée).\x1b[0m');
+      console.log(`  \x1b[90mSolutions :\x1b[0m`);
+      console.log(`  \x1b[90m  • Fermez l'autre serveur (Ctrl+C dans son terminal) puis relancez.\x1b[0m`);
+      console.log(`  \x1b[90m  • Ou utilisez un autre port : node leaderboard.js --serve --port=${port + 1}\x1b[0m`);
+      console.log(`  \x1b[90m  • Sous Windows : netstat -ano | findstr :${port}  puis  taskkill /PID <pid> /F\x1b[0m\n`);
+      process.exit(1);
+    } else {
+      console.error(`  \x1b[31mErreur serveur : ${err.message}\x1b[0m`);
+      process.exit(1);
+    }
+  });
+
   server.listen(port, () => {
     const url = 'http://localhost:' + port;
     console.log('');

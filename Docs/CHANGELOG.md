@@ -1,5 +1,15 @@
 # CHANGELOG - Carnet de Notes BenchGo
 
+## 2026-07-20 — Gestion propre du port occupé (EADDRINUSE) dans leaderboard.js
+
+### Contexte
+`node leaderboard.js --serve` plantait en pile d'exception non gérée (`Error: listen EADDRINUSE: address already in use :::3939`) quand un serveur tournait déjà sur le port 3939 (session précédente non fermée). L'événement `error` du serveur HTTP n'était pas capturé, donc Node propageait l'erreur comme exception fatale.
+
+### Actions entreprises
+**`leaderboard.js` — Handler `server.on('error')`**
+- Capture l'erreur `EADDRINUSE` : affiche un message clair en rouge + solutions (fermer l'autre serveur, utiliser `--port=N+1`, ou `netstat`/`taskkill` sous Windows) puis `process.exit(1)` proprement au lieu d'une stack trace brute.
+- Toute autre erreur serveur est aussi interceptée et affichée proprement.
+
 ## 2026-07-20 — Auto-profilage robuste + détection doublon précoce + presets/clés API persistants + retry anti-timeout
 
 ### Contexte
