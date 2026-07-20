@@ -901,17 +901,25 @@ function esc(s) {
 }
 
 function renderCards() {
-  var activeCat = document.querySelector('#chips .chip.active').getAttribute('data-cat');
-  var activeSize = document.querySelector('#sizeChips .chip.active').getAttribute('data-size');
-  var q = document.getElementById('search').value.trim().toLowerCase();
+  console.log('[renderCards] début — MODELS.length=' + (typeof MODELS !== 'undefined' ? MODELS.length : 'UNDEFINED'));
+  var chipsEl = document.querySelector('#chips .chip.active');
+  var sizeEl = document.querySelector('#sizeChips .chip.active');
+  if (!chipsEl) { console.error('[renderCards] ERREUR : aucun chip de catégorie actif — le DOM n\u2019est pas prêt.'); return; }
+  if (!sizeEl) { console.error('[renderCards] ERREUR : aucun chip de taille actif.'); return; }
+  var activeCat = chipsEl.getAttribute('data-cat');
+  var activeSize = sizeEl.getAttribute('data-size');
+  var searchEl = document.getElementById('search');
+  var q = searchEl ? searchEl.value.trim().toLowerCase() : '';
   var container = document.getElementById('cards');
+  if (!container) { console.error('[renderCards] ERREUR : conteneur #cards introuvable.'); return; }
   container.innerHTML = '';
   var shown = 0;
+  var skippedCat = 0, skippedSize = 0, skippedSearch = 0;
   for (var i = 0; i < MODELS.length; i++) {
     var m = MODELS[i];
-    if (activeCat !== 'all' && m.cat.key !== activeCat) continue;
-    if (activeSize !== 'all' && m.paramSize.key !== activeSize) continue;
-    if (q && m.model.toLowerCase().indexOf(q) === -1 && m.shortName.toLowerCase().indexOf(q) === -1) continue;
+    if (activeCat !== 'all' && m.cat.key !== activeCat) { skippedCat++; continue; }
+    if (activeSize !== 'all' && m.paramSize.key !== activeSize) { skippedSize++; continue; }
+    if (q && m.model.toLowerCase().indexOf(q) === -1 && m.shortName.toLowerCase().indexOf(q) === -1) { skippedSearch++; continue; }
     shown++;
 
     var cardClass = i === 0 ? 'gold' : i === 1 ? 'silver' : i === 2 ? 'bronze' : '';
@@ -968,6 +976,7 @@ function renderCards() {
     '</div>';
     container.insertAdjacentHTML('beforeend', html);
   }
+  console.log('[renderCards] fini — affichés=' + shown + '/' + MODELS.length + ' | skip cat=' + skippedCat + ' skip size=' + skippedSize + ' skip search=' + skippedSearch);
   document.getElementById('resultCount').textContent = shown + '/' + MODELS.length;
   document.getElementById('emptyMsg').style.display = shown === 0 ? 'block' : 'none';
 }
@@ -1021,7 +1030,7 @@ function openModal(idx) {
     body += statBox('Évolution moyenne', (t.avgDeltaPct >= 0 ? '+' : '') + t.avgDeltaPct + '%');
     body += statBox('Écoles avec historique', t.ecoleCount + '/' + m.ecoleCount);
     body += '</div>';
-    body += '<p style="color:var(--text-dim);font-size:var(--fs-small);margin-top:var(--space-s);">Comparaison entre le dernier test et le précédent. Une régression peut indiquer qu'une mise à jour du modèle sur Hugging Face a dégradé ses performances.</p>';
+    body += '<p style="color:var(--text-dim);font-size:var(--fs-small);margin-top:var(--space-s);">Comparaison entre le dernier test et le précédent. Une régression peut indiquer qu&#39;une mise à jour du modèle sur Hugging Face a dégradé ses performances.</p>';
   }
 
   body += '<h3>Forces & Faiblesses</h3>';
