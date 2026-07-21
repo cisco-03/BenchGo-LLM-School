@@ -16,22 +16,22 @@
         {
           "type": "exec",
           "description": "dequeue retourne priorité minimale",
-          "setup": "var fp=creerFilePriorite(); fp.enqueue('haute', 1); fp.enqueue('basse', 10); fp.enqueue('moyenne', 5);",
-          "call": "fp.dequeue()",
+          "setup": "",
+          "call": "(()=>{ var fp=creerFilePriorite(); fp.enqueue('haute', 1); fp.enqueue('basse', 10); fp.enqueue('moyenne', 5); return fp.dequeue(); })()",
           "assert": "result === 'haute'"
         },
         {
           "type": "exec",
           "description": "taille correcte",
-          "setup": "var fp=creerFilePriorite(); fp.enqueue('a', 2); fp.enqueue('b', 1);",
-          "call": "fp.taille()",
+          "setup": "",
+          "call": "(()=>{ var fp=creerFilePriorite(); fp.enqueue('a', 2); fp.enqueue('b', 1); return fp.taille(); })()",
           "assert": "result === 2"
         },
         {
           "type": "exec",
           "description": "file vide retourne null/undefined",
-          "setup": "var fp=creerFilePriorite();",
-          "call": "fp.dequeue()",
+          "setup": "",
+          "call": "(()=>{ var fp=creerFilePriorite(); return fp.dequeue(); })()",
           "assert": "result === null || result === undefined"
         }
       ],
@@ -44,22 +44,22 @@
         {
           "type": "exec",
           "description": "emit déclenche le listener",
-          "setup": "var ee=creerEventEmitter(); var recu=[]; ee.on('test', function(v){ recu.push(v); }); ee.emit('test', 42);",
-          "call": "recu[0]",
+          "setup": "",
+          "call": "(()=>{ var ee=creerEventEmitter(); var recu=[]; ee.on('test', function(v){ recu.push(v); }); ee.emit('test', 42); return recu[0]; })()",
           "assert": "result === 42"
         },
         {
           "type": "exec",
           "description": "off supprime le listener",
-          "setup": "var ee=creerEventEmitter(); var count=0; var fn=function(){ count++; }; ee.on('x', fn); ee.off('x', fn); ee.emit('x');",
-          "call": "count",
+          "setup": "",
+          "call": "(()=>{ var ee=creerEventEmitter(); var count=0; var fn=function(){ count++; }; ee.on('x', fn); ee.off('x', fn); ee.emit('x'); return count; })()",
           "assert": "result === 0"
         },
         {
           "type": "exec",
           "description": "plusieurs listeners sur un même événement",
-          "setup": "var ee=creerEventEmitter(); var a=0,b=0; ee.on('e', function(){ a++; }); ee.on('e', function(){ b++; }); ee.emit('e');",
-          "call": "a === 1 && b === 1",
+          "setup": "",
+          "call": "(()=>{ var ee=creerEventEmitter(); var a=0,b=0; ee.on('e', function(){ a++; }); ee.on('e', function(){ b++; }); ee.emit('e'); return a === 1 && b === 1; })()",
           "assert": "result === true"
         }
       ],
@@ -129,15 +129,15 @@
         {
           "type": "exec",
           "description": "get intercepté",
-          "setup": "var log=[]; var p=creerProxy({x:42},{get:function(c,k){ log.push(k); return c[k]; }});",
-          "call": "p.x === 42 && log[0] === 'x'",
+          "setup": "",
+          "call": "(()=>{ var log=[]; var p=creerProxy({x:42},{get:function(c,k){ log.push(k); return c[k]; }}); return p.x === 42 && log[0] === 'x'; })()",
           "assert": "result === true"
         },
         {
           "type": "exec",
           "description": "set intercepté",
-          "setup": "var log=[]; var cible={y:0}; var p=creerProxy(cible,{get:function(c,k){return c[k];},set:function(c,k,v){ log.push(k); c[k]=v; }}); p.y=99;",
-          "call": "cible.y === 99 && log[0] === 'y'",
+          "setup": "",
+          "call": "(()=>{ var log=[]; var cible={y:0}; var p=creerProxy(cible,{get:function(c,k){return c[k];},set:function(c,k,v){ log.push(k); c[k]=v; }}); p.y=99; return cible.y === 99 && log[0] === 'y'; })()",
           "assert": "result === true"
         }
       ],

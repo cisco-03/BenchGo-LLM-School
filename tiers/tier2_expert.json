@@ -28,15 +28,15 @@
         {
           "type": "exec",
           "description": "multicast vers plusieurs abonnés",
-          "setup": "var s=creerSubject(); var a=[],b=[]; s.subscribe({next:function(v){a.push(v);},error:function(){},complete:function(){}}); s.subscribe({next:function(v){b.push(v);},error:function(){},complete:function(){}}); s.next(1); s.next(2);",
-          "call": "a.length===2 && b.length===2 && a[0]===1",
+          "setup": "",
+          "call": "(()=>{ var s=creerSubject(); var a=[],b=[]; s.subscribe({next:function(v){a.push(v);},error:function(){},complete:function(){}}); s.subscribe({next:function(v){b.push(v);},error:function(){},complete:function(){}}); s.next(1); s.next(2); return a.length===2 && b.length===2 && a[0]===1; })()",
           "assert": "result === true"
         },
         {
           "type": "exec",
           "description": "complete notifie tous les abonnés",
-          "setup": "var s=creerSubject(); var done=0; s.subscribe({next:function(){},error:function(){},complete:function(){done++;}}); s.subscribe({next:function(){},error:function(){},complete:function(){done++;}}); s.complete();",
-          "call": "done",
+          "setup": "",
+          "call": "(()=>{ var s=creerSubject(); var done=0; s.subscribe({next:function(){},error:function(){},complete:function(){done++;}}); s.subscribe({next:function(){},error:function(){},complete:function(){done++;}}); s.complete(); return done; })()",
           "assert": "result === 2"
         }
       ],
@@ -49,15 +49,15 @@
         {
           "type": "exec",
           "description": "retourne le bon résultat",
-          "setup": "var fn=memoiserAsync(async function(x){ return x*2; });",
-          "call": "fn(5).then ? 'ok' : 'fail'",
+          "setup": "",
+          "call": "(()=>{ var fn=memoiserAsync(async function(x){ return x*2; }); return fn(5).then ? 'ok' : 'fail'; })()",
           "assert": "result === 'ok'"
         },
         {
           "type": "exec",
           "description": "appels concurrents partagent la même Promise",
-          "setup": "var calls=0; var fn=memoiserAsync(async function(x){ calls++; return x; }); fn(1); fn(1);",
-          "call": "calls",
+          "setup": "",
+          "call": "(()=>{ var calls=0; var fn=memoiserAsync(async function(x){ calls++; return x; }); fn(1); fn(1); return calls; })()",
           "assert": "result === 1"
         }
       ],
@@ -93,15 +93,15 @@
         {
           "type": "exec",
           "description": "appel normal réussit",
-          "setup": "var cb=creerCircuitBreaker(async function(){ return 'ok'; }, 3, 1000);",
-          "call": "cb().then ? 'promise' : 'fail'",
+          "setup": "",
+          "call": "(()=>{ var cb=creerCircuitBreaker(async function(){ return 'ok'; }, 3, 1000); return cb().then ? 'promise' : 'fail'; })()",
           "assert": "result === 'promise'"
         },
         {
           "type": "exec",
           "description": "s'ouvre après seuil d'échecs",
-          "setup": "var calls=0; var cb=creerCircuitBreaker(async function(){ throw new Error('fail'); }, 2, 10000); cb().catch(function(){}); cb().catch(function(){});",
-          "call": "cb().then(function(){ return 'ok'; }).catch(function(e){ return e.message; })",
+          "setup": "",
+          "call": "(()=>{ var calls=0; var cb=creerCircuitBreaker(async function(){ throw new Error('fail'); }, 2, 10000); cb().catch(function(){}); cb().catch(function(){}); return cb().then(function(){ return 'ok'; }).catch(function(e){ return e.message; }); })()",
           "assert": "result && result.then ? true : false"
         }
       ],

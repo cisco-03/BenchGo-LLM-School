@@ -184,11 +184,34 @@ function stripTypeAnnotations(code) {
         while (i < len) {
           const tc = code[i];
           if (tParen === 0 && tBracket === 0 && tBrace === 0 && tAngle === 0) {
+            // '=>' à profondeur 0 = flèche d'un type de fonction (ex: (x: number) => number).
+            // On DOIT vérifier '=>' AVANT le terminator '=' sinon le scanner s'arrête
+            // sur le '=' de la flèche et laisse '=> ReturnType' dans le résultat.
+            if (tc === '=' && i + 1 < len && code[i + 1] === '>') {
+              i += 2; // skip '=>'
+              while (i < len && /\s/.test(code[i])) i++;
+              // Stripper le type de retour jusqu'au prochain terminator
+              let rParen = 0, rBracket = 0, rBrace = 0, rAngle = 0;
+              while (i < len) {
+                const rc = code[i];
+                if (rParen === 0 && rBracket === 0 && rBrace === 0 && rAngle === 0) {
+                  if (rc === ',' || rc === ')' || rc === ';' || rc === '=' || rc === '\n') break;
+                  if (rc === '{') break;
+                }
+                if (rc === '(') rParen++;
+                else if (rc === ')') rParen--;
+                else if (rc === '[') rBracket++;
+                else if (rc === ']') rBracket--;
+                else if (rc === '{') rBrace++;
+                else if (rc === '}') rBrace--;
+                else if (rc === '<') rAngle++;
+                else if (rc === '>') rAngle--;
+                i++;
+              }
+              continue;
+            }
             if (tc === ',' || tc === ')' || tc === ';' || tc === '=' || tc === '\n') break;
             if (tc === '{') break;
-            if (tc === '=' && i + 1 < len && code[i + 1] === '>') {
-              tAngle++; i++; result += tc; i++; continue;
-            }
           }
           if (tc === '(') tParen++;
           else if (tc === ')') tParen--;
@@ -305,7 +328,13 @@ function stripTS(code) {
   result = result.replace(/\bas\s+[\w.<>\[\]|&\s]+(?=[\s,;)\]}])/g, '');
 
   // 6. Supprime les types de fonction en paramètre : paramName: (args) => ReturnType
-  result = result.replace(/(\w)\s*:\s*\([^)]*\)\s*=>\s*[\w.<>\[\]|&\s]+/g, '$1');
+  //    RÈGLE DÉSACTIVÉE : elle cassait les méthodes fléchées dans les littéraux objet
+  //    ({ on: (e, fn) => fn } → { on }), car elle confondait une méthode fléchée
+  //    d'objet avec une annotation de type de fonction en paramètre. Le scanner
+  //    contextuel (règle 8, stripTypeAnnotations) gère déjà les vrais types de
+  //    fonction en paramètre (entre parenthèses, après déclaration de variable)
+  //    sans casser les littéraux objet. Voir bug 2026-07-21.
+  // result = result.replace(/(\w)\s*:\s*\([^)]*\)\s*=>\s*[\w.<>\[\]|&\s]+/g, '$1');
 
   // 7. Supprime les annotations de type de retour de fonction ): Type {  ou  ): Type =>
   //    Utilise un compteur de profondeur pour gérer les types avec accolades (ex: Promise<{...}>)

@@ -16,22 +16,22 @@
         {
           "type": "exec",
           "description": "curry(a,b,c) appelé un par un",
-          "setup": "var add = curry(function(a,b,c){ return a+b+c; });",
-          "call": "add(1)(2)(3)",
+          "setup": "",
+          "call": "(()=>{ var add = curry(function(a,b,c){ return a+b+c; }); return add(1)(2)(3); })()",
           "assert": "result === 6"
         },
         {
           "type": "exec",
           "description": "curry avec arguments groupés",
-          "setup": "var add = curry(function(a,b,c){ return a+b+c; });",
-          "call": "add(1,2)(3)",
+          "setup": "",
+          "call": "(()=>{ var add = curry(function(a,b,c){ return a+b+c; }); return add(1,2)(3); })()",
           "assert": "result === 6"
         },
         {
           "type": "exec",
           "description": "curry à 2 arguments",
-          "setup": "var mul = curry(function(a,b){ return a*b; });",
-          "call": "mul(4)(5)",
+          "setup": "",
+          "call": "(()=>{ var mul = curry(function(a,b){ return a*b; }); return mul(4)(5); })()",
           "assert": "result === 20"
         }
       ],
@@ -107,22 +107,22 @@
         {
           "type": "exec",
           "description": "insert et contains trouvé",
-          "setup": "var bst=creerBST(); bst.insert(5); bst.insert(3); bst.insert(7);",
-          "call": "bst.contains(3)",
+          "setup": "",
+          "call": "(()=>{ var bst=creerBST(); bst.insert(5); bst.insert(3); bst.insert(7); return bst.contains(3); })()",
           "assert": "result === true"
         },
         {
           "type": "exec",
           "description": "contains absent",
-          "setup": "var bst=creerBST(); bst.insert(5);",
-          "call": "bst.contains(99)",
+          "setup": "",
+          "call": "(()=>{ var bst=creerBST(); bst.insert(5); return bst.contains(99); })()",
           "assert": "result === false"
         },
         {
           "type": "exec",
           "description": "BST vide",
-          "setup": "var bst=creerBST();",
-          "call": "bst.contains(1)",
+          "setup": "",
+          "call": "(()=>{ var bst=creerBST(); return bst.contains(1); })()",
           "assert": "result === false"
         }
       ],
@@ -135,22 +135,22 @@
         {
           "type": "exec",
           "description": "debounce normal : premier appel différé",
-          "setup": "var count=0; var d=debounce(function(){ count++; }, 500, false); d();",
-          "call": "count",
+          "setup": "",
+          "call": "(()=>{ var count=0; var d=debounce(function(){ count++; }, 500, false); d(); return count; })()",
           "assert": "result === 0"
         },
         {
           "type": "exec",
           "description": "debounce immediat : premier appel immédiat",
-          "setup": "var count=0; var d=debounce(function(){ count++; }, 500, true); d();",
-          "call": "count",
+          "setup": "",
+          "call": "(()=>{ var count=0; var d=debounce(function(){ count++; }, 500, true); d(); return count; })()",
           "assert": "result === 1"
         },
         {
           "type": "exec",
           "description": "debounce immediat : second appel bloqué",
-          "setup": "var count=0; var d=debounce(function(){ count++; }, 500, true); d(); d();",
-          "call": "count",
+          "setup": "",
+          "call": "(()=>{ var count=0; var d=debounce(function(){ count++; }, 500, true); d(); d(); return count; })()",
           "assert": "result === 1"
         }
       ],
