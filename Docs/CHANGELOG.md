@@ -1,5 +1,132 @@
 # CHANGELOG - Carnet de Notes BenchGo
 
+## 2026-07-21 — Carnet du Professeur + fix profilage externe (ByteString + Free Router)
+
+### Contexte
+Deux bugs bloquants identifiés à partir du log `benchgo_2026-07-21T08-53-25-788Z.log` et du rapport Tasks1.md :
+1. **Profilage externe en échec systématique** : `external-profiling.js` appelait OpenRouter avec un header `X-Title` contenant un em dash `—` (U+2012 > 255), ce qui faisait planter `fetch` avec « Cannot convert argument to a ByteString because the character at index 11 has a value of 8212 which is greater than 255 ». De plus, le module ne faisait **aucun rotate multi-modèles** : il hardcodait `meta-llama/llama-3.3-70b-instruct:free` (slug souvent dépublié → 404) et réessayait le même modèle 2× avant d'abandonner. Résultat : le professeur IA n'évaluait JAMAIS l'élève (repli systématique sur auto-profilage).
+2. **Correction du professeur IA ignorée** : `askTeacherToCorrectStudentAnalysis` renvoie `{ content, model }` (objet) mais `runner.js` testait `teacherCorrection.length > 0` et appelait `.split()` dessus comme si c'était une string. Un objet n'a pas `.length` → la condition était toujours fausse → **la correction du professeur était systématiquement ignorée** et le repli « Professeur IA indisponible » s'affichait à chaque exercice, même quand le teacher avait répondu (cf. log lignes 58-59 : Teacher répond 603 chars, puis runner dit « aucun retour »).
+
+Par ailleurs, demande utilisateur : créer un **Carnet du Professeur** où chaque signalement/contestation d'élève est consigné, pour que le professeur (humain ou agent) puisse examiner les demandes plus tard — comme un élève qui remet sa copie au professeur dans le monde réel.
+
+### Implémentation
+
+**1. `external-profiling.js` — fix ByteString + Free Router**
+- Header `X-Title` : `'BenchGo V3 — Profilage externe'` → `'BenchGo V3 - Profilage externe'` (tiret ASCII, conforme ByteString).
+- Branchement du Free Router : récupération dynamique des modèles gratuits via `fetchFreeModels()` (endpoint public `/api/v1/models` d'OpenRouter, déjà utilisé par `teacher-client.js` et `report-teacher.js`). Construction d'une liste de candidats : modèle explicite (`--teacher-model`) d'abord, puis tous les modèles gratuits triés par préférence/contexte.
+- Rotate multi-modèles : si un modèle échoue (429/404/5xx/réseau/réponse non parsable), on enchaîne sur le suivant jusqu'à `maxRetries` (défaut 3). Stop sur 401/403 (clé nulle). Plus jamais de slug `:free` hardcodé comme seul point de défaillance.
+- Import de `fetchFreeModels` depuis `teacher-client.js` (réutilisation, pas de duplication).
+- Mise à jour du commentaire d'en-tête pour documenter le Free Router et la contrainte ByteString.
+
+**2. `runner.js` — correction du bug d'objet-vs-string de la Teacher correction**
+- Renommage `teacherCorrection` → `teacherCorrectionObj` au niveau de l'appel `askTeacherToCorrectStudentAnalysis`, extraction du `.content` pour l'affichage et le rapport. La correction du professeur IA est maintenant réellement affichée et injectée dans le rapport.
+
+**3. `carnet-professeur.js` (nouveau module) — registre des demandes**
+- `appendDemande({...})` : annexe une demande au fichier `Carnet-Professeur/<AAAA-MM-JJ>/<ÉCOLE>/demandes.md` (création auto avec entête la première fois). Chaque demande contient : type, école, classe, modèle élève, exercice, tier, erreur sandbox, code élève (extrait), auto-analyse, correction professeur, verdict.
+- `buildClassement({...})` : génère/mets à jour `classement.md` — vue agrégée par classe/modèle avec compteurs par type (contestations / divergences / auto-analyses).
+- 3 types de demandes :
+  - `contestation_penalite` : l'utilisateur a répondu N à « Comptabiliser la pénalité ? » → l'élève a objectivement raison, le grader s'est trompé (signal fort, action requise côté énoncé/évaluateur).
+  - `divergence_prof_eleve` : le professeur IA a relu et produit une correction — à examiner pour départager élève vs professeur.
+  - `auto_analyse_echec` : l'élève a expliqué lui-même son échec (conservé pour mémoire pédagogique, juste ou faux).
+
+**4. `runner.js` — branchement du Carnet du Professeur**
+- Accumulateur `carnetEntries` dans `runTierAttempt`, retourné dans le résultat du tier.
+- Accumulateur global `allCarnetEntries` dans `main()`, alimenté après chaque `runTierAttempt` (run principal ET rattrapage).
+- Écriture finale du carnet après résolution de `dateStr`/`ecole`/`effectiveModel` : appel à `appendDemande` pour chaque entrée + `buildClassement` pour la vue agrégée. Message CLI de confirmation.
+
+### Résultat obtenu
+- Le profilage externe fonctionne maintenant : rotate multi-modèles + headers ByteString valides. Plus d'échec systématique « Cannot convert argument to a ByteString ».
+- La correction du professeur IA est enfin affichée et injectée au rapport (avant : silencieusement jetée à cause du bug d'objet).
+- Chaque contestation/divergence/auto-analyse est consignée dans `Carnet-Professeur/<date>/<ecole>/` pour réexamen différé.
+
+### Fichiers modifiés
+- `external-profiling.js` (fix ByteString + Free Router)
+- `runner.js` (fix objet teacherCorrection + branchement carnet)
+- `carnet-professeur.js` (nouveau)
+- `Docs/CHANGELOG.md`
+
+## 2026-07-21 — Tableaux CLI alignés dynamiquement
+
+### Contexte
+Les tableaux affichés dans le CLI (tableau des scores par école, récap « J'ai fini mes exercices », bilan global multi-écoles, classement BenchGo, liste des presets) utilisaient des `padEnd`/`padStart` à largeurs fixes. Dès qu'une cellule dépassait la largeur prévue (nom d'exercice > 22 car., classe > 18 car., modèle > 40 car.), toutes les colonnes suivantes se décalaient et les chiffres n'étaient plus alignés. Problème purement structurel d'affichage, sans impact sur les calculs.
+
+### Implémentation
+**1. Nouvel utilitaire `cli-table.js` (racine du projet)**
+- `stripAnsi(text)` : retire les codes ANSI pour calculer la vraie longueur affichée.
+- `col(text, width, align)` : formate une cellule avec alignement `'left'`/`'right'`/`'center'`, troncature avec `…` si dépassement.
+- `table(headers, rows, options)` : calcule dynamiquement la largeur de chaque colonne = `max(longueur header, longueur cellule max, pad, longueur footer)`, génère le séparateur `─` à la bonne longueur, retourne `{ lines, widths, sepLine, footerLines }`.
+- Option `footer`/`footers` + `footerAligns` : la ligne de total participe au calcul des largeurs (donc plus jamais tronquée) mais s'affiche séparément après le séparateur.
+- Aucune dépendance externe (Node.js built-ins only).
+
+**2. Refactor des 4 fichiers consommateurs**
+- `runner.js` `printScorecard()` : remplacement des `padEnd(18)`/`padStart(12)`/`padStart(7)` par `table()` ; ligne TOTAL ÉCOLE passée en `footer` → « TOTAL ÉCOLE » et « (Santé: 532 PV) (+89 bonus opt.) » ne sont plus tronqués.
+- `runner.js` bloc « J'ai fini mes exercices » : remplacement des `padEnd(22)`/`padEnd(14)`/`padStart(12)`/`padStart(8)` par `table()` ; ligne TOTAL TIER en `footer` → le total `/443` n'est plus tronqué en `/4…`.
+- `score-ledger.js` `printBilanGlobal()` : remplacement des `padEnd(20)`/`padStart(12)`/`padStart(7)` par `table()` ; ligne temps/tokens/vitesse conservée sous chaque école, indentée à la largeur de la colonne École ; TOTAL CUMULÉ en `footer`.
+- `leaderboard.js` sortie CLI : remplacement des `padEnd(40)`/`padStart(8)`/`padStart(9)`/`substring(0,40)` par `table()` ; médale (🥇🥈🥉) conservée en préfixe hors-tableau.
+- `presets.js` `printPresets()` : remplacement des `padEnd(20)`/`padEnd(14)`/`padEnd(34)`/`padEnd(10)`/`substring(0,33)` par `table()` ; nom en gras via code ANSI inclus dans la cellule.
+
+### Règles respectées
+- Aucune largeur de colonne en dur ne subsiste pour les tableaux CLI.
+- Les séparateurs `─` sont générés à partir des largeurs calculées.
+- Les lignes de total (footer) participent au calcul des largeurs : aucune troncature même si le total est plus large que toutes les lignes de données.
+- Les codes ANSI sont conservés dans la sortie finale (strip uniquement pour le calcul de longueur).
+- Aucune dépendance npm externe ajoutée.
+
+### Fichiers modifiés
+- `cli-table.js` (nouveau)
+- `runner.js`
+- `score-ledger.js`
+- `leaderboard.js`
+- `presets.js`
+- `Docs/CHANGELOG.md`
+
+## 2026-07-21 — Chronométrie & vitesse (tokens/s) dans le leaderboard
+
+### Contexte
+Demande utilisateur (Memories-BenchGo/Tasks1.md) : chronométrer les exercices et le temps total par école, calculer la vitesse moyenne en tokens/s (déjà affichée dans le CLI via LM Studio), et faire apparaître ces métriques dans le leaderboard — y compris la comparaison « lent mais efficace » vs « rapide mais peu fiable ». La vitesse n'est PAS comptabilisée dans le classement (elle est purement indicative), conformément à l'observation utilisateur que des modèles lents peuvent être plus efficaces.
+
+### Implémentation
+**1. `runner.js` — capture de la chronométrie par tier et par école**
+- `runTierAttempt` accumule désormais `tierElapsedMs` (durée d'inférence cumulée, hors attentes) et `tierTokens` (tokens produits, récupérés via `spinner.tokenCount` après le streaming) sur toutes les requêtes du tier : appel principal, retry anti-timeout, et proposition d'aide du professeur.
+- `runSchool` chronomètre l'école entière : `schoolStartMs` (début), `schoolTokens` et `schoolElapsedMs` (cumul des tiers + rattrapage).
+- Le `ecoleResult` stocké dans le carnet inclut 4 nouveaux champs : `elapsedMs`, `wallMs` (durée réelle écoulée), `tokens`, `tokensPerSecond` (vitesse moyenne = tokens / (elapsedMs/1000)).
+
+**2. `score-ledger.js` — cumul multi-écoles + affichage**
+- Nouvelle fonction `formatDuration(ms)` → affichage compact ("1.2s", "1m05s", "1h02m").
+- `computeGrandTotal` cumule `tokens`, `elapsedMs`, `wallMs` et calcule `tokensPerSecond` global.
+- `printBilanGlobal` affiche par école : temps, tokens, vitesse (t/s), et un total cumulé avec temps total + vitesse moyenne.
+- `buildBilanMarkdown` ajoute 3 colonnes (Temps, Tokens, Vitesse) au tableau du bilan.
+
+**3. `leaderboard.js` — affichage complet (HTML + MD + CLI)**
+- `aggregateLedger` cumule durée/tokens et calcule `tokensPerSecond` global par modèle ; `compactAttempt` sérialise ces champs pour l'historique des tentatives.
+- `buildArguments` ajoute des notes qualitatives sur la vitesse vs efficacité :
+  - **Force** : "rapide ET efficace" (≥60 t/s · ≥80%)
+  - **Force** : "LENT mais efficace — la vitesse ne fait pas tout" (<20 t/s · ≥80%)
+  - **Faiblesse** : "rapide mais peu fiable — vitesse sans efficacité" (≥60 t/s · <50%)
+  - **Note** : "modèle lent" / "vitesse moyenne" selon les seuils
+- HTML : mini-stat Vitesse (couleur dégradée rouge→vert) sur la carte ; 4 statBox (Temps inf., Tokens, Vitesse, Temps réel) dans la modale ; 2 colonnes (Temps, Vitesse) dans la table école et l'historique des tentatives.
+- Markdown : 2 colonnes (Temps, Vitesse) dans le tableau récap et le détail par école.
+- CLI : 2 colonnes (Temps, Vitesse colorée) dans le classement console.
+- `copyLeaderboard` (texte brut) inclut Temps + Vitesse.
+
+### Rétrocompatibilité
+Les carnets existants (antérieurs au 2026-07-21) n'ont pas les champs `elapsedMs`/`tokens`/`tokensPerSecond`. Toutes les fonctions utilisent des valeurs par défaut (0 / '—') via `|| 0` ou `> 0 ? ... : '—'`. Aucune migration forcée — les prochains runs rempliront automatiquement les champs.
+
+### Décisions de design
+- **La vitesse n'est PAS dans le score** : le classement reste trié par %, score, santé. La vitesse est purement indicative (badge/note), conformément à l'observation utilisateur que "la vitesse ne fait pas tout".
+- **`elapsedMs` vs `wallMs`** : `elapsedMs` = durée d'inférence cumulée (hors attentes entre tiers, hors traitement local), `wallMs` = durée réelle écoulée (inclut tout). Les deux sont affichés car ils mesurent des choses différentes (vitesse du modèle vs temps total de l'examen).
+- **Seuils de vitesse** : <10 t/s = très lent (rouge), 10-25 = lent (orange), 25-50 = moyen (jaune), 50-80 = rapide (bleu), ≥80 = très rapide (vert). Basés sur l'observation des modèles locaux 7B-14B en Q4/Q8 sur GPU consommateur.
+
+### Fichiers modifiés
+- `runner.js` — `runTierAttempt` (cumul tier), `runSchool` (chronométrie école + `ecoleResult`)
+- `score-ledger.js` — `formatDuration`, `computeGrandTotal`, `printBilanGlobal`, `buildBilanMarkdown`, exports
+- `leaderboard.js` — `fmtDur`, `compactAttempt`, `aggregateLedger`, `buildArguments`, `buildLeaderboardHTML` (carte + modale + table), `buildLeaderboardMarkdown`, `copyLeaderboard`, CLI
+
+### Leçon apprise
+La chronométrie doit être capturée au plus près de l'appel API (dans `runTierAttempt` via `performance.now()`), pas au niveau du spinner qui peut être réinitialisé entre les retry anti-timeout. Le `spinner.tokenCount` est la source fiable pour les tokens car il est alimenté par `updateTokens` pendant le streaming, quel que soit le client (LM Studio, cloud, OpenRouter).
+
+---
+
 ## 2026-07-21 (suite) — Audit exhaustif EXPERT/DOCTORAT/FRONTIER : 5 bugs critiques supplémentaires corrigés
 
 ### Contexte

@@ -6,6 +6,8 @@ const logger = require('./logger');
 const { letterGrade } = require('./progress-bar');
 const { shortenModelName } = require('./report-generator');
 const { detectProfileFromModelName } = require('./config');
+const { formatDuration } = require('./score-ledger');
+const cliTable = require('./cli-table');
 
 const LEDGER_DIR = path.join(__dirname, 'Export-Rapports', '.carnet');
 const EXPORT_DIR = path.join(__dirname, 'Export-Rapports');
@@ -60,7 +62,12 @@ function compactAttempt(a, idx, total) {
     mandatoryPassed: a.mandatoryPassed || 0,
     mandatoryTotal: a.mandatoryTotal || 0,
     calibrationIndex: a.calibrationIndex != null ? a.calibrationIndex : null,
-    reportFile: a.reportFile || null
+    reportFile: a.reportFile || null,
+    // Chronométrie de la tentative (pour l'historique dans la modale).
+    elapsedMs: a.elapsedMs || 0,
+    wallMs: a.wallMs || 0,
+    tokens: a.tokens || 0,
+    tokensPerSecond: a.tokensPerSecond || 0
   };
 }
 
@@ -118,6 +125,7 @@ function aggregateLedger(ledger) {
   let score = 0, max = 0, globalLifeScore = 0, optionalBonus = 0;
   let helpCount = 0, retriedCount = 0;
   let mandatoryPassed = 0, mandatoryTotal = 0;
+  let totalTokens = 0, totalElapsedMs = 0, totalWallMs = 0;
   const ecoles = [];
 
   for (const raw of rawEntries) {
@@ -131,6 +139,10 @@ function aggregateLedger(ledger) {
     retriedCount += best.retriedCount || 0;
     mandatoryPassed += best.mandatoryPassed || 0;
     mandatoryTotal += best.mandatoryTotal || 0;
+    // Cumul chronométrie (durée d'inférence + tokens) pour la vitesse globale.
+    totalTokens += best.tokens || 0;
+    totalElapsedMs += best.elapsedMs || 0;
+    totalWallMs += best.wallMs || 0;
     const bPct = best.max > 0 ? Math.max(0, Math.min(100, Math.round((best.score / best.max) * 100))) : 0;
     const compacted = attempts.map((a, i) => compactAttempt(a, i, attempts.length));
     ecoles.push({
@@ -147,12 +159,22 @@ function aggregateLedger(ledger) {
       reportFile: best.reportFile || null,
       attemptsCount: attempts.length,
       attempts: compacted,
-      trend: computeTrend(compacted)
+      trend: computeTrend(compacted),
+      // Chronométrie de l'école (meilleure tentative).
+      elapsedMs: best.elapsedMs || 0,
+      wallMs: best.wallMs || 0,
+      tokens: best.tokens || 0,
+      tokensPerSecond: best.tokensPerSecond || 0
     });
   }
 
   const pct = max > 0 ? Math.max(0, Math.min(100, Math.round((score / max) * 100))) : 0;
   const mandatoryPct = mandatoryTotal > 0 ? Math.max(0, Math.min(100, Math.round((mandatoryPassed / mandatoryTotal) * 100))) : 0;
+  // Vitesse globale (tokens/s) sur la durée d'inférence cumulée. Mesure la
+  // rapidité moyenne du modèle à produire des tokens (content + reasoning).
+  const tokensPerSecond = totalElapsedMs > 0
+    ? Math.round((totalTokens / (totalElapsedMs / 1000)) * 100) / 100
+    : 0;
 
   // --- Tendance globale : synthèse des tendances par école ---
   // Si au moins une école a un trend, on agrège : redoublement si au moins une
@@ -185,7 +207,12 @@ function aggregateLedger(ledger) {
     ecoleCount: ecoles.length,
     ecoles,
     trend: globalTrend,
-    lastUpdated: ledger.lastUpdated || null
+    lastUpdated: ledger.lastUpdated || null,
+    // Chronométrie globale (cumul multi-écoles).
+    elapsedMs: totalElapsedMs,
+    wallMs: totalWallMs,
+    tokens: totalTokens,
+    tokensPerSecond
   };
 }
 
@@ -220,6 +247,24 @@ function buildArguments(entry) {
 
   if (entry.pct < 50) faiblesses.push('plus de la moitié des exercices échoués');
   if (entry.ecoleCount > 1) notes.push('évalué sur ' + entry.ecoleCount + ' écoles');
+
+  // --- Vitesse (tokens/s) vs efficacité ---
+  // La vitesse ne fait pas tout : un modèle lent peut être très efficace (bon
+  // ratio points/temps), et un modèle rapide peut être médiocre. On signale
+  // explicitement les cas intéressants sans les pénaliser dans le classement.
+  if (entry.tokensPerSecond > 0) {
+    if (entry.tokensPerSecond >= 60 && entry.pct >= 80) {
+      forces.push('rapide ET efficace (' + entry.tokensPerSecond + ' t/s · ' + entry.pct + '%)');
+    } else if (entry.tokensPerSecond < 20 && entry.pct >= 80) {
+      forces.push('LENT mais efficace — la vitesse ne fait pas tout (' + entry.tokensPerSecond + ' t/s · ' + entry.pct + '%)');
+    } else if (entry.tokensPerSecond >= 60 && entry.pct < 50) {
+      faiblesses.push('rapide mais peu fiable — vitesse sans efficacité (' + entry.tokensPerSecond + ' t/s · ' + entry.pct + '%)');
+    } else if (entry.tokensPerSecond < 20) {
+      notes.push('modèle lent (' + entry.tokensPerSecond + ' t/s — ' + fmtDur(entry.elapsedMs) + ' d\'inférence)');
+    } else {
+      notes.push('vitesse moyenne (' + entry.tokensPerSecond + ' t/s)');
+    }
+  }
 
   // --- Tendance (progression / régression / redoublement) ---
   // Détectée à partir de l'historique des re-tests du carnet.
@@ -286,6 +331,22 @@ function esc(str) {
     .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
+// Formate une durée en millisecondes vers un affichage humain compact.
+// Identique à score-ledger.js#formatDuration (dupliqué pour éviter une
+// dépendance circulaire côté navigateur où ce module n'est pas chargé).
+function fmtDur(ms) {
+  if (!Number.isFinite(ms) || ms <= 0) return '—';
+  const s = ms / 1000;
+  if (s < 60) return s.toFixed(1) + 's';
+  const totalSec = Math.round(s);
+  const m = Math.floor(totalSec / 60);
+  const sec = totalSec % 60;
+  if (m < 60) return m + 'm' + String(sec).padStart(2, '0') + 's';
+  const h = Math.floor(m / 60);
+  const min = m % 60;
+  return h + 'h' + String(min).padStart(2, '0') + 'm';
+}
+
 function buildLeaderboardHTML(entries) {
   const now = new Date().toLocaleString('fr-FR');
 
@@ -330,6 +391,11 @@ function buildLeaderboardHTML(entries) {
       ecoleCount: e.ecoleCount,
       lastUpdated: e.lastUpdated,
       trend: e.trend || null,
+      // Chronométrie globale (cumul multi-écoles) pour la modale.
+      elapsedMs: e.elapsedMs || 0,
+      wallMs: e.wallMs || 0,
+      tokens: e.tokens || 0,
+      tokensPerSecond: e.tokensPerSecond || 0,
       verdict,
       cat,
       paramSize: psize,
@@ -356,6 +422,11 @@ function buildLeaderboardHTML(entries) {
           attempts: ec.attempts,
           trend: ec.trend || null,
           selfProfile: (ecoleEntry && ecoleEntry.selfProfile) || null,
+          // Chronométrie par école.
+          elapsedMs: ec.elapsedMs || 0,
+          wallMs: ec.wallMs || 0,
+          tokens: ec.tokens || 0,
+          tokensPerSecond: ec.tokensPerSecond || 0,
           tiers: tiers.map(t => ({
             tierNum: t.tierNum,
             tierTitle: t.tierTitle,
@@ -903,6 +974,31 @@ function pctColor(p) {
 // Affichage du % : borne à [0, 100] pour éviter les valeurs négatives absurdes
 // (ex: -100% si un carnet ancien stocke un pct négatif pour un modèle éliminé).
 function dispPct(p) { return Math.max(0, Math.min(100, p)); }
+// Formate une durée (ms) en affichage humain compact (identique à fmtDur côté serveur).
+function fmtDurJS(ms) {
+  if (!isFinite(ms) || ms <= 0) return '—';
+  var s = ms / 1000;
+  if (s < 60) return s.toFixed(1) + 's';
+  var totalSec = Math.round(s);
+  var m = Math.floor(totalSec / 60);
+  var sec = totalSec % 60;
+  if (m < 60) return m + 'm' + String(sec).padStart(2,'0') + 's';
+  var h = Math.floor(m / 60);
+  var min = m % 60;
+  return h + 'h' + String(min).padStart(2,'0') + 'm';
+}
+// Couleur de la vitesse (tokens/s) : dégradé rouge → jaune → vert.
+// Seuils : <10 t/s = rouge (très lent), 10-25 = orange, 25-50 = jaune,
+// 50-80 = vert clair, >80 = vert vif. La vitesse ne fait pas tout mais permet
+// de comparer la rapidité brute des modèles sur un même matériel.
+function tpsColor(tps) {
+  if (tps <= 0) return '#8b949e';
+  if (tps >= 80) return '#3fb950';
+  if (tps >= 50) return '#58a6ff';
+  if (tps >= 25) return '#d29922';
+  if (tps >= 10) return '#e3b341';
+  return '#f85149';
+}
 function esc(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
@@ -939,6 +1035,13 @@ function renderCards() {
     var helpStr = (m.helpCount > 0 || m.retriedCount > 0)
       ? (m.helpCount > 0 ? 'aide:' + m.helpCount : '') + (m.retriedCount > 0 ? (m.helpCount > 0 ? ' ' : '') + 'rat.:' + m.retriedCount : '')
       : '—';
+    // Mini-stat vitesse (tokens/s) : affichée seulement si des données de
+    // chronométrie existent (carnets récents). Sinon on affiche le temps total.
+    var tpsC = tpsColor(m.tokensPerSecond);
+    var vitesseVal = m.tokensPerSecond > 0
+      ? m.tokensPerSecond + ' t/s'
+      : (m.elapsedMs > 0 ? fmtDurJS(m.elapsedMs) : '—');
+    var vitesseLbl = m.tokensPerSecond > 0 ? 'Vitesse' : 'Temps';
     var szBadge = '<span class="badge" title="' + esc(m.paramSize.label) + '">' + m.paramSize.icon + ' ' + esc(m.paramSize.short) + '</span>';
     var quantBadge = m.quantization
       ? '<span class="badge quant" title="Quantification du modèle (récupérée via LM Studio /api/v0/models ou saisie manuelle)">🧩 ' + esc(m.quantization) + '</span>'
@@ -974,6 +1077,7 @@ function renderCards() {
           '<div class="mini-stat"><span class="lbl">Santé</span><span class="val" style="color:' + sc + '">' + m.globalLifeScore + ' PV</span></div>' +
           '<div class="mini-stat"><span class="lbl">Oblig.</span><span class="val">' + (m.mandatoryTotal > 0 ? m.mandatoryPct + '%' : '—') + '</span></div>' +
           '<div class="mini-stat"><span class="lbl">Aide/Rat.</span><span class="val" style="font-size:var(--fs-tiny)">' + esc(helpStr) + '</span></div>' +
+          '<div class="mini-stat"><span class="lbl">' + vitesseLbl + '</span><span class="val" style="color:' + tpsC + ';font-size:var(--fs-tiny)">' + esc(vitesseVal) + '</span></div>' +
         '</div>' +
         '<div class="card-actions">' +
           '<button class="btn btn-primary" onclick="event.stopPropagation();openModal(' + i + ')">Détails</button>' +
@@ -1015,6 +1119,16 @@ function openModal(idx) {
   body += statBox('Rattrapage', m.retriedCount > 0 ? m.retriedCount + 'x' : '—');
   body += statBox('Écoles', m.ecoleCount);
   body += statBox('Quantif.', m.quantization ? '<span style="color:#bc8cff">' + esc(m.quantization) + '</span>' : '—');
+  // --- Chronométrie : durée d'inférence, tokens produits, vitesse moyenne ---
+  // Affichés seulement si des données existent (carnets récents post-2026-07-21).
+  if (m.elapsedMs > 0 || m.tokens > 0) {
+    body += statBox('Temps inf.', fmtDurJS(m.elapsedMs));
+    body += statBox('Tokens', m.tokens > 0 ? m.tokens : '—');
+    body += statBox('Vitesse', m.tokensPerSecond > 0
+      ? '<span style="color:' + tpsColor(m.tokensPerSecond) + '">' + m.tokensPerSecond + ' t/s</span>'
+      : '—');
+    body += statBox('Temps réel', fmtDurJS(m.wallMs));
+  }
   body += '</div>';
 
   // --- Section Tendance (progression / régression / redoublement) ---
@@ -1055,7 +1169,8 @@ function openModal(idx) {
   body += '<h3>Détail par école</h3>';
   body += '<table class="ecoles-table"><thead><tr>' +
     '<th>École</th><th class="num">Points</th><th>%</th><th>Note</th>' +
-    '<th class="num">Bonus</th><th class="num">Santé</th><th class="num">Aide</th><th class="num">Rat.</th><th class="num">Calib.</th><th>Date</th><th>Tent.</th><th>Tendance</th>' +
+    '<th class="num">Bonus</th><th class="num">Santé</th><th class="num">Aide</th><th class="num">Rat.</th><th class="num">Calib.</th>' +
+    '<th class="num">Temps</th><th class="num">Vitesse</th><th>Date</th><th>Tent.</th><th>Tendance</th>' +
     '</tr></thead><tbody>';
   for (var e of m.ecoles) {
     var egc = gradeColor(e.grade);
@@ -1066,6 +1181,12 @@ function openModal(idx) {
     if (hasHistory) {
       ecoleCell += ' <span class="hist-toggle" onclick="toggleHistory(this)" title="Voir l&#39;historique des re-tests">▸ ' + attempts.length + ' tentatives</span>';
     }
+    // Vitesse (tokens/s) par école avec couleur selon le dégradé de rapidité.
+    var eTpsC = tpsColor(e.tokensPerSecond);
+    var eTemps = e.elapsedMs > 0 ? fmtDurJS(e.elapsedMs) : '—';
+    var eVitesse = e.tokensPerSecond > 0
+      ? '<span style="color:' + eTpsC + '">' + e.tokensPerSecond + ' t/s</span>'
+      : '—';
     // Badge de tendance par école (comparaison dernier vs précédent test).
     var trendCell = '—';
     if (e.trend) {
@@ -1092,23 +1213,31 @@ function openModal(idx) {
       '<td class="num">' + (e.helpCount > 0 ? e.helpCount : '—') + '</td>' +
       '<td class="num">' + (e.retriedCount > 0 ? e.retriedCount : '—') + '</td>' +
       '<td class="num">' + (e.calibrationIndex != null ? 'C=' + e.calibrationIndex.toFixed(2) : '—') + '</td>' +
+      '<td class="num">' + eTemps + '</td>' +
+      '<td class="num">' + eVitesse + '</td>' +
       '<td>' + esc(e.date) + '</td>' +
       '<td class="num">' + attempts.length + '</td>' +
       '<td>' + trendCell + '</td>' +
       '</tr>';
     if (hasHistory) {
-      body += '<tr class="hist-row" style="display:none;"><td colspan="12">' +
+      body += '<tr class="hist-row" style="display:none;"><td colspan="14">' +
         '<div class="hist-block">' +
         '<div class="hist-title">Historique des ' + attempts.length + ' tentatives (chronologique) :</div>' +
         '<table class="hist-table"><thead><tr>' +
         '<th>#</th><th class="num">Points</th><th>%</th><th>Note</th>' +
-        '<th class="num">Bonus</th><th class="num">Santé</th><th class="num">Aide</th><th class="num">Rat.</th><th class="num">Calib.</th><th>Date</th>' +
+        '<th class="num">Bonus</th><th class="num">Santé</th><th class="num">Aide</th><th class="num">Rat.</th><th class="num">Calib.</th>' +
+        '<th class="num">Temps</th><th class="num">Vitesse</th><th>Date</th>' +
         '</tr></thead><tbody>';
       for (var a of attempts) {
         var agc = gradeColor(a.grade);
         var apc = pctColor(a.pct);
         var isBest = (a.pct === e.pct && a.score === e.score);
         var bestTag = isBest ? ' <span class="best-tag" title="Meilleure tentative">★</span>' : '';
+        var aTpsC = tpsColor(a.tokensPerSecond);
+        var aTemps = a.elapsedMs > 0 ? fmtDurJS(a.elapsedMs) : '—';
+        var aVitesse = a.tokensPerSecond > 0
+          ? '<span style="color:' + aTpsC + '">' + a.tokensPerSecond + ' t/s</span>'
+          : '—';
         body += '<tr' + (isBest ? ' class="hist-best"' : '') + '>' +
           '<td class="num">' + a.n + bestTag + '</td>' +
           '<td class="num">' + a.score + '/' + a.max + '</td>' +
@@ -1119,6 +1248,8 @@ function openModal(idx) {
           '<td class="num">' + (a.helpCount > 0 ? a.helpCount : '—') + '</td>' +
           '<td class="num">' + (a.retriedCount > 0 ? a.retriedCount : '—') + '</td>' +
           '<td class="num">' + (a.calibrationIndex != null ? 'C=' + a.calibrationIndex.toFixed(2) : '—') + '</td>' +
+          '<td class="num">' + aTemps + '</td>' +
+          '<td class="num">' + aVitesse + '</td>' +
           '<td>' + esc(a.date) + (a.time ? ' ' + esc(a.time).replace('-', 'h') : '') + '</td>' +
           '</tr>';
       }
@@ -1424,8 +1555,8 @@ function copyLeaderboard() {
   lines.push('🏇 Classement BenchGo V3 — ' + new Date().toLocaleString('fr-FR'));
   lines.push('Filtre catégorie : ' + (activeCat === 'all' ? 'tous' : activeCat) + ' | Taille : ' + (activeSize === 'all' ? 'toutes' : activeSize) + (q ? ' | Recherche : ' + q : ''));
   lines.push('');
-  lines.push('Rang | Modèle | Quantif. | Points | % | Note | Oblig. | Santé | Écoles | Verdict');
-  lines.push('---|---|---|---|---|---|---|---|---|---');
+  lines.push('Rang | Modèle | Quantif. | Points | % | Note | Oblig. | Santé | Écoles | Temps | Vitesse | Verdict');
+  lines.push('---|---|---|---|---|---|---|---|---|---|---|---');
   var copied = 0;
   for (var i = 0; i < MODELS.length; i++) {
     var m = MODELS[i];
@@ -1433,7 +1564,9 @@ function copyLeaderboard() {
     if (activeSize !== 'all' && m.paramSize.key !== activeSize) continue;
     if (q && m.model.toLowerCase().indexOf(q) === -1 && m.shortName.toLowerCase().indexOf(q) === -1) continue;
     var rank = copied < 3 ? ['🥇','🥈','🥉'][copied] : ('' + (copied + 1));
-    lines.push(rank + ' | ' + m.model + ' | ' + (m.quantization || '—') + ' | ' + m.score + '/' + m.max + ' | ' + m.pct + '% | ' + m.grade + ' | ' + (m.mandatoryTotal > 0 ? m.mandatoryPct + '%' : '—') + ' | ' + m.globalLifeScore + ' PV | ' + m.ecoleCount + ' | ' + m.verdict.label);
+    var temps = m.elapsedMs > 0 ? fmtDurJS(m.elapsedMs) : '—';
+    var vit = m.tokensPerSecond > 0 ? (m.tokensPerSecond + ' t/s') : '—';
+    lines.push(rank + ' | ' + m.model + ' | ' + (m.quantization || '—') + ' | ' + m.score + '/' + m.max + ' | ' + m.pct + '% | ' + m.grade + ' | ' + (m.mandatoryTotal > 0 ? m.mandatoryPct + '%' : '—') + ' | ' + m.globalLifeScore + ' PV | ' + m.ecoleCount + ' | ' + temps + ' | ' + vit + ' | ' + m.verdict.label);
     copied++;
   }
   lines.push('');
@@ -1480,8 +1613,8 @@ renderCards();
 function buildLeaderboardMarkdown(entries) {
   let md = `# 🏇 Classement BenchGo V3\n\n`;
   md += `> Généré le ${new Date().toLocaleString('fr-FR')} — ${entries.length} modèle(s) classé(s)\n\n`;
-  md += `| Rang | Modèle | Quantif. | Points | % | Note | Oblig. | Santé | Bonus | Aide | Rat. | Écoles | Verdict | Forces & Faiblesses |\n`;
-  md += `|---:|---|:---:|---|---:|:---:|---:|---:|---:|---:|---:|---:|---|---|\n`;
+  md += `| Rang | Modèle | Quantif. | Points | % | Note | Oblig. | Santé | Bonus | Aide | Rat. | Écoles | Temps | Vitesse | Verdict | Forces & Faiblesses |\n`;
+  md += `|---:|---|:---:|---|---:|:---:|---:|---:|---:|---:|---:|---:|---|---|---|---|\n`;
 
   for (let i = 0; i < entries.length; i++) {
     const e = entries[i];
@@ -1491,12 +1624,14 @@ function buildLeaderboardMarkdown(entries) {
 
     const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : String(i + 1);
     const quant = e.quantization || '—';
+    const temps = e.elapsedMs > 0 ? formatDuration(e.elapsedMs) : '—';
+    const vit = e.tokensPerSecond > 0 ? (e.tokensPerSecond + ' t/s') : '—';
     const argsText = [];
     if (args.forces.length > 0) argsText.push('**Forces :** ' + args.forces.join(', '));
     if (args.faiblesses.length > 0) argsText.push('**Faiblesses :** ' + args.faiblesses.join(', '));
     if (args.notes.length > 0) argsText.push('*' + args.notes.join(', ') + '*');
 
-    md += `| ${medal} | ${e.model} | ${quant} | ${e.score}/${e.max} | ${e.pct}% | ${grade.grade} | ${e.mandatoryTotal > 0 ? e.mandatoryPct + '%' : '—'} | ${e.globalLifeScore} | ${e.optionalBonus > 0 ? '+' + e.optionalBonus : '—'} | ${e.helpCount || '—'} | ${e.retriedCount || '—'} | ${e.ecoleCount} | ${verdict.label} | ${argsText.join(' · ')} |\n`;
+    md += `| ${medal} | ${e.model} | ${quant} | ${e.score}/${e.max} | ${e.pct}% | ${grade.grade} | ${e.mandatoryTotal > 0 ? e.mandatoryPct + '%' : '—'} | ${e.globalLifeScore} | ${e.optionalBonus > 0 ? '+' + e.optionalBonus : '—'} | ${e.helpCount || '—'} | ${e.retriedCount || '—'} | ${e.ecoleCount} | ${temps} | ${vit} | ${verdict.label} | ${argsText.join(' · ')} |\n`;
   }
 
   md += `\n---\n\n## Détail par modèle\n\n`;
@@ -1511,14 +1646,19 @@ function buildLeaderboardMarkdown(entries) {
     md += `- **Santé :** ${e.globalLifeScore} PV | **Bonus :** +${e.optionalBonus}\n`;
     md += `- **Aide :** ${e.helpCount}x | **Rattrapage :** ${e.retriedCount}x | **Écoles :** ${e.ecoleCount}\n`;
     md += `- **Verdict :** ${verdict.label}\n`;
+    if (e.elapsedMs > 0 || e.tokens > 0) {
+      md += `- **Temps d'inférence :** ${formatDuration(e.elapsedMs)} | **Tokens :** ${e.tokens} | **Vitesse :** ${e.tokensPerSecond > 0 ? e.tokensPerSecond + ' t/s' : '—'} | **Temps réel :** ${formatDuration(e.wallMs)}\n`;
+    }
     if (args.forces.length > 0) md += `- **Forces :** ${args.forces.join(', ')}\n`;
     if (args.faiblesses.length > 0) md += `- **Faiblesses :** ${args.faiblesses.join(', ')}\n`;
     if (args.notes.length > 0) md += `- *${args.notes.join(', ')}*\n`;
-    md += `\n| École | Points | % | Note | Bonus | Santé |\n`;
-    md += `|---|---|---:|:---:|---:|---:|\n`;
+    md += `\n| École | Points | % | Note | Bonus | Santé | Temps | Vitesse |\n`;
+    md += `|---|---|---:|:---:|---:|---:|---|---|\n`;
     for (const ecole of e.ecoles) {
       const g = letterGrade(ecole.pct);
-      md += `| ${ecole.ecole} | ${ecole.score}/${ecole.max} | ${ecole.pct}% | ${g.grade} | +${ecole.optionalBonus} | ${ecole.globalLifeScore} |\n`;
+      const temps = ecole.elapsedMs > 0 ? formatDuration(ecole.elapsedMs) : '—';
+      const vit = ecole.tokensPerSecond > 0 ? (ecole.tokensPerSecond + ' t/s') : '—';
+      md += `| ${ecole.ecole} | ${ecole.score}/${ecole.max} | ${ecole.pct}% | ${g.grade} | +${ecole.optionalBonus} | ${ecole.globalLifeScore} | ${temps} | ${vit} |\n`;
     }
     md += `\n`;
   }
@@ -1739,13 +1879,37 @@ function generateLeaderboard() {
   console.log('');
   console.log('  \x1b[1;35m━━━ CLASSEMENT BENCHGO V3 ━━━\x1b[0m');
   console.log(`  \x1b[90m${entries.length} modèle(s) classé(s) du meilleur au pire\x1b[0m`);
+
+  const lbHeaders = ['Rang', 'Modèle', 'Quant', 'Temps', 'Vitesse', 'Pct', 'Verdict'];
+  const lbAligns = ['left', 'left', 'left', 'right', 'right', 'right', 'left'];
+  const lbRows = [];
+  const lbMedals = [];
   for (let i = 0; i < entries.length; i++) {
     const e = entries[i];
     const verdict = getVerdict(e);
     const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : '  ';
     const vColor = verdict.rank === 1 ? '\x1b[32m' : verdict.rank === 2 ? '\x1b[33m' : '\x1b[31m';
-    const quant = e.quantization ? `\x1b[35m${e.quantization.padEnd(8)}\x1b[0m ` : '\x1b[90m—       \x1b[0m ';
-    console.log(`  ${medal} \x1b[1m${(i + 1 + '.').padEnd(4)}\x1b[0m ${e.model.substring(0, 45).padEnd(45)} ${quant}${String(e.pct + '%').padStart(5)}  ${vColor}${verdict.label}\x1b[0m`);
+    const quant = e.quantization ? `\x1b[35m${e.quantization}\x1b[0m` : '\x1b[90m—\x1b[0m';
+    const temps = e.elapsedMs > 0 ? `\x1b[90m${formatDuration(e.elapsedMs)}\x1b[0m` : '\x1b[90m—\x1b[0m';
+    const tpsC = e.tokensPerSecond >= 50 ? '\x1b[32m' : e.tokensPerSecond >= 25 ? '\x1b[33m' : e.tokensPerSecond > 0 ? '\x1b[31m' : '\x1b[90m';
+    const vit = e.tokensPerSecond > 0 ? `${tpsC}${e.tokensPerSecond + ' t/s'}\x1b[0m` : '\x1b[90m—\x1b[0m';
+    lbRows.push([
+      (i + 1) + '.',
+      e.model,
+      quant,
+      temps,
+      vit,
+      e.pct + '%',
+      `${vColor}${verdict.label}\x1b[0m`,
+    ]);
+    lbMedals.push(medal);
+  }
+
+  const lbRes = cliTable.table(lbHeaders, lbRows, { colAligns: lbAligns, separator: '  ' });
+  console.log(`  \x1b[90m    ${lbRes.lines[0]}\x1b[0m`);
+  console.log(`  \x1b[90m    ${lbRes.sepLine}\x1b[0m`);
+  for (let i = 0; i < lbRows.length; i++) {
+    console.log(`  ${lbMedals[i]} ${lbRes.lines[i + 2]}`);
   }
   console.log('');
   console.log(`  \x1b[32mClassement HTML       : ${relHtml}\x1b[0m`);

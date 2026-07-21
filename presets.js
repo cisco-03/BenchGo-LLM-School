@@ -22,6 +22,7 @@
 const fs = require('fs');
 const path = require('path');
 const logger = require('./logger');
+const cliTable = require('./cli-table');
 
 const PRESETS_FILE = path.join(__dirname, '.presets.json');
 
@@ -112,10 +113,14 @@ function printPresets() {
     return;
   }
   console.log('  \x1b[1;36m━━━ PRESETS DISPONIBLES ━━━\x1b[0m');
-  console.log(`  \x1b[90m${'Nom'.padEnd(20)}${'Fournisseur'.padEnd(14)}${'Modèle'.padEnd(34)}${'Profil'.padEnd(10)}Cible\x1b[0m`);
-  console.log(`  \x1b[90m${'─'.repeat(90)}\x1b[0m`);
-  for (const p of presets) {
-    console.log(`  \x1b[1m${p.name.padEnd(20)}\x1b[0m${p.provider.padEnd(14)}${(p.model || '').substring(0, 33).padEnd(34)}${p.profile.padEnd(10)}${p.tier}`);
+  const pHeaders = ['Nom', 'Fournisseur', 'Modèle', 'Profil', 'Cible'];
+  const pAligns = ['left', 'left', 'left', 'left', 'right'];
+  const pRows = presets.map(p => [`\x1b[1m${p.name}\x1b[0m`, p.provider, p.model || '', p.profile, String(p.tier)]);
+  const pRes = cliTable.table(pHeaders, pRows, { colAligns: pAligns, separator: '  ' });
+  console.log(`  \x1b[90m${pRes.lines[0]}\x1b[0m`);
+  console.log(`  \x1b[90m${pRes.sepLine}\x1b[0m`);
+  for (let i = 2; i < pRes.lines.length; i++) {
+    console.log(`  ${pRes.lines[i]}`);
   }
   console.log('');
   console.log('  \x1b[90mUsage : node runner.js --preset=nom\x1b[0m');

@@ -2,11 +2,31 @@ const fs = require('fs');
 const path = require('path');
 const logger = require('./logger');
 const { letterGrade } = require('./progress-bar');
+const cliTable = require('./cli-table');
 
 const LEDGER_DIR = path.join(__dirname, 'Export-Rapports', '.carnet');
 
 function ledgerPath(shortName) {
   return path.join(LEDGER_DIR, shortName + '.json');
+}
+
+// Formate une durée en millisecondes vers un affichage humain compact :
+//   1234ms   -> "1.2s"
+//   65000ms  -> "1m05s"
+//   3723000ms -> "1h02m"
+// Utilisé pour l'affichage du temps d'inférence par école dans le bilan et le
+// leaderboard (durée d'inférence cumulée, hors attentes entre tiers).
+function formatDuration(ms) {
+  if (!Number.isFinite(ms) || ms <= 0) return '—';
+  const s = ms / 1000;
+  if (s < 60) return s.toFixed(1) + 's';
+  const totalSec = Math.round(s);
+  const m = Math.floor(totalSec / 60);
+  const sec = totalSec % 60;
+  if (m < 60) return m + 'm' + String(sec).padStart(2, '0') + 's';
+  const h = Math.floor(m / 60);
+  const min = m % 60;
+  return h + 'h' + String(min).padStart(2, '0') + 'm';
 }
 
 function loadLedger(shortName) {
@@ -105,14 +125,24 @@ function getEcoleAttempts(raw) {
 function computeGrandTotal(ledger) {
   const entries = Object.values(ledger.ecoles || {}).map(getEcoleBest).filter(Boolean);
   let score = 0, max = 0, globalLifeScore = 0, optionalBonus = 0;
+  let totalTokens = 0, totalElapsedMs = 0, totalWallMs = 0;
   for (const e of entries) {
     score += e.score || 0;
     max += e.max || 0;
     globalLifeScore += e.globalLifeScore || 0;
     optionalBonus += e.optionalBonus || 0;
+    totalTokens += e.tokens || 0;
+    totalElapsedMs += e.elapsedMs || 0;
+    totalWallMs += e.wallMs || 0;
   }
   const pct = max > 0 ? Math.round((score / max) * 100) : 0;
-  return { score, max, pct, globalLifeScore, optionalBonus, ecoleCount: entries.length };
+  const tokensPerSecond = totalElapsedMs > 0
+    ? Math.round((totalTokens / (totalElapsedMs / 1000)) * 100) / 100
+    : 0;
+  return {
+    score, max, pct, globalLifeScore, optionalBonus, ecoleCount: entries.length,
+    tokens: totalTokens, elapsedMs: totalElapsedMs, wallMs: totalWallMs, tokensPerSecond
+  };
 }
 
 function printBilanGlobal(shortName, modelName) {
@@ -123,10 +153,13 @@ function printBilanGlobal(shortName, modelName) {
 
   console.log('');
   console.log('  \x1b[1;35m━━━ BILAN GLOBAL — ' + (modelName || shortName) + ' (cumul multi-écoles) ━━━\x1b[0m');
-  console.log('  \x1b[90m' + 'École'.padEnd(20) + 'Points'.padStart(12) + 'Pct'.padStart(7) + '  Note   Statut' + '\x1b[0m');
-  console.log('  \x1b[90m' + '─'.repeat(60) + '\x1b[0m');
 
+  const headers = ['École', 'Points', 'Pct', 'Note', 'Statut'];
+  const aligns = ['left', 'right', 'right', 'center', 'left'];
+  const rows = [];
   let totalScore = 0, totalMax = 0, totalBonus = 0, totalSante = 0;
+  let totalTokens = 0, totalElapsedMs = 0, totalWallMs = 0;
+  const metaLines = [];
   for (let i = 0; i < entries.length; i++) {
     const e = entries[i];
     const raw = rawEntries[i];
@@ -135,19 +168,56 @@ function printBilanGlobal(shortName, modelName) {
     totalMax += e.max || 0;
     totalBonus += e.optionalBonus || 0;
     totalSante += e.globalLifeScore || 0;
+    totalTokens += e.tokens || 0;
+    totalElapsedMs += e.elapsedMs || 0;
+    totalWallMs += e.wallMs || 0;
     const pct = e.max > 0 ? Math.round((e.score / e.max) * 100) : 0;
     const g = letterGrade(pct);
     const status = e.mandatoryTotal > 0 ? (pct >= 70 ? '\x1b[32m✔ Validé\x1b[0m' : '\x1b[31m✘ Échec\x1b[0m') : '\x1b[36m(évaluée)\x1b[0m';
     const bonusTag = (e.optionalBonus > 0) ? ' \x1b[35m[+' + e.optionalBonus + ' bonus opt.]\x1b[0m' : '';
     const pts = (e.score || 0) + '/' + (e.max || 0);
     const histTag = attempts.length > 1 ? ' \x1b[90m(' + attempts.length + ' tentatives)\x1b[0m' : '';
-    console.log('  ' + (e.ecole || '?').padEnd(20) + pts.padStart(12) + (pct + '%').padStart(7) + '  ' + g.color + g.grade + '\x1b[0m      ' + status + bonusTag + histTag);
+    const tps = e.tokensPerSecond > 0 ? (e.tokensPerSecond + ' t/s') : '\x1b[90m—\x1b[0m';
+    const dur = formatDuration(e.elapsedMs || 0);
+    rows.push([
+      e.ecole || '?',
+      pts,
+      pct + '%',
+      g.color + g.grade + '\x1b[0m',
+      status + bonusTag + histTag,
+    ]);
+    metaLines.push('\x1b[90mTemps: ' + dur + ' · ' + e.tokens + ' tokens · ' + tps + '\x1b[0m');
   }
 
   const totalPct = totalMax > 0 ? Math.round((totalScore / totalMax) * 100) : 0;
   const totalGrade = letterGrade(totalPct);
-  console.log('  \x1b[90m' + '─'.repeat(60) + '\x1b[0m');
-  console.log('  \x1b[1m' + 'TOTAL CUMULÉ'.padEnd(20) + (totalScore + '/' + totalMax).padStart(12) + (totalPct + '%').padStart(7) + '  ' + totalGrade.color + totalGrade.grade + '\x1b[0m\x1b[1m  (Santé cumulée: ' + totalSante + ' PV)\x1b[0m');
+  const totalTps = totalElapsedMs > 0 ? (Math.round((totalTokens / (totalElapsedMs / 1000)) * 100) / 100 + ' t/s') : '—';
+  const footer = [
+    '\x1b[1mTOTAL CUMULÉ\x1b[0m',
+    totalScore + '/' + totalMax,
+    totalPct + '%',
+    totalGrade.color + totalGrade.grade + '\x1b[0m',
+    '\x1b[1m(Santé cumulée: ' + totalSante + ' PV)\x1b[0m',
+  ];
+
+  const { lines, widths, sepLine, footerLines } = cliTable.table(headers, rows, {
+    colAligns: aligns,
+    footer: footer,
+    footerAligns: ['left', 'right', 'right', 'center', 'left'],
+    separator: '  ',
+  });
+  console.log('  \x1b[90m' + lines[0] + '\x1b[0m');
+  console.log('  \x1b[90m' + sepLine + '\x1b[0m');
+  for (let i = 0; i < rows.length; i++) {
+    console.log('  ' + lines[i + 2]);
+    const indent = ' '.repeat(widths[0] + 2);
+    console.log('  ' + indent + metaLines[i]);
+  }
+  console.log('  \x1b[90m' + sepLine + '\x1b[0m');
+  for (const fl of footerLines) {
+    console.log('  ' + fl);
+  }
+  console.log('  \x1b[90m' + 'Temps total: ' + formatDuration(totalElapsedMs) + ' · ' + totalTokens + ' tokens · ' + totalTps + ' · Wall: ' + formatDuration(totalWallMs) + '\x1b[0m');
   if (totalBonus > 0) {
     console.log('  \x1b[35m+ Bonus optionnel cumulé : ' + totalBonus + ' points\x1b[0m');
   }
@@ -164,18 +234,20 @@ function buildBilanMarkdown(shortName, modelName) {
 
   let md = '\n---\n\n## Bilan Global Cumulé — ' + (modelName || shortName) + '\n\n';
   md += '> Cumul des écoles évaluées (meilleure tentative conservée par école).\n\n';
-  md += '| École | Points | Quota | Pct | Note | Bonus opt. | Santé | Tentatives |\n';
-  md += '|---|---|---|---|---|---|---|---|\n';
+  md += '| École | Points | Quota | Pct | Note | Bonus opt. | Santé | Tentatives | Temps | Tokens | Vitesse |\n';
+  md += '|---|---|---|---|---|---|---|---|---|---|---|\n';
   for (let i = 0; i < entries.length; i++) {
     const e = entries[i];
     const raw = rawEntries[i][1];
     const attempts = getEcoleAttempts(raw);
     const pct = e.max > 0 ? Math.round((e.score / e.max) * 100) : 0;
     const g = letterGrade(pct);
-    md += '| ' + e.ecole + ' | ' + e.score + ' | ' + e.max + ' | ' + pct + '% | ' + g.grade + ' | +' + (e.optionalBonus || 0) + ' | ' + (e.globalLifeScore || 0) + ' PV | ' + attempts.length + ' |\n';
+    const tps = e.tokensPerSecond > 0 ? (e.tokensPerSecond + ' t/s') : '—';
+    md += '| ' + e.ecole + ' | ' + e.score + ' | ' + e.max + ' | ' + pct + '% | ' + g.grade + ' | +' + (e.optionalBonus || 0) + ' | ' + (e.globalLifeScore || 0) + ' PV | ' + attempts.length + ' | ' + formatDuration(e.elapsedMs || 0) + ' | ' + (e.tokens || 0) + ' | ' + tps + ' |\n';
   }
-  md += '| **TOTAL CUMULÉ** | **' + t.score + '** | **' + t.max + '** | **' + t.pct + '%** | **' + letterGrade(t.pct).grade + '** | **+' + t.optionalBonus + '** | **' + t.globalLifeScore + ' PV** | — |\n';
+  md += '| **TOTAL CUMULÉ** | **' + t.score + '** | **' + t.max + '** | **' + t.pct + '%** | **' + letterGrade(t.pct).grade + '** | **+' + t.optionalBonus + '** | **' + t.globalLifeScore + ' PV** | — | ' + formatDuration(t.elapsedMs) + ' | ' + (t.tokens || 0) + ' | ' + (t.tokensPerSecond > 0 ? t.tokensPerSecond + ' t/s' : '—') + ' |\n';
   md += '\n> *Bonus optionnel cumulé : +' + t.optionalBonus + ' points (récompense pour les exercices optionnels réussis, au-delà du quota).*\n';
+  md += '> *Temps = durée d\'inférence cumulée (hors attentes entre tiers) · Vitesse = tokens/s moyenne sur la durée d\'inférence.*\n';
   return md;
 }
 
@@ -238,5 +310,6 @@ module.exports = {
   normalizeEcoleEntry,
   getEcoleBest,
   getEcoleAttempts,
-  pickBest
+  pickBest,
+  formatDuration
 };

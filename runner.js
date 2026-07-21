@@ -18,8 +18,10 @@ const { runSelfProfiling, filterTasksByProfile, SKILL_LABELS } = require('./self
 const { runExternalProfiling } = require('./external-profiling');
 const leaderboard = require('./leaderboard');
 const secrets = require('./secrets');
+const cliTable = require('./cli-table');
 const { runStartupQuestionnaire } = require('./startup-questionnaire');
 const { buildExternalTeacherReport } = require('./report-teacher');
+const carnetProf = require('./carnet-professeur');
 const presets = require('./presets');
 const apiKeysStore = require('./api-keys-store');
 
@@ -126,9 +128,10 @@ function printScorecard(scorecard, ecoleLabel, isFinal, globalLifeScore) {
   const subtitle = isFinal ? 'FINAL' : 'EN COURS';
   console.log('');
   console.log(`  \x1b[1;36m━━━ TABLEAU DES SCORES — ${ecoleLabel} (${subtitle}) ━━━\x1b[0m`);
-  console.log(`  \x1b[90m${'Classe'.padEnd(18)}${'Points'.padStart(12)}${'Pct'.padStart(7)}  Note   Statut\x1b[0m`);
-  console.log(`  \x1b[90m${'─'.repeat(58)}\x1b[0m`);
 
+  const headers = ['Classe', 'Points', 'Pct', 'Note', 'Statut'];
+  const aligns = ['left', 'right', 'right', 'center', 'left'];
+  const rows = [];
   let totalScore = 0;
   let totalMax = 0;
   let totalBonus = 0;
@@ -144,21 +147,45 @@ function printScorecard(scorecard, ecoleLabel, isFinal, globalLifeScore) {
     const annTag = (entry.annotations && entry.annotations.length > 0) ? ` \x1b[33m[${entry.annotations.join(', ')}]\x1b[0m` : '';
     const bonusTag = (entry.optionalBonus > 0) ? ` \x1b[35m[+${entry.optionalBonus} bonus]\x1b[0m` : '';
     const pointsStr = `${entry.score}/${entry.max}`;
-    console.log(
-      `  ${entry.className.padEnd(18)}${pointsStr.padStart(12)}${(pct + '%').padStart(7)}  ` +
-      `${gradeInfo.color}${gradeInfo.grade}\x1b[0m      ${statusIcon}${optTag}${annTag}${bonusTag}`
-    );
+    rows.push([
+      entry.className,
+      pointsStr,
+      `${pct}%`,
+      `${gradeInfo.color}${gradeInfo.grade}\x1b[0m`,
+      `${statusIcon}${optTag}${annTag}${bonusTag}`,
+    ]);
   }
 
+  let footer = null;
   if (scorecard.length > 0) {
     const totalPct = totalMax > 0 ? Math.round((totalScore / totalMax) * 100) : 0;
     const totalGrade = letterGrade(totalPct);
-    console.log(`  \x1b[90m${'─'.repeat(58)}\x1b[0m`);
     const bonusLine = totalBonus > 0 ? ` \x1b[35m(+${totalBonus} bonus opt.)\x1b[0m` : '';
-    console.log(
-      `  \x1b[1m${'TOTAL ÉCOLE'.padEnd(18)}${`${totalScore}/${totalMax}`.padStart(12)}${(totalPct + '%').padStart(7)}  ` +
-      `${totalGrade.color}${totalGrade.grade}\x1b[0m\x1b[1m  (Santé: ${globalLifeScore} PV)${bonusLine}\x1b[0m`
-    );
+    footer = [
+      '\x1b[1mTOTAL ÉCOLE\x1b[0m',
+      `${totalScore}/${totalMax}`,
+      `${totalPct}%`,
+      `${totalGrade.color}${totalGrade.grade}\x1b[0m`,
+      `\x1b[1m(Santé: ${globalLifeScore} PV)${bonusLine}\x1b[0m`,
+    ];
+  }
+
+  const { lines, sepLine, footerLines } = cliTable.table(headers, rows, {
+    colAligns: aligns,
+    footer: footer,
+    footerAligns: ['left', 'right', 'right', 'center', 'left'],
+    separator: '  ',
+  });
+  console.log(`  \x1b[90m${lines[0]}\x1b[0m`);
+  console.log(`  \x1b[90m${sepLine}\x1b[0m`);
+  for (let i = 2; i < lines.length; i++) {
+    console.log(`  ${lines[i]}`);
+  }
+  if (footerLines && footerLines.length) {
+    console.log(`  \x1b[90m${sepLine}\x1b[0m`);
+    for (const fl of footerLines) {
+      console.log(`  ${fl}`);
+    }
   }
   console.log('');
 }
@@ -302,6 +329,10 @@ async function runTierAttempt({ tierNum, tierData, isMandatory, profileArg, cont
   let tierScore = 0;
   let attemptsLeft = 12;
   let availableTasks = JSON.parse(JSON.stringify(tierData.tasks));
+  // Carnet du professeur : accumulateur des demandes émises pendant ce tier.
+  // Les entrées sont écrites dans Carnet-Professeur/<date>/<ecole>/ par le
+  // caller, une fois le modelName et la date connus.
+  const carnetEntries = [];
   
   // Attribution complètement aléatoire des points (entre 30 et 60) pour chaque exercice
   availableTasks.forEach(t => {
@@ -335,7 +366,13 @@ async function runTierAttempt({ tierNum, tierData, isMandatory, profileArg, cont
   let optionalBonusTotal = 0;
   let responseModelName = null;
   let rawResponseAll = '';
-  
+  // --- Chronométrie du tier (pour le leaderboard) ---
+  // Cumul du temps d'inférence (ms) et du nombre de tokens produits par le
+  // modèle sur TOUTES les requêtes du tier (tentatives, rattrapage, aide...).
+  // Permet de calculer la vitesse (tokens/s) par école puis globalement.
+  let tierElapsedMs = 0;
+  let tierTokens = 0;
+
   // The total possible points based on randomized values
   const totalPossiblePoints = availableTasks.reduce((sum, t) => sum + t.points, 0);
   
@@ -355,12 +392,15 @@ async function runTierAttempt({ tierNum, tierData, isMandatory, profileArg, cont
         `Voulez-vous recevoir cet indice ? Répondez UNIQUEMENT par "AIDE_OUI" ou "AIDE_NON".`;
       const helpSpinner = new Spinner(`Tier ${tierNum} — Professeur : proposition d'aide pour ${rtask.id}...`);
       helpSpinner.start();
+      const helpStart = performance.now();
       try {
         const helpResponse = await queryFn(
           helpPrompt, tierData.difficulty, tierNum, isMandatory, helpSpinner,
           { contextLimitTokens, providerConfig }
         );
         helpSpinner.stop(`Tier ${tierNum} — Réponse du modèle reçue`);
+        tierElapsedMs += Math.round(performance.now() - helpStart);
+        tierTokens += (helpSpinner.tokenCount || 0);
         const helpContent = (helpResponse && helpResponse.content) || '';
         const wantsHelp = /AIDE_OUI/i.test(helpContent) ||
           (!/AIDE_NON/i.test(helpContent) && /\b(?:oui|yes)\b/i.test(helpContent));
@@ -413,6 +453,9 @@ async function runTierAttempt({ tierNum, tierData, isMandatory, profileArg, cont
 
     try {
       const startTime = performance.now();
+      // Spinner utilisé pour l'appel courant (référence partagée pour récupérer
+      // le nombre de tokens produits via spinner.tokenCount).
+      let tierSpinner = spinner;
       // Retry automatique en cas de timeout : les modèles de raisonnement locaux
       // (phi-4-reasoning-plus, GLM, Qwen3, DeepSeek-R1) peuvent dépasser le
       // timeout API (300s) sur un tier obligatoire et faire process.exit(1) sans
@@ -433,6 +476,7 @@ async function runTierAttempt({ tierNum, tierData, isMandatory, profileArg, cont
           spinner2.start();
           console.log(`  \x1b[33m[RETRY ANTI-TIMEOUT]\x1b[0m Tier ${tierNum} — nouvelle tentative avec raisonnement désactivé (le modèle avait dépassé le délai).`);
         }
+        tierSpinner = spinner2;
         const callOptions = tierAttempt === 1
           ? { contextLimitTokens, providerConfig }
           : { contextLimitTokens, providerConfig, disableReasoning: true };
@@ -479,6 +523,10 @@ async function runTierAttempt({ tierNum, tierData, isMandatory, profileArg, cont
       }
       
       spinner.stop(`Tier ${tierNum} — Réponse reçue en ${inferenceTimeMs}ms`);
+      // Cumul chronométrie : temps d'inférence + tokens produits (via le spinner
+      // de l'appel courant, qui a reçu updateTokens pendant le streaming).
+      tierElapsedMs += inferenceTimeMs;
+      tierTokens += (tierSpinner.tokenCount || 0);
       const rawResponse = responseData.content;
       rawResponseAll += '\n\n---\n' + rawResponse;
       if (!responseModelName) responseModelName = responseData.modelName;
@@ -640,11 +688,12 @@ async function runTierAttempt({ tierNum, tierData, isMandatory, profileArg, cont
                   // Modèle cloud indépendant (OpenRouter gratuit par défaut) qui relit
                   // l'auto-analyse de l'élève, dit si elle est juste/fausse, et DÉMONTRE la
                   // vraie cause racine. Évite qu'un modèle faible se valide lui-même.
-                  let teacherCorrection = null;
+                  // askTeacherToCorrectStudentAnalysis renvoie { content, model } ou null.
+                  let teacherCorrectionObj = null;
                   if (teacherConfig && teacherConfig.enabled) {
                     console.log(`  \x1b[35m👨‍🏫 Professeur IA : relecture critique de l'analyse de l'élève pour ${task.id}...\x1b[0m`);
                     try {
-                      teacherCorrection = await askTeacherToCorrectStudentAnalysis({
+                      teacherCorrectionObj = await askTeacherToCorrectStudentAnalysis({
                         teacherConfig,
                         task, errors, studentCode,
                         studentAnalysis: failureExplanation,
@@ -653,16 +702,36 @@ async function runTierAttempt({ tierNum, tierData, isMandatory, profileArg, cont
                     } catch (e) {
                       logger.warn(`Teacher: exception pour ${task.id} : ${e.message}`);
                     }
+                    const teacherCorrection = teacherCorrectionObj ? teacherCorrectionObj.content : null;
                     if (teacherCorrection && teacherCorrection.length > 0) {
                       console.log(`  \x1b[35m🎓 Correction du professeur pour ${task.id} :\x1b[0m`);
                       const teachLines = teacherCorrection.split(/\r?\n/).filter(l => l.trim()).slice(0, 8);
                       for (const line of teachLines) {
                         console.log(`    \x1b[90m${line.substring(0, 140)}\x1b[0m`);
                       }
+                      // Carnet : divergence professeur vs élève (le professeur a
+                      // relu et produit une correction — à examiner pour départager).
+                      carnetEntries.push({
+                        type: 'divergence_prof_eleve',
+                        tierNum, task, errors, studentCode,
+                        studentAnalysis: failureExplanation,
+                        teacherCorrection,
+                        teacherModel: teacherCorrectionObj.model || null
+                      });
                     } else {
                       console.log(`  \x1b[33m👨‍🏫 Professeur IA : indisponible (repli sur l'auto-analyse de l'élève).\x1b[0m`);
                       logger.info(`Teacher: aucun retour pour ${task.id} — repli sur auto-analyse.`);
                     }
+                  }
+
+                  // Carnet : auto-analyse d'échec de l'élève (à conserver pour
+                  // mémoire pédagogique, même si elle est juste).
+                  if (failureExplanation && failureExplanation.length > 0) {
+                    carnetEntries.push({
+                      type: 'auto_analyse_echec',
+                      tierNum, task, errors, studentCode,
+                      studentAnalysis: failureExplanation
+                    });
                   }
 
                   // Le professeur (utilisateur) décide si la pénalité est comptabilisée
@@ -672,6 +741,16 @@ async function runTierAttempt({ tierNum, tierData, isMandatory, profileArg, cont
                      gameState.globalLifeScore += pts;
                      taskNetPoints[task.id] = (taskNetPoints[task.id] || 0) + pts;
                      console.log(`  \x1b[32m✅ Pénalité annulée pour ${task.id} (Tier: ${tierScore}, Santé: ${gameState.globalLifeScore})\x1b[0m`);
+                     // Carnet : contestation de pénalité — l'élève a objectivement
+                     // raison, le grader s'est trompé. Signal fort : action requise
+                     // côté énoncé/évaluateur.
+                     carnetEntries.push({
+                       type: 'contestation_penalite',
+                       tierNum, task, errors, studentCode,
+                       studentAnalysis: failureExplanation,
+                       teacherCorrection: teacherCorrectionObj ? teacherCorrectionObj.content : null,
+                       verdict: 'penalite_annulee_par_le_professeur'
+                     });
                   } else {
                      console.log(`  \x1b[31m✘ Pénalité maintenue : -${pts} Points (Tier: ${tierScore}, Santé: ${gameState.globalLifeScore})\x1b[0m`);
                   }
@@ -680,9 +759,10 @@ async function runTierAttempt({ tierNum, tierData, isMandatory, profileArg, cont
                   // Mémorise l'explication (élève) ET la correction (professeur) pour le rapport
                   if (!taskFailureExplanations) taskFailureExplanations = {};
                   taskFailureExplanations[task.id] = failureExplanation || '';
-                  if (teacherCorrection && teacherCorrection.length > 0) {
+                  const tcContent = teacherCorrectionObj ? teacherCorrectionObj.content : null;
+                  if (tcContent && tcContent.length > 0) {
                     if (!taskTeacherCorrections) taskTeacherCorrections = {};
-                    taskTeacherCorrections[task.id] = teacherCorrection;
+                    taskTeacherCorrections[task.id] = tcContent;
                   }
               } else {
                 // Premier échec — pénalité appliquée, une nouvelle tentative sera proposée
@@ -782,20 +862,43 @@ async function runTierAttempt({ tierNum, tierData, isMandatory, profileArg, cont
   // obtenus pour chaque exercice (ce qui s'affichait dans l'invite de commande).
   console.log(`\n  \x1b[1;36m━━━ J'ai fini mes exercices, veuillez consulter mes points ━━━\x1b[0m\n`);
   const evalResultsForDisplay = Object.values(evalResultsMap);
-  console.log(`  \x1b[90m${'Exercice'.padEnd(22)}${'Type'.padEnd(14)}${'Points'.padStart(12)}${'Max'.padStart(8)}  Statut\x1b[0m`);
-  console.log(`  \x1b[90m${'─'.repeat(70)}\x1b[0m`);
-  for (const r of evalResultsForDisplay) {
+  const finHeaders = ['Exercice', 'Type', 'Points', 'Max', 'Statut'];
+  const finAligns = ['left', 'left', 'right', 'right', 'left'];
+  const finRows = evalResultsForDisplay.map(r => {
     const statusLabel = r.status === 'success' ? '\x1b[32m✔ Validé\x1b[0m'
       : r.status === 'bypassed' ? '\x1b[90m⊘ Bypassé\x1b[0m'
       : '\x1b[31m✘ Échec\x1b[0m';
-    const idStr = (r.id || '').padEnd(22);
-    const typeStr = (r.taskType || '—').padEnd(14);
-    const ptsStr = String(r.points || 0).padStart(12);
-    const maxStr = ('/' + (r.maxPoints || 0)).padStart(8);
-    console.log(`  ${idStr}${typeStr}${ptsStr}${maxStr}  ${statusLabel}`);
+    return [
+      r.id || '',
+      r.taskType || '—',
+      String(r.points || 0),
+      '/' + (r.maxPoints || 0),
+      statusLabel,
+    ];
+  });
+  const finFooter = [
+    '\x1b[1mTOTAL TIER\x1b[0m',
+    '',
+    String(tierScore),
+    '/' + totalPossiblePoints,
+    '',
+  ];
+  const finRes = cliTable.table(finHeaders, finRows, {
+    colAligns: finAligns,
+    footer: finFooter,
+    footerAligns: ['left', 'left', 'right', 'right', 'left'],
+    separator: '  ',
+  });
+  console.log(`  \x1b[90m${finRes.lines[0]}\x1b[0m`);
+  console.log(`  \x1b[90m${finRes.sepLine}\x1b[0m`);
+  for (let i = 2; i < finRes.lines.length; i++) {
+    console.log(`  ${finRes.lines[i]}`);
   }
-  console.log(`  \x1b[90m${'─'.repeat(70)}\x1b[0m`);
-  console.log(`  \x1b[1m${'TOTAL TIER'.padEnd(22)}${''.padEnd(14)}${String(tierScore).padStart(12)}${('/' + totalPossiblePoints).padStart(8)}\x1b[0m\n`);
+  console.log(`  \x1b[90m${finRes.sepLine}\x1b[0m`);
+  for (const fl of finRes.footerLines) {
+    console.log(`  ${fl}`);
+  }
+  console.log('');
 
   const evalResults = Object.values(evalResultsMap);
   const helpUsedCount = Object.values(taskHelpUsed).filter(Boolean).length;
@@ -824,7 +927,10 @@ async function runTierAttempt({ tierNum, tierData, isMandatory, profileArg, cont
     bypassedCount: bypassedTasks.length,
     filterDecisions,
     failureExplanations: taskFailureExplanations,
-    teacherCorrections: taskTeacherCorrections
+    teacherCorrections: taskTeacherCorrections,
+    tierElapsedMs,
+    tierTokens,
+    carnetEntries
   };
 }
 
@@ -1461,6 +1567,16 @@ async function main() {
   let allEvalResults = [];      // Agrégation pour le calcul de calibration (status: success/failed/bypassed)
   let allFilterDecisions = [];  // Décisions de filtrage pour la section rapport calibration
   let allTierResponses = [];    // Réponses brutes + raisonnement par tier (pour l'export raisonnement NotebookLM)
+  let allCarnetEntries = [];    // Carnet du professeur : demandes accumulées sur tous les tiers
+
+  // --- Chronométrie de l'école (durée totale + tokens produits) ---
+  // schoolStartMs marque le début de l'évaluation (avant le 1er tier).
+  // schoolTokens cumule les tokens de chaque tier ; schoolElapsedMs la durée
+  // d'inférence cumulée (hors attente entre tiers). Permet de calculer la
+  // vitesse moyenne (tokens/s) affichée dans le leaderboard.
+  const schoolStartMs = Date.now();
+  let schoolTokens = 0;
+  let schoolElapsedMs = 0;
 
   // --- Détection de doublon (modèle déjà testé sur cette école) ---
   // Vérifie le carnet de scores persistant : si une entrée existe déjà pour ce
@@ -1532,6 +1648,11 @@ async function main() {
       bestResult = attemptResult;
     }
 
+    // Carnet du professeur : récupère les demandes émises pendant ce tier.
+    if (Array.isArray(attemptResult.carnetEntries)) {
+      for (const e of attemptResult.carnetEntries) allCarnetEntries.push(e);
+    }
+
     if (attemptResult.eliminated) {
       console.log(`\n  \x1b[31m[ARRET FATAL] Le test complet est stoppé car le modèle a été éliminé (score <= -100).\x1b[0m\n`);
       stopGlobalEval = true;
@@ -1555,6 +1676,9 @@ async function main() {
       globalReport += bestResult.report;
       globalScore.passed += bestResult.tierPassedCount;
       globalScore.total += bestResult.tierTotalCount;
+      // Cumul chronométrie école (tokens + durée d'inférence du tier).
+      schoolTokens += (bestResult.tierTokens || 0);
+      schoolElapsedMs += (bestResult.tierElapsedMs || 0);
       if (isMandatory) {
         globalScore.mandatoryPassed += bestResult.tierPassedCount;
         globalScore.mandatoryTotal += bestResult.tierTotalCount;
@@ -1655,6 +1779,10 @@ async function main() {
         });
 
         if (!retryResult.skippedOptional && shouldReplaceBestResult(null, retryResult)) {
+          // Carnet du professeur : récupère aussi les demandes du rattrapage.
+          if (Array.isArray(retryResult.carnetEntries)) {
+            for (const e of retryResult.carnetEntries) allCarnetEntries.push(e);
+          }
           // On remplace le résultat précédent du tier par le rattrapage s'il est meilleur.
           const prevIdx = tierScorecard.findIndex(t => t.tierNum === tierNum);
           if (prevIdx !== -1) {
@@ -1695,6 +1823,10 @@ async function main() {
           globalHelpCount += retryResult.helpUsedCount || 0;
           globalRetriedCount += (retryResult.retriedCount || 0) + 1;
           globalOptionalBonus += retryResult.optionalBonus || 0;
+          // Cumul chronométrie rattrapage (les tokens/temps du rattrapage
+          // s'ajoutent à ceux du run principal de l'école).
+          schoolTokens += (retryResult.tierTokens || 0);
+          schoolElapsedMs += (retryResult.tierElapsedMs || 0);
           if (retryResult.evalResults && retryResult.evalResults.length > 0) {
             for (const er of retryResult.evalResults) er._tierNum = tierNum;
             allEvalResults = allEvalResults.concat(retryResult.evalResults);
@@ -1964,6 +2096,54 @@ async function main() {
     }
   }
 
+  // --- Carnet du Professeur : écriture des demandes accumulées ---
+  // Chaque demande (contestation de pénalité, divergence prof/élève, auto-analyse
+  // d'échec) est consignée dans Carnet-Professeur/<date>/<ecole>/demandes.md pour
+  // que le professeur (utilisateur ou agent) puisse rouvrir le carnet plus tard
+  // et examiner chaque demande — comme un élève qui remet sa copie au professeur.
+  if (allCarnetEntries.length > 0) {
+    const classeLabelForCarnet = (tierArg && tierArg !== "all")
+      ? ((CLASSE_NAMES[profileArg] && CLASSE_NAMES[profileArg][parseInt(tierArg)]) || `Classe-${tierArg}`)
+      : 'Toutes-classes';
+    const carnetModel = effectiveModel || modelName || '(inconnu)';
+    try {
+      let written = 0;
+      for (const e of allCarnetEntries) {
+        const r = carnetProf.appendDemande({
+          dateStr,
+          ecole,
+          classe: classeLabelForCarnet,
+          modelName: carnetModel,
+          type: e.type,
+          task: e.task,
+          tierNum: e.tierNum,
+          errors: e.errors,
+          studentCode: e.studentCode,
+          studentAnalysis: e.studentAnalysis,
+          teacherCorrection: e.teacherCorrection,
+          verdict: e.verdict
+        });
+        if (r) written++;
+      }
+      // Vue agrégée par classe/modèle.
+      carnetProf.buildClassement({
+        dateStr,
+        ecole,
+        entries: allCarnetEntries.map(e => ({
+          classe: classeLabelForCarnet,
+          modelName: carnetModel,
+          type: e.type,
+          taskId: e.task && e.task.id,
+          taskLabel: e.task && e.task.label,
+          tierNum: e.tierNum
+        }))
+      });
+      console.log(`  \x1b[36m📓 Carnet du Professeur : ${written} demande(s) consignée(s) — Carnet-Professeur/${dateStr}/${ecole}/\x1b[0m`);
+    } catch (e) {
+      logger.warn(`Carnet-Professeur : échec écriture finale (${e.message}).`);
+    }
+  }
+
   // --- Carnet de scores persistant (cumul multi-écoles) ---
   if (effectiveModel && tierArg === "all") {
     const ecoleResult = {
@@ -1985,7 +2165,18 @@ async function main() {
       reportFile: relPath,
       selfProfile: selfProfile || null,
       tiers: allTierResponses,
-      quantization: resolvedQuantization || null
+      quantization: resolvedQuantization || null,
+      // Chronométrie de l'école (pour le leaderboard : durée + vitesse tokens/s).
+      // elapsedMs = durée d'inférence cumulée (hors attentes) ; wallMs = durée
+      // réelle écoulée depuis le début de l'école (inclut attentes/traitements).
+      // tokens = nombre de tokens produits par le modèle (content + reasoning).
+      // tokensPerSecond = vitesse moyenne sur la durée d'inférence.
+      elapsedMs: schoolElapsedMs,
+      wallMs: Math.max(0, Date.now() - schoolStartMs),
+      tokens: schoolTokens,
+      tokensPerSecond: schoolElapsedMs > 0
+        ? Math.round((schoolTokens / (schoolElapsedMs / 1000)) * 100) / 100
+        : 0
     };
     const bilanMd = scoreLedger.saveAndBuildBilan(shortName, effectiveModel, ecoleResult, resolvedQuantization || null);
     if (bilanMd) globalReport += bilanMd;

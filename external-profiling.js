@@ -15,10 +15,23 @@
 //
 // Sans professeur activé → repli sur l'auto-profilage pour le filtrage
 // (comportement historique).
+//
+// Free Router : sur OpenRouter, on ne hardcode plus un slug ':free' unique
+// (souvent dépublié → 404, et un seul point de défaillance). On récupère
+// dynamiquement la liste des modèles gratuits via fetchFreeModels() (endpoint
+// public /api/v1/models) et on ROTATE à travers les meilleurs jusqu'à en
+// trouver un qui répond et produit un profil parsable. Si un modèle échoue
+// (429/404/5xx/réseau/réponse vide), on enchaîne sur le suivant.
+//
+// ByteString : les headers HTTP OpenRouter (HTTP-Referer, X-Title) doivent être
+// en Latin-1 (valeur ≤ 255). On utilise un tiret ASCII '-' et jamais d'em dash
+// '—' (U+2012) ni d'accent — sinon fetch lève "Cannot convert argument to a
+// ByteString" et le profilage externe échoue systématiquement.
 
 const logger = require('./logger');
 const secrets = require('./secrets');
 const { CLOUD_PROVIDERS } = require('./cloud-client');
+const { fetchFreeModels } = require('./teacher-client');
 
 const EXTERNAL_PROFILE_SYSTEM_PROMPT =
   "Vous êtes un évaluateur technique senior et rigoureux. " +
@@ -90,7 +103,9 @@ async function _callChatCompletion({ url, apiKey, model, systemPrompt, userPromp
     if (apiKey) headers['Authorization'] = `Bearer ${apiKey}`;
     if (url.includes('openrouter.ai')) {
       headers['HTTP-Referer'] = 'https://benchgo-v3';
-      headers['X-Title'] = 'BenchGo V3 — Profilage externe';
+      // X-Title doit être un ByteString (Latin-1) : pas d'em dash ni d'accent.
+      // On utilise un tiret ASCII simple pour rester compatible avec fetch.
+      headers['X-Title'] = 'BenchGo V3 - Profilage externe';
     }
     const res = await fetch(url, {
       method: 'POST',
@@ -155,9 +170,25 @@ async function runExternalProfiling({ teacherConfig, studentSelfProfile, student
     return null;
   }
 
-  const model = teacherConfig.model || (provider === 'openrouter' ? 'meta-llama/llama-3.3-70b-instruct:free' : null);
-  if (!model) {
-    logger.warn('External-profile : aucun modèle spécifié.');
+  // Construction de la liste des modèles à essayer (Free Router OpenRouter).
+  // Ne plus jamais hardcoder un slug ':free' (souvent dépublié → 404) :
+  // on récupère dynamiquement les modèles gratuits réellement disponibles via
+  // fetchFreeModels(), qui filtre déjà la modality texte->texte et la denylist.
+  const explicitModel = teacherConfig.model || null;
+  let candidates = [];
+  if (explicitModel) candidates.push(explicitModel);
+  if (provider === 'openrouter') {
+    try {
+      const free = await fetchFreeModels();
+      for (const id of free) {
+        if (!candidates.includes(id)) candidates.push(id);
+      }
+    } catch (e) {
+      logger.warn(`External-profile : Free Router indisponible (${e.message}) — seuls les modèles explicites seront essayés.`);
+    }
+  }
+  if (candidates.length === 0) {
+    logger.warn('External-profile : aucun modèle disponible.');
     return null;
   }
 
@@ -171,9 +202,12 @@ async function runExternalProfiling({ teacherConfig, studentSelfProfile, student
   const { extractJSON } = require('./parsing-utils');
   const { validateProfile, parseProfileFallback } = require('./self-profiling');
 
-  const maxAttempts = Math.max(1, teacherConfig.maxRetries || 2);
+  // On rotate à travers les candidats : si un modèle échoue (429/5xx/404/réseau
+  // ou réponse non parsable), on passe au suivant. Stop sur 401/403 (clé nulle).
+  const maxAttempts = Math.min(candidates.length, Math.max(1, teacherConfig.maxRetries || 3));
   let lastError = '';
   for (let i = 0; i < maxAttempts; i++) {
+    const model = candidates[i];
     try {
       logger.info(`External-profile : essai ${i + 1}/${maxAttempts} avec ${model} sur ${provider}.`);
       const content = await _callChatCompletion({
@@ -190,7 +224,8 @@ async function runExternalProfiling({ teacherConfig, studentSelfProfile, student
         parsed = parseProfileFallback(content);
       }
       if (!validateProfile(parsed)) {
-        logger.warn('External-profile : réponse non parsable, tentative suivante.');
+        logger.warn(`External-profile : ${model} — réponse non parsable, modèle suivant.`);
+        lastError = 'réponse non parsable';
         continue;
       }
       logger.info(`External-profile : ${model} a répondu — ${JSON.stringify(parsed.skills)}`);
@@ -199,6 +234,8 @@ async function runExternalProfiling({ teacherConfig, studentSelfProfile, student
       lastError = e.message;
       logger.warn(`External-profile : ${model} a échoué : ${lastError}`);
       if (e.httpStatus === 401 || e.httpStatus === 403) break;
+      // 404 = slug :free dépublié → rotate vers le suivant sans backoff.
+      if (e.httpStatus === 404) continue;
       if (i < maxAttempts - 1) await new Promise(r => setTimeout(r, 800));
     }
   }
