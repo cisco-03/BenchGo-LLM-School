@@ -1,5 +1,74 @@
 # CHANGELOG - Carnet de Notes BenchGo
 
+## 2026-07-21 — Mode nuit : liste des modèles triée par statut de test
+
+### Contexte
+Dans le mode nuit interactif, la liste des modèles téléchargés s'affichait sans indiquer lesquels avaient déjà été testés. L'utilisateur devait ouvrir le classement (`classement.html`) pour vérifier manuellement qui avait passé quelles écoles — fastidieux le soir avant de lancer un batch.
+
+### Implémentation
+**`night-batch.js` — statut de test affiché dans la liste de sélection**
+- Chargement des carnets de scores (`Export-Rapports/.carnet/*.json`) au démarrage et croisement avec les `modelKey` de `lms ls` via `matchLedger()` (normalisation : minuscules, suppression `@quant`, `.gguf`, segments `/`→`-`, puis égalité stricte sur `model`/`shortName`, sinon inclusion du dernier segment significatif).
+- Chaque modèle reçoit un statut : `JAMAIS TESTE` (jaune), `PARTIEL` (magenta, avec liste des écoles manquantes), `COMPLET` (vert).
+- Tri de la liste : jamais testés → partiels → complets (les nouveaux en premier), puis alphabétique à l'intérieur de chaque groupe.
+- Affichage tabulaire avec en-tête et colonne « Écoles manquantes ».
+- Nouveau flag `--list-only` : affiche la liste triée et quitte (debug / vérification rapide sans lancer de run).
+
+### Fichiers modifiés
+- `night-batch.js` (fonctions `loadAllLedgers`, `normalizeForMatch`, `matchLedger`, `ledgerSchoolKeys`, `statusBadge`, `missingSchoolsLabel` ; `listLlmModels` enrichi + tri ; `selectModelsInteractive` réécrit avec colonnes statut/écoles manquantes ; flag `--list-only` dans `parseArgs` + `main`).
+- `Docs/CHANGELOG.md`
+
+## 2026-07-21 — Mode nuit (night-batch.js) : file d'attente automatique de modèles
+
+### Contexte
+Un modèle met ~1h à terminer une école et monopolise toute la RAM du PC pendant ce temps, rendant la machine inutilisable. Demande utilisateur : pouvoir sélectionner plusieurs modèles le soir, lancer un script, et retrouver les rapports + le classement le matin sans intervention.
+
+### Implémentation
+
+**1. `night-batch.js` (nouveau module) — orchestrateur de session de nuit**
+- Vérifie le daemon LM Studio (`lms daemon status`) et le serveur HTTP (`GET /v1/models`) au démarrage. Si le serveur HTTP ne répond pas, le démarre en headless (`lms server start` détaché) et l'arrête à la fin **seulement s'il l'a démarré lui-même** (préserve un serveur déjà lancé par l'utilisateur).
+- Liste les modèles LLM téléchargés via `lms ls --json --llm` (modelKey, displayName, params, quantization, sizeBytes, publisher).
+- Sélection interactive (TTY) des **modèles** : numéros séparés par virgules ou `all`. Mode non-interactif via `--models=key1,key2` (utile pour tâche planifiée Windows).
+- Sélection interactive (TTY) des **écoles** : `LIGHT`, `STANDARD`, `EXPERT`, `DOCTORAT`, ou `auto` (détection du profil depuis le nom du modèle). Mode non-interactif via `--schools=LIGHT,STANDARD` (insensible à la casse). Sans `--schools` en non-interactif → `auto`.
+- Pour chaque modèle, pour chaque école : `lms unload --all` (libère la RAM du précédent) → `lms load <modelKey>` (charge la cible) → `node runner.js --force --profile=<ecole>` (benchmark en mode batch). Le modèle est chargé une fois et enchaîne toutes ses écoles avant de laisser la place au suivant.
+- Flag `--no-teacher` pour désactiver le professeur IA (OpenRouter) sur toute la session.
+- Résumé final horodaté (durée par run, succès/échecs, chemins des rapports et du classement). Nettoyage best-effort en cas de crash (`unload --all`) via gestionnaire d'erreur global.
+- Résumé final horodaté (durée par modèle, succès/échecs, chemins des rapports et du classement).
+- Nettoyage best-effort en cas de crash (unload --all) via gestionnaire d'erreur global.
+
+**2. `config.js` — nouveau flag `--force`**
+- `parseCliArgs()` détecte `--force` et l'exporte dans l'objet de config retourné.
+
+**3. `runner.js` — neutralisation des confirmations interactives en mode `--force`**
+- 3 appels `askYesNo` neutralisés quand `forceFlag` est vrai :
+  1. « Continuer quand même » (modèle déjà testé, pré-auto-profilage) → force le re-test.
+  2. « Voulez-vous lancer un nouveau test » (doublon par école) → force le re-test.
+  3. « Comptabiliser la pénalité » (échec définitif) → **maintient** la pénalité (comportement objectif : un benchmark de nuit ne conteste pas le grader à la place de l'élève).
+- `forceFlag` ajouté au destructuring de `runTierAttempt` et passé aux 2 appels (run principal + rattrapage) depuis `runSchool` (closure sur `main`).
+
+### Usage
+```
+node night-batch.js                                   # interactif (modèles + écoles)
+node night-batch.js --models=key1,key2                # modèles sans interaction
+node night-batch.js --schools=STANDARD,EXPERT         # écoles sans interaction
+node night-batch.js --models=... --schools=auto --no-teacher   # tout en non-interactif
+```
+
+### Documentation
+- `Docs/Manuel-utilisateur/07-mode-nuit.md` (nouveau) — guide complet du mode nuit :
+  principe, prérequis, lancement interactif et non-interactif, flags, comportement
+  détaillé (rattrapage/pénalités/doublons), gestion du serveur, exemples, dépannage,
+  et planification automatique via tâche planifiée Windows.
+- Référencé dans `Docs/Manuel-utilisateur/README.md` (parcours n°7) et le README racine.
+
+### Fichiers modifiés
+- `night-batch.js` (nouveau)
+- `config.js` (flag `--force` dans `parseCliArgs`)
+- `runner.js` (propagation de `forceFlag`, neutralisation des 3 `askYesNo`)
+- `Docs/Manuel-utilisateur/07-mode-nuit.md` (nouveau)
+- `Docs/Manuel-utilisateur/README.md` (référence au mode nuit)
+- `README.md` (mention du mode nuit dans les fonctionnalités)
+- `Docs/CHANGELOG.md`
+
 ## 2026-07-21 — Carnet du Professeur + fix profilage externe (ByteString + Free Router)
 
 ### Contexte

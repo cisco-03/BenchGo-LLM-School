@@ -165,6 +165,13 @@ function parseCliArgs() {
   const listKeysFlag   = rawArgs.includes('--list-keys');
   const noSaveKeysFlag = rawArgs.includes('--no-save-keys');
 
+  // --- Mode batch / nuit ---
+  // --force : en session non-interactive (non-TTY), accepte automatiquement les
+  // confirmations de re-test (modèle déjà testé sur une école). Sans ce flag, le
+  // runner annulerait silencieusement le run en non-TTY (askYesNo retourne false).
+  // Conçu pour night-batch.js qui enchaîne plusieurs modèles sans intervention.
+  const forceFlag = rawArgs.includes('--force');
+
   const profileArgExplicit = profileArgRaw ? profileArgRaw.toUpperCase() : null;
   const parsedContextLimit = contextLimitRaw ? parseInt(contextLimitRaw, 10) : null;
   const contextLimitTokens = Number.isInteger(parsedContextLimit) && parsedContextLimit > 0
@@ -182,7 +189,7 @@ function parseCliArgs() {
            teacherModel: teacherModelRaw, teacherApiKey: teacherApiKeyRaw, teacherEndpoint: teacherEndpointRaw,
            teacherDisabled: teacherDisabledRaw, quantization: quantizationRaw,
            preset: presetRaw, savePreset: savePresetRaw, deletePreset: deletePresetRaw, listPresets: listPresetsFlag,
-           forgetKey: forgetKeyRaw, listKeys: listKeysFlag, noSaveKeys: noSaveKeysFlag };
+           forgetKey: forgetKeyRaw, listKeys: listKeysFlag, noSaveKeys: noSaveKeysFlag, force: forceFlag };
 }
 
 function detectProfileFromModelName(modelName) {

@@ -10,6 +10,7 @@ Ce dossier contient la documentation utilisateur complète pour lancer et exploi
 4. Lire les scores et verdicts dans [04-lecture-resultats.md](04-lecture-resultats.md)
 5. Résoudre les incidents avec [05-depannage.md](05-depannage.md)
 6. Voir le détail des épreuves dans [06-reference-tiers.md](06-reference-tiers.md)
+7. Automatiser les tests de nuit avec [07-mode-nuit.md](07-mode-nuit.md)
 
 ### En complément : le système de points
 - [Système de points (calcul, classes, écoles, cumul)](../Apps-Fonctions/systeme-points.md) — combien de points par exercice, par classe, par école, comment s'additionnent plusieurs écoles, que devient un sans-faute, le bonus optionnel, le diplôme et les notes A–F.

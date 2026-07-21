@@ -23,6 +23,7 @@ le tout dans un bac à sable VM isolé.
 - 🧩 **Quantification des modèles** : récupérée automatiquement via l'endpoint `/api/v0/models` de LM Studio (ou saisie manuelle / flag `--quantization=`) et affichée dans le classement. Indispensable pour distinguer deux runs du même modèle avec des quantifications différentes.
 - 🏫 **Écoles séquentielles** : si le modèle fait plus de 3B paramètres, BenchGo propose d'évaluer Primaire (LIGHT) puis Collège-Lycée (STANDARD) à la suite dans le même run — même clé, même auto-profilage, état de santé réinitialisé entre écoles.
 - 📝 **Exports** : rapport Markdown par run, classement HTML/Markdown global, export raisonnement consolidé (destiné à NotebookLM via Gemini).
+- 🌙 **Mode nuit (batch automatique)** : testez plusieurs modèles automatiquement pendant la nuit — sélection des modèles et des écoles, puis le script enchaîne `lms load` / `runner.js` / `lms unload` sans intervention. Rapports et classement prêts le matin. 👉 [Documentation du mode nuit](./Docs/Manuel-utilisateur/07-mode-nuit.md)
 - ☁️ **Mode cloud** : 6 fournisseurs supportés (OpenAI, Anthropic, Groq, Together, OpenRouter, Mistral).
 - 🧪 **Évaluateurs custom asynchrones** : Promise.allSettled, retry/backoff, concurrence limitée, middleware Cloudflare, etc.
 

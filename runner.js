@@ -315,7 +315,7 @@ async function askModelForFailureExplanation({ queryFn, providerConfig, contextL
   }
 }
 
-async function runTierAttempt({ tierNum, tierData, isMandatory, profileArg, contextLimitTokens, attemptNumber, queryFn, providerConfig, gameState, selfProfile, teacherConfig }) {
+async function runTierAttempt({ tierNum, tierData, isMandatory, profileArg, contextLimitTokens, attemptNumber, queryFn, providerConfig, gameState, selfProfile, teacherConfig, forceFlag }) {
   // NOTE : `selfProfile` est le profil utilisé pour le FILTRAGE des tâches.
   // Il peut provenir de l'auto-profilage (élève) OU du profilage externe
   // (professeur IA) si ce dernier était disponible. La variable a gardé son
@@ -734,8 +734,11 @@ async function runTierAttempt({ tierNum, tierData, isMandatory, profileArg, cont
                     });
                   }
 
-                  // Le professeur (utilisateur) décide si la pénalité est comptabilisée
-                  const countPoints = await askYesNo(`  Comptabiliser la pénalité de -${pts} points pour l'exercice ${task.id} ?`, true);
+                  // Le professeur (utilisateur) décide si la pénalité est comptabilisée.
+                  // --force (mode batch/nuit) : on maintient la pénalité sans intervention
+                  // humaine. Un benchmark objectif ne conteste pas le grader à la place de
+                  // l'élève — la pénalité d'échec s'applique normalement.
+                  const countPoints = forceFlag ? true : await askYesNo(`  Comptabiliser la pénalité de -${pts} points pour l'exercice ${task.id} ?`, true);
                   if (!countPoints) {
                      tierScore += pts;
                      gameState.globalLifeScore += pts;
@@ -946,7 +949,7 @@ async function main() {
   const { tierArg: tierArgRaw, profileArgExplicit, contextLimitTokens: contextLimitFromCli, provider, model: cloudModel, apiKey, endpoint,
            teacherModel, teacherApiKey, teacherEndpoint, teacherDisabled, quantization: cliQuantization,
            preset: presetName, savePreset: savePresetName, deletePreset: deletePresetName, listPresets: listPresetsFlag,
-           forgetKey: forgetKeyName, listKeys: listKeysFlag, noSaveKeys: noSaveKeysFlag } = cliArgs;
+           forgetKey: forgetKeyName, listKeys: listKeysFlag, noSaveKeys: noSaveKeysFlag, force: forceFlag } = cliArgs;
   let tierArg = tierArgRaw;
 
   // --- Flags d'action unique : traités puis sortie immédiate ---
@@ -1348,7 +1351,9 @@ async function main() {
       console.log(`  \x1b[33m━━━ MODÈLE DÉJÀ TESTÉ ━━━\x1b[0m`);
       console.log(`  \x1b[33m${preKnownModelName} a déjà un carnet de scores (${preEcoles.length} école(s) :\x1b[0m ${preEcoles.join(', ')}).`);
       console.log(`  \x1b[90m  Score cumulé précédent : ${grandTotal.score}/${grandTotal.max} (${grandTotal.pct}%) — ${preEcoles.length} école(s).\x1b[0m`);
-      const proceedAnyways = await askYesNo(`  Continuer quand même (un nouveau test sera cumulé à l'historique) ?`, true);
+      // --force : en mode batch (non-TTY), on force le re-test sans demander.
+      // Permet à night-batch.js d'enchaîner les modèles sans intervention.
+      const proceedAnyways = forceFlag ? true : await askYesNo(`  Continuer quand même (un nouveau test sera cumulé à l'historique) ?`, true);
       if (!proceedAnyways) {
         console.log(`  \x1b[36mRun annulé : carnet existant conservé.\x1b[0m`);
         console.log(`  \x1b[90mAstuce : changez de modèle (--model=...) ou supprimez le carnet pour repartir de zéro.\x1b[0m`);
@@ -1592,7 +1597,8 @@ async function main() {
       console.log(`  \x1b[33m⚠ ATTENTION : Ce modèle a déjà été testé sur l'école ${ecoleLabel} !\x1b[0m`);
       console.log(`  \x1b[90m  Meilleur score précédent : ${existing.score}/${existing.max} (${existing.pct}%) — ${existing.date}\x1b[0m`);
       console.log(`  \x1b[90m  Tentatives cumulées : ${existingAttempts.length} | Rapport : ${existing.reportFile || 'N/A'}\x1b[0m`);
-      const forceRetest = await askYesNo(`  Voulez-vous lancer un nouveau test (sera cumulé à l'historique, le meilleur score est conservé) ?`, true);
+      // --force : en mode batch (non-TTY), on force le re-test sans demander.
+      const forceRetest = forceFlag ? true : await askYesNo(`  Voulez-vous lancer un nouveau test (sera cumulé à l'historique, le meilleur score est conservé) ?`, true);
       if (!forceRetest) {
         console.log(`  \x1b[36mTest annulé : le score existant est conservé.\x1b[0m`);
         console.log(`  \x1b[90mAstuce : relancez avec un autre modèle ou profil pour comparer.\x1b[0m\n`);
@@ -1633,7 +1639,8 @@ async function main() {
       providerConfig: isCloudMode ? { provider: resolvedProvider, model: resolvedCloudModel, apiKey: resolvedApiKey, endpoint: resolvedEndpoint } : null,
       gameState,
       selfProfile: filterProfile,
-      teacherConfig: teacherConfigResolved
+      teacherConfig: teacherConfigResolved,
+      forceFlag
     });
 
     if (attemptResult.responseModelName && modelName === "Modele_En_Attente") {
@@ -1775,7 +1782,8 @@ async function main() {
           providerConfig: isCloudMode ? { provider: resolvedProvider, model: resolvedCloudModel, apiKey: resolvedApiKey, endpoint: resolvedEndpoint } : null,
           gameState,
           selfProfile: filterProfile,
-          teacherConfig: teacherConfigResolved
+          teacherConfig: teacherConfigResolved,
+          forceFlag
         });
 
         if (!retryResult.skippedOptional && shouldReplaceBestResult(null, retryResult)) {
