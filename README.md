@@ -356,7 +356,7 @@ lisez le guide [`CONTRIBUTING.md`](./.github/CONTRIBUTING.md).
 
 Le flux standard est le suivant :
 
-1. **Forkez** le dépôt sur GitHub.
+1. **Forcer** le dépôt sur GitHub.
 2. Créez une branche : `git checkout -b ma-feature`.
 3. Commitez vos changements avec un message clair.
 4. Poussez : `git push origin ma-feature`.
