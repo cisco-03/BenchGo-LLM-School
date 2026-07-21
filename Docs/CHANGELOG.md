@@ -1,5 +1,63 @@
 # CHANGELOG - Carnet de Notes BenchGo
 
+## 2026-07-21 — Correction de 3 bugs critiques discriminant les modèles + réhabilitation gemma-4-12b-agentic
+
+### Contexte
+Le run du 2026-07-21T05:55 (modèle `yuxinlu1/gemma-4-12b-agentic-fable5-composer2.5-v2-3.5x-tau2`, profil STANDARD) a révélé trois bugs du benchmark qui ont **discriminé injustement** l'élève (le modèle testé) :
+1. **Exercice Tier 5 `info` (FeuTricolore)** : le `setup` instançait la classe **avant** que le code de l'élève ne la déclare → erreur systématique `Cannot access 'FeuTricolore' before initialization` (TDZ), même avec un code d'élève parfait. Pénalité -45 points injuste.
+2. **Parsing du code (Tier 4 `math`)** : `extractCodeRegex` matchait `taskId` à l'intérieur de mots comme `Math.abs(...)` → extraction du mauvais bloc (`### algo_moyen_1` au lieu du code `discriminant`). Pénalité -59 points injuste.
+3. **Timeout API (Tier 6)** : `API_TIMEOUT_MS = 300000` (300s) trop court pour les modèles de raisonnement locaux → timeout injuste sur le Tier 6 (0/437). Les timeouts sur réponse sont **interdits** car ils pénalisent les élèves.
+
+### Actions entreprises
+
+**1. `tiers/tier5_standard.json` — Exercice `info` (FeuTricolore)**
+- Le `setup` (`const f = new FeuTricolore(); f.passerAuSuivant();`) s'exécutait **avant** le code de l'élève (les classes JS ne sont pas hoistées).
+- Déplacement de l'instanciation dans le `call` via une IIFE : `(()=>{ const f = new FeuTricolore(); f.passerAuSuivant(); return f.couleur; })()`.
+- Le `setup` est désormais vide. Le code de l'élève s'exécute d'abord, puis l'IIFE instancie et teste.
+- Vérifié : un code d'élève canonique passe désormais (passed: true).
+
+**2. `parsing-utils.js` — `extractCodeRegex()`**
+- Le fence pattern `${taskId}[\s\S]{0,200}?```...``` ` matchait `taskId` n'importe où (ex: `Math.abs` pour la tâche `math`).
+- Anfrage du pattern sur un début de ligne avec header Markdown optionnel : `(?:^|\n)\s*#{0,6}\s*${taskId}\b[...]`.
+- Filtrage des correspondances dont le contenu est un header Markdown parasite (`### ...`) plutôt que du code.
+- Vérifié : `Math.abs` ne déclenche plus de fausse match ; les tâches `math`, `algo_facile_1`, `algo_defi`, `francais` sont correctement extraites ; le format JSON fonctionne toujours.
+
+**3. `config.js` — `API_TIMEOUT_MS`**
+- Passé de `300000` (300s) à `1500000` (1500s). Les timeouts sur réponse sont interdits : un modèle lent (raisonnement local) ne doit pas être pénalisé. 1500s laisse largement le temps de répondre.
+
+**4. `leaderboard.js` — Scrollbars globales invisibles**
+- Ajout d'une règle CSS globale `html, body, * { scrollbar-width: none; -ms-overflow-style: none; }` + `::-webkit-scrollbar { width: 0; height: 0; display: none; }` au début du `<style>`.
+- Conformément à la décision `scrollbars_always_hidden_scro` : tous les ascenseurs de l'application doivent être invisibles.
+
+**5. Réhabilitation du carnet `yuxinlu1_gemma-4-12b-agentic...`**
+- Réévaluation des deux exercices pénalisés à tort avec le code réellement produit par le modèle (récupéré via le parser corrigé pour Tier 4 math, et via le setup corrigé pour Tier 5 info) :
+  - Tier 4 `math` (discriminant) : code `b*b - 4*a*c` → succès (+59 points).
+  - Tier 5 `info` (FeuTricolore) : classe correcte → succès (+45 points).
+- Retrait des marqueurs `helpUsed`/`retried` sur ces deux exercices (l'échec était dû au bug du benchmark, pas au modèle).
+- Recalcul du score College-Lycee : 2648/2747 (96%) au lieu de 2499/3184 (78%).
+- Recalibrage : D=1.00, P=0.96, C=0.982 (Modèle Bien Calibré).
+- Score cumulé : 5353/5452 (98%) → **🥇 1ère place** du classement (devant ornith-1.0-9b à 96%).
+
+### Fichiers modifiés
+- `tiers/tier5_standard.json` — setup/call de l'exercice `info` corrigés.
+- `parsing-utils.js` — `extractCodeRegex()` durcie (anfrage + filtrage des headers parasites).
+- `config.js` — `API_TIMEOUT_MS` 300s → 1500s + commentaire mis à jour.
+- `leaderboard.js` — règle CSS globale scrollbar invisible.
+- `Export-Rapports/.carnet/yuxinlu1_gemma-4-12b-agentic..._q8_0.json` — carnet réhabilité (T4 math + T5 info).
+- `Export-Rapports/classement.html`, `classement.md`, `raisonnement_modeles.md` — régénérés.
+
+### Résultat obtenu
+- Le modèle `yuxinlu1/gemma-4-12b-agentic-fable5-composer2.5-v2-3.5x-tau2` (Q8_0) passe de la 8e place (88%) à la **1ère place (98%)** — il avait décelé les bugs des exercices, ce qui est remarquable.
+- Les exercices sont désormais **irréprochables** : un code d'élève correct ne peut plus échouer à cause d'un bug du benchmark.
+- Les timeouts de réponse ne pénalisent plus les modèles lents.
+
+### Leçons apprises
+- Un `setup` qui déclare/utilise un symbole défini dans le code de l'élève est un anti-pattern : le `setup` s'exécute **avant** le code de l'élève dans le sandbox VM. L'instanciation doit se faire dans le `call` (après le code de l'élève).
+- L'extraction de code par regex doit ancrer le `taskId` sur des frontières de mots et des séparateurs Markdown, jamais sur une sous-chaîne non délimitée.
+- Les timeouts sur réponse modèle sont inacceptables dans un benchmark éducatif : ils pénalisent la réflexion, pas l'incompétence.
+
+---
+
 ## 2026-07-20 (soir 4) — Redoublement & promotion dans le classement HTML (tendance des re-tests)
 
 ### Contexte

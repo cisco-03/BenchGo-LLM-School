@@ -40,10 +40,23 @@ function extractCodeRegex(text, taskId) {
     return unescapeJSONString(keyMatches[keyMatches.length - 1][1]);
   }
 
-  const fencePattern = new RegExp(`${taskId}[\\s\\S]{0,200}?\`\`\`(?:\\w+)?\\s*([\\s\\S]*?)\`\`\``, 'gi');
+  // Fence pattern : le taskId doit être en tête d'un header Markdown (### ou ##)
+  // ou en début de ligne, pour éviter de matcher "math" à l'intérieur de mots
+  // comme "Math.abs(...)" qui pollue l'extraction et renvoie le mauvais bloc.
+  // On capture le code du premier bloc ``` qui suit immédiatement le header.
+  const fencePattern = new RegExp(
+    `(?:^|\\n)\\s*#{0,6}\\s*${taskId}\\b[\\s\\S]{0,200}?\`\`\`(?:\\w+)?\\s*([\\s\\S]*?)\`\`\``,
+    'gi'
+  );
   const fenceMatches = [...text.matchAll(fencePattern)];
   if (fenceMatches.length > 0) {
-    return fenceMatches[fenceMatches.length - 1][1].trim();
+    // Parmi les correspondances, on préfère celle dont le contenu ressemble à du
+    // code (pas un header Markdown parasite). Si plusieurs blocs valides existent
+    // (le modèle a dupliqué sa réponse), on prend le dernier bloc contenant du
+    // code réel pour rester cohérent avec le comportement JSON (dernière match).
+    const valid = fenceMatches.filter(m => !/^\s*#{1,6}\s/.test(m[1]));
+    const pool = valid.length > 0 ? valid : fenceMatches;
+    return pool[pool.length - 1][1].trim();
   }
 
   return null;

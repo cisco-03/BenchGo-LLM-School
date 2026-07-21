@@ -7,15 +7,17 @@ const LM_STUDIO_MODELS_URL = "http://localhost:1234/v1/models";
 // l'id du modèle, sans la quantification — d'où l'usage de /api/v0/models ici.
 const LM_STUDIO_MODELS_V0_URL = "http://localhost:1234/api/v0/models";
 const EVAL_TIMEOUT_MS = 10000;
-const API_TIMEOUT_MS = 300000;
+const API_TIMEOUT_MS = 1500000;
 // Auto-profilage : budget temps. Le profil JSON attendu est court, mais on ne
 // limite PLUS max_tokens (carte blanche) : limiter la sortie tronque le JSON chez
 // les modèles bavards et provoque l'erreur systématique observée dans le log
 // benchgo_2026-07-20T07-31-39. On laisse le modèle répondre complètement.
 // Timeout généreux : les modèles de raisonnement (GLM, Qwen3, DeepSeek-R1,
-// phi-4-reasoning-plus) mettent du temps même avec reasoning désactivé. 60s était
-// trop court → échec systématique. 300s laisse le temps de répondre sans bloquer
-// indéfiniment.
+// phi-4-reasoning-plus) mettent du temps même avec reasoning désactivé. 300s était
+// trop court et provoquait des timeouts injustes sur les tiers complexes (le modèle
+// était discriminé sans avoir pu répondre). 1500s laisse largement le temps de
+// répondre sans bloquer indéfiniment — les timeouts sur réponse sont INTERDITS
+// car ils pénalisent injustement les élèves.
 const PROFILING_TIMEOUT_MS = 300000;
 const PROFILING_MAX_TOKENS = 0;  // 0 = illimité (carte blanche, ne pas tronquer le JSON)
 // Nombre de tentatives d'auto-profilage avant de baisser les bras. Chaque

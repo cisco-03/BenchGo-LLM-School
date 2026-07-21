@@ -71,8 +71,8 @@
         {
           "type": "exec",
           "description": "Cycle",
-          "setup": "const f = new FeuTricolore(); f.passerAuSuivant();",
-          "call": "f.couleur",
+          "setup": "",
+          "call": "(()=>{ const f = new FeuTricolore(); f.passerAuSuivant(); return f.couleur; })()",
           "assert": "result === 'vert'"
         }
       ],

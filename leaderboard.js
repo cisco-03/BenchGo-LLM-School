@@ -440,6 +440,13 @@ function buildLeaderboardHTML(entries) {
 
   * { box-sizing: border-box; margin: 0; padding: 0; }
 
+  /* Scrollbars TOUJOURS invisibles partout dans l'application */
+  html, body, * {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  ::-webkit-scrollbar { width: 0; height: 0; display: none; }
+
   body {
     font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
     background:
