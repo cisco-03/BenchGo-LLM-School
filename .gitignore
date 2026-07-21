@@ -19,6 +19,7 @@
 # --- 3. Application principale : sources JS à la racine ---
 !.gitignore
 !*.js
+!AGENTS.md
 
 # --- 4. Scripts de dev JETABLES (non requis par l'application) ---
 # On les ignore explicitement même si *.js est ré-autorisé ci-dessus.
@@ -35,9 +36,14 @@ tiers/**
 Docs/**
 !Docs/Manuel-utilisateur/
 Docs/Manuel-utilisateur/**
+!Docs/Manuel-utilisateur/*.md
+!Docs/Manuel-utilisateur/Manuel-pdf/
+Docs/Manuel-utilisateur/Manuel-pdf/**
+!Docs/Manuel-utilisateur/Manuel-pdf/*.pdf
 !Docs/CHANGELOG.md
 !Docs/Apps-Fonctions/
 Docs/Apps-Fonctions/**
+!Docs/Apps-Fonctions/*.md
 
 # --- 6bis. Captures d'écran (page GitHub) ---
 !Docs/Screens/
