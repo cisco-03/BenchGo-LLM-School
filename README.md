@@ -305,7 +305,7 @@ benchmark-v3/
 | `--provider=<NOM>` | Mode cloud (openai / anthropic / groq / together / openrouter / mistral) |
 | `--model=<NOM>` | Nom du modèle cloud |
 | `--api-key=<CLÉ>` | Clé API cloud (⚠️ visible dans le terminal — préférer les variables d'env) |
-| `--teacher-model=<NOM>` | Modèle du professeur correcteur (défaut : `meta-llama/llama-3.3-70b-instruct:free`) |
+| `--teacher-model=<NOM>` | Modèle du professeur correcteur (défaut : `OpenRouter Free Router`) |
 | `--teacher-api-key=<CLÉ>` | Clé API OpenRouter pour le professeur (force le mode professeur sans interaction) |
 | `--teacher-endpoint=<URL>` | Endpoint alternatif pour le professeur (avancé) |
 | `--no-teacher` | Désactive le professeur IA (repli sur l'auto-analyse classique de l'élève) |
