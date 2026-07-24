@@ -1,6 +1,86 @@
 {
   "entries": [
     {
+      "model": "qwopus3.5-9b-coder-mtp",
+      "shortName": "qwopus3.5-9b-coder-mtp",
+      "quantization": null,
+      "score": 2475,
+      "max": 3076,
+      "pct": 80,
+      "globalLifeScore": 2775,
+      "optionalBonus": 300,
+      "tokens": 20951,
+      "elapsedMs": 1173002,
+      "tokensPerSecond": 17.86,
+      "ecoleCount": 1,
+      "pseudo": "FlexoDiv",
+      "submittedAt": "2026-07-24T16:55:07.602Z",
+      "contributors": 1,
+      "allPct": [
+        80
+      ]
+    },
+    {
+      "model": "microsoft/phi-4-reasoning-plus",
+      "shortName": "microsoft_phi-4-reasoning-plus",
+      "quantization": "Q4_K_M",
+      "score": 470,
+      "max": 895,
+      "pct": 53,
+      "globalLifeScore": 470,
+      "optionalBonus": 0,
+      "tokens": 0,
+      "elapsedMs": 0,
+      "tokensPerSecond": 0,
+      "ecoleCount": 1,
+      "pseudo": "FlexoDiv",
+      "submittedAt": "2026-07-24T16:55:11.237Z",
+      "contributors": 1,
+      "allPct": [
+        53
+      ]
+    },
+    {
+      "model": "supergemma-4-12b-abliterated",
+      "shortName": "supergemma-4-12b-abliterated",
+      "quantization": "Q4_K_M",
+      "score": 887,
+      "max": 2740,
+      "pct": 32,
+      "globalLifeScore": 887,
+      "optionalBonus": 0,
+      "tokens": 0,
+      "elapsedMs": 0,
+      "tokensPerSecond": 0,
+      "ecoleCount": 1,
+      "pseudo": "FlexoDiv",
+      "submittedAt": "2026-07-24T16:55:14.409Z",
+      "contributors": 1,
+      "allPct": [
+        32
+      ]
+    },
+    {
+      "model": "mistral-7b-instruct-v0.1",
+      "shortName": "mistral-7b-instruct-v0.1",
+      "quantization": null,
+      "score": -649,
+      "max": 3122,
+      "pct": -21,
+      "globalLifeScore": -649,
+      "optionalBonus": 0,
+      "tokens": 906,
+      "elapsedMs": 157185,
+      "tokensPerSecond": 5.76,
+      "ecoleCount": 1,
+      "pseudo": "FlexoDiv",
+      "submittedAt": "2026-07-24T16:55:17.257Z",
+      "contributors": 1,
+      "allPct": [
+        -21
+      ]
+    },
+    {
       "model": "gemma-3-1b-it",
       "shortName": "gemma-3-1b-it",
       "quantization": null,
@@ -21,6 +101,6 @@
       ]
     }
   ],
-  "generatedAt": "2026-07-24T16:56:15.144Z",
-  "totalSubmissions": 1
+  "generatedAt": "2026-07-24T16:56:31.039Z",
+  "totalSubmissions": 5
 }
