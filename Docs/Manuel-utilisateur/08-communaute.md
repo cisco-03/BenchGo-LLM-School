@@ -48,6 +48,37 @@ Votre machine                          Dépôt GitHub (cisco-03/BenchGo-LLM-Scho
 
 ### Méthode interactive (recommandée)
 
+### Soumettre depuis le classement interactif (recommandé)
+
+Le moyen le plus simple : ouvrez le classement local dans le navigateur, puis
+cliquez sur le bouton violet **« 🌐 Envoyer à la communauté »**.
+
+```bash
+node leaderboard.js --serve
+```
+
+Le navigateur s'ouvre → cliquez sur **« 🌐 Envoyer à la communauté »** →
+collez votre token GitHub → entrez un pseudo (optionnel) → cliquez
+**« Vérifier et envoyer »**.
+
+### Détection automatique des nouveaux modèles
+
+**BenchGo ne soumet que les modèles pas encore envoyés sur GitHub.** Au moment
+de la soumission, l'application interroge le dépôt pour connaître la liste des
+modèles déjà présents sous votre identifiant. Les modèles déjà soumis sont
+**ignorés automatiquement** — seuls les nouveaux sont envoyés.
+
+Exemple :
+- Vous avez 100 modèles en local, 80 déjà soumis sur GitHub → seuls 20 PRs seront créées.
+- Vous testez 5 nouveaux modèles → relancez la soumission → seules 5 PRs seront créées.
+- Vous n'avez aucun nouveau modèle → le bouton affiche « Aucun nouveau modèle ».
+
+**Il n'est donc pas nécessaire de se souvenir de ce qui a déjà été envoyé.**
+Cliquez simplement sur « Envoyer à la communauté » à chaque fois que vous voulez
+partager de nouveaux résultats : l'application fait le tri toute seule.
+
+### Méthode interactive (en fin de run)
+
 Lancez simplement un benchmark complet :
 
 ```bash

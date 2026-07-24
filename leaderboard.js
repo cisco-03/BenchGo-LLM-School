@@ -1784,7 +1784,8 @@ function openSubmitModal() {
     + '  <div class="modal-body" style="padding: 24px;">'
     + '    <p style="color: var(--text-muted); margin-bottom: 16px;">'
     + '      Soumettez vos carnets de scores au classement communautaire sur GitHub.<br>'
-    + '      Une Pull Request sera créée automatiquement. Le propriétaire validera votre contribution.'
+    + '      Une Pull Request sera creee automatiquement. Le proprietaire validera votre contribution.<br>'
+    + '      <strong style="color: var(--accent);">Seuls les modeles pas encore soumis seront envoyes.</strong>'
     + '    </p>'
     + '    <div style="margin-bottom: 16px;">'
     + '      <label style="display: block; margin-bottom: 6px; font-weight: 600;">Token GitHub (PAT, scope repo)</label>'
@@ -1803,7 +1804,7 @@ function openSubmitModal() {
     + '    </div>'
     + '    <div id="submitStatus" style="margin-bottom: 12px;"></div>'
     + '    <div style="display: flex; gap: 12px;">'
-    + '      <button class="btn btn-community" id="btnDoSubmit" onclick="doSubmitAll()" style="flex: 1; justify-content: center;">Envoyer ' + MODELS.length + ' modele(s)</button>'
+    + '      <button class="btn btn-community" id="btnDoSubmit" onclick="doSubmitAll()" style="flex: 1; justify-content: center;">Verifier et envoyer</button>'
     + '      <button class="btn" onclick="closeSubmitModal()" style="padding: 8px 16px;">Annuler</button>'
     + '    </div>'
     + '  </div>'
@@ -1821,17 +1822,37 @@ async function doSubmitAll() {
   var statusEl = document.getElementById('submitStatus');
   var btn = document.getElementById('btnDoSubmit');
   if (!token) { statusEl.innerHTML = '<p style="color: var(--red);">Token GitHub requis.</p>'; return; }
-  btn.disabled = true; btn.textContent = 'Envoi en cours...';
+  btn.disabled = true; btn.textContent = 'Verification...';
   statusEl.innerHTML = '<p style="color: var(--accent);">Validation du token...</p>';
   try {
     var valRes = await fetch('/api/submit-validate?token=' + encodeURIComponent(token), { method: 'POST' });
     var valData = await valRes.json();
-    if (!valData.ok) { statusEl.innerHTML = '<p style="color: var(--red);">Token invalide : ' + valData.error + '</p>'; btn.disabled = false; btn.textContent = 'Reessayer'; return; }
-    statusEl.innerHTML = '<p style="color: var(--green);">Token valide (' + valData.login + '). Envoi des carnets...</p>';
-    var okCount = 0, failCount = 0, prUrls = [];
+    if (!valData.valid) { statusEl.innerHTML = '<p style="color: var(--red);">Token invalide : ' + (valData.error || 'verifiez les permissions') + '</p>'; btn.disabled = false; btn.textContent = 'Reessayer'; return; }
+    statusEl.innerHTML = '<p style="color: var(--green);">Token valide (' + valData.login + '). Recuperation des modeles deja soumis...</p>';
+    // Recupere la liste des modeles deja soumis sur GitHub pour ne renvoyer que les nouveaux.
+    var subRes = await fetch('/api/already-submitted?token=' + encodeURIComponent(token), { method: 'GET' });
+    var subData = await subRes.json();
+    var alreadySubmitted = new Set(subData.ok ? (subData.submitted || []) : []);
+    var toSubmit = [];
+    var skippedCount = 0;
     for (var i = 0; i < MODELS.length; i++) {
-      var m = MODELS[i];
-      statusEl.innerHTML = '<p style="color: var(--accent);">Envoi ' + (i + 1) + '/' + MODELS.length + ' : ' + m.shortName + '...</p>';
+      if (alreadySubmitted.has(MODELS[i].shortName)) { skippedCount++; continue; }
+      toSubmit.push(MODELS[i]);
+    }
+    if (toSubmit.length === 0) {
+      statusEl.innerHTML = '<div style="border: 1px solid var(--border); border-radius: 8px; padding: 12px; background: var(--bg-3);">'
+        + '<p style="color: var(--green); font-weight: 600;">Tous vos modeles sont deja soumis !</p>'
+        + '<p style="margin-top: 8px; font-size: 13px; color: var(--text-muted);">' + skippedCount + ' modele(s) deja present(s) sur le depot communautaire.</p>'
+        + '<p style="margin-top: 4px; font-size: 13px; color: var(--text-muted);">Aucun nouveau modele a envoyer. Testez de nouveaux modeles puis revenez soumettre.</p>'
+        + '</div>';
+      btn.textContent = 'Aucun nouveau modele'; btn.disabled = true;
+      return;
+    }
+    statusEl.innerHTML = '<p style="color: var(--accent);">' + toSubmit.length + ' nouveau(x) modele(s) a envoyer (' + skippedCount + ' deja soumis(s), ignores). Envoi en cours...</p>';
+    var okCount = 0, failCount = 0, prUrls = [];
+    for (var j = 0; j < toSubmit.length; j++) {
+      var m = toSubmit[j];
+      statusEl.innerHTML = '<p style="color: var(--accent);">Envoi ' + (j + 1) + '/' + toSubmit.length + ' : ' + m.shortName + '...</p>';
       try {
         var res = await fetch('/api/submit?shortName=' + encodeURIComponent(m.shortName) + '&pseudo=' + encodeURIComponent(pseudo) + '&token=' + encodeURIComponent(token), { method: 'POST' });
         var data = await res.json();
@@ -1843,6 +1864,7 @@ async function doSubmitAll() {
     var html = '<div style="border: 1px solid var(--border); border-radius: 8px; padding: 12px; background: var(--bg-3);">';
     html += '<p style="color: var(--green); font-weight: 600;">' + okCount + ' soumission(s) reussie(s)';
     if (failCount > 0) html += ', ' + failCount + ' echec(s)';
+    if (skippedCount > 0) html += ', ' + skippedCount + ' deja soumis(s) (ignores)';
     html += '</p>';
     if (prUrls.length > 0) {
       html += '<p style="margin-top: 8px; font-size: 13px; color: var(--text-muted);">Pull Requests creees :</p>';
@@ -2307,8 +2329,29 @@ function startServer(port) {
         if (!ledger || !ledger.ecoles || Object.keys(ledger.ecoles).length === 0) {
           res.writeHead(200, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ ok: false, error: 'Carnet vide ou introuvable : ' + shortName }));
-          return;
-        }
+      return;
+    }
+
+    // API : liste des modèles déjà soumis sur GitHub par cet utilisateur.
+    // Renvoie un tableau de shortNames déjà présents dans submissions/<userId>/.
+    // Permet à la modale de n'afficher que les nouveaux modèles à soumettre.
+    if (url.pathname === '/api/already-submitted' && req.method === 'GET') {
+      const token = url.searchParams.get('token');
+      if (!token) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: false, error: 'token manquant' }));
+        return;
+      }
+      try {
+        const submitted = await communitySync.getAlreadySubmittedModels(token);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true, submitted: Array.from(submitted) }));
+      } catch (e) {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: false, error: e.message }));
+      }
+      return;
+    }
         const result = await communitySync.submitResults(shortName, ledger, token, {
           pseudo: pseudo || null,
           benchgoVersion: 'V3'

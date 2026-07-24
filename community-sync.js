@@ -412,6 +412,50 @@ async function validateGithubToken(token) {
   }
 }
 
+// Récupère la liste des modèles déjà soumis par cet utilisateur sur le dépôt
+// communautaire. Interroge l'API GitHub Contents sur submissions/<userId>/ et
+// renvoie un Set de shortNames (sans extension .json) déjà présents.
+//
+// Permet à la modale de soumission de n'afficher que les NOUVEAUX modèles
+// (ceux pas encore soumis), évitant de re-soumettre 400 modèles à chaque fois.
+async function getAlreadySubmittedModels(token) {
+  const userId = getOrCreateUserId();
+  const safeUserId = String(userId).replace(/[^a-zA-Z0-9._-]/g, '_');
+  const dirPath = `submissions/${safeUserId}`;
+
+  try {
+    const res = await fetch(
+      `${GITHUB_API}/repos/${COMMUNITY_REPO.owner}/${COMMUNITY_REPO.repo}/contents/${encodeURIComponent(dirPath)}?ref=main`,
+      {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/vnd.github+json',
+          'User-Agent': 'BenchGo-V3-Community'
+        }
+      }
+    );
+    // 404 = le dossier n'existe pas encore (première soumission) → Set vide.
+    if (res.status === 404) return new Set();
+    if (!res.ok) {
+      logger.warn('getAlreadySubmittedModels: HTTP ' + res.status);
+      return new Set();
+    }
+    const entries = await res.json();
+    if (!Array.isArray(entries)) return new Set();
+    // Extraction des noms de fichiers sans .json → shortNames.
+    const submitted = new Set();
+    for (const entry of entries) {
+      if (entry.type === 'file' && entry.name.endsWith('.json')) {
+        submitted.add(entry.name.replace(/\.json$/, ''));
+      }
+    }
+    return submitted;
+  } catch (e) {
+    logger.warn('getAlreadySubmittedModels: ' + e.message);
+    return new Set();
+  }
+}
+
 module.exports = {
   COMMUNITY_REPO,
   PROFILE_FILE,
@@ -428,5 +472,6 @@ module.exports = {
   sendPing,
   buildSubmissionPayload,
   submitResults,
-  validateGithubToken
+  validateGithubToken,
+  getAlreadySubmittedModels
 };

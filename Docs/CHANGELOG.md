@@ -1,5 +1,36 @@
 # CHANGELOG - Carnet de Notes BenchGo
 
+## 2026-07-24 — Détection automatique des nouveaux modèles à soumettre
+
+### Contexte
+Quand un utilisateur a déjà soumis 25 modèles et en teste 5 nouveaux, il ne faut pas re-soumettre les 30. L'utilisateur veut que l'application détecte automatiquement les modèles déjà présents sur GitHub et n'envoie que les nouveaux.
+
+### Implémentation
+**`community-sync.js` — Nouvelle fonction `getAlreadySubmittedModels(token)`**
+- Interroge l'API GitHub Contents sur `submissions/<userId>/` (branche main).
+- Renvoie un `Set` de shortNames déjà soumis (noms de fichiers sans `.json`).
+- 404 (dossier inexistant) → Set vide (première soumission).
+- Gestion d'erreur silencieuse (échec réseau → Set vide, on envoie tout).
+
+**`leaderboard.js` — API + modale de soumission**
+- Nouvelle API `/api/already-submitted` (GET) : renvoie la liste des modèles déjà soumis par l'utilisateur.
+- `doSubmitAll()` modifiée : après validation du token, récupère la liste des modèles déjà soumis, filtre `MODELS` pour ne garder que les nouveaux, n'envoie que ceux-là.
+- Affichage : « N nouveau(x) modèle(s) à envoyer (M déjà soumis(s), ignorés) ».
+- Si aucun nouveau modèle : « Tous vos modèles sont déjà soumis ! » + bouton désactivé.
+- Texte de la modale mis à jour : « Seuls les modèles pas encore soumis seront envoyés. »
+- Bouton renommé « Vérifier et envoyer » (au lieu d'un compte fixe).
+
+**`Docs/Manuel-utilisateur/08-communaute.md`**
+- Nouvelle section « Détection automatique des nouveaux modèles » expliquant le comportement.
+- Nouvelle section « Soumettre depuis le classement interactif » (méthode recommandée via le bouton).
+- Exemples concrets (100 modèles dont 80 déjà soumis → 20 PRs seulement).
+
+### Fichiers modifiés
+- `community-sync.js` : `getAlreadySubmittedModels()`.
+- `leaderboard.js` : API `/api/already-submitted` + modale `doSubmitAll` réécrite.
+- `Docs/Manuel-utilisateur/08-communaute.md` : documentation mise à jour.
+- `Docs/CHANGELOG.md` : cette entrée.
+
 ## 2026-07-24 — Classement participatif communautaire + télémétrie anonyme
 
 ### Contexte
