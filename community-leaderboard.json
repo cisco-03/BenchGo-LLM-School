@@ -1,6 +1,66 @@
 {
   "entries": [
     {
+      "model": "gemma-4-26b-a4b-it",
+      "shortName": "gemma-4-26b-a4b-it",
+      "quantization": null,
+      "score": 3028,
+      "max": 3060,
+      "pct": 99,
+      "globalLifeScore": 3371,
+      "optionalBonus": 343,
+      "tokens": 19779,
+      "elapsedMs": 1797563,
+      "tokensPerSecond": 11,
+      "ecoleCount": 1,
+      "pseudo": "FlexoDiv",
+      "submittedAt": "2026-07-24T16:54:04.603Z",
+      "contributors": 1,
+      "allPct": [
+        99
+      ]
+    },
+    {
+      "model": "yuxinlu1/gemma-4-12b-agentic-fable5-composer2.5-v2-3.5x-tau2-gguf/gemma4-v2-q8_0.gguf",
+      "shortName": "yuxinlu1_gemma-4-12b-agentic-fable5-composer2.5-v2-3.5x-tau2_gemma4-v2-q8_0",
+      "quantization": "Q8_0",
+      "score": 5353,
+      "max": 5452,
+      "pct": 98,
+      "globalLifeScore": 5958,
+      "optionalBonus": 605,
+      "tokens": 0,
+      "elapsedMs": 0,
+      "tokensPerSecond": 0,
+      "ecoleCount": 2,
+      "pseudo": "FlexoDiv",
+      "submittedAt": "2026-07-24T16:54:07.756Z",
+      "contributors": 1,
+      "allPct": [
+        98
+      ]
+    },
+    {
+      "model": "kai-os_grug-12b",
+      "shortName": "kai-os_grug-12b",
+      "quantization": null,
+      "score": 2973,
+      "max": 3039,
+      "pct": 98,
+      "globalLifeScore": 3311,
+      "optionalBonus": 338,
+      "tokens": 15766,
+      "elapsedMs": 2496396,
+      "tokensPerSecond": 6.32,
+      "ecoleCount": 1,
+      "pseudo": "FlexoDiv",
+      "submittedAt": "2026-07-24T16:54:11.165Z",
+      "contributors": 1,
+      "allPct": [
+        98
+      ]
+    },
+    {
       "model": "gemma-4-12b-it-qat",
       "shortName": "gemma-4-12b-it-qat",
       "quantization": "Q4_K_XL",
@@ -421,6 +481,6 @@
       ]
     }
   ],
-  "generatedAt": "2026-07-24T16:57:22.237Z",
-  "totalSubmissions": 21
+  "generatedAt": "2026-07-24T16:57:37.499Z",
+  "totalSubmissions": 24
 }
