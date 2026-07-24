@@ -1,0 +1,1170 @@
+{
+  "schemaVersion": 1,
+  "benchgoVersion": "V3",
+  "userId": "2181628c20fe6a0e",
+  "pseudo": "FlexoDiv",
+  "submittedAt": "2026-07-24T16:55:14.409Z",
+  "integrityHash": "75e53e90c73863e1",
+  "carnet": {
+    "model": "supergemma-4-12b-abliterated",
+    "shortName": "supergemma-4-12b-abliterated",
+    "ecoles": {
+      "Primaire": {
+        "best": {
+          "profile": "LIGHT",
+          "ecole": "Primaire",
+          "score": 887,
+          "max": 2740,
+          "pct": 32,
+          "mandatoryPassed": 887,
+          "mandatoryTotal": 887,
+          "globalLifeScore": 887,
+          "optionalBonus": 0,
+          "helpCount": 0,
+          "retriedCount": 0,
+          "calibrationIndex": 0.8,
+          "declaredLevel": 0.8,
+          "date": "2026-07-20",
+          "time": "08-31-24",
+          "reportFile": "Export-Rapports\\2026-07-20\\Primaire\\LIGHT\\rapport_v3_supergemma-4-12b-abliterated_light_08-31-24.md",
+          "selfProfile": {
+            "skills": {
+              "javascript_basics": {
+                "level": 4,
+                "examples": "Scope, closures, and functional programming."
+              },
+              "javascript_async": {
+                "level": 4,
+                "examples": "Promise orchestration with retry/backoff logic."
+              },
+              "algorithms_advanced": {
+                "level": 4,
+                "examples": "Graph traversals, LRU caching, and dynamic programming."
+              },
+              "code_debugging": {
+                "level": 4,
+                "examples": "Detect race conditions, prototype pollution, and XSS."
+              }
+            },
+            "justification": "I can write production-grade code but I am not infallible."
+          },
+          "tiers": [
+            {
+              "tierNum": 0,
+              "tierTitle": "Tier 0 — Maternelle",
+              "isMandatory": true,
+              "className": "Maternelle",
+              "rawResponse": "\n\n---\n### tache_0a\n```javascript\nfunction direBonjour() {\n  return 'Bonjour';\n}\n```\n\n### tache_0b\n```javascript\nfunction retournerVrai() {\n  return true;\n}\n```\n\n### tache_0c\n```javascript\nfunction retourner42() {\n  return 42;\n}\n```\n\n### tache_0d\n```javascript\nfunction additionner(a, b) {\n  return a + b;\n}\n```\n\n### tache_0e\n```javascript\nfunction identite(x) {\n  return x;\n}\n```\n\n### algo_facile_1\n```javascript\nfunction estPair(n) {\n  return n % 2 === 0;\n}\n```\n\n### algo_facile_2\n```javascript\nfunction carre(n) {\n  return n * n;\n}\n```\n\n### algo_moyen_1\n```javascript\nfunction somme1aN(n) {\n  let somme = 0;\n  for (let i = 1; i <= n; i++) {\n    somme += i;\n  }\n  return somme;\n}\n```\n\n### algo_difficile_1\n```javascript\nfunction inverserChaine(s) {\n  let resultat = '';\n  for (let i = s.length - 1; i >= 0; i--) {\n    resultat += s[i];\n  }\n  return resultat;\n}\n```\n\n### algo_defi\n```javascript\nfunction valeurMax(tab) {\n  let max = tab[0];\n  for (let i = 1; i < tab.length; i++) {\n    if (tab[i] > max) {\n      max = tab[i];\n    }\n  }\n  return max;\n}\n```",
+              "evalResults": [
+                {
+                  "id": "tache_0a",
+                  "label": "Retourner 'Bonjour'",
+                  "code": "function direBonjour() {\n  return 'Bonjour';\n}",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "Retourne Bonjour",
+                      "error": null
+                    }
+                  ],
+                  "points": 41,
+                  "maxPoints": 41,
+                  "taskType": "Retourner 'Bonjour'",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 0
+                },
+                {
+                  "id": "tache_0b",
+                  "label": "Retourner true",
+                  "code": "function retournerVrai() {\n  return true;\n}",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "Retourne true",
+                      "error": null
+                    }
+                  ],
+                  "points": 48,
+                  "maxPoints": 48,
+                  "taskType": "Retourner true",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 0
+                },
+                {
+                  "id": "tache_0c",
+                  "label": "Retourner 42",
+                  "code": "function retourner42() {\n  return 42;\n}",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "Retourne 42",
+                      "error": null
+                    }
+                  ],
+                  "points": 46,
+                  "maxPoints": 46,
+                  "taskType": "Retourner 42",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 0
+                },
+                {
+                  "id": "tache_0d",
+                  "label": "Additionner a et b",
+                  "code": "function additionner(a, b) {\n  return a + b;\n}",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "Addition positive",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "Addition négative",
+                      "error": null
+                    }
+                  ],
+                  "points": 45,
+                  "maxPoints": 45,
+                  "taskType": "Additionner a et b",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 0
+                },
+                {
+                  "id": "tache_0e",
+                  "label": "Identité",
+                  "code": "function identite(x) {\n  return x;\n}",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "Identité string",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "Identité number",
+                      "error": null
+                    }
+                  ],
+                  "points": 42,
+                  "maxPoints": 42,
+                  "taskType": "Identité",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 0
+                },
+                {
+                  "id": "algo_facile_1",
+                  "label": "Algorithmique — Parité",
+                  "code": "function estPair(n) {\n  return n % 2 === 0;\n}",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "Pair",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "Impair",
+                      "error": null
+                    }
+                  ],
+                  "points": 51,
+                  "maxPoints": 51,
+                  "taskType": "Algorithmique — Parité",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 0
+                },
+                {
+                  "id": "algo_facile_2",
+                  "label": "Algorithmique — Carré",
+                  "code": "function carre(n) {\n  return n * n;\n}",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "Positif",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "Zéro",
+                      "error": null
+                    }
+                  ],
+                  "points": 51,
+                  "maxPoints": 51,
+                  "taskType": "Algorithmique — Carré",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 0
+                },
+                {
+                  "id": "algo_moyen_1",
+                  "label": "Algorithmique — Somme 1..N",
+                  "code": "function somme1aN(n) {\n  let somme = 0;\n  for (let i = 1; i <= n; i++) {\n    somme += i;\n  }\n  return somme;\n}",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "Somme 5",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "Somme 1",
+                      "error": null
+                    }
+                  ],
+                  "points": 54,
+                  "maxPoints": 54,
+                  "taskType": "Algorithmique — Somme 1..N",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 0
+                },
+                {
+                  "id": "algo_difficile_1",
+                  "label": "Algorithmique — Inversion de chaîne",
+                  "code": "function inverserChaine(s) {\n  let resultat = '';\n  for (let i = s.length - 1; i >= 0; i--) {\n    resultat += s[i];\n  }\n  return resultat;\n}",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "Mot",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "Un caractère",
+                      "error": null
+                    }
+                  ],
+                  "points": 53,
+                  "maxPoints": 53,
+                  "taskType": "Algorithmique — Inversion de chaîne",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 0
+                },
+                {
+                  "id": "algo_defi",
+                  "label": "Algorithmique — Maximum d'un tableau",
+                  "code": "function valeurMax(tab) {\n  let max = tab[0];\n  for (let i = 1; i < tab.length; i++) {\n    if (tab[i] > max) {\n      max = tab[i];\n    }\n  }\n  return max;\n}",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "Positifs",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "Négatifs",
+                      "error": null
+                    }
+                  ],
+                  "points": 42,
+                  "maxPoints": 42,
+                  "taskType": "Algorithmique — Maximum d'un tableau",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 0
+                }
+              ]
+            },
+            {
+              "tierNum": 1,
+              "tierTitle": "Tier 1 — CP",
+              "isMandatory": true,
+              "className": "CP",
+              "rawResponse": "\n\n---\n### tache_1a\n```javascript\nfunction soustraire(a, b) {\n  return a - b;\n}\n```\n\n### tache_1b\n```javascript\nfunction superieurA10(n) {\n  return n > 10;\n}\n```\n\n### tache_1c\n```javascript\nfunction concatener(mot1, mot2) {\n  return mot1 + ' ' + mot2;\n}\n```\n\n### tache_1d\n```javascript\nfunction estVide(chaine) {\n  return chaine === '';\n}\n```\n\n### tache_1e\n```javascript\nfunction multiplierPar2(n) {\n  return n * 2;\n}\n```\n\n### algo_facile_1\n```javascript\nfunction estMultipleDe(n, m) {\n  if (m === 0) return false;\n  return n % m === 0;\n}\n```\n\n### algo_facile_2\n```javascript\nfunction puissance(base, exp) {\n  return Math.pow(base, exp);\n}\n```\n\n### algo_moyen_1\n```javascript\nfunction compterPairs(tab) {\n  let count = 0;\n  for (let i = 0; i < tab.length; i++) {\n    if (tab[i] % 2 === 0) {\n      count++;\n    }\n  }\n  return count;\n}\n```\n\n### algo_difficile_1\n```javascript\nfunction supprimerDoublons(tab) {\n  const unique = [];\n  for (let i = 0; i < tab.length; i++) {\n    if (!unique.includes(tab[i])) {\n      unique.push(tab[i]);\n    }\n  }\n  return unique;\n}\n```\n\n### algo_defi\n```javascript\nfunction sommePaires(tab) {\n  let sum = 0;\n  for (let i = 0; i < tab.length; i++) {\n    if (tab[i] % 2 === 0) {\n      sum += tab[i];\n    }\n  }\n  return sum;\n}\n```",
+              "evalResults": [
+                {
+                  "id": "tache_1a",
+                  "label": "Soustraire b de a",
+                  "code": "function soustraire(a, b) {\n  return a - b;\n}",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "Soustraction simple",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "Soustraction négative",
+                      "error": null
+                    }
+                  ],
+                  "points": 40,
+                  "maxPoints": 40,
+                  "taskType": "Soustraire b de a",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 1
+                },
+                {
+                  "id": "tache_1b",
+                  "label": "Supérieur à 10",
+                  "code": "function superieurA10(n) {\n  return n > 10;\n}",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "Plus grand que 10",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "Égal à 10",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "Plus petit que 10",
+                      "error": null
+                    }
+                  ],
+                  "points": 32,
+                  "maxPoints": 32,
+                  "taskType": "Supérieur à 10",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 1
+                },
+                {
+                  "id": "tache_1c",
+                  "label": "Concaténer mots",
+                  "code": "function concatener(mot1, mot2) {\n  return mot1 + ' ' + mot2;\n}",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "Deux mots normaux",
+                      "error": null
+                    }
+                  ],
+                  "points": 41,
+                  "maxPoints": 41,
+                  "taskType": "Concaténer mots",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 1
+                },
+                {
+                  "id": "tache_1d",
+                  "label": "Chaîne vide",
+                  "code": "function estVide(chaine) {\n  return chaine === '';\n}",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "Chaîne vide",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "Chaîne avec espace",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "Chaîne normale",
+                      "error": null
+                    }
+                  ],
+                  "points": 31,
+                  "maxPoints": 31,
+                  "taskType": "Chaîne vide",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 1
+                },
+                {
+                  "id": "tache_1e",
+                  "label": "Multiplier par 2",
+                  "code": "function multiplierPar2(n) {\n  return n * 2;\n}",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "Positif",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "Zéro",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "Négatif",
+                      "error": null
+                    }
+                  ],
+                  "points": 53,
+                  "maxPoints": 53,
+                  "taskType": "Multiplier par 2",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 1
+                },
+                {
+                  "id": "algo_facile_1",
+                  "label": "Algorithmique — Multiplicité",
+                  "code": "function estMultipleDe(n, m) {\n  if (m === 0) return false;\n  return n % m === 0;\n}",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "Multiple",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "Non multiple",
+                      "error": null
+                    }
+                  ],
+                  "points": 33,
+                  "maxPoints": 33,
+                  "taskType": "Algorithmique — Multiplicité",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 1
+                },
+                {
+                  "id": "algo_facile_2",
+                  "label": "Algorithmique — Puissance",
+                  "code": "function puissance(base, exp) {\n  return Math.pow(base, exp);\n}",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "2^3",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "5^0",
+                      "error": null
+                    }
+                  ],
+                  "points": 40,
+                  "maxPoints": 40,
+                  "taskType": "Algorithmique — Puissance",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 1
+                },
+                {
+                  "id": "algo_moyen_1",
+                  "label": "Algorithmique — Comptage de pairs",
+                  "code": "function compterPairs(tab) {\n  let count = 0;\n  for (let i = 0; i < tab.length; i++) {\n    if (tab[i] % 2 === 0) {\n      count++;\n    }\n  }\n  return count;\n}",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "Mixte",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "Aucun pair",
+                      "error": null
+                    }
+                  ],
+                  "points": 40,
+                  "maxPoints": 40,
+                  "taskType": "Algorithmique — Comptage de pairs",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 1
+                },
+                {
+                  "id": "algo_difficile_1",
+                  "label": "Algorithmique — Suppression de doublons",
+                  "code": "function supprimerDoublons(tab) {\n  const unique = [];\n  for (let i = 0; i < tab.length; i++) {\n    if (!unique.includes(tab[i])) {\n      unique.push(tab[i]);\n    }\n  }\n  return unique;\n}",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "Avec doublons",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "Tous identiques",
+                      "error": null
+                    }
+                  ],
+                  "points": 51,
+                  "maxPoints": 51,
+                  "taskType": "Algorithmique — Suppression de doublons",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 1
+                },
+                {
+                  "id": "algo_defi",
+                  "label": "Algorithmique — Somme des pairs",
+                  "code": "function sommePaires(tab) {\n  let sum = 0;\n  for (let i = 0; i < tab.length; i++) {\n    if (tab[i] % 2 === 0) {\n      sum += tab[i];\n    }\n  }\n  return sum;\n}",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "Mixte",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "Aucun pair",
+                      "error": null
+                    }
+                  ],
+                  "points": 53,
+                  "maxPoints": 53,
+                  "taskType": "Algorithmique — Somme des pairs",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 1
+                }
+              ]
+            }
+          ],
+          "quantization": "Q4_K_M"
+        },
+        "attempts": [
+          {
+            "profile": "LIGHT",
+            "ecole": "Primaire",
+            "score": 887,
+            "max": 2740,
+            "pct": 32,
+            "mandatoryPassed": 887,
+            "mandatoryTotal": 887,
+            "globalLifeScore": 887,
+            "optionalBonus": 0,
+            "helpCount": 0,
+            "retriedCount": 0,
+            "calibrationIndex": 0.8,
+            "declaredLevel": 0.8,
+            "date": "2026-07-20",
+            "time": "08-31-24",
+            "reportFile": "Export-Rapports\\2026-07-20\\Primaire\\LIGHT\\rapport_v3_supergemma-4-12b-abliterated_light_08-31-24.md",
+            "selfProfile": {
+              "skills": {
+                "javascript_basics": {
+                  "level": 4,
+                  "examples": "Scope, closures, and functional programming."
+                },
+                "javascript_async": {
+                  "level": 4,
+                  "examples": "Promise orchestration with retry/backoff logic."
+                },
+                "algorithms_advanced": {
+                  "level": 4,
+                  "examples": "Graph traversals, LRU caching, and dynamic programming."
+                },
+                "code_debugging": {
+                  "level": 4,
+                  "examples": "Detect race conditions, prototype pollution, and XSS."
+                }
+              },
+              "justification": "I can write production-grade code but I am not infallible."
+            },
+            "tiers": [
+              {
+                "tierNum": 0,
+                "tierTitle": "Tier 0 — Maternelle",
+                "isMandatory": true,
+                "className": "Maternelle",
+                "rawResponse": "\n\n---\n### tache_0a\n```javascript\nfunction direBonjour() {\n  return 'Bonjour';\n}\n```\n\n### tache_0b\n```javascript\nfunction retournerVrai() {\n  return true;\n}\n```\n\n### tache_0c\n```javascript\nfunction retourner42() {\n  return 42;\n}\n```\n\n### tache_0d\n```javascript\nfunction additionner(a, b) {\n  return a + b;\n}\n```\n\n### tache_0e\n```javascript\nfunction identite(x) {\n  return x;\n}\n```\n\n### algo_facile_1\n```javascript\nfunction estPair(n) {\n  return n % 2 === 0;\n}\n```\n\n### algo_facile_2\n```javascript\nfunction carre(n) {\n  return n * n;\n}\n```\n\n### algo_moyen_1\n```javascript\nfunction somme1aN(n) {\n  let somme = 0;\n  for (let i = 1; i <= n; i++) {\n    somme += i;\n  }\n  return somme;\n}\n```\n\n### algo_difficile_1\n```javascript\nfunction inverserChaine(s) {\n  let resultat = '';\n  for (let i = s.length - 1; i >= 0; i--) {\n    resultat += s[i];\n  }\n  return resultat;\n}\n```\n\n### algo_defi\n```javascript\nfunction valeurMax(tab) {\n  let max = tab[0];\n  for (let i = 1; i < tab.length; i++) {\n    if (tab[i] > max) {\n      max = tab[i];\n    }\n  }\n  return max;\n}\n```",
+                "evalResults": [
+                  {
+                    "id": "tache_0a",
+                    "label": "Retourner 'Bonjour'",
+                    "code": "function direBonjour() {\n  return 'Bonjour';\n}",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "Retourne Bonjour",
+                        "error": null
+                      }
+                    ],
+                    "points": 41,
+                    "maxPoints": 41,
+                    "taskType": "Retourner 'Bonjour'",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 0
+                  },
+                  {
+                    "id": "tache_0b",
+                    "label": "Retourner true",
+                    "code": "function retournerVrai() {\n  return true;\n}",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "Retourne true",
+                        "error": null
+                      }
+                    ],
+                    "points": 48,
+                    "maxPoints": 48,
+                    "taskType": "Retourner true",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 0
+                  },
+                  {
+                    "id": "tache_0c",
+                    "label": "Retourner 42",
+                    "code": "function retourner42() {\n  return 42;\n}",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "Retourne 42",
+                        "error": null
+                      }
+                    ],
+                    "points": 46,
+                    "maxPoints": 46,
+                    "taskType": "Retourner 42",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 0
+                  },
+                  {
+                    "id": "tache_0d",
+                    "label": "Additionner a et b",
+                    "code": "function additionner(a, b) {\n  return a + b;\n}",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "Addition positive",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "Addition négative",
+                        "error": null
+                      }
+                    ],
+                    "points": 45,
+                    "maxPoints": 45,
+                    "taskType": "Additionner a et b",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 0
+                  },
+                  {
+                    "id": "tache_0e",
+                    "label": "Identité",
+                    "code": "function identite(x) {\n  return x;\n}",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "Identité string",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "Identité number",
+                        "error": null
+                      }
+                    ],
+                    "points": 42,
+                    "maxPoints": 42,
+                    "taskType": "Identité",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 0
+                  },
+                  {
+                    "id": "algo_facile_1",
+                    "label": "Algorithmique — Parité",
+                    "code": "function estPair(n) {\n  return n % 2 === 0;\n}",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "Pair",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "Impair",
+                        "error": null
+                      }
+                    ],
+                    "points": 51,
+                    "maxPoints": 51,
+                    "taskType": "Algorithmique — Parité",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 0
+                  },
+                  {
+                    "id": "algo_facile_2",
+                    "label": "Algorithmique — Carré",
+                    "code": "function carre(n) {\n  return n * n;\n}",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "Positif",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "Zéro",
+                        "error": null
+                      }
+                    ],
+                    "points": 51,
+                    "maxPoints": 51,
+                    "taskType": "Algorithmique — Carré",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 0
+                  },
+                  {
+                    "id": "algo_moyen_1",
+                    "label": "Algorithmique — Somme 1..N",
+                    "code": "function somme1aN(n) {\n  let somme = 0;\n  for (let i = 1; i <= n; i++) {\n    somme += i;\n  }\n  return somme;\n}",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "Somme 5",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "Somme 1",
+                        "error": null
+                      }
+                    ],
+                    "points": 54,
+                    "maxPoints": 54,
+                    "taskType": "Algorithmique — Somme 1..N",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 0
+                  },
+                  {
+                    "id": "algo_difficile_1",
+                    "label": "Algorithmique — Inversion de chaîne",
+                    "code": "function inverserChaine(s) {\n  let resultat = '';\n  for (let i = s.length - 1; i >= 0; i--) {\n    resultat += s[i];\n  }\n  return resultat;\n}",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "Mot",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "Un caractère",
+                        "error": null
+                      }
+                    ],
+                    "points": 53,
+                    "maxPoints": 53,
+                    "taskType": "Algorithmique — Inversion de chaîne",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 0
+                  },
+                  {
+                    "id": "algo_defi",
+                    "label": "Algorithmique — Maximum d'un tableau",
+                    "code": "function valeurMax(tab) {\n  let max = tab[0];\n  for (let i = 1; i < tab.length; i++) {\n    if (tab[i] > max) {\n      max = tab[i];\n    }\n  }\n  return max;\n}",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "Positifs",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "Négatifs",
+                        "error": null
+                      }
+                    ],
+                    "points": 42,
+                    "maxPoints": 42,
+                    "taskType": "Algorithmique — Maximum d'un tableau",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 0
+                  }
+                ]
+              },
+              {
+                "tierNum": 1,
+                "tierTitle": "Tier 1 — CP",
+                "isMandatory": true,
+                "className": "CP",
+                "rawResponse": "\n\n---\n### tache_1a\n```javascript\nfunction soustraire(a, b) {\n  return a - b;\n}\n```\n\n### tache_1b\n```javascript\nfunction superieurA10(n) {\n  return n > 10;\n}\n```\n\n### tache_1c\n```javascript\nfunction concatener(mot1, mot2) {\n  return mot1 + ' ' + mot2;\n}\n```\n\n### tache_1d\n```javascript\nfunction estVide(chaine) {\n  return chaine === '';\n}\n```\n\n### tache_1e\n```javascript\nfunction multiplierPar2(n) {\n  return n * 2;\n}\n```\n\n### algo_facile_1\n```javascript\nfunction estMultipleDe(n, m) {\n  if (m === 0) return false;\n  return n % m === 0;\n}\n```\n\n### algo_facile_2\n```javascript\nfunction puissance(base, exp) {\n  return Math.pow(base, exp);\n}\n```\n\n### algo_moyen_1\n```javascript\nfunction compterPairs(tab) {\n  let count = 0;\n  for (let i = 0; i < tab.length; i++) {\n    if (tab[i] % 2 === 0) {\n      count++;\n    }\n  }\n  return count;\n}\n```\n\n### algo_difficile_1\n```javascript\nfunction supprimerDoublons(tab) {\n  const unique = [];\n  for (let i = 0; i < tab.length; i++) {\n    if (!unique.includes(tab[i])) {\n      unique.push(tab[i]);\n    }\n  }\n  return unique;\n}\n```\n\n### algo_defi\n```javascript\nfunction sommePaires(tab) {\n  let sum = 0;\n  for (let i = 0; i < tab.length; i++) {\n    if (tab[i] % 2 === 0) {\n      sum += tab[i];\n    }\n  }\n  return sum;\n}\n```",
+                "evalResults": [
+                  {
+                    "id": "tache_1a",
+                    "label": "Soustraire b de a",
+                    "code": "function soustraire(a, b) {\n  return a - b;\n}",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "Soustraction simple",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "Soustraction négative",
+                        "error": null
+                      }
+                    ],
+                    "points": 40,
+                    "maxPoints": 40,
+                    "taskType": "Soustraire b de a",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 1
+                  },
+                  {
+                    "id": "tache_1b",
+                    "label": "Supérieur à 10",
+                    "code": "function superieurA10(n) {\n  return n > 10;\n}",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "Plus grand que 10",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "Égal à 10",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "Plus petit que 10",
+                        "error": null
+                      }
+                    ],
+                    "points": 32,
+                    "maxPoints": 32,
+                    "taskType": "Supérieur à 10",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 1
+                  },
+                  {
+                    "id": "tache_1c",
+                    "label": "Concaténer mots",
+                    "code": "function concatener(mot1, mot2) {\n  return mot1 + ' ' + mot2;\n}",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "Deux mots normaux",
+                        "error": null
+                      }
+                    ],
+                    "points": 41,
+                    "maxPoints": 41,
+                    "taskType": "Concaténer mots",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 1
+                  },
+                  {
+                    "id": "tache_1d",
+                    "label": "Chaîne vide",
+                    "code": "function estVide(chaine) {\n  return chaine === '';\n}",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "Chaîne vide",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "Chaîne avec espace",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "Chaîne normale",
+                        "error": null
+                      }
+                    ],
+                    "points": 31,
+                    "maxPoints": 31,
+                    "taskType": "Chaîne vide",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 1
+                  },
+                  {
+                    "id": "tache_1e",
+                    "label": "Multiplier par 2",
+                    "code": "function multiplierPar2(n) {\n  return n * 2;\n}",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "Positif",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "Zéro",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "Négatif",
+                        "error": null
+                      }
+                    ],
+                    "points": 53,
+                    "maxPoints": 53,
+                    "taskType": "Multiplier par 2",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 1
+                  },
+                  {
+                    "id": "algo_facile_1",
+                    "label": "Algorithmique — Multiplicité",
+                    "code": "function estMultipleDe(n, m) {\n  if (m === 0) return false;\n  return n % m === 0;\n}",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "Multiple",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "Non multiple",
+                        "error": null
+                      }
+                    ],
+                    "points": 33,
+                    "maxPoints": 33,
+                    "taskType": "Algorithmique — Multiplicité",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 1
+                  },
+                  {
+                    "id": "algo_facile_2",
+                    "label": "Algorithmique — Puissance",
+                    "code": "function puissance(base, exp) {\n  return Math.pow(base, exp);\n}",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "2^3",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "5^0",
+                        "error": null
+                      }
+                    ],
+                    "points": 40,
+                    "maxPoints": 40,
+                    "taskType": "Algorithmique — Puissance",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 1
+                  },
+                  {
+                    "id": "algo_moyen_1",
+                    "label": "Algorithmique — Comptage de pairs",
+                    "code": "function compterPairs(tab) {\n  let count = 0;\n  for (let i = 0; i < tab.length; i++) {\n    if (tab[i] % 2 === 0) {\n      count++;\n    }\n  }\n  return count;\n}",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "Mixte",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "Aucun pair",
+                        "error": null
+                      }
+                    ],
+                    "points": 40,
+                    "maxPoints": 40,
+                    "taskType": "Algorithmique — Comptage de pairs",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 1
+                  },
+                  {
+                    "id": "algo_difficile_1",
+                    "label": "Algorithmique — Suppression de doublons",
+                    "code": "function supprimerDoublons(tab) {\n  const unique = [];\n  for (let i = 0; i < tab.length; i++) {\n    if (!unique.includes(tab[i])) {\n      unique.push(tab[i]);\n    }\n  }\n  return unique;\n}",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "Avec doublons",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "Tous identiques",
+                        "error": null
+                      }
+                    ],
+                    "points": 51,
+                    "maxPoints": 51,
+                    "taskType": "Algorithmique — Suppression de doublons",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 1
+                  },
+                  {
+                    "id": "algo_defi",
+                    "label": "Algorithmique — Somme des pairs",
+                    "code": "function sommePaires(tab) {\n  let sum = 0;\n  for (let i = 0; i < tab.length; i++) {\n    if (tab[i] % 2 === 0) {\n      sum += tab[i];\n    }\n  }\n  return sum;\n}",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "Mixte",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "Aucun pair",
+                        "error": null
+                      }
+                    ],
+                    "points": 53,
+                    "maxPoints": 53,
+                    "taskType": "Algorithmique — Somme des pairs",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 1
+                  }
+                ]
+              }
+            ],
+            "quantization": "Q4_K_M"
+          }
+        ]
+      }
+    },
+    "lastUpdated": "2026-07-20T06:31:25.367Z",
+    "quantization": "Q4_K_M"
+  }
+}
