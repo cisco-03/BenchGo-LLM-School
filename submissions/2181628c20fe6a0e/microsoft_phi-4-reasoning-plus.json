@@ -1,0 +1,612 @@
+{
+  "schemaVersion": 1,
+  "benchgoVersion": "V3",
+  "userId": "2181628c20fe6a0e",
+  "pseudo": "FlexoDiv",
+  "submittedAt": "2026-07-24T16:55:11.237Z",
+  "integrityHash": "4b78b32138e9240b",
+  "carnet": {
+    "model": "microsoft/phi-4-reasoning-plus",
+    "shortName": "microsoft_phi-4-reasoning-plus",
+    "ecoles": {
+      "College-Lycee": {
+        "best": {
+          "profile": "STANDARD",
+          "ecole": "College-Lycee",
+          "score": 470,
+          "max": 895,
+          "pct": 53,
+          "mandatoryPassed": 470,
+          "mandatoryTotal": 895,
+          "globalLifeScore": 470,
+          "optionalBonus": 0,
+          "helpCount": 0,
+          "retriedCount": 0,
+          "calibrationIndex": 0.6,
+          "declaredLevel": 0.6,
+          "date": "2026-07-20",
+          "time": "11-01-25",
+          "reportFile": "Export-Rapports\\2026-07-20\\College-Lycee\\STANDARD\\rapport_v3_microsoft_phi-4-reasoning-plus_standard_11-01-25.md",
+          "selfProfile": {
+            "skills": {
+              "javascript_basics": {
+                "level": 4,
+                "examples": "Création de fonctions, boucles conditionnelles"
+              },
+              "javascript_async": {
+                "level": 3,
+                "examples": "Utilisation d'async/await pour des requêtes API, gestion de Promises"
+              },
+              "algorithms_advanced": {
+                "level": 2,
+                "examples": "Implémentation basique de trie, utilisation de Dijkstra sur un graphe simple"
+              },
+              "code_debugging": {
+                "level": 3,
+                "examples": "Résolution de race conditions async, identification d'injection SQL"
+              }
+            },
+            "justification": "Expérience solide en bases et async, mais limitée en algorithmes avancés et debugging complexe."
+          },
+          "tiers": [
+            {
+              "tierNum": 0,
+              "tierTitle": "Tier 0 — 6ème (Collège)",
+              "isMandatory": true,
+              "className": "6eme",
+              "rawResponse": "\n\n---\nWe are Phi, we need to produce answer in Markdown with code blocks for each exercise. The instructions: \"Return your answers in Markdown using headers for the exercise IDs and code blocks for the JavaScript functions.\" We have 10 exercises:\n\n- ID: math (Mathématiques : Addition) -> function additionner(tab) that takes an array of numbers and returns their sum.\n- ID: francais (Français : Majuscule) -> function majuscule(mot) that returns the word with its first letter in uppercase. Possibly using toUpperCase on first char, then rest unchanged.\n- ID: contient (Logique : Recherche dans un tableau) -> function contientValeur(tab, val) that returns true if array tab contains value val, false otherwise.\n- ID: absolu (Logique : Valeur absolue) -> function valeurAbsolue(n) that returns absolute value of n. Possibly using Math.abs or manual logic.\n- ID: info (Informatique : Bonjour) -> function bonjour(nom) that returns \"Bonjour \" + nom + \" !\"\n- ID: algo_facile_1 (Algorithmique — Parité) -> function estPair(n) that returns true if n is even, false otherwise. Possibly using modulo operator.\n- ID: algo_facile_2 (Algorithmique — Carré) -> function carre(n) that returns n multiplied by itself.\n- ID: algo_moyen_1 (Algorithmique — Somme 1..N) -> function somme1aN(n) that returns the sum of all integers from 1 to n, where n>=1. Possibly using arithmetic progression formula or iterative loop.\n- ID: algo_difficile_1 (Algorithmique — Inversion de chaîne) -> function inverserChaine(s) that returns reversed string.\n- ID: algo_defi (Algorithmique — Maximum d'un tableau) -> function valeurMax(tab) that returns the largest number in a non-empty array.\n\nWe need to produce code blocks with JavaScript code. The instructions require \"code complet et exécutable\" i.e. complete functions with bodies and return statements, not just placeholders.\n\nI'll produce answer in Markdown format as requested: each exercise gets header with ID (like ### math) then code block with ```javascript ...```. I'll produce code blocks for each function.\n\nLet's produce code:\n\nFor \"math\": additionner(tab)\nWe can do:\nfunction additionner(tab) {\n    let sum = 0;\n    for(let i=0; i<tab.length; i++){\n         sum += tab[i];\n    }\n    return sum;\n}\nAlternatively, we could use reduce but since it's Tier 0 maybe a loop is more appropriate. But I'll produce code that uses either method.\n\nFor \"francais\": majuscule(mot)\nWe can do:\nfunction majuscule(mot) {\n   if (mot.length === 0) return mot;\n   return mot[0].toUpperCase() + mot.slice(1);\n}\nThat is acceptable.\n\nFor \"contient\": contientValeur(tab, val)\nWe can do:\nfunction contientValeur(tab, val) {\n    for(let i=0; i<tab.length; i++){\n         if (tab[i] === val) return true;\n    }\n    return false;\n}\nAlternatively we could use includes method but maybe it's better to show loop. But since Tier 0 might not know array.includes? Actually, I'm not sure. But I'll produce code that uses a for loop.\n\nFor \"absolu\": valeurAbsolue(n)\nWe can do:\nfunction valeurAbsolue(n) {\n    if (n < 0) return -n;\n    else return n;\n}\nAlternatively we could use Math.abs but maybe it's better to show manual logic. But I'll produce code that uses Math.abs because it's simpler and correct.\n\nFor \"info\": bonjour(nom)\nWe can do:\nfunction bonjour(nom) {\n   return \"Bonjour \" + nom + \" !\";\n}\n\nFor \"algo_facile_1\": estPair(n)\nWe can do:\nfunction estPair(n) {\n    return n % 2 === 0;\n}\nThat is acceptable.\n\nFor \"algo_facile_2\": carre(n)\nWe can do:\nfunction carre(n) {\n   return n * n;\n}\n\nFor \"algo_moyen_1\": somme1aN(n)\nWe can do:\nfunction somme1aN(n) {\n    let sum = 0;\n    for(let i=1; i<=n; i++){\n         sum += i;\n    }\n    return sum;\n}\nAlternatively, we could use formula n*(n+1)/2 but I'll produce iterative solution.\n\nFor \"algo_difficile_1\": inverserChaine(s)\nWe can do:\nfunction inverserChaine(s) {\n   let reversed = \"\";\n   for(let i=s.length - 1; i>=0; i--){\n         reversed += s[i];\n   }\n   return reversed;\n}\nAlternatively, we could use split and reverse but I'll produce iterative solution.\n\nFor \"algo_defi\": valeurMax(tab)\nWe can do:\nfunction valeurMax(tab) {\n    let max = tab[0];\n    for(let i=1; i<tab.length; i++){\n         if (tab[i] > max) {\n              max = tab[i];\n         }\n    }\n    return max;\n}\n\nI'll produce code blocks with each header and code block.\n\nI must produce answer in Markdown format. I'll produce headers \"### math\", then code block with ```javascript ...```. Then similar for others.\n\nI'll produce answer as a single message containing all exercises, each preceded by a markdown header with the exercise id (like \"### math\").\n\nI'll produce answer in Markdown with code blocks.\n\nI'll produce answer in Markdown format. I'll produce answer in plain text with code blocks.\n\nI'll produce answer in Markdown with headers for each exercise ID and code block with JavaScript code.\n\nI'll produce answer as a single message containing all exercises, each preceded by header \"### <exercise id>\" then code block with ```javascript ...```.\n\nI'll produce answer accordingly. I'll produce answer in Markdown format.\n\nI'll produce answer in Markdown with code blocks for each exercise.\n\nI'll produce answer in Markdown with headers and code blocks.\n\nI'll produce answer as a single message containing all exercises, each preceded by header \"### <exercise id>\" then code block with ```javascript ...```.\n\nI'll produce answer accordingly.### math\n```javascript\nfunction additionner(tab) {\n  let somme = 0;\n  for (let i = 0; i < tab.length; i++) {\n    somme += tab[i];\n  }\n  return somme;\n}\n```\n\n### francais\n```javascript\nfunction majuscule(mot) {\n  if (mot.length === 0) return mot;\n  return mot[0].toUpperCase() + mot.slice(1);\n}\n```\n\n### contient\n```javascript\nfunction contientValeur(tab, val) {\n  for (let i = 0; i < tab.length; i++) {\n    if (tab[i] === val) {\n      return true;\n    }\n  }\n  return false;\n}\n```\n\n### absolu\n```javascript\nfunction valeurAbsolue(n) {\n  if (n < 0) {\n    return -n;\n  } else {\n    return n;\n  }\n}\n```\n\n### info\n```javascript\nfunction bonjour(nom) {\n  return \"Bonjour \" + nom + \" !\";\n}\n```\n\n### algo_facile_1\n```javascript\nfunction estPair(n) {\n  return n % 2 === 0;\n}\n```\n\n### algo_facile_2\n```javascript\nfunction carre(n) {\n  return n * n;\n}\n```\n\n### algo_moyen_1\n```javascript\nfunction somme1aN(n) {\n  let somme = 0;\n  for (let i = 1; i <= n; i++) {\n    somme += i;\n  }\n  return somme;\n}\n```\n\n### algo_difficile_1\n```javascript\nfunction inverserChaine(s) {\n  let chaineInversee = \"\";\n  for (let i = s.length - 1; i >= 0; i--) {\n    chaineInversee += s[i];\n  }\n  return chaineInversee;\n}\n```\n\n### algo_defi\n```javascript\nfunction valeurMax(tab) {\n  let max = tab[0];\n  for (let i = 1; i < tab.length; i++) {\n    if (tab[i] > max) {\n      max = tab[i];\n    }\n  }\n  return max;\n}\n```",
+              "evalResults": [
+                {
+                  "id": "math",
+                  "label": "Mathématiques : Addition",
+                  "code": "function additionner(tab) {\n  let somme = 0;\n  for (let i = 0; i < tab.length; i++) {\n    somme += tab[i];\n  }\n  return somme;\n}",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "Somme",
+                      "error": null
+                    }
+                  ],
+                  "points": 43,
+                  "maxPoints": 43,
+                  "taskType": "Mathématiques",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 0
+                },
+                {
+                  "id": "francais",
+                  "label": "Français : Majuscule",
+                  "code": "function majuscule(mot) {\n  if (mot.length === 0) return mot;\n  return mot[0].toUpperCase() + mot.slice(1);\n}",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "Première lettre",
+                      "error": null
+                    }
+                  ],
+                  "points": 57,
+                  "maxPoints": 57,
+                  "taskType": "Français",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 0
+                },
+                {
+                  "id": "contient",
+                  "label": "Logique : Recherche dans un tableau",
+                  "code": "function contientValeur(tab, val) {\n  for (let i = 0; i < tab.length; i++) {\n    if (tab[i] === val) {\n      return true;\n    }\n  }\n  return false;\n}",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "Présent",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "Absent",
+                      "error": null
+                    }
+                  ],
+                  "points": 41,
+                  "maxPoints": 41,
+                  "taskType": "Logique",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 0
+                },
+                {
+                  "id": "absolu",
+                  "label": "Logique : Valeur absolue",
+                  "code": "function valeurAbsolue(n) {\n  if (n < 0) {\n    return -n;\n  } else {\n    return n;\n  }\n}",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "Négatif",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "Positif",
+                      "error": null
+                    }
+                  ],
+                  "points": 52,
+                  "maxPoints": 52,
+                  "taskType": "Logique",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 0
+                },
+                {
+                  "id": "info",
+                  "label": "Informatique : Bonjour",
+                  "code": "function bonjour(nom) {\n  return \"Bonjour \" + nom + \" !\";\n}",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "Formatage",
+                      "error": null
+                    }
+                  ],
+                  "points": 58,
+                  "maxPoints": 58,
+                  "taskType": "Informatique",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 0
+                },
+                {
+                  "id": "algo_facile_1",
+                  "label": "Algorithmique — Parité",
+                  "code": "function estPair(n) {\n  return n % 2 === 0;\n}",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "Pair",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "Impair",
+                      "error": null
+                    }
+                  ],
+                  "points": 39,
+                  "maxPoints": 39,
+                  "taskType": "Algorithmique — Parité",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 0
+                },
+                {
+                  "id": "algo_facile_2",
+                  "label": "Algorithmique — Carré",
+                  "code": "function carre(n) {\n  return n * n;\n}",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "Positif",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "Zéro",
+                      "error": null
+                    }
+                  ],
+                  "points": 58,
+                  "maxPoints": 58,
+                  "taskType": "Algorithmique — Carré",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 0
+                },
+                {
+                  "id": "algo_moyen_1",
+                  "label": "Algorithmique — Somme 1..N",
+                  "code": "function somme1aN(n) {\n  let somme = 0;\n  for (let i = 1; i <= n; i++) {\n    somme += i;\n  }\n  return somme;\n}",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "Somme 5",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "Somme 1",
+                      "error": null
+                    }
+                  ],
+                  "points": 40,
+                  "maxPoints": 40,
+                  "taskType": "Algorithmique — Somme 1..N",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 0
+                },
+                {
+                  "id": "algo_difficile_1",
+                  "label": "Algorithmique — Inversion de chaîne",
+                  "code": "function inverserChaine(s) {\n  let chaineInversee = \"\";\n  for (let i = s.length - 1; i >= 0; i--) {\n    chaineInversee += s[i];\n  }\n  return chaineInversee;\n}",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "Mot",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "Un caractère",
+                      "error": null
+                    }
+                  ],
+                  "points": 44,
+                  "maxPoints": 44,
+                  "taskType": "Algorithmique — Inversion de chaîne",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 0
+                },
+                {
+                  "id": "algo_defi",
+                  "label": "Algorithmique — Maximum d'un tableau",
+                  "code": "function valeurMax(tab) {\n  let max = tab[0];\n  for (let i = 1; i < tab.length; i++) {\n    if (tab[i] > max) {\n      max = tab[i];\n    }\n  }\n  return max;\n}",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "Positifs",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "Négatifs",
+                      "error": null
+                    }
+                  ],
+                  "points": 38,
+                  "maxPoints": 38,
+                  "taskType": "Algorithmique — Maximum d'un tableau",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 0
+                }
+              ]
+            }
+          ],
+          "quantization": "Q4_K_M"
+        },
+        "attempts": [
+          {
+            "profile": "STANDARD",
+            "ecole": "College-Lycee",
+            "score": 470,
+            "max": 895,
+            "pct": 53,
+            "mandatoryPassed": 470,
+            "mandatoryTotal": 895,
+            "globalLifeScore": 470,
+            "optionalBonus": 0,
+            "helpCount": 0,
+            "retriedCount": 0,
+            "calibrationIndex": 0.6,
+            "declaredLevel": 0.6,
+            "date": "2026-07-20",
+            "time": "11-01-25",
+            "reportFile": "Export-Rapports\\2026-07-20\\College-Lycee\\STANDARD\\rapport_v3_microsoft_phi-4-reasoning-plus_standard_11-01-25.md",
+            "selfProfile": {
+              "skills": {
+                "javascript_basics": {
+                  "level": 4,
+                  "examples": "Création de fonctions, boucles conditionnelles"
+                },
+                "javascript_async": {
+                  "level": 3,
+                  "examples": "Utilisation d'async/await pour des requêtes API, gestion de Promises"
+                },
+                "algorithms_advanced": {
+                  "level": 2,
+                  "examples": "Implémentation basique de trie, utilisation de Dijkstra sur un graphe simple"
+                },
+                "code_debugging": {
+                  "level": 3,
+                  "examples": "Résolution de race conditions async, identification d'injection SQL"
+                }
+              },
+              "justification": "Expérience solide en bases et async, mais limitée en algorithmes avancés et debugging complexe."
+            },
+            "tiers": [
+              {
+                "tierNum": 0,
+                "tierTitle": "Tier 0 — 6ème (Collège)",
+                "isMandatory": true,
+                "className": "6eme",
+                "rawResponse": "\n\n---\nWe are Phi, we need to produce answer in Markdown with code blocks for each exercise. The instructions: \"Return your answers in Markdown using headers for the exercise IDs and code blocks for the JavaScript functions.\" We have 10 exercises:\n\n- ID: math (Mathématiques : Addition) -> function additionner(tab) that takes an array of numbers and returns their sum.\n- ID: francais (Français : Majuscule) -> function majuscule(mot) that returns the word with its first letter in uppercase. Possibly using toUpperCase on first char, then rest unchanged.\n- ID: contient (Logique : Recherche dans un tableau) -> function contientValeur(tab, val) that returns true if array tab contains value val, false otherwise.\n- ID: absolu (Logique : Valeur absolue) -> function valeurAbsolue(n) that returns absolute value of n. Possibly using Math.abs or manual logic.\n- ID: info (Informatique : Bonjour) -> function bonjour(nom) that returns \"Bonjour \" + nom + \" !\"\n- ID: algo_facile_1 (Algorithmique — Parité) -> function estPair(n) that returns true if n is even, false otherwise. Possibly using modulo operator.\n- ID: algo_facile_2 (Algorithmique — Carré) -> function carre(n) that returns n multiplied by itself.\n- ID: algo_moyen_1 (Algorithmique — Somme 1..N) -> function somme1aN(n) that returns the sum of all integers from 1 to n, where n>=1. Possibly using arithmetic progression formula or iterative loop.\n- ID: algo_difficile_1 (Algorithmique — Inversion de chaîne) -> function inverserChaine(s) that returns reversed string.\n- ID: algo_defi (Algorithmique — Maximum d'un tableau) -> function valeurMax(tab) that returns the largest number in a non-empty array.\n\nWe need to produce code blocks with JavaScript code. The instructions require \"code complet et exécutable\" i.e. complete functions with bodies and return statements, not just placeholders.\n\nI'll produce answer in Markdown format as requested: each exercise gets header with ID (like ### math) then code block with ```javascript ...```. I'll produce code blocks for each function.\n\nLet's produce code:\n\nFor \"math\": additionner(tab)\nWe can do:\nfunction additionner(tab) {\n    let sum = 0;\n    for(let i=0; i<tab.length; i++){\n         sum += tab[i];\n    }\n    return sum;\n}\nAlternatively, we could use reduce but since it's Tier 0 maybe a loop is more appropriate. But I'll produce code that uses either method.\n\nFor \"francais\": majuscule(mot)\nWe can do:\nfunction majuscule(mot) {\n   if (mot.length === 0) return mot;\n   return mot[0].toUpperCase() + mot.slice(1);\n}\nThat is acceptable.\n\nFor \"contient\": contientValeur(tab, val)\nWe can do:\nfunction contientValeur(tab, val) {\n    for(let i=0; i<tab.length; i++){\n         if (tab[i] === val) return true;\n    }\n    return false;\n}\nAlternatively we could use includes method but maybe it's better to show loop. But since Tier 0 might not know array.includes? Actually, I'm not sure. But I'll produce code that uses a for loop.\n\nFor \"absolu\": valeurAbsolue(n)\nWe can do:\nfunction valeurAbsolue(n) {\n    if (n < 0) return -n;\n    else return n;\n}\nAlternatively we could use Math.abs but maybe it's better to show manual logic. But I'll produce code that uses Math.abs because it's simpler and correct.\n\nFor \"info\": bonjour(nom)\nWe can do:\nfunction bonjour(nom) {\n   return \"Bonjour \" + nom + \" !\";\n}\n\nFor \"algo_facile_1\": estPair(n)\nWe can do:\nfunction estPair(n) {\n    return n % 2 === 0;\n}\nThat is acceptable.\n\nFor \"algo_facile_2\": carre(n)\nWe can do:\nfunction carre(n) {\n   return n * n;\n}\n\nFor \"algo_moyen_1\": somme1aN(n)\nWe can do:\nfunction somme1aN(n) {\n    let sum = 0;\n    for(let i=1; i<=n; i++){\n         sum += i;\n    }\n    return sum;\n}\nAlternatively, we could use formula n*(n+1)/2 but I'll produce iterative solution.\n\nFor \"algo_difficile_1\": inverserChaine(s)\nWe can do:\nfunction inverserChaine(s) {\n   let reversed = \"\";\n   for(let i=s.length - 1; i>=0; i--){\n         reversed += s[i];\n   }\n   return reversed;\n}\nAlternatively, we could use split and reverse but I'll produce iterative solution.\n\nFor \"algo_defi\": valeurMax(tab)\nWe can do:\nfunction valeurMax(tab) {\n    let max = tab[0];\n    for(let i=1; i<tab.length; i++){\n         if (tab[i] > max) {\n              max = tab[i];\n         }\n    }\n    return max;\n}\n\nI'll produce code blocks with each header and code block.\n\nI must produce answer in Markdown format. I'll produce headers \"### math\", then code block with ```javascript ...```. Then similar for others.\n\nI'll produce answer as a single message containing all exercises, each preceded by a markdown header with the exercise id (like \"### math\").\n\nI'll produce answer in Markdown with code blocks.\n\nI'll produce answer in Markdown format. I'll produce answer in plain text with code blocks.\n\nI'll produce answer in Markdown with headers for each exercise ID and code block with JavaScript code.\n\nI'll produce answer as a single message containing all exercises, each preceded by header \"### <exercise id>\" then code block with ```javascript ...```.\n\nI'll produce answer accordingly. I'll produce answer in Markdown format.\n\nI'll produce answer in Markdown with code blocks for each exercise.\n\nI'll produce answer in Markdown with headers and code blocks.\n\nI'll produce answer as a single message containing all exercises, each preceded by header \"### <exercise id>\" then code block with ```javascript ...```.\n\nI'll produce answer accordingly.### math\n```javascript\nfunction additionner(tab) {\n  let somme = 0;\n  for (let i = 0; i < tab.length; i++) {\n    somme += tab[i];\n  }\n  return somme;\n}\n```\n\n### francais\n```javascript\nfunction majuscule(mot) {\n  if (mot.length === 0) return mot;\n  return mot[0].toUpperCase() + mot.slice(1);\n}\n```\n\n### contient\n```javascript\nfunction contientValeur(tab, val) {\n  for (let i = 0; i < tab.length; i++) {\n    if (tab[i] === val) {\n      return true;\n    }\n  }\n  return false;\n}\n```\n\n### absolu\n```javascript\nfunction valeurAbsolue(n) {\n  if (n < 0) {\n    return -n;\n  } else {\n    return n;\n  }\n}\n```\n\n### info\n```javascript\nfunction bonjour(nom) {\n  return \"Bonjour \" + nom + \" !\";\n}\n```\n\n### algo_facile_1\n```javascript\nfunction estPair(n) {\n  return n % 2 === 0;\n}\n```\n\n### algo_facile_2\n```javascript\nfunction carre(n) {\n  return n * n;\n}\n```\n\n### algo_moyen_1\n```javascript\nfunction somme1aN(n) {\n  let somme = 0;\n  for (let i = 1; i <= n; i++) {\n    somme += i;\n  }\n  return somme;\n}\n```\n\n### algo_difficile_1\n```javascript\nfunction inverserChaine(s) {\n  let chaineInversee = \"\";\n  for (let i = s.length - 1; i >= 0; i--) {\n    chaineInversee += s[i];\n  }\n  return chaineInversee;\n}\n```\n\n### algo_defi\n```javascript\nfunction valeurMax(tab) {\n  let max = tab[0];\n  for (let i = 1; i < tab.length; i++) {\n    if (tab[i] > max) {\n      max = tab[i];\n    }\n  }\n  return max;\n}\n```",
+                "evalResults": [
+                  {
+                    "id": "math",
+                    "label": "Mathématiques : Addition",
+                    "code": "function additionner(tab) {\n  let somme = 0;\n  for (let i = 0; i < tab.length; i++) {\n    somme += tab[i];\n  }\n  return somme;\n}",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "Somme",
+                        "error": null
+                      }
+                    ],
+                    "points": 43,
+                    "maxPoints": 43,
+                    "taskType": "Mathématiques",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 0
+                  },
+                  {
+                    "id": "francais",
+                    "label": "Français : Majuscule",
+                    "code": "function majuscule(mot) {\n  if (mot.length === 0) return mot;\n  return mot[0].toUpperCase() + mot.slice(1);\n}",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "Première lettre",
+                        "error": null
+                      }
+                    ],
+                    "points": 57,
+                    "maxPoints": 57,
+                    "taskType": "Français",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 0
+                  },
+                  {
+                    "id": "contient",
+                    "label": "Logique : Recherche dans un tableau",
+                    "code": "function contientValeur(tab, val) {\n  for (let i = 0; i < tab.length; i++) {\n    if (tab[i] === val) {\n      return true;\n    }\n  }\n  return false;\n}",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "Présent",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "Absent",
+                        "error": null
+                      }
+                    ],
+                    "points": 41,
+                    "maxPoints": 41,
+                    "taskType": "Logique",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 0
+                  },
+                  {
+                    "id": "absolu",
+                    "label": "Logique : Valeur absolue",
+                    "code": "function valeurAbsolue(n) {\n  if (n < 0) {\n    return -n;\n  } else {\n    return n;\n  }\n}",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "Négatif",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "Positif",
+                        "error": null
+                      }
+                    ],
+                    "points": 52,
+                    "maxPoints": 52,
+                    "taskType": "Logique",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 0
+                  },
+                  {
+                    "id": "info",
+                    "label": "Informatique : Bonjour",
+                    "code": "function bonjour(nom) {\n  return \"Bonjour \" + nom + \" !\";\n}",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "Formatage",
+                        "error": null
+                      }
+                    ],
+                    "points": 58,
+                    "maxPoints": 58,
+                    "taskType": "Informatique",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 0
+                  },
+                  {
+                    "id": "algo_facile_1",
+                    "label": "Algorithmique — Parité",
+                    "code": "function estPair(n) {\n  return n % 2 === 0;\n}",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "Pair",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "Impair",
+                        "error": null
+                      }
+                    ],
+                    "points": 39,
+                    "maxPoints": 39,
+                    "taskType": "Algorithmique — Parité",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 0
+                  },
+                  {
+                    "id": "algo_facile_2",
+                    "label": "Algorithmique — Carré",
+                    "code": "function carre(n) {\n  return n * n;\n}",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "Positif",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "Zéro",
+                        "error": null
+                      }
+                    ],
+                    "points": 58,
+                    "maxPoints": 58,
+                    "taskType": "Algorithmique — Carré",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 0
+                  },
+                  {
+                    "id": "algo_moyen_1",
+                    "label": "Algorithmique — Somme 1..N",
+                    "code": "function somme1aN(n) {\n  let somme = 0;\n  for (let i = 1; i <= n; i++) {\n    somme += i;\n  }\n  return somme;\n}",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "Somme 5",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "Somme 1",
+                        "error": null
+                      }
+                    ],
+                    "points": 40,
+                    "maxPoints": 40,
+                    "taskType": "Algorithmique — Somme 1..N",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 0
+                  },
+                  {
+                    "id": "algo_difficile_1",
+                    "label": "Algorithmique — Inversion de chaîne",
+                    "code": "function inverserChaine(s) {\n  let chaineInversee = \"\";\n  for (let i = s.length - 1; i >= 0; i--) {\n    chaineInversee += s[i];\n  }\n  return chaineInversee;\n}",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "Mot",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "Un caractère",
+                        "error": null
+                      }
+                    ],
+                    "points": 44,
+                    "maxPoints": 44,
+                    "taskType": "Algorithmique — Inversion de chaîne",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 0
+                  },
+                  {
+                    "id": "algo_defi",
+                    "label": "Algorithmique — Maximum d'un tableau",
+                    "code": "function valeurMax(tab) {\n  let max = tab[0];\n  for (let i = 1; i < tab.length; i++) {\n    if (tab[i] > max) {\n      max = tab[i];\n    }\n  }\n  return max;\n}",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "Positifs",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "Négatifs",
+                        "error": null
+                      }
+                    ],
+                    "points": 38,
+                    "maxPoints": 38,
+                    "taskType": "Algorithmique — Maximum d'un tableau",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 0
+                  }
+                ]
+              }
+            ],
+            "quantization": "Q4_K_M"
+          }
+        ]
+      }
+    },
+    "lastUpdated": "2026-07-20T09:01:26.450Z",
+    "quantization": "Q4_K_M"
+  }
+}
