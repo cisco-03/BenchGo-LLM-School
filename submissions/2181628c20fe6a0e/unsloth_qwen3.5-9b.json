@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 1,
+  "benchgoVersion": "V3",
+  "userId": "2181628c20fe6a0e",
+  "pseudo": "FlexoDiv",
+  "submittedAt": "2026-07-24T16:54:44.514Z",
+  "integrityHash": "5f7cf4aef6eba497",
+  "carnet": {
+    "model": "unsloth/qwen3.5-9b",
+    "shortName": "unsloth_qwen3.5-9b",
+    "ecoles": {
+      "Primaire": {
+        "profile": "LIGHT",
+        "ecole": "Primaire",
+        "score": 2398,
+        "max": 2723,
+        "pct": 88,
+        "mandatoryPassed": 863,
+        "mandatoryTotal": 863,
+        "globalLifeScore": 2770,
+        "optionalBonus": 372,
+        "helpCount": 7,
+        "retriedCount": 7,
+        "calibrationIndex": 0.95,
+        "declaredLevel": 0.95,
+        "date": "2026-07-18",
+        "reportFile": "Export-Rapports\\2026-07-18\\Primaire\\rapport_v3_unsloth_qwen3.5-9b_light_12-37-41.md"
+      },
+      "College-Lycee": {
+        "profile": "STANDARD",
+        "ecole": "College-Lycee",
+        "score": 2422,
+        "max": 2699,
+        "pct": 90,
+        "mandatoryPassed": 1364,
+        "mandatoryTotal": 1364,
+        "globalLifeScore": 2669,
+        "optionalBonus": 247,
+        "helpCount": 4,
+        "retriedCount": 4,
+        "calibrationIndex": 0.9833333333333333,
+        "declaredLevel": 0.95,
+        "date": "2026-07-18",
+        "reportFile": "Export-Rapports\\2026-07-18\\College-Lycee\\rapport_v3_unsloth_qwen3.5-9b_standard_14-42-48.md"
+      }
+    },
+    "lastUpdated": "2026-07-19T14:06:54.862Z",
+    "quantization": "Q4_K_XL"
+  }
+}
