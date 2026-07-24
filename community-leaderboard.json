@@ -1,4 +1,26 @@
 {
-  "entries": [],
-  "generatedAt": "2026-07-24T16:31:27.118Z"
+  "entries": [
+    {
+      "model": "gemma-3-1b-it",
+      "shortName": "gemma-3-1b-it",
+      "quantization": null,
+      "score": -1802,
+      "max": 3138,
+      "pct": -57,
+      "globalLifeScore": -1770,
+      "optionalBonus": 32,
+      "tokens": 5818,
+      "elapsedMs": 127157,
+      "tokensPerSecond": 45.75,
+      "ecoleCount": 1,
+      "pseudo": "FlexoDiv",
+      "submittedAt": "2026-07-24T16:55:20.313Z",
+      "contributors": 1,
+      "allPct": [
+        -57
+      ]
+    }
+  ],
+  "generatedAt": "2026-07-24T16:56:15.144Z",
+  "totalSubmissions": 1
 }
