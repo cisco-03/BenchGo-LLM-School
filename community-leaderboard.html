@@ -5,406 +5,268 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Classement Communautaire — BenchGo V3</title>
 <style>
-* { margin: 0; padding: 0; box-sizing: border-box; }
-body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0d1117; color: #c9d1d9; padding: 20px; }
-h1 { text-align: center; color: #58a6ff; margin-bottom: 8px; }
-.subtitle { text-align: center; color: #8b949e; margin-bottom: 24px; font-size: 14px; }
-.stats-bar { display: flex; justify-content: center; gap: 24px; margin-bottom: 24px; flex-wrap: wrap; }
-.stats-bar .pill { background: #161b22; border: 1px solid #30363d; border-radius: 20px; padding: 8px 16px; font-size: 14px; }
-.stats-bar .pill strong { color: #58a6ff; }
-.leaderboard { max-width: 900px; margin: 0 auto; display: flex; flex-direction: column; gap: 12px; }
-.card { display: flex; align-items: center; gap: 16px; background: #161b22; border: 1px solid #30363d; border-radius: 12px; padding: 16px 20px; transition: border-color 0.2s; }
-.card:hover { border-color: #58a6ff; }
-.card.top { border-left: 4px solid #3fb950; }
-.card.rec { border-left: 4px solid #58a6ff; }
-.card.mid { border-left: 4px solid #d29922; }
-.card.rattr { border-left: 4px solid #db6d28; }
-.card.elim { border-left: 4px solid #f85149; }
-.rank { font-size: 24px; font-weight: bold; min-width: 60px; text-align: center; color: #8b949e; }
-.info { flex: 1; min-width: 0; }
-.model-name { font-size: 18px; font-weight: 600; color: #f0f6fc; word-break: break-word; }
-.meta { font-size: 12px; color: #8b949e; margin-top: 4px; display: flex; gap: 12px; flex-wrap: wrap; }
-.meta .quant { background: #1f6feb22; padding: 2px 8px; border-radius: 4px; }
-.meta .contributors { color: #d2a8ff; }
-.meta .pseudo { color: #7ee787; }
-.stats { display: flex; gap: 20px; align-items: center; flex-wrap: wrap; }
-.stat { display: flex; flex-direction: column; align-items: center; }
-.stat .val { font-size: 16px; font-weight: 600; color: #f0f6fc; }
-.stat .lbl { font-size: 11px; color: #8b949e; }
-.verdict { padding: 4px 12px; border-radius: 20px; font-size: 13px; font-weight: 600; }
-.verdict.top { background: #238636; color: #fff; }
-.verdict.rec { background: #1f6feb; color: #fff; }
-.verdict.mid { background: #4d2d00; color: #d29922; }
-.verdict.rattr { background: #3d1f00; color: #db6d28; }
-.verdict.elim { background: #4a0e0e; color: #f85149; }
-footer { text-align: center; margin-top: 32px; color: #8b949e; font-size: 12px; }
-footer a { color: #58a6ff; }
+  :root {
+    --bg-0: #0a0e14; --bg-1: #11161d; --bg-2: #161b22; --bg-3: #1c2128; --bg-elev: #22272e;
+    --border: #2d333b; --border-soft: #21262d;
+    --text: #e6edf3; --text-muted: #8b949e; --text-dim: #6e7681;
+    --accent: #58a6ff; --accent-2: #1f6feb;
+    --green: #3fb950; --yellow: #d29922; --red: #f85149; --purple: #bc8cff;
+    --gold: #ffd700; --silver: #c9d1d4; --bronze: #e3b341;
+    --fs-display: clamp(1.9rem,1.5538rem+1.5385vw,2.75rem);
+    --fs-h1: clamp(1.5rem,1.3615rem+0.6154vw,1.85rem);
+    --fs-h2: clamp(1.15rem,1.0808rem+0.3077vw,1.3rem);
+    --fs-h3: clamp(0.95rem,0.9115rem+0.1667vw,1.05rem);
+    --fs-body: clamp(0.9rem,0.8808rem+0.0833vw,0.97rem);
+    --fs-small: clamp(0.78rem,0.7654rem+0.0641vw,0.83rem);
+    --fs-tiny: clamp(0.68rem,0.6692rem+0.0449vw,0.71rem);
+    --r-sm: 8px; --r-md: 12px; --r-lg: 16px; --r-pill: 999px;
+    --shadow-card: 0 1px 0 rgba(255,255,255,0.03),0 2px 8px rgba(0,0,0,0.25);
+    --shadow-elev: 0 8px 32px rgba(0,0,0,0.45);
+    --container-max: 1600px;
+    --container-pad: clamp(0.75rem,3vw,2rem);
+    --space-xs: clamp(0.375rem,0.3462rem+0.1282vw,0.5rem);
+    --space-s: clamp(0.75rem,0.6923rem+0.2564vw,1rem);
+    --space-m: clamp(1rem,0.8846rem+0.5128vw,1.5rem);
+    --space-l: clamp(1.5rem,1.3077rem+1.0256vw,2.5rem);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body, * { scrollbar-width: none; -ms-overflow-style: none; }
+  ::-webkit-scrollbar { width: 0; height: 0; display: none; }
+  body {
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    background: radial-gradient(1200px 600px at 50% -200px,rgba(31,111,235,0.10),transparent 60%),
+                radial-gradient(900px 500px at 100% 0%,rgba(188,140,255,0.06),transparent 55%),var(--bg-0);
+    color: var(--text); font-size: var(--fs-body); line-height: 1.5; min-height: 100vh;
+    padding-block: var(--space-m); -webkit-font-smoothing: antialiased;
+  }
+  .wrap { width: 100%; max-width: var(--container-max); margin-inline: auto; padding-inline: var(--container-pad); }
+  header.hero { text-align: center; padding-block: var(--space-m) var(--space-l); }
+  header.hero .badge-top {
+    display: inline-flex; align-items: center; gap: 6px; padding: 4px 12px;
+    border: 1px solid var(--border); background: var(--bg-2); border-radius: var(--r-pill);
+    color: var(--text-muted); font-size: var(--fs-tiny); text-transform: uppercase;
+    letter-spacing: 1.2px; margin-bottom: var(--space-s);
+  }
+  header.hero h1 {
+    font-size: var(--fs-display); font-weight: 800; line-height: 1.05;
+    background: linear-gradient(135deg,var(--accent) 0%,var(--purple) 100%);
+    -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+    letter-spacing: -0.02em;
+  }
+  header.hero .subtitle { color: var(--text-muted); margin-top: 6px; font-size: var(--fs-small); }
+  .toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-xs); margin-block: var(--space-s); }
+  .sticky-bar {
+    position: sticky; top: 0; z-index: 100;
+    background: rgba(10,14,20,0.82); backdrop-filter: blur(10px) saturate(140%);
+    -webkit-backdrop-filter: blur(10px) saturate(140%); border-bottom: 1px solid var(--border);
+    margin-inline: calc(-1 * var(--container-pad)); padding-inline: var(--container-pad);
+    padding-block: var(--space-xs); transition: box-shadow 0.2s ease, background 0.2s ease;
+  }
+  .sticky-bar.stuck { background: rgba(10,14,20,0.94); box-shadow: 0 4px 18px rgba(0,0,0,0.45); }
+  .filter-chips { display: flex; flex-wrap: wrap; gap: 6px; flex: 1 1 auto; min-width: 0; }
+  .chip {
+    padding: 6px 12px; border: 1px solid var(--border); background: var(--bg-2);
+    color: var(--text-muted); border-radius: var(--r-pill); font-size: var(--fs-small);
+    cursor: pointer; white-space: nowrap; transition: all 0.18s ease; user-select: none;
+    display: inline-flex; align-items: center; gap: 4px;
+  }
+  .chip:hover { border-color: var(--accent); color: var(--text); transform: translateY(-1px); }
+  .chip.active {
+    background: linear-gradient(135deg,var(--accent-2),var(--accent));
+    border-color: transparent; color: #fff; font-weight: 600;
+    box-shadow: 0 2px 10px rgba(31,111,235,0.35);
+  }
+  .chip .count { opacity: 0.75; margin-left: 2px; font-size: 0.85em; background: rgba(255,255,255,0.08); padding: 0 6px; border-radius: var(--r-pill); }
+  .search-wrap { display: flex; align-items: center; gap: var(--space-xs); flex: 0 0 auto; }
+  .search {
+    padding: 8px 14px; background: var(--bg-2); border: 1px solid var(--border);
+    color: var(--text); border-radius: var(--r-sm); font-size: var(--fs-small);
+    width: clamp(140px,22vw,240px); transition: all 0.18s ease;
+  }
+  .search:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(88,166,255,0.18); }
+  .result-count { font-size: var(--fs-tiny); color: var(--text-muted); }
+  .cards { display: flex; flex-direction: column; gap: var(--space-s); margin-block: var(--space-m); }
+  .card {
+    background: linear-gradient(180deg,var(--bg-2),var(--bg-1));
+    border: 1px solid var(--border); border-radius: var(--r-md);
+    box-shadow: var(--shadow-card); transition: all 0.2s ease; overflow: hidden; position: relative;
+  }
+  .card::before { content: ''; position: absolute; inset: 0 auto 0 0; width: 3px; background: transparent; transition: background 0.2s ease; }
+  .card:hover { border-color: var(--border-soft); transform: translateY(-1px); box-shadow: var(--shadow-elev); }
+  .card.gold::before { background: linear-gradient(180deg,var(--gold),transparent); }
+  .card.silver::before { background: linear-gradient(180deg,var(--silver),transparent); }
+  .card.bronze::before { background: linear-gradient(180deg,var(--bronze),transparent); }
+  .card.gold { border-color: rgba(255,215,0,0.4); box-shadow: 0 0 24px rgba(255,215,0,0.10),var(--shadow-card); }
+  .card.silver { border-color: rgba(201,209,212,0.3); }
+  .card.bronze { border-color: rgba(227,179,65,0.35); }
+  .card-row { display: flex; align-items: center; gap: var(--space-m); padding: var(--space-s) var(--space-m); }
+  .rank {
+    flex: 0 0 auto; min-width: 44px; height: 44px; display: flex; align-items: center;
+    justify-content: center; flex-wrap: wrap; gap: 2px; padding-inline: 6px;
+    font-size: var(--fs-h3); font-weight: 800; color: var(--accent);
+    background: var(--bg-3); border: 1px solid var(--border); border-radius: var(--r-sm);
+  }
+  .rank .medal { font-size: 1.5em; line-height: 1; }
+  .card.gold .rank { background: linear-gradient(135deg,rgba(255,215,0,0.18),transparent); border-color: rgba(255,215,0,0.4); }
+  .card.silver .rank { background: linear-gradient(135deg,rgba(201,209,212,0.14),transparent); border-color: rgba(201,209,212,0.3); }
+  .card.bronze .rank { background: linear-gradient(135deg,rgba(227,179,65,0.14),transparent); border-color: rgba(227,179,65,0.3); }
+  .model-name { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+  .model-name .name-line {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
+    color: var(--accent); font-weight: 700; font-size: var(--fs-body);
+    word-break: break-all; line-height: 1.3;
+  }
+  .model-name .badges { display: flex; flex-wrap: wrap; gap: 5px; }
+  .badge {
+    display: inline-flex; align-items: center; gap: 4px; font-size: var(--fs-tiny);
+    padding: 2px 8px; border-radius: var(--r-pill); background: var(--bg-3);
+    color: var(--text-muted); border: 1px solid var(--border); white-space: nowrap; font-weight: 600;
+  }
+  .badge.quant { color: var(--purple); border-color: rgba(188,140,255,0.35); background: rgba(188,140,255,0.10); }
+  .badge.contrib { color: #d2a8ff; border-color: rgba(188,140,255,0.30); background: rgba(188,140,255,0.08); }
+  .badge.pseudo { color: var(--green); border-color: rgba(63,185,80,0.30); background: rgba(63,185,80,0.08); }
+  .verdict-badge { display: inline-block; padding: 4px 12px; border-radius: var(--r-sm); font-size: var(--fs-tiny); font-weight: 700; color: #fff; }
+  .mini-stats { display: flex; align-items: center; gap: var(--space-m); flex: 0 0 auto; flex-wrap: wrap; }
+  .mini-stat { display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 52px; }
+  .mini-stat .lbl { font-size: var(--fs-tiny); color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.6px; font-weight: 600; }
+  .mini-stat .val { font-size: var(--fs-body); font-weight: 700; }
+  .mini-stat .val.grade { font-size: var(--fs-h3); }
+  .pct-bar-wrap { width: 64px; height: 5px; background: var(--bg-3); border-radius: var(--r-pill); margin-top: 3px; overflow: hidden; }
+  .pct-bar-fill { height: 100%; border-radius: var(--r-pill); transition: width 0.3s ease; }
+  .empty-msg { text-align: center; color: var(--text-muted); padding: var(--space-l); font-style: italic; display: none; font-size: var(--fs-body); }
+  footer.footer { text-align: center; color: var(--text-dim); font-size: var(--fs-tiny); margin-top: var(--space-l); padding-block: var(--space-m); }
+  footer.footer a { color: var(--accent); }
+  footer.footer code { background: var(--bg-3); padding: 1px 6px; border-radius: 4px; color: var(--purple); }
+  @media (max-width: 720px) {
+    .card-row { flex-wrap: wrap; }
+    .mini-stats { width: 100%; justify-content: space-between; padding-top: var(--space-s); border-top: 1px solid var(--border-soft); }
+  }
 </style>
 </head>
 <body>
-<h1>🏆 Classement Communautaire BenchGo V3</h1>
-<p class="subtitle">Classement consolidé des soumissions de la communauté — généré automatiquement</p>
-<div class="stats-bar">
-  <div class="pill"><strong>25</strong> modèle(s) classé(s)</div>
-  <div class="pill"><strong>25</strong> soumission(s)</div>
-  <div class="pill">Généré le <strong>2026-07-24</strong></div>
-</div>
-<div class="leaderboard">
+<div class="wrap">
+  <header class="hero">
+    <span class="badge-top">🌐 BenchGo V3 · Classement Communautaire</span>
+    <h1>Classement Communautaire BenchGo V3</h1>
+    <p class="subtitle">Généré le 24/07/2026 17:05:49 — 25 modèles classés · 25 soumissions de la communauté</p>
+  </header>
 
-    <div class="card top" data-rank="1">
-      <div class="rank">🏆</div>
-      <div class="info">
-        <div class="model-name">qwen3.6-27b-mtp</div>
-        <div class="meta"><span class="quant">Q4_K_XL</span>  <span class="pseudo">par FlexoDiv</span></div>
-      </div>
-      <div class="stats">
-        <div class="stat"><span class="val">99%</span><span class="lbl">Score</span></div>
-        <div class="stat"><span class="val">3067/3101</span><span class="lbl">Points</span></div>
-        <div class="stat"><span class="val">3426 PV</span><span class="lbl">Santé</span></div>
-        <div class="stat"><span class="val">1</span><span class="lbl">Écoles</span></div>
-        <div class="stat verdict top">Top du top</div>
+  <div class="sticky-bar" id="stickyBar">
+    <div class="toolbar">
+      <div class="filter-chips" id="chips">
+        <span class="chip active" data-cat="all">Tous <span class="count">25</span></span>
+        <span class="chip" data-cat="top">🏆 Top du top <span class="count">3</span></span>
+        <span class="chip" data-cat="recommande">✅ Recommandés <span class="count">18</span></span>
+        <span class="chip" data-cat="moyenne">📊 Dans la moyenne <span class="count">0</span></span>
+        <span class="chip" data-cat="rattrapage">⚠️ En rattrapage <span class="count">1</span></span>
+        <span class="chip" data-cat="catastrophe">💥 Échec total <span class="count">3</span></span>
       </div>
     </div>
-    <div class="card top" data-rank="2">
-      <div class="rank">🥈</div>
-      <div class="info">
-        <div class="model-name">gemma-4-26b-a4b-it</div>
-        <div class="meta">  <span class="pseudo">par FlexoDiv</span></div>
+    <div class="toolbar">
+      <div class="filter-chips" id="sizeChips">
+        <span class="chip active" data-size="all">Toutes tailles <span class="count">25</span></span>
+        <span class="chip" data-size="petit">🐱 &lt; 3B <span class="count">1</span></span>
+        <span class="chip" data-size="standard">📦 3B–14B <span class="count">19</span></span>
+        <span class="chip" data-size="expert">🎓 14B–30B <span class="count">3</span></span>
+        <span class="chip" data-size="doctorat">🧠 &gt; 30B <span class="count">0</span></span>
       </div>
-      <div class="stats">
-        <div class="stat"><span class="val">99%</span><span class="lbl">Score</span></div>
-        <div class="stat"><span class="val">3028/3060</span><span class="lbl">Points</span></div>
-        <div class="stat"><span class="val">3371 PV</span><span class="lbl">Santé</span></div>
-        <div class="stat"><span class="val">1</span><span class="lbl">Écoles</span></div>
-        <div class="stat verdict top">Top du top</div>
-      </div>
-    </div>
-    <div class="card top" data-rank="3">
-      <div class="rank">🥉</div>
-      <div class="info">
-        <div class="model-name">yuxinlu1/gemma-4-12b-agentic-fable5-composer2.5-v2-3.5x-tau2-gguf/gemma4-v2-q8_0.gguf</div>
-        <div class="meta"><span class="quant">Q8_0</span>  <span class="pseudo">par FlexoDiv</span></div>
-      </div>
-      <div class="stats">
-        <div class="stat"><span class="val">98%</span><span class="lbl">Score</span></div>
-        <div class="stat"><span class="val">5353/5452</span><span class="lbl">Points</span></div>
-        <div class="stat"><span class="val">5958 PV</span><span class="lbl">Santé</span></div>
-        <div class="stat"><span class="val">2</span><span class="lbl">Écoles</span></div>
-        <div class="stat verdict top">Top du top</div>
+      <div class="search-wrap">
+        <input type="text" class="search" id="search" placeholder="🔍 Rechercher un modèle…" />
+        <span class="result-count" id="resultCount"></span>
       </div>
     </div>
-    <div class="card top" data-rank="4">
-      <div class="rank">#4</div>
-      <div class="info">
-        <div class="model-name">kai-os_grug-12b</div>
-        <div class="meta">  <span class="pseudo">par FlexoDiv</span></div>
-      </div>
-      <div class="stats">
-        <div class="stat"><span class="val">98%</span><span class="lbl">Score</span></div>
-        <div class="stat"><span class="val">2973/3039</span><span class="lbl">Points</span></div>
-        <div class="stat"><span class="val">3311 PV</span><span class="lbl">Santé</span></div>
-        <div class="stat"><span class="val">1</span><span class="lbl">Écoles</span></div>
-        <div class="stat verdict top">Top du top</div>
-      </div>
-    </div>
-    <div class="card top" data-rank="5">
-      <div class="rank">#5</div>
-      <div class="info">
-        <div class="model-name">gemma-4-12b-it-qat</div>
-        <div class="meta"><span class="quant">Q4_K_XL</span>  <span class="pseudo">par FlexoDiv</span></div>
-      </div>
-      <div class="stats">
-        <div class="stat"><span class="val">98%</span><span class="lbl">Score</span></div>
-        <div class="stat"><span class="val">2964/3018</span><span class="lbl">Points</span></div>
-        <div class="stat"><span class="val">3306 PV</span><span class="lbl">Santé</span></div>
-        <div class="stat"><span class="val">1</span><span class="lbl">Écoles</span></div>
-        <div class="stat verdict top">Top du top</div>
-      </div>
-    </div>
-    <div class="card top" data-rank="6">
-      <div class="rank">#6</div>
-      <div class="info">
-        <div class="model-name">ornith-1.0-9b</div>
-        <div class="meta"><span class="quant">Q4_K_M</span>  <span class="pseudo">par FlexoDiv</span></div>
-      </div>
-      <div class="stats">
-        <div class="stat"><span class="val">96%</span><span class="lbl">Score</span></div>
-        <div class="stat"><span class="val">5129/5367</span><span class="lbl">Points</span></div>
-        <div class="stat"><span class="val">6093 PV</span><span class="lbl">Santé</span></div>
-        <div class="stat"><span class="val">2</span><span class="lbl">Écoles</span></div>
-        <div class="stat verdict top">Top du top</div>
-      </div>
-    </div>
-    <div class="card top" data-rank="7">
-      <div class="rank">#7</div>
-      <div class="info">
-        <div class="model-name">mythos-9b-unhinged</div>
-        <div class="meta"><span class="quant">Q4_K_M</span>  <span class="pseudo">par FlexoDiv</span></div>
-      </div>
-      <div class="stats">
-        <div class="stat"><span class="val">95%</span><span class="lbl">Score</span></div>
-        <div class="stat"><span class="val">5132/5380</span><span class="lbl">Points</span></div>
-        <div class="stat"><span class="val">5723 PV</span><span class="lbl">Santé</span></div>
-        <div class="stat"><span class="val">2</span><span class="lbl">Écoles</span></div>
-        <div class="stat verdict top">Top du top</div>
-      </div>
-    </div>
-    <div class="card top" data-rank="8">
-      <div class="rank">#8</div>
-      <div class="info">
-        <div class="model-name">ornith-1.0-9b-mtp</div>
-        <div class="meta">  <span class="pseudo">par FlexoDiv</span></div>
-      </div>
-      <div class="stats">
-        <div class="stat"><span class="val">94%</span><span class="lbl">Score</span></div>
-        <div class="stat"><span class="val">3011/3201</span><span class="lbl">Points</span></div>
-        <div class="stat"><span class="val">3334 PV</span><span class="lbl">Santé</span></div>
-        <div class="stat"><span class="val">1</span><span class="lbl">Écoles</span></div>
-        <div class="stat verdict top">Top du top</div>
-      </div>
-    </div>
-    <div class="card top" data-rank="9">
-      <div class="rank">#9</div>
-      <div class="info">
-        <div class="model-name">mistralai/mistral-7b-instruct-v0.3</div>
-        <div class="meta"><span class="quant">Q4_K_M</span>  <span class="pseudo">par FlexoDiv</span></div>
-      </div>
-      <div class="stats">
-        <div class="stat"><span class="val">92%</span><span class="lbl">Score</span></div>
-        <div class="stat"><span class="val">2752/2998</span><span class="lbl">Points</span></div>
-        <div class="stat"><span class="val">3415 PV</span><span class="lbl">Santé</span></div>
-        <div class="stat"><span class="val">2</span><span class="lbl">Écoles</span></div>
-        <div class="stat verdict top">Top du top</div>
-      </div>
-    </div>
-    <div class="card top" data-rank="10">
-      <div class="rank">#10</div>
-      <div class="info">
-        <div class="model-name">qwythos-9b-claude-mythos-5-1m</div>
-        <div class="meta"><span class="quant">Q4_K_M</span>  <span class="pseudo">par FlexoDiv</span></div>
-      </div>
-      <div class="stats">
-        <div class="stat"><span class="val">91%</span><span class="lbl">Score</span></div>
-        <div class="stat"><span class="val">4881/5384</span><span class="lbl">Points</span></div>
-        <div class="stat"><span class="val">5476 PV</span><span class="lbl">Santé</span></div>
-        <div class="stat"><span class="val">2</span><span class="lbl">Écoles</span></div>
-        <div class="stat verdict top">Top du top</div>
-      </div>
-    </div>
-    <div class="card top" data-rank="11">
-      <div class="rank">#11</div>
-      <div class="info">
-        <div class="model-name">mistralai/devstral-small-2-2512</div>
-        <div class="meta">  <span class="pseudo">par FlexoDiv</span></div>
-      </div>
-      <div class="stats">
-        <div class="stat"><span class="val">91%</span><span class="lbl">Score</span></div>
-        <div class="stat"><span class="val">2904/3206</span><span class="lbl">Points</span></div>
-        <div class="stat"><span class="val">3237 PV</span><span class="lbl">Santé</span></div>
-        <div class="stat"><span class="val">1</span><span class="lbl">Écoles</span></div>
-        <div class="stat verdict top">Top du top</div>
-      </div>
-    </div>
-    <div class="card top" data-rank="12">
-      <div class="rank">#12</div>
-      <div class="info">
-        <div class="model-name">gemma-4-12b-coder-fable5-composer2.5-v1</div>
-        <div class="meta"><span class="quant">Q4_K_M</span>  <span class="pseudo">par FlexoDiv</span></div>
-      </div>
-      <div class="stats">
-        <div class="stat"><span class="val">90%</span><span class="lbl">Score</span></div>
-        <div class="stat"><span class="val">4900/5421</span><span class="lbl">Points</span></div>
-        <div class="stat"><span class="val">5509 PV</span><span class="lbl">Santé</span></div>
-        <div class="stat"><span class="val">2</span><span class="lbl">Écoles</span></div>
-        <div class="stat verdict top">Top du top</div>
-      </div>
-    </div>
-    <div class="card top" data-rank="13">
-      <div class="rank">#13</div>
-      <div class="info">
-        <div class="model-name">mistralai/codestral-22b-v0.1</div>
-        <div class="meta">  <span class="pseudo">par FlexoDiv</span></div>
-      </div>
-      <div class="stats">
-        <div class="stat"><span class="val">90%</span><span class="lbl">Score</span></div>
-        <div class="stat"><span class="val">2834/3143</span><span class="lbl">Points</span></div>
-        <div class="stat"><span class="val">3161 PV</span><span class="lbl">Santé</span></div>
-        <div class="stat"><span class="val">1</span><span class="lbl">Écoles</span></div>
-        <div class="stat verdict top">Top du top</div>
-      </div>
-    </div>
-    <div class="card rec" data-rank="14">
-      <div class="rank">#14</div>
-      <div class="info">
-        <div class="model-name">unsloth/qwen3.5-9b</div>
-        <div class="meta"><span class="quant">Q4_K_XL</span>  <span class="pseudo">par FlexoDiv</span></div>
-      </div>
-      <div class="stats">
-        <div class="stat"><span class="val">89%</span><span class="lbl">Score</span></div>
-        <div class="stat"><span class="val">4820/5422</span><span class="lbl">Points</span></div>
-        <div class="stat"><span class="val">5439 PV</span><span class="lbl">Santé</span></div>
-        <div class="stat"><span class="val">2</span><span class="lbl">Écoles</span></div>
-        <div class="stat verdict rec">Recommandé</div>
-      </div>
-    </div>
-    <div class="card rec" data-rank="15">
-      <div class="rank">#15</div>
-      <div class="info">
-        <div class="model-name">mistralai/ministral-3-14b-reasoning</div>
-        <div class="meta"><span class="quant">Q4_K_M</span>  <span class="pseudo">par FlexoDiv</span></div>
-      </div>
-      <div class="stats">
-        <div class="stat"><span class="val">89%</span><span class="lbl">Score</span></div>
-        <div class="stat"><span class="val">2433/2744</span><span class="lbl">Points</span></div>
-        <div class="stat"><span class="val">2703 PV</span><span class="lbl">Santé</span></div>
-        <div class="stat"><span class="val">1</span><span class="lbl">Écoles</span></div>
-        <div class="stat verdict rec">Recommandé</div>
-      </div>
-    </div>
-    <div class="card rec" data-rank="16">
-      <div class="rank">#16</div>
-      <div class="info">
-        <div class="model-name">deepseek-r1-distill-qwen-14b@q4_k_s</div>
-        <div class="meta">  <span class="pseudo">par FlexoDiv</span></div>
-      </div>
-      <div class="stats">
-        <div class="stat"><span class="val">87%</span><span class="lbl">Score</span></div>
-        <div class="stat"><span class="val">2695/3085</span><span class="lbl">Points</span></div>
-        <div class="stat"><span class="val">3030 PV</span><span class="lbl">Santé</span></div>
-        <div class="stat"><span class="val">1</span><span class="lbl">Écoles</span></div>
-        <div class="stat verdict rec">Recommandé</div>
-      </div>
-    </div>
-    <div class="card rec" data-rank="17">
-      <div class="rank">#17</div>
-      <div class="info">
-        <div class="model-name">yuxinlu1/gemma-4-12b-coder-fable5-composer2.5-v1</div>
-        <div class="meta">  <span class="pseudo">par FlexoDiv</span></div>
-      </div>
-      <div class="stats">
-        <div class="stat"><span class="val">86%</span><span class="lbl">Score</span></div>
-        <div class="stat"><span class="val">2604/3038</span><span class="lbl">Points</span></div>
-        <div class="stat"><span class="val">2919 PV</span><span class="lbl">Santé</span></div>
-        <div class="stat"><span class="val">1</span><span class="lbl">Écoles</span></div>
-        <div class="stat verdict rec">Recommandé</div>
-      </div>
-    </div>
-    <div class="card rec" data-rank="18">
-      <div class="rank">#18</div>
-      <div class="info">
-        <div class="model-name">xanyun/gemma-4-12b-coder-fable5-composer2.5-v1</div>
-        <div class="meta">  <span class="pseudo">par FlexoDiv</span></div>
-      </div>
-      <div class="stats">
-        <div class="stat"><span class="val">85%</span><span class="lbl">Score</span></div>
-        <div class="stat"><span class="val">2658/3123</span><span class="lbl">Points</span></div>
-        <div class="stat"><span class="val">2973 PV</span><span class="lbl">Santé</span></div>
-        <div class="stat"><span class="val">1</span><span class="lbl">Écoles</span></div>
-        <div class="stat verdict rec">Recommandé</div>
-      </div>
-    </div>
-    <div class="card rec" data-rank="19">
-      <div class="rank">#19</div>
-      <div class="info">
-        <div class="model-name">deepseek-r1-distill-qwen-14b@q4_1</div>
-        <div class="meta">  <span class="pseudo">par FlexoDiv</span></div>
-      </div>
-      <div class="stats">
-        <div class="stat"><span class="val">85%</span><span class="lbl">Score</span></div>
-        <div class="stat"><span class="val">2639/3098</span><span class="lbl">Points</span></div>
-        <div class="stat"><span class="val">2966 PV</span><span class="lbl">Santé</span></div>
-        <div class="stat"><span class="val">1</span><span class="lbl">Écoles</span></div>
-        <div class="stat verdict rec">Recommandé</div>
-      </div>
-    </div>
-    <div class="card rec" data-rank="20">
-      <div class="rank">#20</div>
-      <div class="info">
-        <div class="model-name">nanbeige_nanbeige4-3b-thinking-2511</div>
-        <div class="meta">  <span class="pseudo">par FlexoDiv</span></div>
-      </div>
-      <div class="stats">
-        <div class="stat"><span class="val">85%</span><span class="lbl">Score</span></div>
-        <div class="stat"><span class="val">2547/2989</span><span class="lbl">Points</span></div>
-        <div class="stat"><span class="val">2873 PV</span><span class="lbl">Santé</span></div>
-        <div class="stat"><span class="val">1</span><span class="lbl">Écoles</span></div>
-        <div class="stat verdict rec">Recommandé</div>
-      </div>
-    </div>
-    <div class="card rec" data-rank="21">
-      <div class="rank">#21</div>
-      <div class="info">
-        <div class="model-name">qwopus3.5-9b-coder-mtp</div>
-        <div class="meta">  <span class="pseudo">par FlexoDiv</span></div>
-      </div>
-      <div class="stats">
-        <div class="stat"><span class="val">80%</span><span class="lbl">Score</span></div>
-        <div class="stat"><span class="val">2475/3076</span><span class="lbl">Points</span></div>
-        <div class="stat"><span class="val">2775 PV</span><span class="lbl">Santé</span></div>
-        <div class="stat"><span class="val">1</span><span class="lbl">Écoles</span></div>
-        <div class="stat verdict rec">Recommandé</div>
-      </div>
-    </div>
-    <div class="card rattr" data-rank="22">
-      <div class="rank">#22</div>
-      <div class="info">
-        <div class="model-name">microsoft/phi-4-reasoning-plus</div>
-        <div class="meta"><span class="quant">Q4_K_M</span>  <span class="pseudo">par FlexoDiv</span></div>
-      </div>
-      <div class="stats">
-        <div class="stat"><span class="val">53%</span><span class="lbl">Score</span></div>
-        <div class="stat"><span class="val">470/895</span><span class="lbl">Points</span></div>
-        <div class="stat"><span class="val">470 PV</span><span class="lbl">Santé</span></div>
-        <div class="stat"><span class="val">1</span><span class="lbl">Écoles</span></div>
-        <div class="stat verdict rattr">En rattrapage</div>
-      </div>
-    </div>
-    <div class="card elim" data-rank="23">
-      <div class="rank">#23</div>
-      <div class="info">
-        <div class="model-name">supergemma-4-12b-abliterated</div>
-        <div class="meta"><span class="quant">Q4_K_M</span>  <span class="pseudo">par FlexoDiv</span></div>
-      </div>
-      <div class="stats">
-        <div class="stat"><span class="val">32%</span><span class="lbl">Score</span></div>
-        <div class="stat"><span class="val">887/2740</span><span class="lbl">Points</span></div>
-        <div class="stat"><span class="val">887 PV</span><span class="lbl">Santé</span></div>
-        <div class="stat"><span class="val">1</span><span class="lbl">Écoles</span></div>
-        <div class="stat verdict elim">Éliminé</div>
-      </div>
-    </div>
-    <div class="card elim" data-rank="24">
-      <div class="rank">#24</div>
-      <div class="info">
-        <div class="model-name">mistral-7b-instruct-v0.1</div>
-        <div class="meta">  <span class="pseudo">par FlexoDiv</span></div>
-      </div>
-      <div class="stats">
-        <div class="stat"><span class="val">-21%</span><span class="lbl">Score</span></div>
-        <div class="stat"><span class="val">-649/3122</span><span class="lbl">Points</span></div>
-        <div class="stat"><span class="val">-649 PV</span><span class="lbl">Santé</span></div>
-        <div class="stat"><span class="val">1</span><span class="lbl">Écoles</span></div>
-        <div class="stat verdict elim">Éliminé</div>
-      </div>
-    </div>
-    <div class="card elim" data-rank="25">
-      <div class="rank">#25</div>
-      <div class="info">
-        <div class="model-name">gemma-3-1b-it</div>
-        <div class="meta">  <span class="pseudo">par FlexoDiv</span></div>
-      </div>
-      <div class="stats">
-        <div class="stat"><span class="val">-57%</span><span class="lbl">Score</span></div>
-        <div class="stat"><span class="val">-1802/3138</span><span class="lbl">Points</span></div>
-        <div class="stat"><span class="val">-1770 PV</span><span class="lbl">Santé</span></div>
-        <div class="stat"><span class="val">1</span><span class="lbl">Écoles</span></div>
-        <div class="stat verdict elim">Éliminé</div>
-      </div>
-    </div>
+  </div>
+
+  <div class="cards" id="cards"></div>
+  <p class="empty-msg" id="emptyMsg">Aucun modèle ne correspond à ce filtre.</p>
+
+  <footer class="footer">
+    <p>Classement communautaire généré par <a href="https://github.com/cisco-03/BenchGo-LLM-School">BenchGo V3</a> — participatif et open source</p>
+    <p>Pour soumettre vos résultats : <code>node runner.js --submit</code> ou bouton "🌐 Envoyer à la communauté" dans le classement local</p>
+  </footer>
 </div>
-<footer>
-  <p>Classement généré par <a href="https://github.com/cisco-03/BenchGo-LLM-School">BenchGo V3</a> — participatif et open source</p>
-  <p>Pour soumettre vos résultats : <code>node runner.js --submit</code></p>
-</footer>
+<script>
+var MODELS = [{"rank":1,"model":"qwen3.6-27b-mtp","shortName":"qwen3.6-27b-mtp","quantization":"Q4_K_XL","pct":99,"score":3067,"max":3101,"grade":"A","globalLifeScore":3426,"optionalBonus":359,"ecoleCount":1,"elapsedMs":8587934,"tokens":34577,"tokensPerSecond":4.03,"contributors":1,"pseudo":"FlexoDiv","cat":{"key":"top","icon":"🏆","label":"Top du top"},"paramSize":{"key":"expert","icon":"🎓","label":"14B-30B"}},{"rank":2,"model":"gemma-4-26b-a4b-it","shortName":"gemma-4-26b-a4b-it","quantization":null,"pct":99,"score":3028,"max":3060,"grade":"A","globalLifeScore":3371,"optionalBonus":343,"ecoleCount":1,"elapsedMs":1797563,"tokens":19779,"tokensPerSecond":11,"contributors":1,"pseudo":"FlexoDiv","cat":{"key":"top","icon":"🏆","label":"Top du top"},"paramSize":{"key":"expert","icon":"🎓","label":"14B-30B"}},{"rank":3,"model":"yuxinlu1/gemma-4-12b-agentic-fable5-composer2.5-v2-3.5x-tau2-gguf/gemma4-v2-q8_0.gguf","shortName":"yuxinlu1_gemma-4-12b-agentic-fable5-composer2.5-v2-3.5x-tau2_gemma4-v2-q8_0","quantization":"Q8_0","pct":98,"score":5353,"max":5452,"grade":"A","globalLifeScore":5958,"optionalBonus":605,"ecoleCount":2,"elapsedMs":0,"tokens":0,"tokensPerSecond":0,"contributors":1,"pseudo":"FlexoDiv","cat":{"key":"top","icon":"🏆","label":"Top du top"},"paramSize":{"key":"standard","icon":"📦","label":"3B-14B"}},{"rank":4,"model":"kai-os_grug-12b","shortName":"kai-os_grug-12b","quantization":null,"pct":98,"score":2973,"max":3039,"grade":"A","globalLifeScore":3311,"optionalBonus":338,"ecoleCount":1,"elapsedMs":2496396,"tokens":15766,"tokensPerSecond":6.32,"contributors":1,"pseudo":"FlexoDiv","cat":{"key":"recommande","icon":"✅","label":"Recommandé"},"paramSize":{"key":"standard","icon":"📦","label":"3B-14B"}},{"rank":5,"model":"gemma-4-12b-it-qat","shortName":"gemma-4-12b-it-qat","quantization":"Q4_K_XL","pct":98,"score":2964,"max":3018,"grade":"A","globalLifeScore":3306,"optionalBonus":342,"ecoleCount":1,"elapsedMs":2927753,"tokens":21139,"tokensPerSecond":7.22,"contributors":1,"pseudo":"FlexoDiv","cat":{"key":"recommande","icon":"✅","label":"Recommandé"},"paramSize":{"key":"standard","icon":"📦","label":"3B-14B"}},{"rank":6,"model":"ornith-1.0-9b","shortName":"ornith-1.0-9b","quantization":"Q4_K_M","pct":96,"score":5129,"max":5367,"grade":"A","globalLifeScore":6093,"optionalBonus":600,"ecoleCount":2,"elapsedMs":0,"tokens":0,"tokensPerSecond":0,"contributors":1,"pseudo":"FlexoDiv","cat":{"key":"recommande","icon":"✅","label":"Recommandé"},"paramSize":{"key":"standard","icon":"📦","label":"3B-14B"}},{"rank":7,"model":"mythos-9b-unhinged","shortName":"mythos-9b-unhinged","quantization":"Q4_K_M","pct":95,"score":5132,"max":5380,"grade":"A","globalLifeScore":5723,"optionalBonus":591,"ecoleCount":2,"elapsedMs":0,"tokens":0,"tokensPerSecond":0,"contributors":1,"pseudo":"FlexoDiv","cat":{"key":"recommande","icon":"✅","label":"Recommandé"},"paramSize":{"key":"standard","icon":"📦","label":"3B-14B"}},{"rank":8,"model":"ornith-1.0-9b-mtp","shortName":"ornith-1.0-9b-mtp","quantization":null,"pct":94,"score":3011,"max":3201,"grade":"A","globalLifeScore":3334,"optionalBonus":323,"ecoleCount":1,"elapsedMs":1215257,"tokens":13141,"tokensPerSecond":10.81,"contributors":1,"pseudo":"FlexoDiv","cat":{"key":"recommande","icon":"✅","label":"Recommandé"},"paramSize":{"key":"standard","icon":"📦","label":"3B-14B"}},{"rank":9,"model":"mistralai/mistral-7b-instruct-v0.3","shortName":"mistralai_mistral-7b-instruct-v0.3","quantization":"Q4_K_M","pct":92,"score":2752,"max":2998,"grade":"A","globalLifeScore":3415,"optionalBonus":349,"ecoleCount":2,"elapsedMs":0,"tokens":0,"tokensPerSecond":0,"contributors":1,"pseudo":"FlexoDiv","cat":{"key":"recommande","icon":"✅","label":"Recommandé"},"paramSize":{"key":"standard","icon":"📦","label":"3B-14B"}},{"rank":10,"model":"qwythos-9b-claude-mythos-5-1m","shortName":"qwythos-9b-claude-mythos-5-1m","quantization":"Q4_K_M","pct":91,"score":4881,"max":5384,"grade":"A","globalLifeScore":5476,"optionalBonus":595,"ecoleCount":2,"elapsedMs":0,"tokens":0,"tokensPerSecond":0,"contributors":1,"pseudo":"FlexoDiv","cat":{"key":"recommande","icon":"✅","label":"Recommandé"},"paramSize":{"key":"standard","icon":"📦","label":"3B-14B"}},{"rank":11,"model":"mistralai/devstral-small-2-2512","shortName":"mistralai_devstral-small-2-2512","quantization":null,"pct":91,"score":2904,"max":3206,"grade":"A","globalLifeScore":3237,"optionalBonus":333,"ecoleCount":1,"elapsedMs":1855405,"tokens":5923,"tokensPerSecond":3.19,"contributors":1,"pseudo":"FlexoDiv","cat":{"key":"recommande","icon":"✅","label":"Recommandé"},"paramSize":{"key":"inconnu","icon":"❓","label":"Taille inconnue"}},{"rank":12,"model":"gemma-4-12b-coder-fable5-composer2.5-v1","shortName":"gemma-4-12b-coder-fable5-composer2.5-v1","quantization":"Q4_K_M","pct":90,"score":4900,"max":5421,"grade":"A","globalLifeScore":5509,"optionalBonus":609,"ecoleCount":2,"elapsedMs":0,"tokens":0,"tokensPerSecond":0,"contributors":1,"pseudo":"FlexoDiv","cat":{"key":"recommande","icon":"✅","label":"Recommandé"},"paramSize":{"key":"standard","icon":"📦","label":"3B-14B"}},{"rank":13,"model":"mistralai/codestral-22b-v0.1","shortName":"mistralai_codestral-22b-v0.1","quantization":null,"pct":90,"score":2834,"max":3143,"grade":"A","globalLifeScore":3161,"optionalBonus":327,"ecoleCount":1,"elapsedMs":2189779,"tokens":7213,"tokensPerSecond":3.29,"contributors":1,"pseudo":"FlexoDiv","cat":{"key":"recommande","icon":"✅","label":"Recommandé"},"paramSize":{"key":"expert","icon":"🎓","label":"14B-30B"}},{"rank":14,"model":"unsloth/qwen3.5-9b","shortName":"unsloth_qwen3.5-9b","quantization":"Q4_K_XL","pct":89,"score":4820,"max":5422,"grade":"B","globalLifeScore":5439,"optionalBonus":619,"ecoleCount":2,"elapsedMs":0,"tokens":0,"tokensPerSecond":0,"contributors":1,"pseudo":"FlexoDiv","cat":{"key":"recommande","icon":"✅","label":"Recommandé"},"paramSize":{"key":"standard","icon":"📦","label":"3B-14B"}},{"rank":15,"model":"mistralai/ministral-3-14b-reasoning","shortName":"mistralai_ministral-3-14b-reasoning","quantization":"Q4_K_M","pct":89,"score":2433,"max":2744,"grade":"B","globalLifeScore":2703,"optionalBonus":270,"ecoleCount":1,"elapsedMs":0,"tokens":0,"tokensPerSecond":0,"contributors":1,"pseudo":"FlexoDiv","cat":{"key":"recommande","icon":"✅","label":"Recommandé"},"paramSize":{"key":"standard","icon":"📦","label":"3B-14B"}},{"rank":16,"model":"deepseek-r1-distill-qwen-14b@q4_k_s","shortName":"deepseek-r1-distill-qwen-14b@q4_k_s","quantization":null,"pct":87,"score":2695,"max":3085,"grade":"B","globalLifeScore":3030,"optionalBonus":335,"ecoleCount":1,"elapsedMs":3535926,"tokens":25089,"tokensPerSecond":7.1,"contributors":1,"pseudo":"FlexoDiv","cat":{"key":"recommande","icon":"✅","label":"Recommandé"},"paramSize":{"key":"standard","icon":"📦","label":"3B-14B"}},{"rank":17,"model":"yuxinlu1/gemma-4-12b-coder-fable5-composer2.5-v1","shortName":"yuxinlu1_gemma-4-12b-coder-fable5-composer2.5-v1","quantization":null,"pct":86,"score":2604,"max":3038,"grade":"B","globalLifeScore":2919,"optionalBonus":315,"ecoleCount":1,"elapsedMs":1314627,"tokens":8664,"tokensPerSecond":6.59,"contributors":1,"pseudo":"FlexoDiv","cat":{"key":"recommande","icon":"✅","label":"Recommandé"},"paramSize":{"key":"standard","icon":"📦","label":"3B-14B"}},{"rank":18,"model":"xanyun/gemma-4-12b-coder-fable5-composer2.5-v1","shortName":"xanyun_gemma-4-12b-coder-fable5-composer2.5-v1","quantization":null,"pct":85,"score":2658,"max":3123,"grade":"B","globalLifeScore":2973,"optionalBonus":315,"ecoleCount":1,"elapsedMs":1764615,"tokens":9183,"tokensPerSecond":5.2,"contributors":1,"pseudo":"FlexoDiv","cat":{"key":"recommande","icon":"✅","label":"Recommandé"},"paramSize":{"key":"standard","icon":"📦","label":"3B-14B"}},{"rank":19,"model":"deepseek-r1-distill-qwen-14b@q4_1","shortName":"deepseek-r1-distill-qwen-14b@q4_1","quantization":null,"pct":85,"score":2639,"max":3098,"grade":"B","globalLifeScore":2966,"optionalBonus":327,"ecoleCount":1,"elapsedMs":2523715,"tokens":15850,"tokensPerSecond":6.28,"contributors":1,"pseudo":"FlexoDiv","cat":{"key":"recommande","icon":"✅","label":"Recommandé"},"paramSize":{"key":"standard","icon":"📦","label":"3B-14B"}},{"rank":20,"model":"nanbeige_nanbeige4-3b-thinking-2511","shortName":"nanbeige_nanbeige4-3b-thinking-2511","quantization":null,"pct":85,"score":2547,"max":2989,"grade":"B","globalLifeScore":2873,"optionalBonus":326,"ecoleCount":1,"elapsedMs":3758056,"tokens":71924,"tokensPerSecond":19.14,"contributors":1,"pseudo":"FlexoDiv","cat":{"key":"recommande","icon":"✅","label":"Recommandé"},"paramSize":{"key":"standard","icon":"📦","label":"3B-14B"}},{"rank":21,"model":"qwopus3.5-9b-coder-mtp","shortName":"qwopus3.5-9b-coder-mtp","quantization":null,"pct":80,"score":2475,"max":3076,"grade":"B","globalLifeScore":2775,"optionalBonus":300,"ecoleCount":1,"elapsedMs":1173002,"tokens":20951,"tokensPerSecond":17.86,"contributors":1,"pseudo":"FlexoDiv","cat":{"key":"recommande","icon":"✅","label":"Recommandé"},"paramSize":{"key":"standard","icon":"📦","label":"3B-14B"}},{"rank":22,"model":"microsoft/phi-4-reasoning-plus","shortName":"microsoft_phi-4-reasoning-plus","quantization":"Q4_K_M","pct":53,"score":470,"max":895,"grade":"F","globalLifeScore":470,"optionalBonus":0,"ecoleCount":1,"elapsedMs":0,"tokens":0,"tokensPerSecond":0,"contributors":1,"pseudo":"FlexoDiv","cat":{"key":"rattrapage","icon":"⚠️","label":"En rattrapage"},"paramSize":{"key":"inconnu","icon":"❓","label":"Taille inconnue"}},{"rank":23,"model":"supergemma-4-12b-abliterated","shortName":"supergemma-4-12b-abliterated","quantization":"Q4_K_M","pct":32,"score":887,"max":2740,"grade":"F","globalLifeScore":887,"optionalBonus":0,"ecoleCount":1,"elapsedMs":0,"tokens":0,"tokensPerSecond":0,"contributors":1,"pseudo":"FlexoDiv","cat":{"key":"catastrophe","icon":"💥","label":"Échec total"},"paramSize":{"key":"standard","icon":"📦","label":"3B-14B"}},{"rank":24,"model":"mistral-7b-instruct-v0.1","shortName":"mistral-7b-instruct-v0.1","quantization":null,"pct":-21,"score":-649,"max":3122,"grade":"F","globalLifeScore":-649,"optionalBonus":0,"ecoleCount":1,"elapsedMs":157185,"tokens":906,"tokensPerSecond":5.76,"contributors":1,"pseudo":"FlexoDiv","cat":{"key":"catastrophe","icon":"💥","label":"Échec total"},"paramSize":{"key":"standard","icon":"📦","label":"3B-14B"}},{"rank":25,"model":"gemma-3-1b-it","shortName":"gemma-3-1b-it","quantization":null,"pct":-57,"score":-1802,"max":3138,"grade":"F","globalLifeScore":-1770,"optionalBonus":32,"ecoleCount":1,"elapsedMs":127157,"tokens":5818,"tokensPerSecond":45.75,"contributors":1,"pseudo":"FlexoDiv","cat":{"key":"catastrophe","icon":"💥","label":"Échec total"},"paramSize":{"key":"petit","icon":"🐱","label":"< 3B"}}];
+function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function pctColor(p) { return p>=80?'#3fb950':p>=70?'#d29922':p>=50?'#db6d28':'#f85149'; }
+function gradeColor(g) { return g==='A'?'#3fb950':g==='B'?'#58a6ff':g==='C'?'#d29922':g==='D'?'#db6d28':'#f85149'; }
+function fmtDur(ms) { if(!ms||ms<=0) return '—'; var s=ms/1000; if(s<60) return s.toFixed(1)+'s'; var t=Math.round(s),m=Math.floor(t/60),sec=t%60; if(m<60) return m+'m'+String(sec).padStart(2,'0')+'s'; var h=Math.floor(m/60),mn=m%60; return h+'h'+String(mn).padStart(2,'0')+'m'; }
+
+var activeCat = 'all', activeSize = 'all', searchQ = '';
+function renderCards() {
+  var container = document.getElementById('cards');
+  container.innerHTML = '';
+  var shown = 0;
+  for (var i = 0; i < MODELS.length; i++) {
+    var m = MODELS[i];
+    if (activeCat !== 'all' && m.cat.key !== activeCat) continue;
+    if (activeSize !== 'all' && m.paramSize.key !== activeSize) continue;
+    if (searchQ && m.model.toLowerCase().indexOf(searchQ) === -1 && m.shortName.toLowerCase().indexOf(searchQ) === -1) continue;
+    shown++;
+    var cardClass = m.rank === 1 ? 'gold' : m.rank === 2 ? 'silver' : m.rank === 3 ? 'bronze' : '';
+    var rankDisp = m.rank <= 3 ? '<span class="medal">' + ['🥇','🥈','🥉'][m.rank-1] + '</span>' : m.rank;
+    var pc = pctColor(m.pct), gc = gradeColor(m.grade);
+    var sc = m.globalLifeScore < 0 ? '#f85149' : '#3fb950';
+    var tpsC = m.tokensPerSecond >= 50 ? '#3fb950' : m.tokensPerSecond >= 25 ? '#d29922' : m.tokensPerSecond > 0 ? '#f85149' : '#8b949e';
+    var quantBadge = m.quantization ? '<span class="badge quant">🧩 ' + esc(m.quantization) + '</span>' : '';
+    var contribBadge = m.contributors > 1 ? '<span class="badge contrib">👥 testé par ' + m.contributors + ' personnes</span>' : '';
+    var pseudoBadge = m.pseudo ? '<span class="badge pseudo">✍️ ' + esc(m.pseudo) + '</span>' : '';
+    var vitesseVal = m.tokensPerSecond > 0 ? (m.tokensPerSecond + ' t/s') : (m.elapsedMs > 0 ? fmtDur(m.elapsedMs) : '—');
+    var vitesseLbl = m.tokensPerSecond > 0 ? 'Vitesse' : 'Temps';
+    var html = '<div class="card ' + cardClass + '">' +
+      '<div class="card-row">' +
+        '<div class="rank">' + rankDisp + '</div>' +
+        '<div class="model-name">' +
+          '<div class="name-line"><span>' + m.cat.icon + '</span>' + esc(m.model) + '</div>' +
+          '<div class="badges">' + quantBadge + ' ' + contribBadge + ' ' + pseudoBadge + ' <span class="badge">' + m.paramSize.icon + ' ' + esc(m.paramSize.label) + '</span></div>' +
+        '</div>' +
+        '<div class="mini-stats">' +
+          '<div class="mini-stat"><span class="lbl">%</span><span class="val" style="color:' + pc + '">' + m.pct + '%</span><div class="pct-bar-wrap"><div class="pct-bar-fill" style="width:' + Math.max(2,m.pct) + '%;background:' + pc + '"></div></div></div>' +
+          '<div class="mini-stat"><span class="lbl">Note</span><span class="val grade" style="color:' + gc + '">' + m.grade + '</span></div>' +
+          '<div class="mini-stat"><span class="lbl">Points</span><span class="val">' + m.score + '/' + m.max + '</span></div>' +
+          '<div class="mini-stat"><span class="lbl">Santé</span><span class="val" style="color:' + sc + '">' + m.globalLifeScore + ' PV</span></div>' +
+          '<div class="mini-stat"><span class="lbl">Écoles</span><span class="val">' + m.ecoleCount + '</span></div>' +
+          '<div class="mini-stat"><span class="lbl">' + vitesseLbl + '</span><span class="val" style="color:' + tpsC + ';font-size:var(--fs-tiny)">' + esc(vitesseVal) + '</span></div>' +
+        '</div>' +
+      '</div>' +
+    '</div>';
+    container.insertAdjacentHTML('beforeend', html);
+  }
+  document.getElementById('resultCount').textContent = shown + '/' + MODELS.length;
+  document.getElementById('emptyMsg').style.display = shown === 0 ? 'block' : 'none';
+}
+
+// Filtres catégorie
+document.querySelectorAll('#chips .chip').forEach(function(chip) {
+  chip.addEventListener('click', function() {
+    document.querySelectorAll('#chips .chip').forEach(function(c) { c.classList.remove('active'); });
+    chip.classList.add('active');
+    activeCat = chip.dataset.cat;
+    renderCards();
+  });
+});
+// Filtres taille
+document.querySelectorAll('#sizeChips .chip').forEach(function(chip) {
+  chip.addEventListener('click', function() {
+    document.querySelectorAll('#sizeChips .chip').forEach(function(c) { c.classList.remove('active'); });
+    chip.classList.add('active');
+    activeSize = chip.dataset.size;
+    renderCards();
+  });
+});
+// Recherche
+document.getElementById('search').addEventListener('input', function(e) {
+  searchQ = e.target.value.toLowerCase().trim();
+  renderCards();
+});
+// Barre sticky
+(function() {
+  var bar = document.getElementById('stickyBar');
+  function onScroll() { if (window.scrollY > 4) bar.classList.add('stuck'); else bar.classList.remove('stuck'); }
+  window.addEventListener('scroll', onScroll, { passive: true });
+  onScroll();
+})();
+renderCards();
+</script>
 </body>
 </html>
