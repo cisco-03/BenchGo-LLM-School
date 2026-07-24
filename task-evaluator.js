@@ -1,5 +1,5 @@
 
-const { stripTS } = require('./parsing-utils');
+const { stripTS, stripComments } = require('./parsing-utils');
 const { execCodeInVM } = require('./vm-sandbox');
 const { EVAL_TIMEOUT_MS } = require('./config');
 const customEvaluators = require('./custom-evaluators');
@@ -27,7 +27,7 @@ async function evaluateTask(taskDef, studentCode) {
         }
       }
       else if (evalDef.type === "pattern") {
-        const codeText = (studentCode || '').toLowerCase();
+        const codeText = stripComments(studentCode || '').toLowerCase();
         if (evalDef.required) {
           for (const req of evalDef.required) {
             if (!codeText.includes(req.toLowerCase())) {

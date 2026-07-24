@@ -8,9 +8,11 @@ const { shortenModelName } = require('./report-generator');
 const { detectProfileFromModelName } = require('./config');
 const { formatDuration } = require('./score-ledger');
 const cliTable = require('./cli-table');
+const communitySync = require('./community-sync');
 
 const LEDGER_DIR = path.join(__dirname, 'Export-Rapports', '.carnet');
 const EXPORT_DIR = path.join(__dirname, 'Export-Rapports');
+const SNAPSHOT_FILE = path.join(LEDGER_DIR, 'classement_snapshot.json');
 
 // Charge tous les carnets de scores depuis Export-Rapports/.carnet/*.json
 function loadAllLedgers() {
@@ -26,6 +28,57 @@ function loadAllLedgers() {
     }
   }
   return ledgers;
+}
+
+// --- Snapshots de position (détection de mouvement entre générations) ---
+// À chaque génération du classement, on sauvegarde un snapshot { shortName: rang }
+// dans .carnet/classement_snapshot.json. Au run suivant, on compare les rangs
+// pour détecter si un modèle a monté (▲ vert), descendu (▼ rouge) ou est resté
+// stable (= neutre). Utile pour suivre l'impact des mises à jour Hugging Face
+// quand on re-teste certains modèles : leur score change, donc leur rang bouge.
+function loadPositionSnapshot() {
+  try {
+    if (fs.existsSync(SNAPSHOT_FILE)) {
+      return JSON.parse(fs.readFileSync(SNAPSHOT_FILE, 'utf8'));
+    }
+  } catch (e) {
+    logger.warn('Snapshot de position illisible ignoré : ' + e.message);
+  }
+  return {};
+}
+
+function savePositionSnapshot(entries) {
+  const snapshot = {};
+  for (let i = 0; i < entries.length; i++) {
+    snapshot[entries[i].shortName] = i + 1;
+  }
+  try {
+    fs.mkdirSync(LEDGER_DIR, { recursive: true });
+    fs.writeFileSync(SNAPSHOT_FILE, JSON.stringify(snapshot, null, 2), 'utf8');
+  } catch (e) {
+    logger.warn('Impossible de sauvegarder le snapshot de position : ' + e.message);
+  }
+  return snapshot;
+}
+
+// Calcule le delta de position pour chaque entrée en comparant le rang actuel
+// au rang stocké dans le snapshot précédent. Retourne une map { shortName: delta }.
+//   delta > 0 : le modèle a DESCENDU (son rang a augmenté, ex: 3 → 5, delta = +2).
+//   delta < 0 : le modèle a MONTÉ (son rang a diminué, ex: 5 → 3, delta = -2).
+//   delta = 0 : position stable.
+//   null      : modèle nouveau (pas dans le snapshot précédent).
+function computePositionDeltas(entries, snapshot) {
+  const deltas = {};
+  for (let i = 0; i < entries.length; i++) {
+    const sn = entries[i].shortName;
+    const oldRank = snapshot[sn];
+    if (oldRank == null) {
+      deltas[sn] = null;
+    } else {
+      deltas[sn] = (i + 1) - oldRank;
+    }
+  }
+  return deltas;
 }
 
 // Normalise une entrée d'école du carnet vers { best, attempts }.
@@ -293,11 +346,18 @@ function getVerdict(entry) {
 }
 
 // Catégorie de filtrage (plus fine que le verdict) basée sur le % global.
-function getCategory(entry) {
+// "Top du top" n'est réservé qu'aux 3 meilleurs modèles (rang 1, 2, 3).
+// Sémantique des autres catégories (du meilleur au pire) :
+//   - Recommandés   : modèles appropriés pour coder normalement (>= 90%).
+//   - Dans la moyenne : modèles justes, à manier avec prudence (>= 75%).
+//   - En rattrapage : modèles qui doivent repasser les écoles pour gagner
+//                     des points supplémentaires (>= 50%).
+//   - Échec total   : modèles non fiables, à supprimer du classement (< 50%).
+function getCategory(entry, rank = null) {
   const p = entry.pct;
-  if (p >= 90) return { key: 'top', label: 'Top du top', icon: '🏆', color: '#ffd700' };
-  if (p >= 80) return { key: 'recommande', label: 'Recommandés', icon: '✅', color: '#28a745' };
-  if (p >= 70) return { key: 'moyenne', label: 'Dans la moyenne', icon: '📊', color: '#17a2b8' };
+  if (rank && rank <= 3) return { key: 'top', label: 'Top du top', icon: '🏆', color: '#ffd700' };
+  if (p >= 90) return { key: 'recommande', label: 'Recommandés', icon: '✅', color: '#28a745' };
+  if (p >= 75) return { key: 'moyenne', label: 'Dans la moyenne', icon: '📊', color: '#17a2b8' };
   if (p >= 50) return { key: 'rattrapage', label: 'En rattrapage', icon: '⚠️', color: '#ffc107' };
   return { key: 'catastrophe', label: 'Échec total', icon: '💥', color: '#dc3545' };
 }
@@ -353,18 +413,20 @@ function buildLeaderboardHTML(entries) {
   // Compteurs par catégorie pour les filtres
   const catCounts = { top: 0, recommande: 0, moyenne: 0, rattrapage: 0, catastrophe: 0 };
   const sizeCounts = { petit: 0, standard: 0, expert: 0, doctorat: 0, inconnu: 0 };
-  for (const e of entries) {
-    catCounts[getCategory(e).key]++;
+  entries.forEach((e, idx) => {
+    const rank = idx + 1;
+    catCounts[getCategory(e, rank).key]++;
     sizeCounts[getParamSize(e.model).key]++;
-  }
+  });
 
   // Les données complètes de chaque modèle sont sérialisées en JSON pour la modale
   // (forces/faiblesses, détail par école, etc. — calculés une seule fois côté serveur).
-  const modelsData = entries.map(e => {
+  const modelsData = entries.map((e, idx) => {
+    const rank = idx + 1;
     const verdict = getVerdict(e);
     const grade = letterGrade(e.pct);
     const args = buildArguments(e);
-    const cat = getCategory(e);
+    const cat = getCategory(e, rank);
     const psize = getParamSize(e.model);
 
     // Rapport intégral : on charge le carnet original pour accéder aux tiers
@@ -391,6 +453,7 @@ function buildLeaderboardHTML(entries) {
       ecoleCount: e.ecoleCount,
       lastUpdated: e.lastUpdated,
       trend: e.trend || null,
+      positionDelta: e.positionDelta != null ? e.positionDelta : null,
       // Chronométrie globale (cumul multi-écoles) pour la modale.
       elapsedMs: e.elapsedMs || 0,
       wallMs: e.wallMs || 0,
@@ -505,8 +568,8 @@ function buildLeaderboardHTML(entries) {
     --shadow-elev: 0 8px 32px rgba(0,0,0,0.45);
 
     /* Container boxed intelligent */
-    --container-max: 1120px;
-    --container-pad: clamp(0.75rem, 4vw, 2rem);
+    --container-max: 1600px;
+    --container-pad: clamp(0.75rem, 3vw, 2rem);
   }
 
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -629,6 +692,15 @@ function buildLeaderboardHTML(entries) {
   .btn-primary:active { transform: scale(0.97); }
   .btn-primary.done { background: var(--green); border-color: var(--green); color: #fff; }
 
+  .btn-community {
+    padding: 8px 16px; border-color: rgba(210,168,255,0.5);
+    background: linear-gradient(135deg, rgba(210,168,255,0.18), rgba(163,113,247,0.12));
+    color: #d2a8ff; font-size: var(--fs-small);
+  }
+  .btn-community:hover { background: linear-gradient(135deg, #a373fb, #d2a8ff); color: #fff; box-shadow: 0 3px 12px rgba(163,113,247,0.4); }
+  .btn-community:active { transform: scale(0.97); }
+  .btn-community:disabled { opacity: 0.5; cursor: default; }
+
   .btn-icon {
     padding: 5px 9px; background: var(--bg-3); border-color: var(--border);
     color: var(--text-muted); font-size: var(--fs-tiny);
@@ -665,11 +737,12 @@ function buildLeaderboardHTML(entries) {
   .card.silver { border-color: rgba(201,209,212,0.3); }
   .card.bronze { border-color: rgba(227,179,65,0.35); }
 
-  .card-row { display: flex; align-items: center; gap: var(--space-s); padding: var(--space-s) var(--space-m); cursor: pointer; }
+  .card-row { display: flex; align-items: center; gap: var(--space-m); padding: var(--space-s) var(--space-m); cursor: pointer; }
 
   .rank {
-    flex: 0 0 auto; width: 44px; height: 44px;
-    display: flex; align-items: center; justify-content: center;
+    flex: 0 0 auto; min-width: 44px; height: 44px;
+    display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 2px;
+    padding-inline: 6px;
     font-size: var(--fs-h3); font-weight: 800; color: var(--accent);
     background: var(--bg-3); border: 1px solid var(--border); border-radius: var(--r-sm);
   }
@@ -699,6 +772,19 @@ function buildLeaderboardHTML(entries) {
   .badge.trend-up   { color: #3fb950; border-color: rgba(63,185,80,0.35); background: rgba(63,185,80,0.10); }
   .badge.trend-down { color: #f85149; border-color: rgba(248,81,73,0.35); background: rgba(248,81,73,0.10); }
   .badge.trend-stable { color: #8b949e; border-color: var(--border); background: var(--bg-3); }
+  .badge.exported { color: #58a6ff; border-color: rgba(88,166,255,0.45); background: rgba(88,166,255,0.12); }
+  .badge.exported:hover { background: rgba(88,166,255,0.22); }
+
+  /* Flèche de mouvement de position (delta de rang) */
+  .pos-arrow {
+    display: inline-flex; align-items: center; gap: 1px;
+    font-size: var(--fs-tiny); font-weight: 800; padding: 1px 5px;
+    border-radius: var(--r-pill); margin-left: 4px; white-space: nowrap;
+    border: 1px solid transparent;
+  }
+  .pos-arrow.pos-up     { color: #3fb950; background: rgba(63,185,80,0.12); border-color: rgba(63,185,80,0.30); }
+  .pos-arrow.pos-down   { color: #f85149; background: rgba(248,81,73,0.12); border-color: rgba(248,81,73,0.30); }
+  .pos-arrow.pos-stable { color: #8b949e; background: var(--bg-3); border-color: var(--border); }
 
   /* Mini-stats — flexbox grow */
   .mini-stats { display: flex; align-items: center; gap: var(--space-m); flex: 0 0 auto; flex-wrap: wrap; }
@@ -737,7 +823,7 @@ function buildLeaderboardHTML(entries) {
   .modal {
     background: linear-gradient(180deg, var(--bg-2), var(--bg-1));
     border: 1px solid var(--border); border-radius: var(--r-lg);
-    max-width: 860px; width: 100%; margin: auto; overflow: hidden;
+    max-width: 1180px; width: 100%; margin: auto; overflow: hidden;
     box-shadow: var(--shadow-elev);
   }
   .modal-head { display: flex; align-items: flex-start; gap: var(--space-s); padding: var(--space-m) var(--space-l); background: var(--bg-3); border-bottom: 1px solid var(--border); }
@@ -767,12 +853,12 @@ function buildLeaderboardHTML(entries) {
   /* Stats complètes — flexbox grow (préféré à grid) */
   .full-stats { display: flex; flex-wrap: wrap; gap: var(--space-s); }
   .full-stat {
-    flex: 1 1 110px; min-width: 100px;
+    flex: 1 1 110px; min-width: 0;
     background: var(--bg-1); border: 1px solid var(--border-soft);
     border-radius: var(--r-sm); padding: var(--space-s); text-align: center;
   }
   .full-stat .lbl { font-size: var(--fs-tiny); color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; }
-  .full-stat .val { font-size: var(--fs-h3); font-weight: 800; margin-top: 4px; }
+  .full-stat .val { font-size: clamp(0.72rem, 0.68rem + 0.2vw, 0.88rem); font-weight: 800; margin-top: 4px; word-break: break-all; overflow-wrap: anywhere; line-height: 1.15; }
   .full-stat .bar { width: 100%; height: 5px; background: var(--bg-3); border-radius: var(--r-pill); margin-top: 6px; overflow: hidden; }
   .full-stat .bar > div { height: 100%; border-radius: var(--r-pill); }
 
@@ -926,6 +1012,7 @@ function buildLeaderboardHTML(entries) {
         <input type="text" class="search" id="search" placeholder="🔍 Rechercher un modèle…" />
         <span class="result-count" id="resultCount"></span>
         <button class="btn btn-primary" id="btnCopyAll" title="Copier tout le classement (texte brut) pour le partager">⧉ Copier le classement</button>
+        <button class="btn btn-community" id="btnSubmitCommunity" title="Envoyer vos résultats sur le classement communautaire GitHub">🌐 Envoyer à la communauté</button>
       </div>
     </div>
   </div>
@@ -1003,6 +1090,46 @@ function esc(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
 
+// --- Flèche de mouvement de position (delta de rang entre 2 générations) ---
+//   delta < 0 : le modèle a MONTÉ (rang diminué) → ▲ vert
+//   delta > 0 : le modèle a DESCENDU (rang augmenté) → ▼ rouge
+//   delta = 0 : position stable → = gris
+//   null      : nouveau modèle (pas d'historique) → pas de flèche
+function positionArrow(delta) {
+  if (delta == null) return '';
+  if (delta < 0) return '<span class="pos-arrow pos-up" title="A monté de ' + Math.abs(delta) + ' place(s) depuis la dernière génération">▲' + Math.abs(delta) + '</span>';
+  if (delta > 0) return '<span class="pos-arrow pos-down" title="A descendu de ' + delta + ' place(s) depuis la dernière génération">▼' + delta + '</span>';
+  return '<span class="pos-arrow pos-stable" title="Position stable">=</span>';
+}
+
+// --- Suivi des rapports intégraux déjà exportés ---
+// Persiste en localStorage (clé par shortName) pour savoir quels modèles ont
+// déjà eu leur rapport .md téléchargé. Survit aux régénérations du classement
+// et permet de visualiser d'un coup d'œil où l'on en est dans une session de
+// tests longue (beaucoup de modèles, on perd le fil).
+var EXPORTED_KEY = 'benchgo_exportedReports_v1';
+function getExportedSet() {
+  try {
+    var raw = localStorage.getItem(EXPORTED_KEY);
+    if (!raw) return {};
+    var o = JSON.parse(raw);
+    return (o && typeof o === 'object') ? o : {};
+  } catch (e) { return {}; }
+}
+function isExported(shortName) {
+  if (!shortName) return false;
+  return !!getExportedSet()[shortName];
+}
+function markExported(shortName) {
+  if (!shortName) return;
+  try {
+    var s = getExportedSet();
+    if (s[shortName]) return; // déjà marqué
+    s[shortName] = new Date().toISOString();
+    localStorage.setItem(EXPORTED_KEY, JSON.stringify(s));
+  } catch (e) { /* localStorage indisponible (mode privé) : on ignore */ }
+}
+
 function renderCards() {
   console.log('[renderCards] début — MODELS.length=' + (typeof MODELS !== 'undefined' ? MODELS.length : 'UNDEFINED'));
   var chipsEl = document.querySelector('#chips .chip.active');
@@ -1029,6 +1156,7 @@ function renderCards() {
     var rankDisp = i < 3
       ? '<span class="medal">' + (i === 0 ? '🥇' : i === 1 ? '🥈' : '🥉') + '</span>'
       : (i + 1);
+    var posArrow = positionArrow(m.positionDelta);
     var pc = pctColor(m.pct);
     var sc = m.globalLifeScore < 0 ? '#f85149' : '#3fb950';
     var gc = gradeColor(m.grade);
@@ -1043,6 +1171,13 @@ function renderCards() {
       : (m.elapsedMs > 0 ? fmtDurJS(m.elapsedMs) : '—');
     var vitesseLbl = m.tokensPerSecond > 0 ? 'Vitesse' : 'Temps';
     var szBadge = '<span class="badge" title="' + esc(m.paramSize.label) + '">' + m.paramSize.icon + ' ' + esc(m.paramSize.short) + '</span>';
+    // Badge 📄 : apparaît quand le rapport intégral de ce modèle a déjà été
+    // exporté (téléchargé) au moins une fois. Persistance via localStorage
+    // (clé par shortName) pour garder le suivi entre deux générations du
+    // classement. Cliquez pour retirer la marque (reset).
+    var exportedBadge = isExported(m.shortName)
+      ? ' <span class="badge exported" title="Rapport intégral déjà exporté (cliquez pour effacer la marque)" onclick="event.stopPropagation();unmarkExported(' + i + ')" style="cursor:pointer">📄 Exporté</span>'
+      : '';
     var quantBadge = m.quantization
       ? '<span class="badge quant" title="Quantification du modèle (récupérée via LM Studio /api/v0/models ou saisie manuelle)">🧩 ' + esc(m.quantization) + '</span>'
       : '';
@@ -1068,8 +1203,8 @@ function renderCards() {
       '<div class="card-row">' +
         '<div class="rank">' + rankDisp + '</div>' +
         '<div class="model-name">' +
-          '<div class="name-line"><span class="cat-icon">' + m.cat.icon + '</span>' + esc(m.model) + '</div>' +
-          '<div class="badges">' + szBadge + ' ' + quantBadge + ' ' + trendBadge + ' <button class="btn btn-icon" onclick="event.stopPropagation();copyModelName(' + i + ')" title="Copier le nom du modèle">⧉ Nom</button></div>' +
+          '<div class="name-line"><span class="cat-icon">' + m.cat.icon + '</span>' + esc(m.model) + posArrow + '</div>' +
+          '<div class="badges">' + szBadge + ' ' + quantBadge + ' ' + trendBadge + exportedBadge + ' <button class="btn btn-icon" onclick="event.stopPropagation();copyModelName(' + i + ')" title="Copier le nom du modèle">⧉ Nom</button></div>' +
         '</div>' +
         '<div class="mini-stats">' +
           '<div class="mini-stat"><span class="lbl">%</span><span class="val" style="color:' + pc + '">' + dispPct(m.pct) + '%</span><div class="pct-bar-wrap"><div class="pct-bar-fill" style="width:' + Math.max(2,dispPct(m.pct)) + '%;background:' + pc + '"></div></div></div>' +
@@ -1094,7 +1229,8 @@ function renderCards() {
 
 function openModal(idx) {
   var m = MODELS[idx];
-  document.getElementById('mRank').innerHTML = idx < 3 ? '<span class="medal">' + (idx === 0 ? '🥇' : idx === 1 ? '🥈' : '🥉') + '</span>' : (idx + 1);
+  var posArrowHtml = positionArrow(m.positionDelta);
+  document.getElementById('mRank').innerHTML = (idx < 3 ? '<span class="medal">' + (idx === 0 ? '🥇' : idx === 1 ? '🥈' : '🥉') + '</span>' : (idx + 1)) + posArrowHtml;
   document.getElementById('mTitle').textContent = m.model;
   var vb = document.getElementById('mVerdict');
   vb.textContent = m.verdict.label;
@@ -1467,6 +1603,27 @@ function exportReport(idx) {
     document.body.removeChild(a);
     setTimeout(function(){ URL.revokeObjectURL(url); }, 1500);
     showToast('Rapport téléchargé : ' + filename, true);
+    // Marque ce modèle comme « rapport déjà exporté » (persistance localStorage)
+    // pour faire apparaître le badge 📄 sur sa carte du leaderboard.
+    markExported(m.shortName);
+    // Rafraîchit la carte correspondante si elle est visible pour faire
+    // apparaître le badge immédiatement, sans tout re-rendre.
+    var card = document.querySelector('.card[onclick*="openModal(' + idx + ')"]');
+    if (card && !card.querySelector('.badge.exported')) {
+      var badgesEl = card.querySelector('.badges');
+      if (badgesEl) {
+        var b = document.createElement('span');
+        b.className = 'badge exported';
+        b.title = 'Rapport intégral déjà exporté (cliquez pour effacer la marque)';
+        b.style.cursor = 'pointer';
+        b.setAttribute('onclick', 'event.stopPropagation();unmarkExported(' + idx + ')');
+        b.textContent = '📄 Exporté';
+        // Inséré avant le bouton "⧉ Nom" pour rester avec les badges.
+        var nomBtn = badgesEl.querySelector('.btn-icon');
+        if (nomBtn) badgesEl.insertBefore(b, nomBtn);
+        else badgesEl.appendChild(b);
+      }
+    }
     if (btn) { btn.disabled = false; btn.textContent = '⬇ Exporter le rapport intégral'; }
   }
   function clientFallback() {
@@ -1536,6 +1693,19 @@ function exportReport(idx) {
       clientFallback();
     });
 }
+// Retire la marque « rapport exporté » pour un modèle (clic sur le badge 📄
+// de la carte). Permet de repartir à zéro si on veut re-tester/re-exporter.
+function unmarkExported(idx) {
+  var m = MODELS[idx];
+  if (!m || !m.shortName) return;
+  try {
+    var s = getExportedSet();
+    delete s[m.shortName];
+    localStorage.setItem(EXPORTED_KEY, JSON.stringify(s));
+  } catch (e) {}
+  renderCards();
+  showToast('Marque d\u2019export effacée pour ' + m.shortName, true);
+}
 function fallbackCopy(text) {
   var ta = document.createElement('textarea');
   ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
@@ -1555,8 +1725,8 @@ function copyLeaderboard() {
   lines.push('🏇 Classement BenchGo V3 — ' + new Date().toLocaleString('fr-FR'));
   lines.push('Filtre catégorie : ' + (activeCat === 'all' ? 'tous' : activeCat) + ' | Taille : ' + (activeSize === 'all' ? 'toutes' : activeSize) + (q ? ' | Recherche : ' + q : ''));
   lines.push('');
-  lines.push('Rang | Modèle | Quantif. | Points | % | Note | Oblig. | Santé | Écoles | Temps | Vitesse | Verdict');
-  lines.push('---|---|---|---|---|---|---|---|---|---|---|---');
+  lines.push('Rang | Modèle | Quantif. | Points | % | Note | Mvt | Oblig. | Santé | Écoles | Temps | Vitesse | Verdict');
+  lines.push('---|---|---|---|---|---|---|---|---|---|---|---|---');
   var copied = 0;
   for (var i = 0; i < MODELS.length; i++) {
     var m = MODELS[i];
@@ -1566,7 +1736,13 @@ function copyLeaderboard() {
     var rank = copied < 3 ? ['🥇','🥈','🥉'][copied] : ('' + (copied + 1));
     var temps = m.elapsedMs > 0 ? fmtDurJS(m.elapsedMs) : '—';
     var vit = m.tokensPerSecond > 0 ? (m.tokensPerSecond + ' t/s') : '—';
-    lines.push(rank + ' | ' + m.model + ' | ' + (m.quantization || '—') + ' | ' + m.score + '/' + m.max + ' | ' + m.pct + '% | ' + m.grade + ' | ' + (m.mandatoryTotal > 0 ? m.mandatoryPct + '%' : '—') + ' | ' + m.globalLifeScore + ' PV | ' + m.ecoleCount + ' | ' + temps + ' | ' + vit + ' | ' + m.verdict.label);
+    // Flèche de mouvement de position (delta de rang vs snapshot précédent).
+    var mvt;
+    if (m.positionDelta == null) { mvt = 'NEW'; }
+    else if (m.positionDelta < 0) { mvt = '▲' + Math.abs(m.positionDelta); }
+    else if (m.positionDelta > 0) { mvt = '▼' + m.positionDelta; }
+    else { mvt = '='; }
+    lines.push(rank + ' | ' + m.model + ' | ' + (m.quantization || '—') + ' | ' + m.score + '/' + m.max + ' | ' + m.pct + '% | ' + m.grade + ' | ' + mvt + ' | ' + (m.mandatoryTotal > 0 ? m.mandatoryPct + '%' : '—') + ' | ' + m.globalLifeScore + ' PV | ' + m.ecoleCount + ' | ' + temps + ' | ' + vit + ' | ' + m.verdict.label);
     copied++;
   }
   lines.push('');
@@ -1588,6 +1764,102 @@ function copyLeaderboard() {
   }
 }
 document.getElementById('btnCopyAll').addEventListener('click', copyLeaderboard);
+
+// --- Bouton "Envoyer à la communauté" ---
+// Ouvre une modale permettant de soumettre tous les carnets de scores du classement
+// vers le dépôt communautaire GitHub via une Pull Request. Nécessite un token GitHub.
+var submitModal = null;
+function openSubmitModal() {
+  if (submitModal) { document.body.removeChild(submitModal); submitModal = null; return; }
+  var overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.style.display = 'flex';
+  overlay.id = 'submitOverlay';
+  overlay.innerHTML = ''
+    + '<div class="modal" style="max-width: 600px;">'
+    + '  <div class="modal-head">'
+    + '    <h2>🌐 Envoyer à la communauté</h2>'
+    + '    <button class="modal-close" onclick="closeSubmitModal()" aria-label="Fermer">x</button>'
+    + '  </div>'
+    + '  <div class="modal-body" style="padding: 24px;">'
+    + '    <p style="color: var(--text-muted); margin-bottom: 16px;">'
+    + '      Soumettez vos carnets de scores au classement communautaire sur GitHub.<br>'
+    + '      Une Pull Request sera créée automatiquement. Le propriétaire validera votre contribution.'
+    + '    </p>'
+    + '    <div style="margin-bottom: 16px;">'
+    + '      <label style="display: block; margin-bottom: 6px; font-weight: 600;">Token GitHub (PAT, scope repo)</label>'
+    + '      <input type="password" id="submitToken" placeholder="ghp_xxxxxxxxxxxx" style="width: 100%; padding: 10px; background: var(--bg-3); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-family: monospace;" />'
+    + '      <p style="font-size: 12px; color: var(--text-muted); margin-top: 4px;"> Creez-en un sur github.com/settings/tokens (scope "repo").</p>'
+    + '    </div>'
+    + '    <div style="margin-bottom: 16px;">'
+    + '      <label style="display: block; margin-bottom: 6px; font-weight: 600;">Pseudo public (optionnel)</label>'
+    + '      <input type="text" id="submitPseudo" placeholder="Votre pseudo (ou laissez vide pour anonyme)" style="width: 100%; padding: 10px; background: var(--bg-3); border: 1px solid var(--border); border-radius: 8px; color: var(--text);" />'
+    + '    </div>'
+    + '    <div style="margin-bottom: 16px;">'
+    + '      <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">'
+    + '        <input type="checkbox" id="submitRemember" checked style="accent-color: var(--accent);" />'
+    + '        <span>Memoriser le token pour les prochaines fois</span>'
+    + '      </label>'
+    + '    </div>'
+    + '    <div id="submitStatus" style="margin-bottom: 12px;"></div>'
+    + '    <div style="display: flex; gap: 12px;">'
+    + '      <button class="btn btn-community" id="btnDoSubmit" onclick="doSubmitAll()" style="flex: 1; justify-content: center;">Envoyer ' + MODELS.length + ' modele(s)</button>'
+    + '      <button class="btn" onclick="closeSubmitModal()" style="padding: 8px 16px;">Annuler</button>'
+    + '    </div>'
+    + '  </div>'
+    + '</div>';
+  document.body.appendChild(overlay);
+  submitModal = overlay;
+}
+function closeSubmitModal() {
+  if (submitModal) { document.body.removeChild(submitModal); submitModal = null; }
+}
+async function doSubmitAll() {
+  var token = document.getElementById('submitToken').value.trim();
+  var pseudo = document.getElementById('submitPseudo').value.trim();
+  var remember = document.getElementById('submitRemember').checked;
+  var statusEl = document.getElementById('submitStatus');
+  var btn = document.getElementById('btnDoSubmit');
+  if (!token) { statusEl.innerHTML = '<p style="color: var(--red);">Token GitHub requis.</p>'; return; }
+  btn.disabled = true; btn.textContent = 'Envoi en cours...';
+  statusEl.innerHTML = '<p style="color: var(--accent);">Validation du token...</p>';
+  try {
+    var valRes = await fetch('/api/submit-validate?token=' + encodeURIComponent(token), { method: 'POST' });
+    var valData = await valRes.json();
+    if (!valData.ok) { statusEl.innerHTML = '<p style="color: var(--red);">Token invalide : ' + valData.error + '</p>'; btn.disabled = false; btn.textContent = 'Reessayer'; return; }
+    statusEl.innerHTML = '<p style="color: var(--green);">Token valide (' + valData.login + '). Envoi des carnets...</p>';
+    var okCount = 0, failCount = 0, prUrls = [];
+    for (var i = 0; i < MODELS.length; i++) {
+      var m = MODELS[i];
+      statusEl.innerHTML = '<p style="color: var(--accent);">Envoi ' + (i + 1) + '/' + MODELS.length + ' : ' + m.shortName + '...</p>';
+      try {
+        var res = await fetch('/api/submit?shortName=' + encodeURIComponent(m.shortName) + '&pseudo=' + encodeURIComponent(pseudo) + '&token=' + encodeURIComponent(token), { method: 'POST' });
+        var data = await res.json();
+        if (data.ok) { okCount++; if (data.prUrl) prUrls.push(data.prUrl); }
+        else { failCount++; }
+      } catch (e) { failCount++; }
+    }
+    if (remember) { /* le serveur a deja memorise le token si demande */ }
+    var html = '<div style="border: 1px solid var(--border); border-radius: 8px; padding: 12px; background: var(--bg-3);">';
+    html += '<p style="color: var(--green); font-weight: 600;">' + okCount + ' soumission(s) reussie(s)';
+    if (failCount > 0) html += ', ' + failCount + ' echec(s)';
+    html += '</p>';
+    if (prUrls.length > 0) {
+      html += '<p style="margin-top: 8px; font-size: 13px; color: var(--text-muted);">Pull Requests creees :</p>';
+      for (var u = 0; u < prUrls.length; u++) {
+        html += '<p style="margin: 4px 0;"><a href="' + prUrls[u] + '" target="_blank" style="color: var(--accent);">' + prUrls[u] + '</a></p>';
+      }
+    }
+    html += '<p style="margin-top: 8px; font-size: 13px; color: var(--text-muted);">Le proprietaire du depot validera vos PR pour integrer vos resultats au classement consolide.</p>';
+    html += '</div>';
+    statusEl.innerHTML = html;
+    btn.textContent = 'Termine'; btn.disabled = true;
+  } catch (e) {
+    statusEl.innerHTML = '<p style="color: var(--red);">Erreur : ' + e.message + '</p>';
+    btn.disabled = false; btn.textContent = 'Reessayer';
+  }
+}
+document.getElementById('btnSubmitCommunity').addEventListener('click', openSubmitModal);
 
 // Barre sticky : ajoute la classe .stuck dès qu'on scrolle pour renforcer le
 // contraste (fond + opaque + ombre) et signaler visuellement le "détachement".
@@ -1613,8 +1885,8 @@ renderCards();
 function buildLeaderboardMarkdown(entries) {
   let md = `# 🏇 Classement BenchGo V3\n\n`;
   md += `> Généré le ${new Date().toLocaleString('fr-FR')} — ${entries.length} modèle(s) classé(s)\n\n`;
-  md += `| Rang | Modèle | Quantif. | Points | % | Note | Oblig. | Santé | Bonus | Aide | Rat. | Écoles | Temps | Vitesse | Verdict | Forces & Faiblesses |\n`;
-  md += `|---:|---|:---:|---|---:|:---:|---:|---:|---:|---:|---:|---:|---|---|---|---|\n`;
+  md += `| Rang | Modèle | Quantif. | Points | % | Note | Mvt | Oblig. | Santé | Bonus | Aide | Rat. | Écoles | Temps | Vitesse | Verdict | Forces & Faiblesses |\n`;
+  md += `|---:|---|:---:|---|---:|:---:|:---:|---:|---:|---:|---:|---:|---:|---|---|---|---|\n`;
 
   for (let i = 0; i < entries.length; i++) {
     const e = entries[i];
@@ -1626,12 +1898,23 @@ function buildLeaderboardMarkdown(entries) {
     const quant = e.quantization || '—';
     const temps = e.elapsedMs > 0 ? formatDuration(e.elapsedMs) : '—';
     const vit = e.tokensPerSecond > 0 ? (e.tokensPerSecond + ' t/s') : '—';
+    // Flèche de mouvement de position (delta de rang vs snapshot précédent).
+    let mvt;
+    if (e.positionDelta == null) {
+      mvt = '🆕 NEW';
+    } else if (e.positionDelta < 0) {
+      mvt = '▲' + Math.abs(e.positionDelta);
+    } else if (e.positionDelta > 0) {
+      mvt = '▼' + e.positionDelta;
+    } else {
+      mvt = '=';
+    }
     const argsText = [];
     if (args.forces.length > 0) argsText.push('**Forces :** ' + args.forces.join(', '));
     if (args.faiblesses.length > 0) argsText.push('**Faiblesses :** ' + args.faiblesses.join(', '));
     if (args.notes.length > 0) argsText.push('*' + args.notes.join(', ') + '*');
 
-    md += `| ${medal} | ${e.model} | ${quant} | ${e.score}/${e.max} | ${e.pct}% | ${grade.grade} | ${e.mandatoryTotal > 0 ? e.mandatoryPct + '%' : '—'} | ${e.globalLifeScore} | ${e.optionalBonus > 0 ? '+' + e.optionalBonus : '—'} | ${e.helpCount || '—'} | ${e.retriedCount || '—'} | ${e.ecoleCount} | ${temps} | ${vit} | ${verdict.label} | ${argsText.join(' · ')} |\n`;
+    md += `| ${medal} | ${e.model} | ${quant} | ${e.score}/${e.max} | ${e.pct}% | ${grade.grade} | ${mvt} | ${e.mandatoryTotal > 0 ? e.mandatoryPct + '%' : '—'} | ${e.globalLifeScore} | ${e.optionalBonus > 0 ? '+' + e.optionalBonus : '—'} | ${e.helpCount || '—'} | ${e.retriedCount || '—'} | ${e.ecoleCount} | ${temps} | ${vit} | ${verdict.label} | ${argsText.join(' · ')} |\n`;
   }
 
   md += `\n---\n\n## Détail par modèle\n\n`;
@@ -1857,6 +2140,16 @@ function generateLeaderboard() {
     return b.globalLifeScore - a.globalLifeScore;
   });
 
+  // --- Détection de mouvement de position ---
+  // Compare le rang actuel de chaque modèle à celui du snapshot précédent
+  // (génération antérieure du classement). Permet d'afficher des flèches
+  // ▲ (monte, vert) / ▼ (descend, rouge) / = (stable) sur les cartes.
+  const prevSnapshot = loadPositionSnapshot();
+  const positionDeltas = computePositionDeltas(entries, prevSnapshot);
+  for (let i = 0; i < entries.length; i++) {
+    entries[i].positionDelta = positionDeltas[entries[i].shortName] ?? null;
+  }
+
   const html = buildLeaderboardHTML(entries);
   const md = buildLeaderboardMarkdown(entries);
   const reasoningMd = buildReasoningMarkdown(entries);
@@ -1872,6 +2165,10 @@ function generateLeaderboard() {
   fs.writeFileSync(mdPath, md, 'utf8');
   fs.writeFileSync(reasoningPath, reasoningMd, 'utf8');
 
+  // Sauvegarde le snapshot des positions pour la prochaine génération
+  // (permet de détecter les mouvements ▲/▼/= au prochain run).
+  savePositionSnapshot(entries);
+
   const relHtml = path.relative(__dirname, htmlPath);
   const relMd = path.relative(__dirname, mdPath);
   const relReasoning = path.relative(__dirname, reasoningPath);
@@ -1880,8 +2177,8 @@ function generateLeaderboard() {
   console.log('  \x1b[1;35m━━━ CLASSEMENT BENCHGO V3 ━━━\x1b[0m');
   console.log(`  \x1b[90m${entries.length} modèle(s) classé(s) du meilleur au pire\x1b[0m`);
 
-  const lbHeaders = ['Rang', 'Modèle', 'Quant', 'Temps', 'Vitesse', 'Pct', 'Verdict'];
-  const lbAligns = ['left', 'left', 'left', 'right', 'right', 'right', 'left'];
+  const lbHeaders = ['Rang', 'Modèle', 'Quant', 'Temps', 'Vitesse', 'Pct', 'Mvt', 'Verdict'];
+  const lbAligns = ['left', 'left', 'left', 'right', 'right', 'right', 'center', 'left'];
   const lbRows = [];
   const lbMedals = [];
   for (let i = 0; i < entries.length; i++) {
@@ -1893,6 +2190,18 @@ function generateLeaderboard() {
     const temps = e.elapsedMs > 0 ? `\x1b[90m${formatDuration(e.elapsedMs)}\x1b[0m` : '\x1b[90m—\x1b[0m';
     const tpsC = e.tokensPerSecond >= 50 ? '\x1b[32m' : e.tokensPerSecond >= 25 ? '\x1b[33m' : e.tokensPerSecond > 0 ? '\x1b[31m' : '\x1b[90m';
     const vit = e.tokensPerSecond > 0 ? `${tpsC}${e.tokensPerSecond + ' t/s'}\x1b[0m` : '\x1b[90m—\x1b[0m';
+    // Flèche de mouvement de position (delta de rang vs snapshot précédent).
+    //   delta < 0 → ▲ vert (monte)  |  delta > 0 → ▼ rouge (descend)  |  0 → = gris  |  null → nouveau
+    let mvt;
+    if (e.positionDelta == null) {
+      mvt = '\x1b[90mNEW\x1b[0m';
+    } else if (e.positionDelta < 0) {
+      mvt = `\x1b[32m▲${Math.abs(e.positionDelta)}\x1b[0m`;
+    } else if (e.positionDelta > 0) {
+      mvt = `\x1b[31m▼${e.positionDelta}\x1b[0m`;
+    } else {
+      mvt = '\x1b[90m=\x1b[0m';
+    }
     lbRows.push([
       (i + 1) + '.',
       e.model,
@@ -1900,6 +2209,7 @@ function generateLeaderboard() {
       temps,
       vit,
       e.pct + '%',
+      mvt,
       `${vColor}${verdict.label}\x1b[0m`,
     ]);
     lbMedals.push(medal);
@@ -1939,7 +2249,7 @@ function startServer(port) {
   port = port || 3939;
   const htmlPath = path.join(EXPORT_DIR, 'classement.html');
 
-  const server = http.createServer((req, res) => {
+  const server = http.createServer(async (req, res) => {
     const url = new URL(req.url, 'http://localhost');
 
     // API : suppression d'un modèle
@@ -1953,6 +2263,62 @@ function startServer(port) {
       const result = deleteLedger(shortName);
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify(result));
+      return;
+    }
+
+    // API : validation d'un token GitHub (vérifie /user).
+    if (url.pathname === '/api/submit-validate' && req.method === 'POST') {
+      const token = url.searchParams.get('token');
+      if (!token) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: false, error: 'token manquant' }));
+        return;
+      }
+      try {
+        const validation = await communitySync.validateGithubToken(token);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(validation));
+      } catch (e) {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: false, error: e.message }));
+      }
+      return;
+    }
+
+    // API : soumission d'un carnet vers le dépôt communautaire (Pull Request GitHub).
+    // Lit le carnet local, le soumet via community-sync.js (crée branche + fichier + PR).
+    if (url.pathname === '/api/submit' && req.method === 'POST') {
+      const shortName = url.searchParams.get('shortName');
+      const pseudo = url.searchParams.get('pseudo') || null;
+      const token = url.searchParams.get('token');
+      if (!shortName) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: false, error: 'shortName manquant' }));
+        return;
+      }
+      if (!token) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: false, error: 'token GitHub manquant' }));
+        return;
+      }
+      try {
+        const { loadLedger } = require('./score-ledger');
+        const ledger = loadLedger(shortName);
+        if (!ledger || !ledger.ecoles || Object.keys(ledger.ecoles).length === 0) {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ ok: false, error: 'Carnet vide ou introuvable : ' + shortName }));
+          return;
+        }
+        const result = await communitySync.submitResults(shortName, ledger, token, {
+          pseudo: pseudo || null,
+          benchgoVersion: 'V3'
+        });
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(result));
+      } catch (e) {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: false, error: e.message }));
+      }
       return;
     }
 
@@ -2032,6 +2398,7 @@ function startServer(port) {
     console.log('  \x1b[1;35m━━━ CLASSEMENT INTERACTIF — BenchGo V3 ━━━\x1b[0m');
     console.log(`  \x1b[32mServeur démarré : ${url}\x1b[0m`);
     console.log('  \x1b[90mOuvrez le navigateur. Cliquez sur "🗑 Supprimer" pour retirer un modèle.\x1b[0m');
+    console.log('  \x1b[90mBouton "🌐 Envoyer à la communauté" pour soumettre vos résultats sur GitHub.\x1b[0m');
     console.log('  \x1b[90mModale → bouton "⬇ Exporter le rapport intégral" pour télécharger le MD.\x1b[0m');
     console.log('  \x1b[90mCtrl+C pour arrêter le serveur.\x1b[0m\n');
 

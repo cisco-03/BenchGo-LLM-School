@@ -358,8 +358,53 @@ function stripTS(code) {
   return result;
 }
 
+function stripComments(code) {
+  if (!code) return '';
+  let result = '';
+  let i = 0;
+  const n = code.length;
+  while (i < n) {
+    const ch = code[i];
+    const next = i + 1 < n ? code[i + 1] : '';
+    if (ch === '"' || ch === "'" || ch === '`') {
+      const quote = ch;
+      result += ch;
+      i++;
+      while (i < n) {
+        const c = code[i];
+        result += c;
+        if (c === '\\' && i + 1 < n) {
+          result += code[i + 1];
+          i += 2;
+          continue;
+        }
+        if (c === quote) {
+          i++;
+          break;
+        }
+        i++;
+      }
+      continue;
+    }
+    if (ch === '/' && next === '/') {
+      while (i < n && code[i] !== '\n') i++;
+      continue;
+    }
+    if (ch === '/' && next === '*') {
+      i += 2;
+      while (i < n && !(code[i] === '*' && i + 1 < n && code[i + 1] === '/')) i++;
+      i += 2;
+      continue;
+    }
+    result += ch;
+    i++;
+  }
+  return result;
+}
+
 module.exports = {
   extractJSON,
   extractCodeRegex,
-  stripTS
+  stripTS,
+  stripComments
 };
