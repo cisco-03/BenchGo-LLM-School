@@ -1,5 +1,26 @@
 # CHANGELOG - Carnet de Notes BenchGo
 
+## 2026-07-24 — Refonte visuelle du classement communautaire + guide de style
+
+### Contexte
+Le classement communautaire (https://cisco-03.github.io/BenchGo-LLM-School/community-leaderboard.html) était trop condensé : cartes sur une seule ligne, stats minuscules, boutons collés, pas d'aération. Un thème macOS Liquid Glass a été testé puis rejeté. Finalement, le style visuel du leaderboard local BenchGo (`leaderboard.js`) a été reproduit à l'identique pour assurer une cohérence parfaite entre les deux pages.
+
+### Implémentation
+**`consolidate-leaderboard.js` — `buildConsolidatedHTML()`**
+- Bloc `<style>` entièrement réécrit pour reprendre la palette GitHub-dark du leaderboard local (variables `:root`, règles CSS, responsive).
+- `renderCards()` réécrit en structure `card-row` + `mini-stats` (6 stats alignées : %, Note, Points, Santé, Écoles, Vitesse/Temps) au lieu du layout en tuiles `card-head`/`card-stats`.
+- Couleurs dynamiques `pctColor()`/`gradeColor()` remises en palette GitHub-dark (`#3fb950`, `#58a6ff`, `#d29922`, `#db6d28`, `#f85149`) — modifiées aux deux endroits (serveur + client).
+- Badges `quant`/`contrib`/`pseudo` conservés avec les mêmes couleurs que le leaderboard local.
+- Titre en dégradé `linear-gradient(135deg, var(--accent), var(--purple))` identique.
+- Barre sticky, chips de filtres, champ de recherche : mêmes styles que le leaderboard local.
+
+**`Docs/guide-style-classement-communautaire.md` — Nouveau**
+- Guide complet expliquant quel fichier modifier (`consolidate-leaderboard.js`), les 3 zones à toucher (variables `:root`, règles `<style>`, JS `renderCards()`), le workflow de modification, la cohérence avec le leaderboard local, et les pièges à éviter.
+
+### Fichiers modifiés
+- `consolidate-leaderboard.js` : refonte CSS + `renderCards()` + couleurs.
+- `Docs/guide-style-classement-communautaire.md` : nouveau guide de style.
+
 ## 2026-07-24 — Détection automatique des nouveaux modèles à soumettre
 
 ### Contexte
