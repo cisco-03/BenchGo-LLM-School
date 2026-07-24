@@ -389,6 +389,12 @@ function detecterNomFonction(strippedCode, nomParDefaut) {
  */
 function exposerFonctionVM(code, nomParDefaut, extraGlobals) {
   const stripped = stripTS(code);
+  // Sécurité : inspecter le code avant exécution pour détecter les patterns d'évasion
+  const { detectSandboxEscape } = require('./vm-sandbox');
+  const escapeAttempt = detectSandboxEscape(stripped);
+  if (escapeAttempt) {
+    throw new Error(`Sécurité : ${escapeAttempt}`);
+  }
   const fnName = detecterNomFonction(stripped, nomParDefaut);
   const sandbox = buildSandbox();
   if (extraGlobals) Object.assign(sandbox, extraGlobals);

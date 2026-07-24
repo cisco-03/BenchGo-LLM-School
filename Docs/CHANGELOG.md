@@ -1,5 +1,62 @@
 # CHANGELOG - Carnet de Notes BenchGo
 
+## 2026-07-24 — Audit de sécurité : correction de 6 failles de sécurité
+
+### Contexte
+Audit complet de sécurité de l'application BenchGo V3. Exploration de tous les fichiers JS, exploitation de chaque faille pour confirmer son exploitabilité, puis correction. 6 failles ont été identifiées et confirmées par exploit, 5 ont été corrigées (la 6e, stockage des clés en clair, est un compromis assumé documenté).
+
+### Failles identifiées et corrigées
+
+**1. CRITIQUE — Évasion de sandbox VM (`vm-sandbox.js`)**
+- Le module `vm` de Node.js n'est PAS une sandbox de sécurité. Le code d'un modèle testé peut s'échapper via la chaîne de prototypes : `this.constructor.constructor('return process')().mainModule.require('child_process').execSync(...)` → exécution de commandes système arbitraires (RCE).
+- Exploit confirmé : `echo PWNED_SANDBOX_ESCAPE` exécuté depuis la sandbox, accès au hostname via `os.hostname()`.
+- **Fix** : retrait de `setTimeout`/`clearTimeout`/`Promise`/`Symbol` du sandbox (vecteurs d'évasion via `.constructor`), gel profond (`Object.freeze`) des constructeurs exposés, ajout de `detectSandboxEscape()` qui inspecte le code avant exécution pour rejeter les patterns d'évasion connus (`constructor.constructor`, `process.mainModule`, `child_process`, `__proto__`, `new Function`, `eval`, etc.). Vérifié : 5 exploits d'évasion testés → tous bloqués. Code légitime (5 exercices algorithmiques) → tous passent toujours.
+
+**2. CRITIQUE — Path traversal sur `/api/delete` (`leaderboard.js`)**
+- La fonction `deleteLedger(shortName)` construit le chemin avec `path.join(LEDGER_DIR, shortName + '.json')` sans validation. Un `shortName=../../.api-keys` cible `C:\...\benchmark-v3\.api-keys.json` → suppression du fichier de clés API.
+- Exploit confirmé : `deleteLedger('../../.api-keys')` retourne `{ ok: true, auraitSupprime: '...\.api-keys.json' }`.
+- **Fix** : validation du `shortName` (rejet des `/`, `\`, `..`), sanitization des caractères, vérification que le chemin résolu est bien dans `LEDGER_DIR`.
+
+**3. HAUTE — Token GitHub en query string + absence de CORS/CSRF (`leaderboard.js`)**
+- Le serveur HTTP du leaderboard passe le token GitHub PAT en query string (`url.searchParams.get('token')`) → visible dans les logs d'accès, l'historique du navigateur, les referer headers. Aucune protection CORS ou CSRF : n'importe quelle page web peut faire des requêtes vers `localhost:3939`.
+- **Fix** : les tokens sont désormais transmis dans le corps JSON des requêtes POST (plus en query string). Ajout d'en-têtes CORS restrictifs (`Access-Control-Allow-Origin: http://localhost:<port>` uniquement), gestion du preflight OPTIONS, vérification de l'`Origin` header (rejet des requêtes cross-origin), en-têtes de sécurité (`X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`), limitation de la taille du corps POST (64KB anti-DoS). Le client JS (`doSubmitAll`) a été mis à jour pour envoyer le token dans le `body` de la requête.
+
+**4. HAUTE — XSS via injection `</script>` dans le pseudo (`consolidate-leaderboard.js`)**
+- Le JSON sérialisé pour le client est injecté directement dans une balise `<script>` sans échappement. Un pseudo contenant `</script><script>alert(...)</script>` ferme la balise prématurément et exécute du JS arbitraire. Visible par tous les visiteurs du classement communautaire.
+- Exploit confirmé : le HTML généré contient bien la balise `</script>` injectée.
+- **Fix** : ajout de `safeForScript()` qui échappe `<`, `>`, `&` en `\u003c`, `\u003e`, `\u0026` avant injection dans la balise `<script>`.
+
+**5. MOYENNE — XSS via `innerHTML` avec réponses réseau non échappées (`leaderboard.js`)**
+- Les valeurs `valData.error`, `valData.login`, `e.message`, `prUrls[u]` provenant de réponses réseau sont injectées via `innerHTML` sans échappement. Un attaquant qui contrôle la réponse (MITM, API compromise) peut injecter du HTML/JS arbitraire.
+- **Fix** : toutes les valeurs réseau injectées via `innerHTML` sont désormais échappées avec `esc()`.
+
+**6. FAIBLE — Clés API stockées en clair sur disque (`api-keys-store.js`)**
+- Le fichier `.api-keys.json` contient les clés API en texte brut. Déjà documenté comme compromis assumé (équivalent `~/.aws/credentials`), fichier ignoré par `.gitignore` (vérifié). Non corrigé — c'est un choix de conception conscient.
+
+### Fichiers modifiés
+- `vm-sandbox.js` : retrait des primitives d'évasion, gel des constructeurs, ajout de `detectSandboxEscape()`, export de la fonction.
+- `custom-evaluators.js` : appel de `detectSandboxEscape()` dans `exposerFonctionVM()` avant exécution du code étudiant.
+- `leaderboard.js` : durcissement de `deleteLedger()` (path traversal), refonte de `startServer()` (CORS, body JSON, en-têtes de sécurité), correction du client `doSubmitAll()` (token en body, `esc()` sur valeurs réseau).
+- `consolidate-leaderboard.js` : ajout de `safeForScript()` pour empêcher le XSS via `</script>`.
+
+### Vérifications
+- `node --check` sur les 4 fichiers modifiés : tous OK.
+- 5 exploits d'évasion sandbox testés : tous bloqués.
+- 5 exercices algorithmiques légitimes : tous passent toujours.
+
+### Revue de sécurité (post-fix) — corrections additionnelles
+Suite à la revue de code des fixes de sécurité, 8 issues additionnelles ont été identifiées et corrigées :
+1. **CRITIQUE — Serveur bindé sur 0.0.0.0** : `server.listen(port)` bindait sur toutes les interfaces réseau au lieu de localhost. Fix : `server.listen(port, '127.0.0.1', ...)`.
+2. **CRITIQUE — detectSandboxEscape contournable par bracket-notation** : `this['constructor']['constructor']` passait la regex. Fix : ajout de patterns pour bracket-notation (`['constructor']`, `["constructor"]`), concaténation (`['con'+'structor']`), Unicode escapes (`constr\u0075ctor`), et scan du code final après transformation `const/let`→`var` au lieu du code brut.
+3. **WARNING — Clause redondante dans deleteLedger** : le check `&& resolvedFile !== path.join(...)` ne pouvait jamais se déclencher. Fix : simplifié à `startsWith` uniquement.
+4. **WARNING — detectSandboxEscape scannait le code brut, pas le code transformé** : la transformation `const/let`→`var` s'appliquait après le scan. Fix : scan déplacé après la construction du `fullCode` final.
+5. **WARNING — Duplicate condition `/classement.md`** : bug pré-existant `pathname === '/classement.md' || pathname === '/classement.md'`. Fix : corrigé.
+6. **WARNING — esc() de consolidate-leaderboard.js ne échappait pas les quotes** : divergeait de leaderboard.js. Fix : ajout de `.replace(/"/g, '&quot;').replace(/'/g, '&#39;')`.
+7. **SUGGESTION — /api/report ne utilisait pas securityHeaders** : responses d'erreur bypassaient les en-têtes de sécurité. Fix : utilisation de `securityHeaders`.
+8. **SUGGESTION — JSON non gelé dans sandbox** : `JSON.stringify`/`JSON.parse` pouvaient être mutés. Fix : `JSON: Object.freeze(JSON)`.
+
+Vérification finale : 10/10 exploits d'évasion sandbox bloqués (incluant bracket-notation, concatenation, Unicode obfuscation), 5/5 tests légitimes passent.
+
 ## 2026-07-24 — Refonte visuelle du classement communautaire + guide de style
 
 ### Contexte

@@ -203,7 +203,13 @@ function buildConsolidatedHTML(entries) {
   const totalSubmissions = entries.reduce((s, e) => s + (e.contributors || 1), 0);
 
   // Sérialise les données pour le JS côté client
-  const modelsJson = JSON.stringify(entries.map((e, idx) => {
+  // Sécurité : on échappe les séquences </script> et <!-- dans le JSON injecté
+  // dans la balise <script> pour empêcher le XSS par injection de pseudo/model.
+  // JSON.stringify ne protège pas contre ces séquences HTML.
+  function safeForScript(json) {
+    return String(json).replace(/</g, '\\u003c').replace(/>/g, '\\u003e').replace(/&/g, '\\u0026');
+  }
+  const modelsJson = safeForScript(JSON.stringify(entries.map((e, idx) => {
     const rank = idx + 1;
     const cat = getCategory(e.pct, rank);
     const psize = getParamSize(e.model);
@@ -217,7 +223,7 @@ function buildConsolidatedHTML(entries) {
       contributors: e.contributors || 1, pseudo: e.pseudo,
       cat, paramSize: psize
     };
-  }));
+  })));
 
   return `<!DOCTYPE html>
 <html lang="fr">
@@ -507,7 +513,7 @@ function buildConsolidatedHTML(entries) {
 </div>
 <script>
 var MODELS = ${modelsJson};
-function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
 function pctColor(p) { return p>=80?'#3fb950':p>=70?'#d29922':p>=50?'#db6d28':'#f85149'; }
 function gradeColor(g) { return g==='A'?'#3fb950':g==='B'?'#58a6ff':g==='C'?'#d29922':g==='D'?'#db6d28':'#f85149'; }
 function fmtDur(ms) { if(!ms||ms<=0) return '—'; var s=ms/1000; if(s<60) return s.toFixed(1)+'s'; var t=Math.round(s),m=Math.floor(t/60),sec=t%60; if(m<60) return m+'m'+String(sec).padStart(2,'0')+'s'; var h=Math.floor(m/60),mn=m%60; return h+'h'+String(mn).padStart(2,'0')+'m'; }

@@ -1825,12 +1825,20 @@ async function doSubmitAll() {
   btn.disabled = true; btn.textContent = 'Verification...';
   statusEl.innerHTML = '<p style="color: var(--accent);">Validation du token...</p>';
   try {
-    var valRes = await fetch('/api/submit-validate?token=' + encodeURIComponent(token), { method: 'POST' });
+    var valRes = await fetch('/api/submit-validate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token: token })
+    });
     var valData = await valRes.json();
-    if (!valData.valid) { statusEl.innerHTML = '<p style="color: var(--red);">Token invalide : ' + (valData.error || 'verifiez les permissions') + '</p>'; btn.disabled = false; btn.textContent = 'Reessayer'; return; }
-    statusEl.innerHTML = '<p style="color: var(--green);">Token valide (' + valData.login + '). Recuperation des modeles deja soumis...</p>';
+    if (!valData.valid) { statusEl.innerHTML = '<p style="color: var(--red);">Token invalide : ' + esc(valData.error || 'verifiez les permissions') + '</p>'; btn.disabled = false; btn.textContent = 'Reessayer'; return; }
+    statusEl.innerHTML = '<p style="color: var(--green);">Token valide (' + esc(valData.login || '') + '). Recuperation des modeles deja soumis...</p>';
     // Recupere la liste des modeles deja soumis sur GitHub pour ne renvoyer que les nouveaux.
-    var subRes = await fetch('/api/already-submitted?token=' + encodeURIComponent(token), { method: 'GET' });
+    var subRes = await fetch('/api/already-submitted', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token: token })
+    });
     var subData = await subRes.json();
     var alreadySubmitted = new Set(subData.ok ? (subData.submitted || []) : []);
     var toSubmit = [];
@@ -1852,9 +1860,13 @@ async function doSubmitAll() {
     var okCount = 0, failCount = 0, prUrls = [];
     for (var j = 0; j < toSubmit.length; j++) {
       var m = toSubmit[j];
-      statusEl.innerHTML = '<p style="color: var(--accent);">Envoi ' + (j + 1) + '/' + toSubmit.length + ' : ' + m.shortName + '...</p>';
+      statusEl.innerHTML = '<p style="color: var(--accent);">Envoi ' + (j + 1) + '/' + toSubmit.length + ' : ' + esc(m.shortName) + '...</p>';
       try {
-        var res = await fetch('/api/submit?shortName=' + encodeURIComponent(m.shortName) + '&pseudo=' + encodeURIComponent(pseudo) + '&token=' + encodeURIComponent(token), { method: 'POST' });
+        var res = await fetch('/api/submit?shortName=' + encodeURIComponent(m.shortName), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ pseudo: pseudo, token: token })
+        });
         var data = await res.json();
         if (data.ok) { okCount++; if (data.prUrl) prUrls.push(data.prUrl); }
         else { failCount++; }
@@ -1869,7 +1881,7 @@ async function doSubmitAll() {
     if (prUrls.length > 0) {
       html += '<p style="margin-top: 8px; font-size: 13px; color: var(--text-muted);">Pull Requests creees :</p>';
       for (var u = 0; u < prUrls.length; u++) {
-        html += '<p style="margin: 4px 0;"><a href="' + prUrls[u] + '" target="_blank" style="color: var(--accent);">' + prUrls[u] + '</a></p>';
+        html += '<p style="margin: 4px 0;"><a href="' + esc(prUrls[u]) + '" target="_blank" style="color: var(--accent);">' + esc(prUrls[u]) + '</a></p>';
       }
     }
     html += '<p style="margin-top: 8px; font-size: 13px; color: var(--text-muted);">Le proprietaire du depot validera vos PR pour integrer vos resultats au classement consolide.</p>';
@@ -1877,7 +1889,7 @@ async function doSubmitAll() {
     statusEl.innerHTML = html;
     btn.textContent = 'Termine'; btn.disabled = true;
   } catch (e) {
-    statusEl.innerHTML = '<p style="color: var(--red);">Erreur : ' + e.message + '</p>';
+    statusEl.innerHTML = '<p style="color: var(--red);">Erreur : ' + esc(e.message) + '</p>';
     btn.disabled = false; btn.textContent = 'Reessayer';
   }
 }
@@ -2255,53 +2267,159 @@ function generateLeaderboard() {
 
 // Supprime un carnet de scores par shortName, puis régénère le classement.
 function deleteLedger(shortName) {
-  const file = path.join(LEDGER_DIR, shortName + '.json');
+  // Sécurité : valider le shortName pour empêcher le path traversal.
+  // Un shortName ne contient que des caractères alphanumériques, tirets, underscores et points.
+  // On rejette tout ce qui contient des séparateurs de chemin (/, \, ..) pour
+  // empêcher la suppression de fichiers hors du dossier .carnet (ex: .api-keys.json).
+  if (!shortName || typeof shortName !== 'string') {
+    return { ok: false, error: 'shortName manquant ou invalide' };
+  }
+  if (/[\/\\]/.test(shortName) || shortName === '..' || shortName.includes('..')) {
+    return { ok: false, error: 'shortName invalide (caractères interdits)' };
+  }
+  const safeName = shortName.replace(/[^a-zA-Z0-9._-]/g, '_');
+  const file = path.join(LEDGER_DIR, safeName + '.json');
+  // Vérification finale : le chemin résolu doit bien être dans LEDGER_DIR
+  const resolvedFile = path.resolve(file);
+  const resolvedDir = path.resolve(LEDGER_DIR);
+  if (!resolvedFile.startsWith(resolvedDir + path.sep)) {
+    return { ok: false, error: 'Chemin de fichier hors du dossier autorisé' };
+  }
   if (!fs.existsSync(file)) {
     return { ok: false, error: 'Carnet introuvable : ' + shortName };
   }
   fs.unlinkSync(file);
-  logger.info('Carnet supprimé : ' + shortName + '.json');
+  logger.info('Carnet supprimé : ' + safeName + '.json');
   generateLeaderboard();
   return { ok: true };
 }
 
 // Démarre un mini-serveur HTTP servant le classement HTML + l'API de suppression
 // + l'API d'export du rapport intégral d'un modèle (téléchargement Markdown).
+//
+// SÉCURITÉ :
+//   - Le serveur n'écoute que sur localhost (pas d'exposition réseau externe).
+//   - Les en-têtes CORS restreignent l'origine à localhost uniquement pour
+//     empêcher les attaques CSRF depuis des sites web malveillants.
+//   - Les tokens GitHub (PAT) sont transmis via le corps de la requête POST
+//     (JSON), JAMAIS en query string (visible dans les logs/access logs).
+//   - Le paramètre shortName est validé (sanitization) pour empêcher le path
+//     traversal (cf. deleteLedger).
 function startServer(port) {
   port = port || 3939;
   const htmlPath = path.join(EXPORT_DIR, 'classement.html');
 
+  // En-têtes de sécurité appliqués à toutes les réponses API JSON.
+  // CORS strict : seul localhost est autorisé (pas de page web externe).
+  const securityHeaders = {
+    'Content-Type': 'application/json',
+    'Access-Control-Allow-Origin': 'http://localhost:' + port,
+    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type',
+    'X-Content-Type-Options': 'nosniff',
+    'X-Frame-Options': 'DENY',
+    'Referrer-Policy': 'no-referrer'
+  };
+
+  // Lit le corps JSON d'une requête POST (limité à 64KB pour éviter le DoS).
+  function readJsonBody(req) {
+    return new Promise((resolve, reject) => {
+      let body = '';
+      let size = 0;
+      req.on('data', (chunk) => {
+        size += chunk.length;
+        if (size > 65536) { reject(new Error('Corps de requête trop volumineux')); req.destroy(); return; }
+        body += chunk;
+      });
+      req.on('end', () => {
+        try { resolve(body ? JSON.parse(body) : {}); }
+        catch (_) { reject(new Error('JSON invalide')); }
+      });
+      req.on('error', reject);
+    });
+  }
+
   const server = http.createServer(async (req, res) => {
     const url = new URL(req.url, 'http://localhost');
+
+    // Requête OPTIONS (CORS preflight) : répondre avec les en-têtes CORS
+    if (req.method === 'OPTIONS') {
+      res.writeHead(204, securityHeaders);
+      res.end();
+      return;
+    }
+
+    // Vérification de l'origine : rejeter les requêtes venant d'autres sites
+    // (protection CSRF). En localhost, l'Origin peut être absente (même origine).
+    const origin = req.headers.origin;
+    if (origin && origin !== 'http://localhost:' + port) {
+      res.writeHead(403, securityHeaders);
+      res.end(JSON.stringify({ ok: false, error: 'Origine non autorisée' }));
+      return;
+    }
 
     // API : suppression d'un modèle
     if (url.pathname === '/api/delete' && req.method === 'POST') {
       const shortName = url.searchParams.get('shortName');
       if (!shortName) {
-        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.writeHead(400, securityHeaders);
         res.end(JSON.stringify({ ok: false, error: 'shortName manquant' }));
         return;
       }
       const result = deleteLedger(shortName);
-      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.writeHead(200, securityHeaders);
       res.end(JSON.stringify(result));
       return;
     }
 
     // API : validation d'un token GitHub (vérifie /user).
+    // Le token est lu depuis le corps JSON de la requête POST (plus en query string).
     if (url.pathname === '/api/submit-validate' && req.method === 'POST') {
-      const token = url.searchParams.get('token');
+      let body;
+      try { body = await readJsonBody(req); } catch (e) {
+        res.writeHead(400, securityHeaders);
+        res.end(JSON.stringify({ ok: false, error: e.message }));
+        return;
+      }
+      const token = body.token;
       if (!token) {
-        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.writeHead(400, securityHeaders);
         res.end(JSON.stringify({ ok: false, error: 'token manquant' }));
         return;
       }
       try {
         const validation = await communitySync.validateGithubToken(token);
-        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.writeHead(200, securityHeaders);
         res.end(JSON.stringify(validation));
       } catch (e) {
-        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.writeHead(200, securityHeaders);
+        res.end(JSON.stringify({ ok: false, error: e.message }));
+      }
+      return;
+    }
+
+    // API : liste des modèles déjà soumis sur GitHub par cet utilisateur.
+    // Renvoie un tableau de shortNames déjà présents dans submissions/<userId>/.
+    // Permet à la modale de n'afficher que les nouveaux modèles à soumettre.
+    if (url.pathname === '/api/already-submitted' && req.method === 'POST') {
+      let body;
+      try { body = await readJsonBody(req); } catch (e) {
+        res.writeHead(400, securityHeaders);
+        res.end(JSON.stringify({ ok: false, error: e.message }));
+        return;
+      }
+      const token = body.token;
+      if (!token) {
+        res.writeHead(400, securityHeaders);
+        res.end(JSON.stringify({ ok: false, error: 'token manquant' }));
+        return;
+      }
+      try {
+        const submitted = await communitySync.getAlreadySubmittedModels(token);
+        res.writeHead(200, securityHeaders);
+        res.end(JSON.stringify({ ok: true, submitted: Array.from(submitted) }));
+      } catch (e) {
+        res.writeHead(200, securityHeaders);
         res.end(JSON.stringify({ ok: false, error: e.message }));
       }
       return;
@@ -2309,17 +2427,24 @@ function startServer(port) {
 
     // API : soumission d'un carnet vers le dépôt communautaire (Pull Request GitHub).
     // Lit le carnet local, le soumet via community-sync.js (crée branche + fichier + PR).
+    // Le token et le pseudo sont lus depuis le corps JSON de la requête POST.
     if (url.pathname === '/api/submit' && req.method === 'POST') {
       const shortName = url.searchParams.get('shortName');
-      const pseudo = url.searchParams.get('pseudo') || null;
-      const token = url.searchParams.get('token');
       if (!shortName) {
-        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.writeHead(400, securityHeaders);
         res.end(JSON.stringify({ ok: false, error: 'shortName manquant' }));
         return;
       }
+      let body;
+      try { body = await readJsonBody(req); } catch (e) {
+        res.writeHead(400, securityHeaders);
+        res.end(JSON.stringify({ ok: false, error: e.message }));
+        return;
+      }
+      const pseudo = body.pseudo || null;
+      const token = body.token;
       if (!token) {
-        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.writeHead(400, securityHeaders);
         res.end(JSON.stringify({ ok: false, error: 'token GitHub manquant' }));
         return;
       }
@@ -2327,39 +2452,18 @@ function startServer(port) {
         const { loadLedger } = require('./score-ledger');
         const ledger = loadLedger(shortName);
         if (!ledger || !ledger.ecoles || Object.keys(ledger.ecoles).length === 0) {
-          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.writeHead(200, securityHeaders);
           res.end(JSON.stringify({ ok: false, error: 'Carnet vide ou introuvable : ' + shortName }));
-      return;
-    }
-
-    // API : liste des modèles déjà soumis sur GitHub par cet utilisateur.
-    // Renvoie un tableau de shortNames déjà présents dans submissions/<userId>/.
-    // Permet à la modale de n'afficher que les nouveaux modèles à soumettre.
-    if (url.pathname === '/api/already-submitted' && req.method === 'GET') {
-      const token = url.searchParams.get('token');
-      if (!token) {
-        res.writeHead(400, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ ok: false, error: 'token manquant' }));
-        return;
-      }
-      try {
-        const submitted = await communitySync.getAlreadySubmittedModels(token);
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ ok: true, submitted: Array.from(submitted) }));
-      } catch (e) {
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ ok: false, error: e.message }));
-      }
-      return;
-    }
+          return;
+        }
         const result = await communitySync.submitResults(shortName, ledger, token, {
           pseudo: pseudo || null,
           benchgoVersion: 'V3'
         });
-        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.writeHead(200, securityHeaders);
         res.end(JSON.stringify(result));
       } catch (e) {
-        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.writeHead(200, securityHeaders);
         res.end(JSON.stringify({ ok: false, error: e.message }));
       }
       return;
@@ -2372,13 +2476,13 @@ function startServer(port) {
     if (url.pathname === '/api/report' && req.method === 'GET') {
       const shortName = url.searchParams.get('shortName');
       if (!shortName) {
-        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.writeHead(400, securityHeaders);
         res.end(JSON.stringify({ ok: false, error: 'shortName manquant' }));
         return;
       }
       const entry = getModelEntryByShortName(shortName);
       if (!entry) {
-        res.writeHead(404, { 'Content-Type': 'application/json' });
+        res.writeHead(404, securityHeaders);
         res.end(JSON.stringify({ ok: false, error: 'Modèle introuvable : ' + shortName }));
         return;
       }
@@ -2405,9 +2509,9 @@ function startServer(port) {
       return;
     }
 
-    // Page par défaut : sert le classement HTML
+    // Page par défaut : sert le classement HTML (ou le Markdown si demandé)
     let content, type;
-    if (url.pathname === '/classement.md' || url.pathname === '/classement.md') {
+    if (url.pathname === '/classement.md') {
       const mdPath = path.join(EXPORT_DIR, 'classement.md');
       content = fs.existsSync(mdPath) ? fs.readFileSync(mdPath, 'utf8') : '# Classement vide';
       type = 'text/plain; charset=utf-8';
@@ -2435,7 +2539,7 @@ function startServer(port) {
     }
   });
 
-  server.listen(port, () => {
+  server.listen(port, '127.0.0.1', () => {
     const url = 'http://localhost:' + port;
     console.log('');
     console.log('  \x1b[1;35m━━━ CLASSEMENT INTERACTIF — BenchGo V3 ━━━\x1b[0m');
