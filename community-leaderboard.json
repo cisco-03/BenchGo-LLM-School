@@ -1,6 +1,106 @@
 {
   "entries": [
     {
+      "model": "qwythos-9b-claude-mythos-5-1m",
+      "shortName": "qwythos-9b-claude-mythos-5-1m",
+      "quantization": "Q4_K_M",
+      "score": 4881,
+      "max": 5384,
+      "pct": 91,
+      "globalLifeScore": 5476,
+      "optionalBonus": 595,
+      "tokens": 0,
+      "elapsedMs": 0,
+      "tokensPerSecond": 0,
+      "ecoleCount": 2,
+      "pseudo": "FlexoDiv",
+      "submittedAt": "2026-07-24T16:54:31.113Z",
+      "contributors": 1,
+      "allPct": [
+        91
+      ]
+    },
+    {
+      "model": "mistralai/devstral-small-2-2512",
+      "shortName": "mistralai_devstral-small-2-2512",
+      "quantization": null,
+      "score": 2904,
+      "max": 3206,
+      "pct": 91,
+      "globalLifeScore": 3237,
+      "optionalBonus": 333,
+      "tokens": 5923,
+      "elapsedMs": 1855405,
+      "tokensPerSecond": 3.19,
+      "ecoleCount": 1,
+      "pseudo": "FlexoDiv",
+      "submittedAt": "2026-07-24T16:54:34.579Z",
+      "contributors": 1,
+      "allPct": [
+        91
+      ]
+    },
+    {
+      "model": "gemma-4-12b-coder-fable5-composer2.5-v1",
+      "shortName": "gemma-4-12b-coder-fable5-composer2.5-v1",
+      "quantization": "Q4_K_M",
+      "score": 4900,
+      "max": 5421,
+      "pct": 90,
+      "globalLifeScore": 5509,
+      "optionalBonus": 609,
+      "tokens": 0,
+      "elapsedMs": 0,
+      "tokensPerSecond": 0,
+      "ecoleCount": 2,
+      "pseudo": "FlexoDiv",
+      "submittedAt": "2026-07-24T16:54:37.976Z",
+      "contributors": 1,
+      "allPct": [
+        90
+      ]
+    },
+    {
+      "model": "mistralai/codestral-22b-v0.1",
+      "shortName": "mistralai_codestral-22b-v0.1",
+      "quantization": null,
+      "score": 2834,
+      "max": 3143,
+      "pct": 90,
+      "globalLifeScore": 3161,
+      "optionalBonus": 327,
+      "tokens": 7213,
+      "elapsedMs": 2189779,
+      "tokensPerSecond": 3.29,
+      "ecoleCount": 1,
+      "pseudo": "FlexoDiv",
+      "submittedAt": "2026-07-24T16:54:41.187Z",
+      "contributors": 1,
+      "allPct": [
+        90
+      ]
+    },
+    {
+      "model": "unsloth/qwen3.5-9b",
+      "shortName": "unsloth_qwen3.5-9b",
+      "quantization": "Q4_K_XL",
+      "score": 4820,
+      "max": 5422,
+      "pct": 89,
+      "globalLifeScore": 5439,
+      "optionalBonus": 619,
+      "tokens": 0,
+      "elapsedMs": 0,
+      "tokensPerSecond": 0,
+      "ecoleCount": 2,
+      "pseudo": "FlexoDiv",
+      "submittedAt": "2026-07-24T16:54:44.514Z",
+      "contributors": 1,
+      "allPct": [
+        89
+      ]
+    },
+    {
       "model": "mistralai/ministral-3-14b-reasoning",
       "shortName": "mistralai_ministral-3-14b-reasoning",
       "quantization": "Q4_K_M",
@@ -221,6 +321,6 @@
       ]
     }
   ],
-  "generatedAt": "2026-07-24T16:56:48.713Z",
-  "totalSubmissions": 11
+  "generatedAt": "2026-07-24T16:57:05.736Z",
+  "totalSubmissions": 16
 }
