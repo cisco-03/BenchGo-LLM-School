@@ -1,6 +1,106 @@
 {
   "entries": [
     {
+      "model": "gemma-4-12b-it-qat",
+      "shortName": "gemma-4-12b-it-qat",
+      "quantization": "Q4_K_XL",
+      "score": 2964,
+      "max": 3018,
+      "pct": 98,
+      "globalLifeScore": 3306,
+      "optionalBonus": 342,
+      "tokens": 21139,
+      "elapsedMs": 2927753,
+      "tokensPerSecond": 7.22,
+      "ecoleCount": 1,
+      "pseudo": "FlexoDiv",
+      "submittedAt": "2026-07-24T16:54:14.351Z",
+      "contributors": 1,
+      "allPct": [
+        98
+      ]
+    },
+    {
+      "model": "ornith-1.0-9b",
+      "shortName": "ornith-1.0-9b",
+      "quantization": "Q4_K_M",
+      "score": 5129,
+      "max": 5367,
+      "pct": 96,
+      "globalLifeScore": 6093,
+      "optionalBonus": 600,
+      "tokens": 0,
+      "elapsedMs": 0,
+      "tokensPerSecond": 0,
+      "ecoleCount": 2,
+      "pseudo": "FlexoDiv",
+      "submittedAt": "2026-07-24T16:54:17.577Z",
+      "contributors": 1,
+      "allPct": [
+        96
+      ]
+    },
+    {
+      "model": "mythos-9b-unhinged",
+      "shortName": "mythos-9b-unhinged",
+      "quantization": "Q4_K_M",
+      "score": 5132,
+      "max": 5380,
+      "pct": 95,
+      "globalLifeScore": 5723,
+      "optionalBonus": 591,
+      "tokens": 0,
+      "elapsedMs": 0,
+      "tokensPerSecond": 0,
+      "ecoleCount": 2,
+      "pseudo": "FlexoDiv",
+      "submittedAt": "2026-07-24T16:54:21.024Z",
+      "contributors": 1,
+      "allPct": [
+        95
+      ]
+    },
+    {
+      "model": "ornith-1.0-9b-mtp",
+      "shortName": "ornith-1.0-9b-mtp",
+      "quantization": null,
+      "score": 3011,
+      "max": 3201,
+      "pct": 94,
+      "globalLifeScore": 3334,
+      "optionalBonus": 323,
+      "tokens": 13141,
+      "elapsedMs": 1215257,
+      "tokensPerSecond": 10.81,
+      "ecoleCount": 1,
+      "pseudo": "FlexoDiv",
+      "submittedAt": "2026-07-24T16:54:24.875Z",
+      "contributors": 1,
+      "allPct": [
+        94
+      ]
+    },
+    {
+      "model": "mistralai/mistral-7b-instruct-v0.3",
+      "shortName": "mistralai_mistral-7b-instruct-v0.3",
+      "quantization": "Q4_K_M",
+      "score": 2752,
+      "max": 2998,
+      "pct": 92,
+      "globalLifeScore": 3415,
+      "optionalBonus": 349,
+      "tokens": 0,
+      "elapsedMs": 0,
+      "tokensPerSecond": 0,
+      "ecoleCount": 2,
+      "pseudo": "FlexoDiv",
+      "submittedAt": "2026-07-24T16:54:28.121Z",
+      "contributors": 1,
+      "allPct": [
+        92
+      ]
+    },
+    {
       "model": "qwythos-9b-claude-mythos-5-1m",
       "shortName": "qwythos-9b-claude-mythos-5-1m",
       "quantization": "Q4_K_M",
@@ -321,6 +421,6 @@
       ]
     }
   ],
-  "generatedAt": "2026-07-24T16:57:05.736Z",
-  "totalSubmissions": 16
+  "generatedAt": "2026-07-24T16:57:22.237Z",
+  "totalSubmissions": 21
 }
