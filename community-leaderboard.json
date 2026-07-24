@@ -1,6 +1,126 @@
 {
   "entries": [
     {
+      "model": "mistralai/ministral-3-14b-reasoning",
+      "shortName": "mistralai_ministral-3-14b-reasoning",
+      "quantization": "Q4_K_M",
+      "score": 2433,
+      "max": 2744,
+      "pct": 89,
+      "globalLifeScore": 2703,
+      "optionalBonus": 270,
+      "tokens": 0,
+      "elapsedMs": 0,
+      "tokensPerSecond": 0,
+      "ecoleCount": 1,
+      "pseudo": "FlexoDiv",
+      "submittedAt": "2026-07-24T16:54:47.161Z",
+      "contributors": 1,
+      "allPct": [
+        89
+      ]
+    },
+    {
+      "model": "deepseek-r1-distill-qwen-14b@q4_k_s",
+      "shortName": "deepseek-r1-distill-qwen-14b@q4_k_s",
+      "quantization": null,
+      "score": 2695,
+      "max": 3085,
+      "pct": 87,
+      "globalLifeScore": 3030,
+      "optionalBonus": 335,
+      "tokens": 25089,
+      "elapsedMs": 3535926,
+      "tokensPerSecond": 7.1,
+      "ecoleCount": 1,
+      "pseudo": "FlexoDiv",
+      "submittedAt": "2026-07-24T16:54:50.821Z",
+      "contributors": 1,
+      "allPct": [
+        87
+      ]
+    },
+    {
+      "model": "yuxinlu1/gemma-4-12b-coder-fable5-composer2.5-v1",
+      "shortName": "yuxinlu1_gemma-4-12b-coder-fable5-composer2.5-v1",
+      "quantization": null,
+      "score": 2604,
+      "max": 3038,
+      "pct": 86,
+      "globalLifeScore": 2919,
+      "optionalBonus": 315,
+      "tokens": 8664,
+      "elapsedMs": 1314627,
+      "tokensPerSecond": 6.59,
+      "ecoleCount": 1,
+      "pseudo": "FlexoDiv",
+      "submittedAt": "2026-07-24T16:54:53.917Z",
+      "contributors": 1,
+      "allPct": [
+        86
+      ]
+    },
+    {
+      "model": "xanyun/gemma-4-12b-coder-fable5-composer2.5-v1",
+      "shortName": "xanyun_gemma-4-12b-coder-fable5-composer2.5-v1",
+      "quantization": null,
+      "score": 2658,
+      "max": 3123,
+      "pct": 85,
+      "globalLifeScore": 2973,
+      "optionalBonus": 315,
+      "tokens": 9183,
+      "elapsedMs": 1764615,
+      "tokensPerSecond": 5.2,
+      "ecoleCount": 1,
+      "pseudo": "FlexoDiv",
+      "submittedAt": "2026-07-24T16:54:57.042Z",
+      "contributors": 1,
+      "allPct": [
+        85
+      ]
+    },
+    {
+      "model": "deepseek-r1-distill-qwen-14b@q4_1",
+      "shortName": "deepseek-r1-distill-qwen-14b@q4_1",
+      "quantization": null,
+      "score": 2639,
+      "max": 3098,
+      "pct": 85,
+      "globalLifeScore": 2966,
+      "optionalBonus": 327,
+      "tokens": 15850,
+      "elapsedMs": 2523715,
+      "tokensPerSecond": 6.28,
+      "ecoleCount": 1,
+      "pseudo": "FlexoDiv",
+      "submittedAt": "2026-07-24T16:55:00.336Z",
+      "contributors": 1,
+      "allPct": [
+        85
+      ]
+    },
+    {
+      "model": "nanbeige_nanbeige4-3b-thinking-2511",
+      "shortName": "nanbeige_nanbeige4-3b-thinking-2511",
+      "quantization": null,
+      "score": 2547,
+      "max": 2989,
+      "pct": 85,
+      "globalLifeScore": 2873,
+      "optionalBonus": 326,
+      "tokens": 71924,
+      "elapsedMs": 3758056,
+      "tokensPerSecond": 19.14,
+      "ecoleCount": 1,
+      "pseudo": "FlexoDiv",
+      "submittedAt": "2026-07-24T16:55:04.347Z",
+      "contributors": 1,
+      "allPct": [
+        85
+      ]
+    },
+    {
       "model": "qwopus3.5-9b-coder-mtp",
       "shortName": "qwopus3.5-9b-coder-mtp",
       "quantization": null,
@@ -101,6 +221,6 @@
       ]
     }
   ],
-  "generatedAt": "2026-07-24T16:56:31.039Z",
-  "totalSubmissions": 5
+  "generatedAt": "2026-07-24T16:56:48.713Z",
+  "totalSubmissions": 11
 }
