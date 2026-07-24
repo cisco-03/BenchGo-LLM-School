@@ -136,11 +136,11 @@ function buildConsolidatedHTML(entries) {
     return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   }
 
-  // Catégories (identiques au leaderboard principal)
+  // Catégories (identiques au leaderboard principal — leaderboard.js#getCategory)
   function getCategory(pct, rank) {
     if (rank <= 3) return { key: 'top', icon: '🏆', label: 'Top du top' };
-    if (pct >= 80) return { key: 'recommande', icon: '✅', label: 'Recommandé' };
-    if (pct >= 70) return { key: 'moyenne', icon: '📊', label: 'Dans la moyenne' };
+    if (pct >= 90) return { key: 'recommande', icon: '✅', label: 'Recommandé' };
+    if (pct >= 75) return { key: 'moyenne', icon: '📊', label: 'Dans la moyenne' };
     if (pct >= 50) return { key: 'rattrapage', icon: '⚠️', label: 'En rattrapage' };
     return { key: 'catastrophe', icon: '💥', label: 'Échec total' };
   }
