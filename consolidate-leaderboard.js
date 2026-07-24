@@ -13,8 +13,9 @@ const path = require('path');
 const crypto = require('crypto');
 
 const SUBMISSIONS_DIR = path.join(__dirname, 'submissions');
-const OUTPUT_HTML = path.join(__dirname, 'community-leaderboard.html');
-const OUTPUT_JSON = path.join(__dirname, 'community-leaderboard.json');
+const OUTPUT_DIR = path.join(__dirname, 'gh-pages-output');
+const OUTPUT_HTML = path.join(OUTPUT_DIR, 'community-leaderboard.html');
+const OUTPUT_JSON = path.join(OUTPUT_DIR, 'community-leaderboard.json');
 
 // Charge toutes les soumissions depuis submissions/<userId>/<model>.json.
 function loadAllSubmissions() {
@@ -239,6 +240,7 @@ function main() {
   if (submissions.length === 0) {
     console.log('Aucune soumission trouvée dans submissions/.');
     // On génère quand même un HTML vide pour que gh-pages existe
+    fs.mkdirSync(OUTPUT_DIR, { recursive: true });
     fs.writeFileSync(OUTPUT_HTML, buildConsolidatedHTML([]), 'utf8');
     fs.writeFileSync(OUTPUT_JSON, JSON.stringify({ entries: [], generatedAt: new Date().toISOString() }, null, 2), 'utf8');
     return;
@@ -263,6 +265,7 @@ function main() {
 
   // Génère les fichiers
   const html = buildConsolidatedHTML(merged);
+  fs.mkdirSync(OUTPUT_DIR, { recursive: true });
   fs.writeFileSync(OUTPUT_HTML, html, 'utf8');
   fs.writeFileSync(OUTPUT_JSON, JSON.stringify({
     entries: merged,
