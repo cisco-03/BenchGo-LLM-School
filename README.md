@@ -26,6 +26,8 @@ le tout dans un bac à sable VM isolé.
 - 🌙 **Mode nuit (batch automatique)** : testez plusieurs modèles automatiquement pendant la nuit — sélection des modèles et des écoles, puis le script enchaîne `lms load` / `runner.js` / `lms unload` sans intervention. Rapports et classement prêts le matin. 👉 [Documentation du mode nuit](./Docs/Manuel-utilisateur/07-mode-nuit.md)
 - ☁️ **Mode cloud** : 6 fournisseurs supportés (OpenAI, Anthropic, Groq, Together, OpenRouter, Mistral).
 - 🧪 **Évaluateurs custom asynchrones** : Promise.allSettled, retry/backoff, concurrence limitée, middleware Cloudflare, etc.
+- 🌐 **Classement communautaire participatif** : envoyez vos résultats sur le dépôt GitHub via une Pull Request automatique. Le classement consolidé de tous les contributeurs est publié sur GitHub Pages. Détection automatique des nouveaux modèles (pas de re-soumission). 👉 [Documentation communauté](./Docs/Manuel-utilisateur/08-communaute.md)
+- 📡 **Télémétrie anonyme** : un ping opt-in (une fois par jour) permet au propriétaire du projet de savoir combien de personnes utilisent BenchGo. Aucune donnée personnelle transmise. Désactivable avec `--no-telemetry`.
 
 ---
 
@@ -56,11 +58,11 @@ Trois méthodes possibles, de la plus simple à la plus « pro ».
 
 #### Méthode A — Télécharger un ZIP (le plus simple, sans Git)
 
-1. Ouvrez la page GitHub du projet : https://github.com/cisco-03/benchgo
+1. Ouvrez la page GitHub du projet : https://github.com/cisco-03/BenchGo-LLM-School
 2. Cliquez sur le bouton vert **« <> Code »** en haut à droite.
 3. Choisissez **« Download ZIP »**.
-4. Extrayez l'archive (`benchgo-main.zip`) où vous le souhaitez, par exemple dans
-   `C:\Users\votre-nome\Desktop\` → dossier `benchgo-main`.
+4. Extrayez l'archive (`BenchGo-LLM-School-main.zip`) où vous le souhaitez, par exemple dans
+   `C:\Users\votre-nom\Desktop\` → dossier `BenchGo-LLM-School-main`.
 5. Ouvrez un terminal **dans ce dossier** :
    - Windows : clic droit dans le dossier → « Ouvrir dans le terminal »
    - ou : PowerShell, puis `cd Chemin\Vers\benchgo-main`
@@ -70,8 +72,8 @@ Trois méthodes possibles, de la plus simple à la plus « pro ».
 Si vous avez [Git](https://git-scm.com/) installé :
 
 ```powershell
-git clone https://github.com/cisco-03/benchgo.git
-cd benchgo
+git clone https://github.com/cisco-03/BenchGo-LLM-School.git
+cd BenchGo-LLM-School
 ```
 
 Pour récupérer les mises à jour plus tard, il suffira de :
@@ -85,8 +87,8 @@ git pull
 Si vous utilisez [GitHub CLI](https://cli.github.com/) :
 
 ```powershell
-gh repo clone cisco-03/benchgo
-cd benchgo
+gh repo clone cisco-03/BenchGo-LLM-School
+cd BenchGo-LLM-School
 ```
 
 ### Étape 3 — Aucune installation de dépendances
@@ -158,9 +160,23 @@ node runner.js all --provider=openrouter --model=anthropic/claude-opus-4 --profi
 # Régénérer les 3 fichiers de classement (HTML + MD + raisonnement)
 node leaderboard.js
 
-# Mode interactif (serveur web sur http://localhost:3939, boutons de suppression actifs)
+# Mode interactif (serveur web sur http://localhost:3939, boutons de suppression + communauté)
 node leaderboard.js --serve
 ```
+
+En mode interactif, le bouton **« 🌐 Envoyer à la communauté »** permet de soumettre
+vos résultats au classement consolidé GitHub. L'application détecte automatiquement
+les modèles déjà soumis et n'envoie que les nouveaux. 👉
+[Détails dans la documentation communauté](./Docs/Manuel-utilisateur/08-communaute.md)
+
+### Classement communautaire (GitHub Pages)
+
+Le classement consolidé de tous les contributeurs est consultable en ligne :
+
+🔗 **https://cisco-03.github.io/BenchGo-LLM-School/community-leaderboard.html**
+
+Il est reconstruit automatiquement à chaque fois qu'une Pull Request de soumission
+est mergée par le propriétaire du dépôt.
 
 ---
 
@@ -249,7 +265,10 @@ un **historique** des performances d'un modèle dans le temps.
 | `parsing-utils.js` | Extraction JSON/regex + stripping TypeScript |
 | `score-ledger.js` | Carnet de scores persistant + calcul de calibration |
 | `report-generator.js` | Génération des rapports Markdown |
-| `leaderboard.js` | Classement global (HTML condensé + modale + filtres, MD, raisonnement) |
+| `leaderboard.js` | Classement global (HTML condensé + modale + filtres, MD, raisonnement, bouton communauté) |
+| `community-sync.js` | Synchronisation communautaire (ping télémétrie + soumission PR GitHub) |
+| `community-stats.js` | Tableau de bord stats pour le propriétaire (vues, clones, PRs) |
+| `consolidate-leaderboard.js` | Script CI : consolidation du classement communautaire (GitHub Action) |
 | `progress-bar.js` | UI console (ProgressBar, Spinner, `letterGrade`) |
 | `logger.js` | Journalisation dans `logs/` |
 
@@ -261,7 +280,10 @@ un **historique** des performances d'un modèle dans le temps.
 benchmark-v3/
 ├── runner.js                  ← Orchestrateur principal
 ├── config.js                  ← Configuration & profils
-├── leaderboard.js             ← Classement global (HTML + MD + raisonnement)
+├── leaderboard.js             ← Classement global (HTML + MD + raisonnement + bouton communauté)
+├── community-sync.js          ← Synchronisation communautaire (télémétrie + soumission PR GitHub)
+├── community-stats.js         ← Tableau de bord stats (vues, clones, PRs en attente)
+├── consolidate-leaderboard.js ← Script CI : consolidation classement communautaire (GitHub Action)
 ├── self-profiling.js          ← Auto-profilage & calibration
 ├── score-ledger.js            ← Carnet de scores persistant
 ├── cloud-client.js            ← Client API cloud (6 fournisseurs)
@@ -288,7 +310,7 @@ benchmark-v3/
 
 ## 📖 Documentation
 
-- [Manuel utilisateur](./Docs/Manuel-utilisateur/README.md) — Démarrage, commandes, fonctionnement, lecture des résultats, dépannage, référence des tiers
+- [Manuel utilisateur](./Docs/Manuel-utilisateur/README.md) — Démarrage, commandes, fonctionnement, lecture des résultats, dépannage, référence des tiers, communauté
 - [CHANGELOG](./Docs/CHANGELOG.md) — Historique chronologique des modifications
 - [Système de gamification & santé](./Docs/Apps-Fonctions/gamification-sante.md) — Fonctionnement des PV, pénalités et élimination
 - [Système de points](./Docs/Apps-Fonctions/systeme-points.md) — Calcul des points par exercice, classe, école et cumul multi-écoles (sans-faute, bonus optionnel, diplôme, notes A–F)
@@ -310,6 +332,9 @@ benchmark-v3/
 | `--teacher-endpoint=<URL>` | Endpoint alternatif pour le professeur (avancé) |
 | `--no-teacher` | Désactive le professeur IA (repli sur l'auto-analyse classique de l'élève) |
 | `--quantization=<Q>` | Quantification du modèle (ex: `Q4_K_M`, `Q5_K_S`, `Q8_0`). Auto-détectée via LM Studio `/api/v0/models` si absente ; saisie manuelle demandée au questionnaire pour Ollama/custom. |
+| `--submit` | Force la soumission des résultats au classement communautaire GitHub en fin de run (sans confirmation interactive). |
+| `--no-telemetry` | Désactive le ping télémétrie anonyme (compteur d'utilisateurs). |
+| `--github-token=<TOKEN>` | Fournit un token GitHub (PAT) pour la soumission communautaire (évite la saisie interactive). |
 
 ---
 

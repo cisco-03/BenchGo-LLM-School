@@ -152,3 +152,19 @@ node leaderboard.js
 # Mode interactif (serveur web sur http://localhost:3939)
 node leaderboard.js --serve
 ```
+
+### Communauté & soumission de résultats
+
+```powershell
+# Soumettre ses résultats au classement communautaire (en fin de run)
+node runner.js --submit
+
+# Soumettre avec un token GitHub fourni (non-interactif)
+node runner.js --submit --github-token=ghp_xxxxxxxxxxxx
+
+# Désactiver la télémétrie anonyme (ping compteur d'utilisateurs)
+node runner.js --no-telemetry
+```
+
+> 📖 Voir le [chapitre 8 — Communauté & classement participatif](./08-communaute.md)
+> pour le détail complet (token GitHub, détection des nouveaux modèles, etc.)

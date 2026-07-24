@@ -34,7 +34,7 @@ Quand un utilisateur a déjà soumis 25 modèles et en teste 5 nouveaux, il ne f
 ## 2026-07-24 — Classement participatif communautaire + télémétrie anonyme
 
 ### Contexte
-Le projet est open source sur GitHub (cisco-03/benchgo). Chaque utilisateur teste ses modèles en local, mais les résultats restent isolés : impossible de savoir combien de personnes utilisent BenchGo, ni d'agréger les scores de la communauté. L'utilisateur souhaite un système participatif où chacun peut envoyer ses résultats pour constituer une base de données commune, avec un compteur d'utilisateurs.
+Le projet est open source sur GitHub (cisco-03/BenchGo-LLM-School). Chaque utilisateur teste ses modèles en local, mais les résultats restent isolés : impossible de savoir combien de personnes utilisent BenchGo, ni d'agréger les scores de la communauté. L'utilisateur souhaite un système participatif où chacun peut envoyer ses résultats pour constituer une base de données commune, avec un compteur d'utilisateurs.
 
 ### Implémentation
 
@@ -78,7 +78,7 @@ Le projet est open source sur GitHub (cisco-03/benchgo). Chaque utilisateur test
 
 ### Architecture du flux participatif
 ```
-Utilisateur (local)                     Dépôt GitHub (cisco-03/benchgo)
+Utilisateur (local)                     Dépôt GitHub (cisco-03/BenchGo-LLM-School)
 ┌──────────────────┐                   ┌─────────────────────────────┐
 │ node runner.js   │  --submit         │  submissions/<userId>/      │
 │  .carnet/        │ ────PR────────►   │    <model>.json             │

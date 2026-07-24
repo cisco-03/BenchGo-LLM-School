@@ -27,7 +27,7 @@ respectant pas ce code.
 
 Ce code s'applique à tous les espaces liés au projet : issues GitHub, pull
 requests, reviews, discussions, et tout canal de communication officiel
-associé au dépôt `cisco-03/benchgo`.
+associé au dépôt `cisco-03/BenchGo-LLM-School`.
 
 ## Signalement
 

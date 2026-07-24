@@ -14,7 +14,7 @@ Depuis le dossier racine de BenchGo (celui qui contient `runner.js`) :
 
 ```powershell
 # Si vous n'êtes pas encore dans le dossier :
-cd chemin\vers\benchgo
+cd chemin\vers\BenchGo-LLM-School
 ```
 
 Vérifiez que vous êtes au bon endroit :

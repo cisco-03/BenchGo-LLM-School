@@ -51,7 +51,7 @@ scolaire (écoles = profils, classes = tiers). Quelques principes à respecter :
    ```bash
    git push origin fix/typo-leaderboard
    ```
-7. Ouvrez une **Pull Request** vers la branche `main` du dépôt `cisco-03/benchgo`.
+7. Ouvrez une **Pull Request** vers la branche `main` du dépôt `cisco-03/BenchGo-LLM-School`.
    Remplissez le template fourni.
 
 ## ✅ Revue & fusion
