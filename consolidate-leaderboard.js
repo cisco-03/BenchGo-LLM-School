@@ -122,7 +122,7 @@ function deduplicateAndMerge(entries) {
   return Object.values(byShortName);
 }
 
-// Génère le HTML du classement consolidé.
+// Génère le HTML du classement consolidé — même style que le leaderboard principal.
 function buildConsolidatedHTML(entries) {
   entries.sort((a, b) => {
     if (b.pct !== a.pct) return b.pct - a.pct;
@@ -130,48 +130,94 @@ function buildConsolidatedHTML(entries) {
     return b.globalLifeScore - a.globalLifeScore;
   });
 
-  const generatedAt = new Date().toISOString();
+  const generatedAt = new Date().toLocaleString('fr-FR');
 
-  function escapeHtml(s) {
+  function esc(s) {
     return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   }
 
-  function verdictLabel(pct) {
-    if (pct >= 90) return { label: 'Top du top', class: 'top' };
-    if (pct >= 80) return { label: 'Recommandé', class: 'rec' };
-    if (pct >= 70) return { label: 'Dans la moyenne', class: 'mid' };
-    if (pct >= 50) return { label: 'En rattrapage', class: 'rattr' };
-    return { label: 'Éliminé', class: 'elim' };
+  // Catégories (identiques au leaderboard principal)
+  function getCategory(pct, rank) {
+    if (rank <= 3) return { key: 'top', icon: '🏆', label: 'Top du top' };
+    if (pct >= 80) return { key: 'recommande', icon: '✅', label: 'Recommandé' };
+    if (pct >= 70) return { key: 'moyenne', icon: '📊', label: 'Dans la moyenne' };
+    if (pct >= 50) return { key: 'rattrapage', icon: '⚠️', label: 'En rattrapage' };
+    return { key: 'catastrophe', icon: '💥', label: 'Échec total' };
   }
 
-  let cards = '';
-  for (let i = 0; i < entries.length; i++) {
-    const e = entries[i];
-    const rank = i + 1;
-    const medal = i === 0 ? '🏆' : i === 1 ? '🥈' : i === 2 ? '🥉' : '';
-    const v = verdictLabel(e.pct);
-    const contributorTag = e.contributors > 1
-      ? `<span class="contributors">testé par ${e.contributors} personnes</span>`
-      : '';
-    const pseudoTag = e.pseudo ? `<span class="pseudo">par ${escapeHtml(e.pseudo)}</span>` : '';
-    const quantTag = e.quantization ? `<span class="quant">${escapeHtml(e.quantization)}</span>` : '';
-
-    cards += `
-    <div class="card ${v.class}" data-rank="${rank}">
-      <div class="rank">${medal || '#' + rank}</div>
-      <div class="info">
-        <div class="model-name">${escapeHtml(e.model)}</div>
-        <div class="meta">${quantTag} ${contributorTag} ${pseudoTag}</div>
-      </div>
-      <div class="stats">
-        <div class="stat"><span class="val">${e.pct}%</span><span class="lbl">Score</span></div>
-        <div class="stat"><span class="val">${e.score}/${e.max}</span><span class="lbl">Points</span></div>
-        <div class="stat"><span class="val">${e.globalLifeScore} PV</span><span class="lbl">Santé</span></div>
-        <div class="stat"><span class="val">${e.ecoleCount}</span><span class="lbl">Écoles</span></div>
-        <div class="stat verdict ${v.class}">${v.label}</div>
-      </div>
-    </div>`;
+  // Taille du modèle par nom
+  function getParamSize(modelName) {
+    const m = (modelName || '').match(/([\d]+[.,]?[\d]*)\s*b/i);
+    if (!m) return { key: 'inconnu', icon: '❓', label: 'Taille inconnue' };
+    const size = parseFloat(m[1].replace(',', '.'));
+    if (size < 3) return { key: 'petit', icon: '🐱', label: '< 3B' };
+    if (size <= 14) return { key: 'standard', icon: '📦', label: '3B-14B' };
+    if (size <= 30) return { key: 'expert', icon: '🎓', label: '14B-30B' };
+    return { key: 'doctorat', icon: '🧠', label: '> 30B' };
   }
+
+  function gradeLetter(pct) {
+    if (pct >= 90) return 'A';
+    if (pct >= 80) return 'B';
+    if (pct >= 70) return 'C';
+    if (pct >= 60) return 'D';
+    return 'F';
+  }
+
+  function pctColor(pct) {
+    if (pct >= 80) return '#3fb950';
+    if (pct >= 70) return '#d29922';
+    if (pct >= 50) return '#db6d28';
+    return '#f85149';
+  }
+
+  function gradeColor(g) {
+    if (g === 'A') return '#3fb950';
+    if (g === 'B') return '#58a6ff';
+    if (g === 'C') return '#d29922';
+    if (g === 'D') return '#db6d28';
+    return '#f85149';
+  }
+
+  function formatDuration(ms) {
+    if (!ms || ms <= 0) return '—';
+    const s = ms / 1000;
+    if (s < 60) return s.toFixed(1) + 's';
+    const total = Math.round(s);
+    const m = Math.floor(total / 60);
+    const sec = total % 60;
+    if (m < 60) return m + 'm' + String(sec).padStart(2, '0') + 's';
+    const h = Math.floor(m / 60);
+    const min = m % 60;
+    return h + 'h' + String(min).padStart(2, '0') + 'm';
+  }
+
+  // Compteurs par catégorie pour les filtres
+  const catCounts = { top: 0, recommande: 0, moyenne: 0, rattrapage: 0, catastrophe: 0 };
+  const sizeCounts = { petit: 0, standard: 0, expert: 0, doctorat: 0, inconnu: 0 };
+  entries.forEach((e, idx) => {
+    catCounts[getCategory(e.pct, idx + 1).key]++;
+    sizeCounts[getParamSize(e.model).key]++;
+  });
+
+  const totalSubmissions = entries.reduce((s, e) => s + (e.contributors || 1), 0);
+
+  // Sérialise les données pour le JS côté client
+  const modelsJson = JSON.stringify(entries.map((e, idx) => {
+    const rank = idx + 1;
+    const cat = getCategory(e.pct, rank);
+    const psize = getParamSize(e.model);
+    return {
+      rank, model: e.model, shortName: e.shortName,
+      quantization: e.quantization, pct: e.pct, score: e.score, max: e.max,
+      grade: gradeLetter(e.pct), globalLifeScore: e.globalLifeScore,
+      optionalBonus: e.optionalBonus || 0, ecoleCount: e.ecoleCount,
+      elapsedMs: e.elapsedMs || 0, tokens: e.tokens || 0,
+      tokensPerSecond: e.tokensPerSecond || 0,
+      contributors: e.contributors || 1, pseudo: e.pseudo,
+      cat, paramSize: psize
+    };
+  }));
 
   return `<!DOCTYPE html>
 <html lang="fr">
@@ -180,57 +226,269 @@ function buildConsolidatedHTML(entries) {
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Classement Communautaire — BenchGo V3</title>
 <style>
-* { margin: 0; padding: 0; box-sizing: border-box; }
-body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0d1117; color: #c9d1d9; padding: 20px; }
-h1 { text-align: center; color: #58a6ff; margin-bottom: 8px; }
-.subtitle { text-align: center; color: #8b949e; margin-bottom: 24px; font-size: 14px; }
-.stats-bar { display: flex; justify-content: center; gap: 24px; margin-bottom: 24px; flex-wrap: wrap; }
-.stats-bar .pill { background: #161b22; border: 1px solid #30363d; border-radius: 20px; padding: 8px 16px; font-size: 14px; }
-.stats-bar .pill strong { color: #58a6ff; }
-.leaderboard { max-width: 900px; margin: 0 auto; display: flex; flex-direction: column; gap: 12px; }
-.card { display: flex; align-items: center; gap: 16px; background: #161b22; border: 1px solid #30363d; border-radius: 12px; padding: 16px 20px; transition: border-color 0.2s; }
-.card:hover { border-color: #58a6ff; }
-.card.top { border-left: 4px solid #3fb950; }
-.card.rec { border-left: 4px solid #58a6ff; }
-.card.mid { border-left: 4px solid #d29922; }
-.card.rattr { border-left: 4px solid #db6d28; }
-.card.elim { border-left: 4px solid #f85149; }
-.rank { font-size: 24px; font-weight: bold; min-width: 60px; text-align: center; color: #8b949e; }
-.info { flex: 1; min-width: 0; }
-.model-name { font-size: 18px; font-weight: 600; color: #f0f6fc; word-break: break-word; }
-.meta { font-size: 12px; color: #8b949e; margin-top: 4px; display: flex; gap: 12px; flex-wrap: wrap; }
-.meta .quant { background: #1f6feb22; padding: 2px 8px; border-radius: 4px; }
-.meta .contributors { color: #d2a8ff; }
-.meta .pseudo { color: #7ee787; }
-.stats { display: flex; gap: 20px; align-items: center; flex-wrap: wrap; }
-.stat { display: flex; flex-direction: column; align-items: center; }
-.stat .val { font-size: 16px; font-weight: 600; color: #f0f6fc; }
-.stat .lbl { font-size: 11px; color: #8b949e; }
-.verdict { padding: 4px 12px; border-radius: 20px; font-size: 13px; font-weight: 600; }
-.verdict.top { background: #238636; color: #fff; }
-.verdict.rec { background: #1f6feb; color: #fff; }
-.verdict.mid { background: #4d2d00; color: #d29922; }
-.verdict.rattr { background: #3d1f00; color: #db6d28; }
-.verdict.elim { background: #4a0e0e; color: #f85149; }
-footer { text-align: center; margin-top: 32px; color: #8b949e; font-size: 12px; }
-footer a { color: #58a6ff; }
+  :root {
+    --bg-0: #0a0e14; --bg-1: #11161d; --bg-2: #161b22; --bg-3: #1c2128; --bg-elev: #22272e;
+    --border: #2d333b; --border-soft: #21262d;
+    --text: #e6edf3; --text-muted: #8b949e; --text-dim: #6e7681;
+    --accent: #58a6ff; --accent-2: #1f6feb;
+    --green: #3fb950; --yellow: #d29922; --red: #f85149; --purple: #bc8cff;
+    --gold: #ffd700; --silver: #c9d1d4; --bronze: #e3b341;
+    --fs-display: clamp(1.9rem,1.5538rem+1.5385vw,2.75rem);
+    --fs-h1: clamp(1.5rem,1.3615rem+0.6154vw,1.85rem);
+    --fs-h2: clamp(1.15rem,1.0808rem+0.3077vw,1.3rem);
+    --fs-h3: clamp(0.95rem,0.9115rem+0.1667vw,1.05rem);
+    --fs-body: clamp(0.9rem,0.8808rem+0.0833vw,0.97rem);
+    --fs-small: clamp(0.78rem,0.7654rem+0.0641vw,0.83rem);
+    --fs-tiny: clamp(0.68rem,0.6692rem+0.0449vw,0.71rem);
+    --r-sm: 8px; --r-md: 12px; --r-lg: 16px; --r-pill: 999px;
+    --shadow-card: 0 1px 0 rgba(255,255,255,0.03),0 2px 8px rgba(0,0,0,0.25);
+    --shadow-elev: 0 8px 32px rgba(0,0,0,0.45);
+    --container-max: 1600px;
+    --container-pad: clamp(0.75rem,3vw,2rem);
+    --space-xs: clamp(0.375rem,0.3462rem+0.1282vw,0.5rem);
+    --space-s: clamp(0.75rem,0.6923rem+0.2564vw,1rem);
+    --space-m: clamp(1rem,0.8846rem+0.5128vw,1.5rem);
+    --space-l: clamp(1.5rem,1.3077rem+1.0256vw,2.5rem);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body, * { scrollbar-width: none; -ms-overflow-style: none; }
+  ::-webkit-scrollbar { width: 0; height: 0; display: none; }
+  body {
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    background: radial-gradient(1200px 600px at 50% -200px,rgba(31,111,235,0.10),transparent 60%),
+                radial-gradient(900px 500px at 100% 0%,rgba(188,140,255,0.06),transparent 55%),var(--bg-0);
+    color: var(--text); font-size: var(--fs-body); line-height: 1.5; min-height: 100vh;
+    padding-block: var(--space-m); -webkit-font-smoothing: antialiased;
+  }
+  .wrap { width: 100%; max-width: var(--container-max); margin-inline: auto; padding-inline: var(--container-pad); }
+  header.hero { text-align: center; padding-block: var(--space-m) var(--space-l); }
+  header.hero .badge-top {
+    display: inline-flex; align-items: center; gap: 6px; padding: 4px 12px;
+    border: 1px solid var(--border); background: var(--bg-2); border-radius: var(--r-pill);
+    color: var(--text-muted); font-size: var(--fs-tiny); text-transform: uppercase;
+    letter-spacing: 1.2px; margin-bottom: var(--space-s);
+  }
+  header.hero h1 {
+    font-size: var(--fs-display); font-weight: 800; line-height: 1.05;
+    background: linear-gradient(135deg,var(--accent) 0%,var(--purple) 100%);
+    -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+    letter-spacing: -0.02em;
+  }
+  header.hero .subtitle { color: var(--text-muted); margin-top: 6px; font-size: var(--fs-small); }
+  .toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-xs); margin-block: var(--space-s); }
+  .sticky-bar {
+    position: sticky; top: 0; z-index: 100;
+    background: rgba(10,14,20,0.82); backdrop-filter: blur(10px) saturate(140%);
+    -webkit-backdrop-filter: blur(10px) saturate(140%); border-bottom: 1px solid var(--border);
+    margin-inline: calc(-1 * var(--container-pad)); padding-inline: var(--container-pad);
+    padding-block: var(--space-xs); transition: box-shadow 0.2s ease, background 0.2s ease;
+  }
+  .sticky-bar.stuck { background: rgba(10,14,20,0.94); box-shadow: 0 4px 18px rgba(0,0,0,0.45); }
+  .filter-chips { display: flex; flex-wrap: wrap; gap: 6px; flex: 1 1 auto; min-width: 0; }
+  .chip {
+    padding: 6px 12px; border: 1px solid var(--border); background: var(--bg-2);
+    color: var(--text-muted); border-radius: var(--r-pill); font-size: var(--fs-small);
+    cursor: pointer; white-space: nowrap; transition: all 0.18s ease; user-select: none;
+    display: inline-flex; align-items: center; gap: 4px;
+  }
+  .chip:hover { border-color: var(--accent); color: var(--text); transform: translateY(-1px); }
+  .chip.active {
+    background: linear-gradient(135deg,var(--accent-2),var(--accent));
+    border-color: transparent; color: #fff; font-weight: 600;
+    box-shadow: 0 2px 10px rgba(31,111,235,0.35);
+  }
+  .chip .count { opacity: 0.75; margin-left: 2px; font-size: 0.85em; background: rgba(255,255,255,0.08); padding: 0 6px; border-radius: var(--r-pill); }
+  .search-wrap { display: flex; align-items: center; gap: var(--space-xs); flex: 0 0 auto; }
+  .search {
+    padding: 8px 14px; background: var(--bg-2); border: 1px solid var(--border);
+    color: var(--text); border-radius: var(--r-sm); font-size: var(--fs-small);
+    width: clamp(140px,22vw,240px); transition: all 0.18s ease;
+  }
+  .search:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(88,166,255,0.18); }
+  .result-count { font-size: var(--fs-tiny); color: var(--text-muted); }
+  .cards { display: flex; flex-direction: column; gap: var(--space-s); margin-block: var(--space-m); }
+  .card {
+    background: linear-gradient(180deg,var(--bg-2),var(--bg-1));
+    border: 1px solid var(--border); border-radius: var(--r-md);
+    box-shadow: var(--shadow-card); transition: all 0.2s ease; overflow: hidden; position: relative;
+  }
+  .card::before { content: ''; position: absolute; inset: 0 auto 0 0; width: 3px; background: transparent; transition: background 0.2s ease; }
+  .card:hover { border-color: var(--border-soft); transform: translateY(-1px); box-shadow: var(--shadow-elev); }
+  .card.gold::before { background: linear-gradient(180deg,var(--gold),transparent); }
+  .card.silver::before { background: linear-gradient(180deg,var(--silver),transparent); }
+  .card.bronze::before { background: linear-gradient(180deg,var(--bronze),transparent); }
+  .card.gold { border-color: rgba(255,215,0,0.4); box-shadow: 0 0 24px rgba(255,215,0,0.10),var(--shadow-card); }
+  .card.silver { border-color: rgba(201,209,212,0.3); }
+  .card.bronze { border-color: rgba(227,179,65,0.35); }
+  .card-row { display: flex; align-items: center; gap: var(--space-m); padding: var(--space-s) var(--space-m); }
+  .rank {
+    flex: 0 0 auto; min-width: 44px; height: 44px; display: flex; align-items: center;
+    justify-content: center; flex-wrap: wrap; gap: 2px; padding-inline: 6px;
+    font-size: var(--fs-h3); font-weight: 800; color: var(--accent);
+    background: var(--bg-3); border: 1px solid var(--border); border-radius: var(--r-sm);
+  }
+  .rank .medal { font-size: 1.5em; line-height: 1; }
+  .card.gold .rank { background: linear-gradient(135deg,rgba(255,215,0,0.18),transparent); border-color: rgba(255,215,0,0.4); }
+  .card.silver .rank { background: linear-gradient(135deg,rgba(201,209,212,0.14),transparent); border-color: rgba(201,209,212,0.3); }
+  .card.bronze .rank { background: linear-gradient(135deg,rgba(227,179,65,0.14),transparent); border-color: rgba(227,179,65,0.3); }
+  .model-name { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+  .model-name .name-line {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
+    color: var(--accent); font-weight: 700; font-size: var(--fs-body);
+    word-break: break-all; line-height: 1.3;
+  }
+  .model-name .badges { display: flex; flex-wrap: wrap; gap: 5px; }
+  .badge {
+    display: inline-flex; align-items: center; gap: 4px; font-size: var(--fs-tiny);
+    padding: 2px 8px; border-radius: var(--r-pill); background: var(--bg-3);
+    color: var(--text-muted); border: 1px solid var(--border); white-space: nowrap; font-weight: 600;
+  }
+  .badge.quant { color: var(--purple); border-color: rgba(188,140,255,0.35); background: rgba(188,140,255,0.10); }
+  .badge.contrib { color: #d2a8ff; border-color: rgba(188,140,255,0.30); background: rgba(188,140,255,0.08); }
+  .badge.pseudo { color: var(--green); border-color: rgba(63,185,80,0.30); background: rgba(63,185,80,0.08); }
+  .verdict-badge { display: inline-block; padding: 4px 12px; border-radius: var(--r-sm); font-size: var(--fs-tiny); font-weight: 700; color: #fff; }
+  .mini-stats { display: flex; align-items: center; gap: var(--space-m); flex: 0 0 auto; flex-wrap: wrap; }
+  .mini-stat { display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 52px; }
+  .mini-stat .lbl { font-size: var(--fs-tiny); color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.6px; font-weight: 600; }
+  .mini-stat .val { font-size: var(--fs-body); font-weight: 700; }
+  .mini-stat .val.grade { font-size: var(--fs-h3); }
+  .pct-bar-wrap { width: 64px; height: 5px; background: var(--bg-3); border-radius: var(--r-pill); margin-top: 3px; overflow: hidden; }
+  .pct-bar-fill { height: 100%; border-radius: var(--r-pill); transition: width 0.3s ease; }
+  .empty-msg { text-align: center; color: var(--text-muted); padding: var(--space-l); font-style: italic; display: none; font-size: var(--fs-body); }
+  footer.footer { text-align: center; color: var(--text-dim); font-size: var(--fs-tiny); margin-top: var(--space-l); padding-block: var(--space-m); }
+  footer.footer a { color: var(--accent); }
+  footer.footer code { background: var(--bg-3); padding: 1px 6px; border-radius: 4px; color: var(--purple); }
+  @media (max-width: 720px) {
+    .card-row { flex-wrap: wrap; }
+    .mini-stats { width: 100%; justify-content: space-between; padding-top: var(--space-s); border-top: 1px solid var(--border-soft); }
+  }
 </style>
 </head>
 <body>
-<h1>🏆 Classement Communautaire BenchGo V3</h1>
-<p class="subtitle">Classement consolidé des soumissions de la communauté — généré automatiquement</p>
-<div class="stats-bar">
-  <div class="pill"><strong>${entries.length}</strong> modèle(s) classé(s)</div>
-  <div class="pill"><strong>${entries.reduce((s, e) => s + e.contributors, 0)}</strong> soumission(s)</div>
-  <div class="pill">Généré le <strong>${generatedAt.slice(0, 10)}</strong></div>
+<div class="wrap">
+  <header class="hero">
+    <span class="badge-top">🌐 BenchGo V3 · Classement Communautaire</span>
+    <h1>Classement Communautaire BenchGo V3</h1>
+    <p class="subtitle">Généré le ${esc(generatedAt)} — ${entries.length} modèle${entries.length > 1 ? 's' : ''} classé${entries.length > 1 ? 's' : ''} · ${totalSubmissions} soumission${totalSubmissions > 1 ? 's' : ''} de la communauté</p>
+  </header>
+
+  <div class="sticky-bar" id="stickyBar">
+    <div class="toolbar">
+      <div class="filter-chips" id="chips">
+        <span class="chip active" data-cat="all">Tous <span class="count">${entries.length}</span></span>
+        <span class="chip" data-cat="top">🏆 Top du top <span class="count">${catCounts.top}</span></span>
+        <span class="chip" data-cat="recommande">✅ Recommandés <span class="count">${catCounts.recommande}</span></span>
+        <span class="chip" data-cat="moyenne">📊 Dans la moyenne <span class="count">${catCounts.moyenne}</span></span>
+        <span class="chip" data-cat="rattrapage">⚠️ En rattrapage <span class="count">${catCounts.rattrapage}</span></span>
+        <span class="chip" data-cat="catastrophe">💥 Échec total <span class="count">${catCounts.catastrophe}</span></span>
+      </div>
+    </div>
+    <div class="toolbar">
+      <div class="filter-chips" id="sizeChips">
+        <span class="chip active" data-size="all">Toutes tailles <span class="count">${entries.length}</span></span>
+        <span class="chip" data-size="petit">🐱 &lt; 3B <span class="count">${sizeCounts.petit}</span></span>
+        <span class="chip" data-size="standard">📦 3B–14B <span class="count">${sizeCounts.standard}</span></span>
+        <span class="chip" data-size="expert">🎓 14B–30B <span class="count">${sizeCounts.expert}</span></span>
+        <span class="chip" data-size="doctorat">🧠 &gt; 30B <span class="count">${sizeCounts.doctorat}</span></span>
+      </div>
+      <div class="search-wrap">
+        <input type="text" class="search" id="search" placeholder="🔍 Rechercher un modèle…" />
+        <span class="result-count" id="resultCount"></span>
+      </div>
+    </div>
+  </div>
+
+  <div class="cards" id="cards"></div>
+  <p class="empty-msg" id="emptyMsg">Aucun modèle ne correspond à ce filtre.</p>
+
+  <footer class="footer">
+    <p>Classement communautaire généré par <a href="https://github.com/cisco-03/BenchGo-LLM-School">BenchGo V3</a> — participatif et open source</p>
+    <p>Pour soumettre vos résultats : <code>node runner.js --submit</code> ou bouton "🌐 Envoyer à la communauté" dans le classement local</p>
+  </footer>
 </div>
-<div class="leaderboard">
-${cards}
-</div>
-<footer>
-  <p>Classement généré par <a href="https://github.com/cisco-03/BenchGo-LLM-School">BenchGo V3</a> — participatif et open source</p>
-  <p>Pour soumettre vos résultats : <code>node runner.js --submit</code></p>
-</footer>
+<script>
+var MODELS = ${modelsJson};
+function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function pctColor(p) { return p>=80?'#3fb950':p>=70?'#d29922':p>=50?'#db6d28':'#f85149'; }
+function gradeColor(g) { return g==='A'?'#3fb950':g==='B'?'#58a6ff':g==='C'?'#d29922':g==='D'?'#db6d28':'#f85149'; }
+function fmtDur(ms) { if(!ms||ms<=0) return '—'; var s=ms/1000; if(s<60) return s.toFixed(1)+'s'; var t=Math.round(s),m=Math.floor(t/60),sec=t%60; if(m<60) return m+'m'+String(sec).padStart(2,'0')+'s'; var h=Math.floor(m/60),mn=m%60; return h+'h'+String(mn).padStart(2,'0')+'m'; }
+
+var activeCat = 'all', activeSize = 'all', searchQ = '';
+function renderCards() {
+  var container = document.getElementById('cards');
+  container.innerHTML = '';
+  var shown = 0;
+  for (var i = 0; i < MODELS.length; i++) {
+    var m = MODELS[i];
+    if (activeCat !== 'all' && m.cat.key !== activeCat) continue;
+    if (activeSize !== 'all' && m.paramSize.key !== activeSize) continue;
+    if (searchQ && m.model.toLowerCase().indexOf(searchQ) === -1 && m.shortName.toLowerCase().indexOf(searchQ) === -1) continue;
+    shown++;
+    var cardClass = m.rank === 1 ? 'gold' : m.rank === 2 ? 'silver' : m.rank === 3 ? 'bronze' : '';
+    var rankDisp = m.rank <= 3 ? '<span class="medal">' + ['🥇','🥈','🥉'][m.rank-1] + '</span>' : m.rank;
+    var pc = pctColor(m.pct), gc = gradeColor(m.grade);
+    var sc = m.globalLifeScore < 0 ? '#f85149' : '#3fb950';
+    var tpsC = m.tokensPerSecond >= 50 ? '#3fb950' : m.tokensPerSecond >= 25 ? '#d29922' : m.tokensPerSecond > 0 ? '#f85149' : '#8b949e';
+    var quantBadge = m.quantization ? '<span class="badge quant">🧩 ' + esc(m.quantization) + '</span>' : '';
+    var contribBadge = m.contributors > 1 ? '<span class="badge contrib">👥 testé par ' + m.contributors + ' personnes</span>' : '';
+    var pseudoBadge = m.pseudo ? '<span class="badge pseudo">✍️ ' + esc(m.pseudo) + '</span>' : '';
+    var vitesseVal = m.tokensPerSecond > 0 ? (m.tokensPerSecond + ' t/s') : (m.elapsedMs > 0 ? fmtDur(m.elapsedMs) : '—');
+    var vitesseLbl = m.tokensPerSecond > 0 ? 'Vitesse' : 'Temps';
+    var html = '<div class="card ' + cardClass + '">' +
+      '<div class="card-row">' +
+        '<div class="rank">' + rankDisp + '</div>' +
+        '<div class="model-name">' +
+          '<div class="name-line"><span>' + m.cat.icon + '</span>' + esc(m.model) + '</div>' +
+          '<div class="badges">' + quantBadge + ' ' + contribBadge + ' ' + pseudoBadge + ' <span class="badge">' + m.paramSize.icon + ' ' + esc(m.paramSize.label) + '</span></div>' +
+        '</div>' +
+        '<div class="mini-stats">' +
+          '<div class="mini-stat"><span class="lbl">%</span><span class="val" style="color:' + pc + '">' + m.pct + '%</span><div class="pct-bar-wrap"><div class="pct-bar-fill" style="width:' + Math.max(2,m.pct) + '%;background:' + pc + '"></div></div></div>' +
+          '<div class="mini-stat"><span class="lbl">Note</span><span class="val grade" style="color:' + gc + '">' + m.grade + '</span></div>' +
+          '<div class="mini-stat"><span class="lbl">Points</span><span class="val">' + m.score + '/' + m.max + '</span></div>' +
+          '<div class="mini-stat"><span class="lbl">Santé</span><span class="val" style="color:' + sc + '">' + m.globalLifeScore + ' PV</span></div>' +
+          '<div class="mini-stat"><span class="lbl">Écoles</span><span class="val">' + m.ecoleCount + '</span></div>' +
+          '<div class="mini-stat"><span class="lbl">' + vitesseLbl + '</span><span class="val" style="color:' + tpsC + ';font-size:var(--fs-tiny)">' + esc(vitesseVal) + '</span></div>' +
+        '</div>' +
+      '</div>' +
+    '</div>';
+    container.insertAdjacentHTML('beforeend', html);
+  }
+  document.getElementById('resultCount').textContent = shown + '/' + MODELS.length;
+  document.getElementById('emptyMsg').style.display = shown === 0 ? 'block' : 'none';
+}
+
+// Filtres catégorie
+document.querySelectorAll('#chips .chip').forEach(function(chip) {
+  chip.addEventListener('click', function() {
+    document.querySelectorAll('#chips .chip').forEach(function(c) { c.classList.remove('active'); });
+    chip.classList.add('active');
+    activeCat = chip.dataset.cat;
+    renderCards();
+  });
+});
+// Filtres taille
+document.querySelectorAll('#sizeChips .chip').forEach(function(chip) {
+  chip.addEventListener('click', function() {
+    document.querySelectorAll('#sizeChips .chip').forEach(function(c) { c.classList.remove('active'); });
+    chip.classList.add('active');
+    activeSize = chip.dataset.size;
+    renderCards();
+  });
+});
+// Recherche
+document.getElementById('search').addEventListener('input', function(e) {
+  searchQ = e.target.value.toLowerCase().trim();
+  renderCards();
+});
+// Barre sticky
+(function() {
+  var bar = document.getElementById('stickyBar');
+  function onScroll() { if (window.scrollY > 4) bar.classList.add('stuck'); else bar.classList.remove('stuck'); }
+  window.addEventListener('scroll', onScroll, { passive: true });
+  onScroll();
+})();
+renderCards();
+</script>
 </body>
 </html>`;
 }
