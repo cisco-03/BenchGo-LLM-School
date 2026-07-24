@@ -21,7 +21,7 @@ vous pouvez envoyer vos résultats pour enrichir la base de données communautai
 ## Comment ça marche
 
 ```
-Votre machine                          Dépôt GitHub (cisco-03/benchgo)
+Votre machine                          Dépôt GitHub (cisco-03/BenchGo-LLM-School)
 ┌─────────────┐                       ┌──────────────────────────────┐
 │ node runner │  --submit             │  submissions/                │
 │   .carnet/  │ ──────────────────►   │    <userId>/                 │
@@ -112,7 +112,7 @@ Le classement consolidé est la fusion des résultats de tous les contributeurs.
 Il est disponible sur GitHub Pages à l'adresse :
 
 ```
-https://cisco-03.github.io/benchgo/community-leaderboard.html
+https://cisco-03.github.io/BenchGo-LLM-School/community-leaderboard.html
 ```
 
 Si plusieurs utilisateurs ont testé le même modèle, le classement consolidé :

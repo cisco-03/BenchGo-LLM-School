@@ -35,7 +35,7 @@ const logger = require('./logger');
 // L'utilisateur n'a rien à configurer : le ping et la soumission ciblent ce dépôt.
 const COMMUNITY_REPO = {
   owner: 'cisco-03',
-  repo: 'benchgo'
+  repo: 'BenchGo-LLM-School'
 };
 
 const GITHUB_API = 'https://api.github.com';

@@ -227,7 +227,7 @@ footer a { color: #58a6ff; }
 ${cards}
 </div>
 <footer>
-  <p>Classement généré par <a href="https://github.com/${'cisco-03'}/${'benchgo'}">BenchGo V3</a> — participatif et open source</p>
+  <p>Classement généré par <a href="https://github.com/cisco-03/BenchGo-LLM-School">BenchGo V3</a> — participatif et open source</p>
   <p>Pour soumettre vos résultats : <code>node runner.js --submit</code></p>
 </footer>
 </body>
