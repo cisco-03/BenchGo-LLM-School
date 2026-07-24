@@ -69,6 +69,20 @@ Docs/Screens/**
 !/.github/ISSUE_TEMPLATE/bug_report.md
 !/.github/ISSUE_TEMPLATE/feature_request.md
 
+# --- 7ter. Workflows GitHub Actions (consolidation classement communautaire) ---
+!/.github/workflows/
+.github/workflows/**
+!/.github/workflows/*.yml
+
+# --- 7quater. Fichiers communautaires (consolidation classement participatif) ---
+# consolidate-leaderboard.js est déjà couvert par !*.js à la racine.
+# .community/ contient le fichier ping.txt (télémétrie) et submissions/ les carnets.
+!/.community/
+.community/**
+!/.community/ping.txt
+!/submissions/
+submissions/**
+
 # =============================================================================
 # Données SENSIBLES / INTERNES — NE PAS COMMITER (ignorées par le "*" ci-dessus) :
 #   Memories-BenchGo/    -> mémoire interne de dev (Kilo Memory, issues-fixes, etc.)

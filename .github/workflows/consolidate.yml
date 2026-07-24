@@ -1,0 +1,46 @@
+name: Consolidation du classement communautaire
+
+on:
+  pull_request:
+    types: [closed]
+    paths:
+      - 'submissions/**'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: consolidate-leaderboard
+  cancel-in-progress: false
+
+jobs:
+  consolidate:
+    # Ne se déclenche que si la PR a été mergée (pas si fermée sans merge)
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout du dépôt (main)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configuration de Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Consolidation du classement
+        run: node consolidate-leaderboard.js
+
+      - name: Publication du classement consolidé
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: .
+          publish_branch: gh-pages
+          keep_files: true
+          destination_dir: .
+          allow_empty_configs: true

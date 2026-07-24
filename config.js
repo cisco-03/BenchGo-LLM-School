@@ -18,7 +18,7 @@ const API_TIMEOUT_MS = 1500000;
 // était discriminé sans avoir pu répondre). 1500s laisse largement le temps de
 // répondre sans bloquer indéfiniment — les timeouts sur réponse sont INTERDITS
 // car ils pénalisent injustement les élèves.
-const PROFILING_TIMEOUT_MS = 300000;
+const PROFILING_TIMEOUT_MS = 600000;
 const PROFILING_MAX_TOKENS = 0;  // 0 = illimité (carte blanche, ne pas tronquer le JSON)
 // Nombre de tentatives d'auto-profilage avant de baisser les bras. Chaque
 // tentative change de stratégie (json_schema → texte → raisonnement activé).
@@ -38,7 +38,7 @@ const TEACHER_CONFIG = {
   enabled: true,
   provider: 'openrouter',
   // Modèle gratuit par défaut (clean, bon en français, robuste pour la critique).
-  model: 'meta-llama/llama-3.3-70b-instruct:free',
+  model: 'openrouter/free',
   apiKey: null,         // Surcharge via --teacher-api-key ou OPENROUTER_API_KEY
   endpoint: null,      // Surcharge via --teacher-endpoint (rare)
   maxRetries: 3,       // Tentatives avant repli sur l'auto-analyse de l'élève
@@ -172,6 +172,15 @@ function parseCliArgs() {
   // Conçu pour night-batch.js qui enchaîne plusieurs modèles sans intervention.
   const forceFlag = rawArgs.includes('--force');
 
+  // --- Communauté : soumission & télémétrie ---
+  // --submit : ouvre une Pull Request sur le dépôt communautaire avec le carnet
+  //   de scores du modèle testé (nécessite un token GitHub PAT).
+  // --no-telemetry : désactive le ping télémétrie anonyme (compteur d'utilisateurs).
+  // --github-token=xxx : fournit le PAT GitHub pour la soumission (évite la saisie interactive).
+  const submitFlag = rawArgs.includes('--submit');
+  const noTelemetryFlag = rawArgs.includes('--no-telemetry');
+  const githubTokenRaw = (() => { const a = rawArgs.find(r => r.startsWith('--github-token=')); return a ? a.split('=').slice(1).join('=') : null; })();
+
   const profileArgExplicit = profileArgRaw ? profileArgRaw.toUpperCase() : null;
   const parsedContextLimit = contextLimitRaw ? parseInt(contextLimitRaw, 10) : null;
   const contextLimitTokens = Number.isInteger(parsedContextLimit) && parsedContextLimit > 0
@@ -189,7 +198,8 @@ function parseCliArgs() {
            teacherModel: teacherModelRaw, teacherApiKey: teacherApiKeyRaw, teacherEndpoint: teacherEndpointRaw,
            teacherDisabled: teacherDisabledRaw, quantization: quantizationRaw,
            preset: presetRaw, savePreset: savePresetRaw, deletePreset: deletePresetRaw, listPresets: listPresetsFlag,
-           forgetKey: forgetKeyRaw, listKeys: listKeysFlag, noSaveKeys: noSaveKeysFlag, force: forceFlag };
+            forgetKey: forgetKeyRaw, listKeys: listKeysFlag, noSaveKeys: noSaveKeysFlag, force: forceFlag,
+            submit: submitFlag, noTelemetry: noTelemetryFlag, githubToken: githubTokenRaw };
 }
 
 function detectProfileFromModelName(modelName) {

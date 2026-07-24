@@ -24,6 +24,7 @@ const { buildExternalTeacherReport } = require('./report-teacher');
 const carnetProf = require('./carnet-professeur');
 const presets = require('./presets');
 const apiKeysStore = require('./api-keys-store');
+const communitySync = require('./community-sync');
 
 const DEFAULT_CONTEXT_LIMIT_TOKENS = 16384;
 const MAX_RATTRAPAGE_ATTEMPTS = 1;
@@ -937,6 +938,98 @@ async function runTierAttempt({ tierNum, tierData, isMandatory, profileArg, cont
   };
 }
 
+// --- Soumission communautaire : propose d'envoyer le carnet sur le dépôt GitHub ---
+// Après un run complet, l'utilisateur peut envoyer ses résultats pour alimenter
+// le classement consolidé participatif. La soumission ouvre une Pull Request sur
+// le dépôt communautaire (cisco-03/benchgo) via l'API GitHub. L'utilisateur a
+// besoin d'un Personal Access Token (PAT) avec le scope `repo`.
+async function proposeCommunitySubmission(shortName, options) {
+  options = options || {};
+  const { submitFlag, cliGithubToken } = options;
+
+  // En mode non-interactif sans --submit, on ne propose rien.
+  if (!submitFlag && (!process.stdin.isTTY || !process.stdout.isTTY)) return;
+
+  // Si --submit n'est pas forcé, on demande confirmation.
+  if (!submitFlag) {
+    console.log('\n  \x1b[1;36m━━━ COMMUNAUTÉ BENCHGO ━━━\x1b[0m');
+    console.log('  \x1b[90mEnvoyez vos résultats sur le dépôt communautaire pour alimenter le classement\x1b[0m');
+    console.log('  \x1b[90mconsolidé visible par tous. Votre carnet sera soumis via une Pull Request GitHub\x1b[0m');
+    console.log('  \x1b[90mque le propriétaire du dépôt validera. Un token GitHub (PAT, scope repo) est requis.\x1b[0m');
+    const wantsSubmit = await askYesNo('  Envoyer vos résultats sur le classement communautaire ?', true);
+    if (!wantsSubmit) {
+      console.log('  \x1b[90mSoumission ignorée. Vous pouvez le faire plus tard avec : node runner.js --submit\x1b[0m');
+      return;
+    }
+  }
+
+  // Récupère le carnet local.
+  const ledger = scoreLedger.loadLedger(shortName);
+  if (!ledger || !ledger.ecoles || Object.keys(ledger.ecoles).length === 0) {
+    console.log('  \x1b[33mAucun carnet de scores trouvé pour ce modèle — soumission impossible.\x1b[0m');
+    return;
+  }
+
+  // Token GitHub : CLI > profil local > saisie interactive.
+  let token = cliGithubToken || communitySync.getStoredGithubToken();
+  if (!token) {
+    console.log('\n  \x1b[36mUn token GitHub (Personal Access Token) est nécessaire pour créer la Pull Request.\x1b[0m');
+    console.log('  \x1b[90mCréez-en un sur : https://github.com/settings/tokens (scope "repo").\x1b[0m');
+    if (process.stdin.isTTY && process.stdout.isTTY) {
+      token = await secrets.askSecret('  Collez votre token GitHub (ghp_...)', { revealMs: 3000 });
+    } else {
+      token = await askFreeText('  Collez votre token GitHub (ghp_...) :');
+    }
+    if (!token) {
+      console.log('  \x1b[33mAucun token fourni — soumission annulée.\x1b[0m');
+      return;
+    }
+    // Valide le token avant de l'utiliser.
+    const validation = await communitySync.validateGithubToken(token);
+    if (!validation.valid) {
+      console.log(`  \x1b[31mToken invalide : ${validation.error}. Soumission annulée.\x1b[0m`);
+      return;
+    }
+    console.log(`  \x1b[32mToken valide (compte : ${validation.login}).\x1b[0m`);
+    // Propose de mémoriser le token pour les prochaines fois.
+    const storeToken = await askYesNo('  Mémoriser ce token pour les prochaines soumissions ?', true);
+    if (storeToken) {
+      communitySync.setGithubToken(token);
+      console.log('  \x1b[90mToken mémorisé localement (.benchgo-profile.json, hors GitHub).\x1b[0m');
+    }
+  }
+
+  // Pseudo optionnel (pour l'attribution dans le classement consolidé).
+  let pseudo = communitySync.getPublicPseudo();
+  if (!pseudo && process.stdin.isTTY && process.stdout.isTTY) {
+    console.log('\n  \x1b[90mVous pouvez renseigner un pseudo public (optionnel) pour l\'attribution dans le classement.\x1b[0m');
+    const inputPseudo = await askFreeText('  Pseudo public (Entrée = anonyme) :');
+    if (inputPseudo) {
+      pseudo = inputPseudo;
+      communitySync.setPublicPseudo(pseudo);
+    }
+  }
+
+  // Lance la soumission.
+  console.log('\n  \x1b[35mSoumission en cours...\x1b[0m');
+  try {
+    const result = await communitySync.submitResults(shortName, ledger, token, {
+      pseudo: pseudo || null,
+      benchgoVersion: 'V3'
+    });
+    console.log(`\n  \x1b[1;32m━━━ SOUMISSION RÉUSSIE ━━━\x1b[0m`);
+    console.log(`  \x1b[32mPull Request créée : ${result.prUrl}\x1b[0m`);
+    console.log(`  \x1b[90mBranche : ${result.branch}\x1b[0m`);
+    console.log(`  \x1b[90mFichier : ${result.filePath}\x1b[0m`);
+    console.log('  \x1b[90mLe propriétaire du dépôt validera votre PR pour intégrer vos résultats\x1b[0m');
+    console.log('  \x1b[90mau classement consolidé. Merci pour votre participation !\x1b[0m\n');
+  } catch (e) {
+    console.log(`\n  \x1b[31mÉchec de la soumission : ${e.message}\x1b[0m`);
+    console.log('  \x1b[33mVérifiez votre token GitHub et vos droits sur le dépôt.\x1b[0m');
+    console.log('  \x1b[90mVous pouvez réessayer plus tard avec : node runner.js --submit\x1b[0m\n');
+  }
+}
+
 async function main() {
   console.clear();
 
@@ -949,7 +1042,8 @@ async function main() {
   const { tierArg: tierArgRaw, profileArgExplicit, contextLimitTokens: contextLimitFromCli, provider, model: cloudModel, apiKey, endpoint,
            teacherModel, teacherApiKey, teacherEndpoint, teacherDisabled, quantization: cliQuantization,
            preset: presetName, savePreset: savePresetName, deletePreset: deletePresetName, listPresets: listPresetsFlag,
-           forgetKey: forgetKeyName, listKeys: listKeysFlag, noSaveKeys: noSaveKeysFlag, force: forceFlag } = cliArgs;
+           forgetKey: forgetKeyName, listKeys: listKeysFlag, noSaveKeys: noSaveKeysFlag, force: forceFlag,
+           submit: submitFlag, noTelemetry: noTelemetryFlag, githubToken: cliGithubToken } = cliArgs;
   let tierArg = tierArgRaw;
 
   // --- Flags d'action unique : traités puis sortie immédiate ---
@@ -999,6 +1093,32 @@ async function main() {
   // une clé que la 1re fois, puis on lui propose de la mémoriser (message
   // interactif cf. plus bas). --no-save-keys désactive la mémorisation.
   apiKeysStore.restoreIntoSession(secrets);
+
+  // --- Ping télémétrie anonyme (opt-in, compteur d'utilisateurs) ---
+  // Au premier lancement, on demande le consentement. Ensuite, le ping est
+  // automatique (une fois par jour). --no-telemetry désactive définitivement.
+  // Le ping ne transmet AUCUNE donnée personnelle — il fetch un fichier statique
+  // sur le dépôt GitHub, ce qui incrémente le compteur de vues (Insights → Traffic).
+  if (!noTelemetryFlag) {
+    if (!communitySync.loadProfile().hasOwnProperty('telemetry')) {
+      // Premier lancement : on demande le consentement si on est en TTY.
+      if (process.stdin.isTTY && process.stdout.isTTY) {
+        console.log('  \x1b[36m━━ TÉLÉMÉTRIE ANONYME ━━\x1b[0m');
+        console.log('  \x1b[90mPour savoir combien de personnes utilisent BenchGo, une requête anonyme\x1b[0m');
+        console.log('  \x1b[90mest envoyée une fois par jour vers le dépôt GitHub (compteur de vues).\x1b[0m');
+        console.log('  \x1b[90mAucune donnée personnelle n\'est transmise. Vous pouvez désactiver cela\x1b[0m');
+        console.log('  \x1b[90mavec --no-telemetry à tout moment.\x1b[0m');
+        const consent = await askYesNo('  Autoriser la télémétrie anonyme ?', false);
+        communitySync.setTelemetryConsent(consent);
+        console.log('');
+      } else {
+        // Non-TTY (mode batch) : opt-in par défaut silencieux.
+        communitySync.setTelemetryConsent(true);
+      }
+    }
+    // Envoie le ping (silencieux, non bloquant).
+    communitySync.sendPing().catch(() => {});
+  }
 
   // --- Questionnaire interactif au démarrage ---
   // Si AUCUN flag significatif n'est passé (--provider, --model), on lance le
@@ -1378,7 +1498,7 @@ async function main() {
   if (selfProfiling.enabled) {
     console.log(`  \x1b[1;35m━━━ AUTO-PROFILAGE DU MODÈLE ━━━\x1b[0m`);
     console.log(`  \x1b[35mLe modèle va s'auto-évaluer sur 4 compétences (niveau 1 à 5).\x1b[0m`);
-    console.log(`  \x1b[35mCette étape prend ~10-30s (timeout ${PROFILING_TIMEOUT_MS / 1000}s max) — merci de patienter.\x1b[0m`);
+    console.log(`  \x1b[35mCette étape prend ~1-3min (jusqu'à 5min max) — merci de patienter.\x1b[0m`);
     console.log(`  \x1b[90mCompétences évaluées : JavaScript Bases, Async, Algorithmes avancés, Débogage/Sécurité.\x1b[0m\n`);
 
     const profileSpinner = new Spinner('Auto-profilage : interview JSON du modèle en cours');
@@ -2289,6 +2409,15 @@ async function main() {
       console.error(`\x1b[31m[ERREUR]\x1b[0m École ${PROFILES[schoolProfile].ecole} : ${e.message}`);
       break;
     }
+  }
+
+  // --- Proposition de soumission communautaire ---
+  // Après un run complet (tierArg = "all"), on propose à l'utilisateur d'envoyer
+  // son carnet de scores sur le dépôt communautaire via une Pull Request GitHub.
+  // Cela alimente le classement consolidé visible par tous. --submit force la
+  // proposition (sans confirmation) ; sinon on demande en interactif.
+  if (lastResult && lastResult.shortName && tierArg === 'all') {
+    await proposeCommunitySubmission(lastResult.shortName, { submitFlag, cliGithubToken });
   }
 
   logger.close();

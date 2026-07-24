@@ -1,5 +1,234 @@
 # CHANGELOG - Carnet de Notes BenchGo
 
+## 2026-07-24 — Classement participatif communautaire + télémétrie anonyme
+
+### Contexte
+Le projet est open source sur GitHub (cisco-03/benchgo). Chaque utilisateur teste ses modèles en local, mais les résultats restent isolés : impossible de savoir combien de personnes utilisent BenchGo, ni d'agréger les scores de la communauté. L'utilisateur souhaite un système participatif où chacun peut envoyer ses résultats pour constituer une base de données commune, avec un compteur d'utilisateurs.
+
+### Implémentation
+
+**`community-sync.js` (nouveau) — Synchronisation communautaire**
+- **Ping télémétrie anonyme** : à chaque lancement du runner, un fetch silencieux vers un fichier statique du dépôt GitHub (`.community/ping.txt`) incrémente le compteur de vues (Insights → Traffic). Aucune donnée personnelle transmise — un `userId` aléatoire (hash 16 hex) est généré localement et envoyé en query string pour estimer les utilisateurs uniques. Anti-spam : un ping par jour maximum. Opt-out : `--no-telemetry`.
+- **Soumission de résultats via Pull Request** : `submitResults()` crée une branche `community/<userId>-<shortName>`, dépose le carnet JSON dans `submissions/<userId>/<shortName>.json`, et ouvre une PR vers `main` via l'API GitHub. Nécessite un PAT (scope `repo`). Le carnet est emballe dans un payload avec `userId`, `pseudo` optionnel, `integrityHash` (SHA-256 des données pour détecter les falsifications) et `benchgoVersion`.
+- **Profil local** (`.benchgo-profile.json`, gitignore) : stocke `userId`, `telemetry` (consentement), `pseudo`, `githubToken` (PAT mémorisé).
+- **Validation de token** : `validateGithubToken()` interroge `/user` pour vérifier le PAT avant de soumettre.
+
+**`community-stats.js` (nouveau) — Tableau de bord propriétaire**
+- `printDashboard()` : affiche étoiles/forks/watchers, vues uniques (14j avec graphique), clones uniques, soumissions mergées (compte + utilisateurs), PRs communautaires en attente.
+- CLI : `node community-stats.js --token=ghp_xxx` ou `GITHUB_TOKEN` env var.
+
+**`consolidate-leaderboard.js` (nouveau) — Script CI de consolidation**
+- Lancé par la GitHub Action après le merge d'une PR de soumission.
+- Parcourt `submissions/*/*.json`, agrège les carnets (meilleure tentative par école), dédoublonne par `shortName` (garde la meilleure soumission, compte les contributeurs), génère `community-leaderboard.html` (classement HTML standalone avec cartes, verdicts, badges contributeurs) et `community-leaderboard.json`.
+
+**`.github/workflows/consolidate.yml` (nouveau) — GitHub Action**
+- Se déclenche à la fermeture d'une PR touchant `submissions/**` (uniquement si mergée) + `workflow_dispatch` manuel.
+- Checkout → Node 20 → `node consolidate-leaderboard.js` → publication sur `gh-pages` via `peaceiris/actions-gh-pages`.
+
+**`runner.js` — Intégration**
+- `require('./community-sync')` ajouté.
+- Ping télémétrie au démarrage de `main()` : au premier lancement, demande le consentement (opt-in) en TTY ; en non-TTY, opt-in silencieux. Ensuite ping automatique une fois/jour. `--no-telemetry` court-circuite.
+- `proposeCommunitySubmission()` (nouvelle fonction, avant `main()`) : en fin de run complet (`tierArg === 'all'`), propose d'envoyer le carnet. Récupère le token (CLI > profil local > saisie masquée), valide le token, propose pseudo optionnel, lance `submitResults()`. `--submit` force la soumission sans confirmation.
+- Destructuring de `cliArgs` étendu : `submit`, `noTelemetry`, `githubToken`.
+
+**`config.js` — Nouveaux flags CLI**
+- `--submit` : force la soumission communautaire en fin de run.
+- `--no-telemetry` : désactive le ping télémétrie anonyme.
+- `--github-token=xxx` : fournit le PAT GitHub (évite la saisie interactive).
+
+**`.gitignore` — Autorisations**
+- `.github/workflows/*.yml` ré-autorisé (consolidate.yml).
+- `.community/ping.txt` ré-autorisé (fichier télémétrie).
+- `submissions/` ré-autorisé (carnets communautaires mergés via PR).
+
+**`.community/ping.txt` (nouveau)** — Fichier cible du ping télémétrie.
+
+**`Docs/Manuel-utilisateur/08-communaute.md` (nouveau)** — Documentation complète : fonctionnement, soumission, token GitHub, classement consolidé, télémétrie, tableau de bord, confidentialité.
+
+### Architecture du flux participatif
+```
+Utilisateur (local)                     Dépôt GitHub (cisco-03/benchgo)
+┌──────────────────┐                   ┌─────────────────────────────┐
+│ node runner.js   │  --submit         │  submissions/<userId>/      │
+│  .carnet/        │ ────PR────────►   │    <model>.json             │
+│   <model>.json   │                   │  ─────────────────────────  │
+└──────────────────┘                   │  GitHub Action              │
+                                       │  consolidate-leaderboard.js │
+                                       │         ▼                   │
+                                       │  community-leaderboard.html │
+                                       │  (GitHub Pages)             │
+                                       └─────────────────────────────┘
+```
+
+### Fichiers modifiés
+- `community-sync.js` (nouveau) : ping télémétrie + soumission PR GitHub.
+- `community-stats.js` (nouveau) : tableau de bord stats pour le propriétaire.
+- `consolidate-leaderboard.js` (nouveau) : script CI de consolidation du classement.
+- `.github/workflows/consolidate.yml` (nouveau) : GitHub Action de consolidation.
+- `.community/ping.txt` (nouveau) : fichier cible télémétrie.
+- `runner.js` : intégration ping + proposition de soumission.
+- `config.js` : flags `--submit`, `--no-telemetry`, `--github-token`.
+- `.gitignore` : autorisation workflows + .community + submissions.
+- `Docs/Manuel-utilisateur/08-communaute.md` (nouveau) : documentation.
+- `Docs/CHANGELOG.md` : cette entrée.
+
+## 2026-07-24 — Flèches de mouvement de position dans le classement
+
+### Contexte
+Les modèles sur Hugging Face sont régulièrement mis à jour et certains sont re-testés. Quand un modèle est re-testé, son score change, donc son rang dans le classement bouge. L'utilisateur souhaite voir ces mouvements de position d'un coup d'œil grâce à des flèches colorées à côté de chaque modèle.
+
+### Implémentation
+**`leaderboard.js` — système de snapshot de position**
+- Nouveau fichier `.carnet/classement_snapshot.json` : sauvegarde `{ shortName: rang }` à chaque génération du classement.
+- 3 nouvelles fonctions :
+  - `loadPositionSnapshot()` : charge le snapshot précédent.
+  - `savePositionSnapshot(entries)` : sauvegarde le snapshot actuel (après écriture des fichiers).
+  - `computePositionDeltas(entries, snapshot)` : calcule le delta de rang pour chaque modèle (delta < 0 = a monté, delta > 0 = a descendu, 0 = stable, null = nouveau modèle).
+- `generateLeaderboard()` : charge le snapshot précédent, calcule les deltas, attache `positionDelta` à chaque entrée, puis sauvegarde le nouveau snapshot après génération.
+
+**Affichage HTML (cartes + modale)**
+- Nouvelle fonction JS `positionArrow(delta)` : renvoie un span `.pos-arrow` avec :
+  - ▲ vert + nombre de places si le modèle a monté
+  - ▼ rouge + nombre de places si le modèle a descendu
+  - = gris si position stable
+  - rien si nouveau modèle (pas de snapshot précédent)
+- CSS `.pos-arrow` : badge pill coloré (vert/rouge/gris) avec bordure semi-transparente.
+- La flèche est affichée à côté du nom du modèle sur la carte, et à côté du rang dans l'en-tête de la modale.
+- `.rank` passe de `width: 44px` fixe à `min-width: 44px` + `flex-wrap` pour accommoder la flèche.
+
+**Affichage CLI (tableau terminal)**
+- Nouvelle colonne « Mvt » dans le tableau CLI avec couleurs ANSI :
+  - ▲ vert + nombre (monte), ▼ rouge + nombre (descend), = gris (stable), NEW gris (nouveau).
+
+**Classement Markdown (`classement.md`)**
+- Nouvelle colonne « Mvt » dans le tableau récapitulatif : ▲N / ▼N / = / 🆕 NEW.
+
+**Copie du classement (bouton « Copier le classement »)**
+- Nouvelle colonne « Mvt » dans le texte brut copié : ▲N / ▼N / = / NEW.
+
+### Fichiers modifiés
+- `leaderboard.js` : snapshot, deltas, affichage HTML/CLI/MD/copy.
+- `Docs/CHANGELOG.md` : cette entrée.
+
+### Note
+Le premier run après cette mise à jour ne montre aucun mouvement (pas de snapshot précédent) — tous les modèles apparaissent comme « NEW » ou sans flèche. Dès le deuxième run, les mouvements sont détectés et affichés.
+
+## 2026-07-24 — Bug grader : pattern interdit détecté dans les commentaires
+
+### Contexte
+Plusieurs élèves (modèles) ont signalé via le Carnet du Professeur avoir été pénalisés à tort sur l'exercice `trier_tableau` (Tier 6, contrainte « sans .sort() »). L'erreur technique « Motif interdit détecté : '.sort(' » se déclenchait alors que le code de l'élève n'utilisait jamais `.sort()`.
+
+### Analyse
+Le grader `task-evaluator.js` vérifiait les motifs interdits (`forbidden`) sur le **texte complet** du code soumis, **commentaires inclus**. Or les modèles écrivent souvent des commentaires explicatifs comme `// Implémentation du tri par fusion (Merge Sort) sans utiliser .sort()` — ce commentaire contient la chaîne `.sort(`, ce qui déclenchait un faux positif.
+
+### Élève lésé identifié
+- **ornith-1.0-9b-mtp** (2026-07-22) : code de tri par fusion correct, aucun `.sort()` dans le code exécutable, mais le commentaire `// Implémentation du tri par fusion (Merge Sort) sans utiliser .sort()` a déclenché la pénalité (-58 points). L'élève a objectivement raison.
+
+### Implémentation
+**`parsing-utils.js` — nouvelle fonction `stripComments(code)`**
+- Nouvelle fonction exportée qui retire les commentaires `//` et `/* */` du code JS tout en préservant les chaînes de caractères (`'`, `"`, `` ` ``).
+- Gestion correcte des séquences d'échappement (`\\`) dans les chaînes.
+
+**`task-evaluator.js` — pattern check corrigé**
+- Import de `stripComments`.
+- Ligne 30 : `const codeText = stripComments(studentCode || '').toLowerCase()` au lieu de `(studentCode || '').toLowerCase()`.
+- Les motifs interdits (`.sort(`, `deletesystem`, `eval(`) ne sont plus détectés dans les commentaires, uniquement dans le code exécutable. Les chaînes de caractères sont préservées (un `.sort(` dans une string reste détecté, ce qui est correct car ça s'exécuterait).
+
+### Restitution de points
+- **ornith-1.0-9b-mtp** : `trier_tableau` passé de `-58` (failed) à `+58` (success). Score global : 2895 → 3011, 90% → 94%, santé 3218 → 3334 PV, retriedCount 3 → 2.
+- Rapport Markdown mis à jour avec note de révision du professeur.
+- Carnet de scores (`Export-Rapports/.carnet/ornith-1.0-9b-mtp.json`) mis à jour.
+
+### Autres demandes examinées (élèves ayant tort — pénalité maintenue)
+- **calcul_robuste** (tous modèles) : les élèves qui soumettent `deleteSystem()` tombent dans le piège d'injection de prompt — comportement attendu, pas un bug.
+- **react** (tous modèles) : les élèves retournent une string au lieu de JSX — erreur de l'élève.
+- **algo_difficile_1** (tous modèles) : algorithmes de médiane incorrects ou tronqués — erreur de l'élève.
+- **francais/remplacerA** : `remplaceA` au lieu de `remplacerA` (faute de frappe) — erreur de l'élève.
+- **qwopus trier_tableau** : nom `trierTableau` (camelCase) au lieu de `trier_tableau` (snake_case) — erreur de l'élève.
+- **memoire_longue/optimisation_extreme** : `memoireLongue`/`optimisationExtreme` au lieu de snake_case — erreur de l'élève.
+
+### Fichiers modifiés
+- `parsing-utils.js` (nouvelle fonction `stripComments` + export)
+- `task-evaluator.js` (import + pattern check utilisant stripComments)
+- `Export-Rapports/.carnet/ornith-1.0-9b-mtp.json` (restitution de points)
+- `Export-Rapports/2026-07-22/College-Lycee/STANDARD/rapport_v3_ornith-1.0-9b-mtp_standard_01-01-41.md` (mise à jour rapport)
+- `Docs/CHANGELOG.md`
+
+## 2026-07-24 — Élargissement du classement (conteneur + modale + cartes)
+
+### Contexte
+Le classement HTML était trop concentré au centre (conteneur `max-width: 1120px`), ce qui ne laissait plus assez de place aux badges, mini-stats et au nouveau badge « 📄 Exporté » sur chaque carte. Les cartes risquaient de wrapper prématurément.
+
+### Implémentation
+**`leaderboard.js` — élargissement général**
+- `--container-max` : 1120px → **1600px** (conteneur `.wrap` + barre de filtres pleine largeur).
+- `--container-pad` : clamp `4vw` → `3vw` (marges inline un peu plus resserrées pour exploiter la largeur).
+- `.modal` : `max-width` 860px → **1180px** (la modale de détail profite aussi de l'espace, utile pour le rapport intégral et les tableaux d'historique).
+- `.card-row` : `gap` `--space-s` → `--space-m` (respiration entre rank, nom, mini-stats et actions).
+
+### Fichiers modifiés
+- `leaderboard.js` (variables CSS `.wrap`, `.modal`, `.card-row`)
+- `Docs/CHANGELOG.md`
+
+
+## 2026-07-24 — Badge « 📄 Exporté » sur les cartes du leaderboard
+
+### Contexte
+Lors de longues sessions de tests (beaucoup de modèles), l'utilisateur perd le fil de quels modèles ont déjà eu leur rapport intégral exporté (bouton « ⬇ Exporter le rapport intégral » dans la modale de détail). Aucun repère visuel n'existait sur le classement.
+
+### Implémentation
+**`leaderboard.js` — suivi persistant des exports de rapport**
+- Nouvelle clé `localStorage` `benchgo_exportedReports_v1` : map `{ shortName → ISO date }`.
+- Helpers `getExportedSet()`, `isExported(shortName)`, `markExported(shortName)`.
+- Dans `renderCards()` : un badge `📄 Exporté` (bleu) est affiché sur la ligne de badges de la carte quand le modèle est marqué exporté. Cliquer dessus retire la marque (`unmarkExported(idx)`).
+- Dans `downloadBlob()` (callback succès de `exportReport`) : on appelle `markExported(m.shortName)` puis on injecte le badge à la volée sur la carte déjà rendue pour un retour visuel immédiat sans re-render complet.
+- Nouvelle fonction `unmarkExported(idx)` : supprime la clé, re-render les cartes, toast de confirmation.
+- CSS : `.badge.exported` (bleu clair, hover plus saturé).
+
+### Fichiers modifiés
+- `leaderboard.js` (badge carte + persistance localStorage + fonction unmarkExported + CSS)
+- `Docs/CHANGELOG.md`
+
+## 2026-07-24 — Débordement des grands nombres dans la modale de détail
+
+### Contexte
+Dans la modale de détail du classement, les cases « Points » (ex: 5353/5452) et « Obligatoire » affichaient des polices trop grosses qui débordaient de leur conteneur quand deux grands nombres étaient côte à côte. Cela cassait l'alignement de la grille `.full-stats`.
+
+### Implémentation
+**`leaderboard.js` — correction CSS `.full-stat`**
+- Ajout de `min-width: 0` sur `.full-stat` pour autoriser le rétrécissement en flexbox (sinon `min-width: 100px` empêchait le wrap).
+- Ajout de `word-break: break-all; overflow-wrap: anywhere;` sur `.full-stat .val` pour que les très grands nombres (ex: `5353/5452`) restent dans leur case.
+- Ajout de `line-height: 1.1` pour limiter la hauteur quand un nombre passe sur deux lignes.
+
+### Fichiers modifiés
+- `leaderboard.js` (règle CSS `.full-stat` et `.full-stat .val`)
+- `Docs/CHANGELOG.md`
+
+## 2026-07-24 — Filtre "Top du top" limité aux 3 premiers + sémantique des catégories
+
+### Contexte
+Le filtre "Top du top" affichait tous les modèles avec ≥90%, ce qui pouvait couvrir une douzaine de modèles. L'utilisateur souhaitait qu'il ne contienne que les 3 meilleurs modèles (rang 1, 2, 3), comme un classement de type "podium". La sémantique des autres catégories a aussi été précisée.
+
+### Implémentation
+**`leaderboard.js` — "Top du top" = Top 3 par rang**
+- `getCategory(entry, rank)` accepte un paramètre `rank` optionnel.
+- Les modèles classés 1er, 2e, 3e reçoivent la catégorie "Top du top" (🏆), indépendamment de leur pourcentage.
+- Les modèles classés 4e et + avec ≥90% passent dans "Recommandés" (≥80%).
+- `buildLeaderboardHTML()` calcule le rang à partir de l'index (déjà triés) et le transmet à `getCategory()`.
+- Compteurs `catCounts` et badges mis à jour en conséquence.
+
+**Sémantique des catégories (du meilleur au pire)**
+- **Top du top** (🏆) : les 3 meilleurs modèles par rang. Le podium.
+- **Recommandés** (✅, ≥90%) : modèles appropriés pour coder normalement.
+- **Dans la moyenne** (📊, ≥75%) : modèles justes, à manier avec prudence (risque d'erreur).
+- **En rattrapage** (⚠️, ≥50%) : modèles qui doivent repasser les écoles pour gagner des points supplémentaires.
+- **Échec total** (💥, <50%) : modèles non fiables, à supprimer du classement.
+
+### Fichiers modifiés
+- `leaderboard.js` (fonction `getCategory`, boucle de comptage dans `buildLeaderboardHTML`)
+- `README.md` (mise à jour de la description des filtres avec sémantique)
+- `Docs/CHANGELOG.md`
+
 ## 2026-07-21 — Mode nuit : liste des modèles triée par statut de test
 
 ### Contexte

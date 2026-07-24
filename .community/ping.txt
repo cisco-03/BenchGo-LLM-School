@@ -1,0 +1,9 @@
+BenchGo V3 — Fichier de ping télémétrie.
+
+Ce fichier existe uniquement pour servir de cible au ping télémétrie anonyme.
+Chaque fetch de ce fichier (depuis community-sync.js) incrémente le compteur
+de vues du dépôt dans GitHub Insights → Traffic, permettant au propriétaire
+d'estimer le nombre d'utilisateurs actifs. Aucune donnée personnelle n'est
+collectée — le userId envoyé en query string est un hash aléatoire non-identifiant.
+
+Pour désactiver la télémétrie : node runner.js --no-telemetry
