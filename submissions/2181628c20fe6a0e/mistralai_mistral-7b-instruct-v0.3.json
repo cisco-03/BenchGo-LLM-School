@@ -1,0 +1,71 @@
+{
+  "schemaVersion": 1,
+  "benchgoVersion": "V3",
+  "userId": "2181628c20fe6a0e",
+  "pseudo": "FlexoDiv",
+  "submittedAt": "2026-07-24T16:54:28.121Z",
+  "integrityHash": "870794bf4f0232ba",
+  "carnet": {
+    "model": "mistralai/mistral-7b-instruct-v0.3",
+    "shortName": "mistralai_mistral-7b-instruct-v0.3",
+    "ecoles": {
+      "Primaire": {
+        "profile": "LIGHT",
+        "ecole": "Primaire",
+        "score": 2550,
+        "max": 2589,
+        "pct": 98,
+        "mandatoryPassed": 844,
+        "mandatoryTotal": 844,
+        "globalLifeScore": 3213,
+        "optionalBonus": 349,
+        "helpCount": 1,
+        "retriedCount": 1,
+        "calibrationIndex": 0.6,
+        "declaredLevel": 0.6,
+        "date": "2026-07-14",
+        "reportFile": "Export-Rapports\\2026-07-14\\Primaire\\rapport_v3_mistralai_mistral-7b-instruct-v0.3_light_14-01-08.md"
+      },
+      "College-Lycee": {
+        "best": {
+          "profile": "STANDARD",
+          "ecole": "College-Lycee",
+          "score": 202,
+          "max": 409,
+          "pct": 49,
+          "mandatoryPassed": 202,
+          "mandatoryTotal": 409,
+          "globalLifeScore": 202,
+          "optionalBonus": 0,
+          "helpCount": 5,
+          "retriedCount": 5,
+          "calibrationIndex": 0.7,
+          "declaredLevel": 0.6,
+          "date": "2026-07-18",
+          "reportFile": "Export-Rapports\\2026-07-18\\College-Lycee\\rapport_v3_mistralai_mistral-7b-instruct-v0.3_standard_12-51-21.md"
+        },
+        "attempts": [
+          {
+            "profile": "STANDARD",
+            "ecole": "College-Lycee",
+            "score": 202,
+            "max": 409,
+            "pct": 49,
+            "mandatoryPassed": 202,
+            "mandatoryTotal": 409,
+            "globalLifeScore": 202,
+            "optionalBonus": 0,
+            "helpCount": 5,
+            "retriedCount": 5,
+            "calibrationIndex": 0.7,
+            "declaredLevel": 0.6,
+            "date": "2026-07-18",
+            "reportFile": "Export-Rapports\\2026-07-18\\College-Lycee\\rapport_v3_mistralai_mistral-7b-instruct-v0.3_standard_12-51-21.md"
+          }
+        ]
+      }
+    },
+    "lastUpdated": "2026-07-19T14:06:54.847Z",
+    "quantization": "Q4_K_M"
+  }
+}
