@@ -1,0 +1,320 @@
+
+const LM_STUDIO_API_URL = "http://localhost:1234/v1/chat/completions";
+const LM_STUDIO_MODELS_URL = "http://localhost:1234/v1/models";
+// Endpoint v0 de LM Studio : expose des métadonnées plus riches que /v1/models,
+// notamment la quantification (Q4_K_M, Q5_K_S, Q8_0...), l'architecture, l'éditeur
+// et l'état (loaded / not-loaded). /v1/models (compatible OpenAI) ne renvoie que
+// l'id du modèle, sans la quantification — d'où l'usage de /api/v0/models ici.
+const LM_STUDIO_MODELS_V0_URL = "http://localhost:1234/api/v0/models";
+const EVAL_TIMEOUT_MS = 10000;
+const API_TIMEOUT_MS = 1500000;
+// Auto-profilage : budget temps. Le profil JSON attendu est court, mais on ne
+// limite PLUS max_tokens (carte blanche) : limiter la sortie tronque le JSON chez
+// les modèles bavards et provoque l'erreur systématique observée dans le log
+// benchgo_2026-07-20T07-31-39. On laisse le modèle répondre complètement.
+// Timeout généreux : les modèles de raisonnement (GLM, Qwen3, DeepSeek-R1,
+// phi-4-reasoning-plus) mettent du temps même avec reasoning désactivé. 300s était
+// trop court et provoquait des timeouts injustes sur les tiers complexes (le modèle
+// était discriminé sans avoir pu répondre). 1500s laisse largement le temps de
+// répondre sans bloquer indéfiniment — les timeouts sur réponse sont INTERDITS
+// car ils pénalisent injustement les élèves.
+const PROFILING_TIMEOUT_MS = 600000;
+const PROFILING_MAX_TOKENS = 0;  // 0 = illimité (carte blanche, ne pas tronquer le JSON)
+// Nombre de tentatives d'auto-profilage avant de baisser les bras. Chaque
+// tentative change de stratégie (json_schema → texte → raisonnement activé).
+// L'auto-profilage est NON NÉGOCIABLE : on essaie plusieurs approches.
+const PROFILING_RETRY_MAX = 3;
+const OPTIONAL_BONUS_PCT = 0.20; // Bonus appliqué aux exercices optionnels réussis (20% des points de base)
+
+// --- Professeur (correcteur IA distinct de l'élève) ---
+// Après un échec définitif, l'élève (le modèle testé) s'auto-analyse. Puis un
+// PROFESSEUR indépendant — un modèle cloud plus robuste — relit cette analyse,
+// identifie ce qui est juste/faux et DÉMONTRE la vraie cause racine. Cela évite
+// qu'un modèle faible se contredise lui-même ou valide une analyse erronée.
+//
+// Par défaut : OpenRouter gratuit (aucune clé requise pour les modèles :free).
+// Override possible via --teacher-model / --teacher-api-key / --teacher-endpoint.
+const TEACHER_CONFIG = {
+  enabled: true,
+  provider: 'openrouter',
+  // Modèle gratuit par défaut (clean, bon en français, robuste pour la critique).
+  model: 'openrouter/free',
+  apiKey: null,         // Surcharge via --teacher-api-key ou OPENROUTER_API_KEY
+  endpoint: null,      // Surcharge via --teacher-endpoint (rare)
+  maxRetries: 3,       // Tentatives avant repli sur l'auto-analyse de l'élève
+  temperature: 0.15,    // Déterministe mais pas rigide pour l'analyse pédagogique
+  maxTokens: 512        // Limite stricte : l'analyse prof doit rester concise
+};
+
+const PROFILES = {
+  LIGHT:    { mandatory: [0, 1],          optional: [2, 3, 4, 5],    label: "LIGHT — Primaire (< 3B paramètres)",                      ecole: "Primaire"    },
+  STANDARD: { mandatory: [0, 1, 2],       optional: [3, 4, 5, 6],    label: "STANDARD — Collège/Lycée (3B – 14B paramètres)",         ecole: "College-Lycee" },
+  EXPERT:   { mandatory: [0, 1, 2, 3],    optional: [6],             label: "EXPERT — Université (14B – 30B paramètres)",               ecole: "Universite"    },
+  DOCTORAT: { mandatory: [0, 1, 2, 3, 6], optional: [],              label: "DOCTORAT — Thèse (> 30B paramètres)",                     ecole: "Doctorat-These" },
+  FRONTIER: { mandatory: [0, 1, 2, 3, 4, 6], optional: [],           label: "FRONTIER — Post-Doctorat (modèles cloud frontier)",        ecole: "Post-Doctorat" }
+};
+
+// Noms de classes par profil et numéro de tier (pour les dossiers d'export)
+const CLASSE_NAMES = {
+  LIGHT:    { 0: "Classe-0-Maternelle", 1: "Classe-1-CP",        2: "Classe-2-CE1",          3: "Classe-3-CE2",        4: "Classe-4-CM1",         5: "Classe-5-CM2" },
+  STANDARD: { 0: "Classe-0-6eme",       1: "Classe-1-5eme",      2: "Classe-2-4eme",         3: "Classe-3-3eme",       4: "Classe-4-2nde",        5: "Classe-5-1ere", 6: "Classe-6-Terminale" },
+  EXPERT:   { 0: "Classe-0-Licence1",   1: "Classe-1-Licence2",  2: "Classe-2-L3-Master1",   3: "Classe-3-Master2",    6: "Classe-6-Doctorat" },
+  DOCTORAT: { 0: "Classe-0-Doctorat1",  1: "Classe-1-Doctorat2", 2: "Classe-2-Doctorat3",    3: "Classe-3-Soutenance", 6: "Classe-6-Expertise" },
+  FRONTIER: { 0: "Classe-0-PostDoc1",   1: "Classe-1-PostDoc2",  2: "Classe-2-PostDoc3",     3: "Classe-3-PostDoc4",   4: "Classe-4-Frontier", 6: "Classe-6-Ultimate" }
+};
+
+// Auto-profilage & Calibration : le runner interroge le modèle au démarrage pour
+// qu'il s'auto-évalue sur 4 compétences clés, puis filtre les tâches trop difficiles
+// selon le niveau déclaré. bypassFilter=true garde le profilage mais exécute tout.
+const selfProfiling = {
+  enabled: true,
+  minLevelToTest: 2,     // Niveau minimum déclaré (1 à 5) pour lancer les tests associés
+  bypassFilter: false    // true = profilage conservé mais exécution de TOUS les tests
+};
+
+const SPINNER_FRAMES = '\u2588';
+
+const SPINNER_CHARS = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+
+// Messages pédagogiques rotatifs affichés pendant les temps morts (avant/après
+// l'auto-profilage) pour tenir l'utilisateur en haleine. PAS d'humour (conformément
+// à la décision spinner_no_humor) : phrases informatives et rassurantes qui
+// expliquent ce que le modèle fait. Chaque phase a sa propre liste. Les phrases
+// tournent toutes les ~5-10s pour donner un sentiment de progression et d'activité.
+const PROFILING_WAITING_MESSAGES = [
+  "Je consulte mes compétences en JavaScript...",
+  "J'évalue mon niveau sur 4 domaines clés : Bases, Async, Algorithmes, Débogage.",
+  "Auto-évaluation en cours — je dois être lucide et honnête sur mes capacités.",
+  "Cette étape détermine quels exercices me seront accessibles pendant l'examen.",
+  "Je passe en revue Promises, async/await, concurrence limitée et retry/backoff.",
+  "J'estime ma maîtrise des LRU, Trie, arbres, heap, graphes, Dijkstra, BFS/DFS...",
+  "Veuillez patienter, je m'auto-évalue pour ne pas attaquer des exercices trop difficiles.",
+  "Un niveau 5 est rare — je reste prudent dans mon auto-jugement.",
+  "Bientôt : je saurai exactement quelles classes je peux tenter."
+];
+
+const POST_PROFILING_WAITING_MESSAGES = [
+  "Je prends connaissance de mes exercices à réaliser...",
+  "Préparation de la session d'examen — chargement des classes du profil...",
+  "Veuillez patienter, je découvre mon programme d'évaluation.",
+  "Chargement des exercices : mathématiques, français, sciences, algorithmique...",
+  "Mise en place de l'environnement de test (bac à sable VM)...",
+  "Je m'installe à ma table d'examen, prête à commencer.",
+  "Presque prêt — les premiers exercices arrivent.",
+  "Veuillez patienter, je classe les exercices par ordre de difficulté.",
+  "L'examen va commencer, merci de rester avec moi."
+];
+
+// Messages pédagogiques génériques pour n'importe quelle phase d'attente longue
+// (ex: chargement des tiers, génération de rapport). Pas d'humour, informatifs.
+const GENERIC_WAITING_MESSAGES = [
+  "Traitement en cours, veuillez patienter...",
+  "Le modèle travaille, merci de patienter...",
+  "Opération en cours, ne fermez pas la fenêtre..."
+];
+
+const WAITING_MESSAGES = [
+  "Veuillez patienter, je réfléchis très fort...",
+  "Consultation des circuits neuronaux en cours...",
+  "Le modèle rassemble ses idées (et son courage)...",
+  "Chargement de l'inspiration artificielle...",
+  "Ça mouline sec dans les GPU...",
+  "Chut, ça réfléchit...",
+  "Le modèle pèse le pour et le contre...",
+  "Encore un peu de patience, le génie prend son temps...",
+  "Recherche de la réponse parfaite en cours...",
+  "Ne débranchez surtout rien, ça pense fort là-dedans...",
+  "Le modèle fait chauffer ses neurones artificiels...",
+  "Analyse en cours, merci de ne pas réveiller le modèle..."
+];
+
+function parseCliArgs() {
+  const rawArgs = process.argv.slice(2);
+  const tierArg = rawArgs.find(a => !a.startsWith('--')) || "all";
+  const profileArgRaw    = ((rawArgs.find(a => a.startsWith('--profile='))       || '').split('=')[1]);
+  const contextLimitRaw  = ((rawArgs.find(a => a.startsWith('--context-limit=')) || '').split('=')[1]);
+  const providerArgRaw   = ((rawArgs.find(a => a.startsWith('--provider='))      || '').split('=')[1]);
+  // --model, --api-key et --endpoint peuvent contenir des '=' (tokens base64, URLs) → on joint tout après le premier '='
+  const modelArgRaw    = (() => { const a = rawArgs.find(r => r.startsWith('--model='));    return a ? a.split('=').slice(1).join('=') : null; })();
+  const apiKeyArgRaw   = (() => { const a = rawArgs.find(r => r.startsWith('--api-key='));  return a ? a.split('=').slice(1).join('=') : null; })();
+  const endpointArgRaw = (() => { const a = rawArgs.find(r => r.startsWith('--endpoint=')); return a ? a.split('=').slice(1).join('=') : null; })();
+
+  // --- Override du professeur (modèle cloud indépendant qui corrige l'élève) ---
+  const teacherModelRaw    = (() => { const a = rawArgs.find(r => r.startsWith('--teacher-model='));    return a ? a.split('=').slice(1).join('=') : null; })();
+  const teacherApiKeyRaw   = (() => { const a = rawArgs.find(r => r.startsWith('--teacher-api-key='));  return a ? a.split('=').slice(1).join('=') : null; })();
+  const teacherEndpointRaw = (() => { const a = rawArgs.find(r => r.startsWith('--teacher-endpoint=')); return a ? a.split('=').slice(1).join('=') : null; })();
+  const teacherDisabledRaw = rawArgs.includes('--no-teacher');
+
+  // Quantification du modèle (ex: Q4_K_M, Q5_K_S, Q8_0...). Les serveurs locaux
+  // (LM Studio, Ollama) ne l'exposent pas toujours dans le nom du modèle, et
+  // /v1/models (OpenAI-compat) ne la renvoie pas non plus. On la récupère via
+  // /api/v0/models (LM Studio) ou on la prend depuis ce flag CLI / le questionnaire.
+  const quantizationRaw = (() => { const a = rawArgs.find(r => r.startsWith('--quantization=')); return a ? a.split('=').slice(1).join('=') : null; })();
+
+  // --- Presets de configuration (fichiers locaux non-commités) ---
+  const presetRaw          = (() => { const a = rawArgs.find(r => r.startsWith('--preset='));           return a ? a.split('=').slice(1).join('=') : null; })();
+  const savePresetRaw       = (() => { const a = rawArgs.find(r => r.startsWith('--save-preset='));     return a ? a.split('=').slice(1).join('=') : null; })();
+  const deletePresetRaw    = (() => { const a = rawArgs.find(r => r.startsWith('--delete-preset='));   return a ? a.split('=').slice(1).join('=') : null; })();
+  const listPresetsFlag    = rawArgs.includes('--list-presets');
+
+  // --- Clés API persistantes (tous providers) ---
+  // --forget-key=provider efface une clé mémorisée localement et quitte.
+  // --list-keys affiche les providers dont une clé est mémorisée et quitte.
+  // --no-save-keys désactive la proposition de mémorisation des clés ce run.
+  const forgetKeyRaw   = (() => { const a = rawArgs.find(r => r.startsWith('--forget-key='));         return a ? a.split('=').slice(1).join('=') : null; })();
+  const listKeysFlag   = rawArgs.includes('--list-keys');
+  const noSaveKeysFlag = rawArgs.includes('--no-save-keys');
+
+  // --- Mode batch / nuit ---
+  // --force : en session non-interactive (non-TTY), accepte automatiquement les
+  // confirmations de re-test (modèle déjà testé sur une école). Sans ce flag, le
+  // runner annulerait silencieusement le run en non-TTY (askYesNo retourne false).
+  // Conçu pour night-batch.js qui enchaîne plusieurs modèles sans intervention.
+  const forceFlag = rawArgs.includes('--force');
+
+  // --- Communauté : soumission & télémétrie ---
+  // --submit : ouvre une Pull Request sur le dépôt communautaire avec le carnet
+  //   de scores du modèle testé (nécessite un token GitHub PAT).
+  // --no-telemetry : désactive le ping télémétrie anonyme (compteur d'utilisateurs).
+  // --github-token=xxx : fournit le PAT GitHub pour la soumission (évite la saisie interactive).
+  const submitFlag = rawArgs.includes('--submit');
+  const noTelemetryFlag = rawArgs.includes('--no-telemetry');
+  const githubTokenRaw = (() => { const a = rawArgs.find(r => r.startsWith('--github-token=')); return a ? a.split('=').slice(1).join('=') : null; })();
+
+  const profileArgExplicit = profileArgRaw ? profileArgRaw.toUpperCase() : null;
+  const parsedContextLimit = contextLimitRaw ? parseInt(contextLimitRaw, 10) : null;
+  const contextLimitTokens = Number.isInteger(parsedContextLimit) && parsedContextLimit > 0
+    ? parsedContextLimit
+    : null;
+  const provider = providerArgRaw ? providerArgRaw.toLowerCase() : null;
+  const model    = modelArgRaw  || null;
+  const apiKey   = apiKeyArgRaw || null;
+  const endpoint = endpointArgRaw || null;
+
+  // Si --provider est spécifié sans --profile, on présume un modèle frontier
+  let profileArg = profileArgExplicit || (provider ? 'FRONTIER' : 'STANDARD');
+
+  return { tierArg, profileArg, profileArgExplicit, contextLimitTokens, provider, model, apiKey, endpoint,
+           teacherModel: teacherModelRaw, teacherApiKey: teacherApiKeyRaw, teacherEndpoint: teacherEndpointRaw,
+           teacherDisabled: teacherDisabledRaw, quantization: quantizationRaw,
+           preset: presetRaw, savePreset: savePresetRaw, deletePreset: deletePresetRaw, listPresets: listPresetsFlag,
+            forgetKey: forgetKeyRaw, listKeys: listKeysFlag, noSaveKeys: noSaveKeysFlag, force: forceFlag,
+            submit: submitFlag, noTelemetry: noTelemetryFlag, githubToken: githubTokenRaw };
+}
+
+function detectProfileFromModelName(modelName) {
+  const sizePatterns = [
+    /([\d]+[.,]?[\d]*)\s*b/i,
+    /([\d]+[.,]?[\d]*)\s*billion/i,
+    /([\d]+[.,]?[\d]*)\s*g/
+  ];
+
+  let paramSize = null;
+  for (const pattern of sizePatterns) {
+    const match = modelName.match(pattern);
+    if (match) {
+      paramSize = parseFloat(match[1].replace(',', '.'));
+      break;
+    }
+  }
+
+  let detected = null;
+  if (paramSize !== null) {
+    if (paramSize < 3)   detected = 'LIGHT';
+    else if (paramSize <= 14) detected = 'STANDARD';
+    else if (paramSize <= 30) detected = 'EXPERT';
+    else detected = 'DOCTORAT';
+  }
+
+  return { paramSize, detected };
+}
+
+async function fetchModelNameFromLMStudio() {
+  try {
+    const response = await fetch(LM_STUDIO_MODELS_URL, {
+      method: "GET",
+      headers: { "Content-Type": "application/json" }
+    });
+    if (!response.ok) return null;
+    const data = await response.json();
+    if (data.data && data.data.length > 0) {
+      return data.data[0].id || data.data[0].name || null;
+    }
+    return null;
+  } catch (e) {
+    return null;
+  }
+}
+
+// Récupère les métadonnées riches d'un modèle depuis l'endpoint v0 de LM Studio.
+// Contrairement à /v1/models (qui ne donne que l'id), /api/v0/models renvoie la
+// quantification (Q4_K_M, Q5_K_S, Q8_0...), l'architecture, l'éditeur et l'état.
+//
+// @param {string|null} modelId - id du modèle à cibler (ex: "mythos-9b-unhinged").
+//   Si null/undefined : renvoie le premier modèle "loaded", sinon le premier tout
+//   court.
+// @returns {Promise<object|null>} { name, quantization, arch, publisher, state,
+//   maxContextLength } ou null si indisponible (LM Studio éteint, endpoint absent,
+//   modèle introuvable).
+async function fetchModelMetadataFromLMStudio(modelId) {
+  try {
+    const response = await fetch(LM_STUDIO_MODELS_V0_URL, {
+      method: "GET",
+      headers: { "Content-Type": "application/json" }
+    });
+    if (!response.ok) return null;
+    const data = await response.json();
+    if (!data.data || data.data.length === 0) return null;
+
+    // Cherche l'entrée correspondant à modelId (priorité au modèle chargé si
+    // plusieurs partagent le même id). Si modelId est absent, on prend le premier
+    // modèle "loaded", sinon le premier de la liste.
+    let entry = null;
+    if (modelId) {
+      const matches = data.data.filter(m => m.id === modelId);
+      if (matches.length > 0) {
+        entry = matches.find(m => m.state === 'loaded') || matches[0];
+      }
+    }
+    if (!entry) {
+      entry = data.data.find(m => m.state === 'loaded') || data.data[0];
+    }
+
+    return {
+      name: entry.id || null,
+      quantization: entry.quantization || null,
+      arch: entry.arch || null,
+      publisher: entry.publisher || null,
+      state: entry.state || null,
+      maxContextLength: entry.max_context_length || null
+    };
+  } catch (e) {
+    return null;
+  }
+}
+
+module.exports = {
+  LM_STUDIO_API_URL,
+  LM_STUDIO_MODELS_URL,
+  LM_STUDIO_MODELS_V0_URL,
+  EVAL_TIMEOUT_MS,
+  API_TIMEOUT_MS,
+  PROFILING_TIMEOUT_MS,
+  PROFILING_MAX_TOKENS,
+  PROFILING_RETRY_MAX,
+  OPTIONAL_BONUS_PCT,
+  PROFILES,
+  CLASSE_NAMES,
+  SPINNER_FRAMES,
+  SPINNER_CHARS,
+  WAITING_MESSAGES,
+  PROFILING_WAITING_MESSAGES,
+  POST_PROFILING_WAITING_MESSAGES,
+  GENERIC_WAITING_MESSAGES,
+  TEACHER_CONFIG,
+  parseCliArgs,
+  detectProfileFromModelName,
+  fetchModelNameFromLMStudio,
+  fetchModelMetadataFromLMStudio,
+  selfProfiling
+};

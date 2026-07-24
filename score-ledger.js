@@ -1,0 +1,315 @@
+const fs = require('fs');
+const path = require('path');
+const logger = require('./logger');
+const { letterGrade } = require('./progress-bar');
+const cliTable = require('./cli-table');
+
+const LEDGER_DIR = path.join(__dirname, 'Export-Rapports', '.carnet');
+
+function ledgerPath(shortName) {
+  return path.join(LEDGER_DIR, shortName + '.json');
+}
+
+// Formate une durée en millisecondes vers un affichage humain compact :
+//   1234ms   -> "1.2s"
+//   65000ms  -> "1m05s"
+//   3723000ms -> "1h02m"
+// Utilisé pour l'affichage du temps d'inférence par école dans le bilan et le
+// leaderboard (durée d'inférence cumulée, hors attentes entre tiers).
+function formatDuration(ms) {
+  if (!Number.isFinite(ms) || ms <= 0) return '—';
+  const s = ms / 1000;
+  if (s < 60) return s.toFixed(1) + 's';
+  const totalSec = Math.round(s);
+  const m = Math.floor(totalSec / 60);
+  const sec = totalSec % 60;
+  if (m < 60) return m + 'm' + String(sec).padStart(2, '0') + 's';
+  const h = Math.floor(m / 60);
+  const min = m % 60;
+  return h + 'h' + String(min).padStart(2, '0') + 'm';
+}
+
+function loadLedger(shortName) {
+  const file = ledgerPath(shortName);
+  try {
+    if (fs.existsSync(file)) {
+      const data = JSON.parse(fs.readFileSync(file, 'utf8'));
+      if (!data.ecoles) data.ecoles = {};
+      return data;
+    }
+  } catch (e) {
+    logger.warn('Carnet de scores illisible, recréation : ' + e.message);
+  }
+  return { model: null, shortName: shortName, ecoles: {}, lastUpdated: null };
+}
+
+function saveLedger(ledger) {
+  try {
+    fs.mkdirSync(LEDGER_DIR, { recursive: true });
+    ledger.lastUpdated = new Date().toISOString();
+    fs.writeFileSync(ledgerPath(ledger.shortName), JSON.stringify(ledger, null, 2) + '\n', 'utf8');
+  } catch (e) {
+    logger.error('Impossible de sauvegarder le carnet de scores : ' + e.message);
+  }
+}
+
+// Normalise une entrée d'école du carnet vers le format cumul { best, attempts }.
+// Gère l'ancien format (entrée = résultat unique) et le nouveau format cumul.
+function normalizeEcoleEntry(raw) {
+  if (!raw) return { best: null, attempts: [] };
+  // Nouveau format cumul
+  if (raw.attempts && Array.isArray(raw.attempts)) {
+    let best = raw.best;
+    if (!best && raw.attempts.length > 0) best = pickBest(raw.attempts);
+    return { best: best, attempts: raw.attempts.slice() };
+  }
+  // Ancien format (résultat unique) — migration
+  if (raw.score != null || raw.max != null || raw.pct != null) {
+    return { best: raw, attempts: [raw] };
+  }
+  // Inattendu
+  return { best: null, attempts: [] };
+}
+
+// Sélectionne la meilleure tentative d'une liste (pct le plus élevé ; égalité -> dernière).
+function pickBest(attempts) {
+  if (!attempts || attempts.length === 0) return null;
+  let best = attempts[0];
+  for (let i = 1; i < attempts.length; i++) {
+    if ((attempts[i].pct || 0) >= (best.pct || 0)) best = attempts[i];
+  }
+  return best;
+}
+
+// Conserve TOUTES les tentatives par école (historique des re-tests), la meilleure
+// est référencée par `best` pour le classement global. Migration auto des anciens carnets.
+// `quantization` (optionnel) est stockée au niveau du carnet (par modèle) : un même
+// modèle testé avec plusieurs quantifications verra sa dernière quantification connue
+// mise à jour. C'est au niveau du résultat qu'elle est aussi conservée, pour l'historique.
+function saveResult(shortName, modelName, result, quantization) {
+  const ledger = loadLedger(shortName);
+  ledger.model = modelName;
+  ledger.shortName = shortName;
+  // La quantification est une propriété du modèle physique (pas de l'école). On la
+  // conserve au niveau du carnet pour que le classement puisse l'afficher même sans
+  // recharger tous les résultats. Si fournie, on écrase la valeur précédente (la
+  // dernière connue prime).
+  if (quantization) {
+    ledger.quantization = quantization;
+  }
+  const entry = normalizeEcoleEntry(ledger.ecoles[result.ecole]);
+  entry.attempts.push(result);
+  const newBest = pickBest(entry.attempts);
+  const prevBest = entry.best;
+  entry.best = newBest;
+  ledger.ecoles[result.ecole] = entry;
+  if (prevBest && newBest && newBest !== prevBest) {
+    logger.info('Carnet : ' + result.ecole + ' nouvelle meilleure tentative (' + newBest.pct + '%, ' + entry.attempts.length + ' tentative(s) cumulée(s)).');
+  } else {
+    logger.info('Carnet : ' + result.ecole + ' tentative #' + entry.attempts.length + ' enregistrée (meilleure : ' + (newBest ? newBest.pct : '?') + '%).');
+  }
+  saveLedger(ledger);
+  return ledger;
+}
+
+// Renvoie la meilleure tentative d'une entrée d'école (gère ancien et nouveau format).
+function getEcoleBest(raw) {
+  return normalizeEcoleEntry(raw).best;
+}
+
+// Renvoie la liste des tentatives (chronologique) d'une entrée d'école.
+function getEcoleAttempts(raw) {
+  return normalizeEcoleEntry(raw).attempts;
+}
+
+function computeGrandTotal(ledger) {
+  const entries = Object.values(ledger.ecoles || {}).map(getEcoleBest).filter(Boolean);
+  let score = 0, max = 0, globalLifeScore = 0, optionalBonus = 0;
+  let totalTokens = 0, totalElapsedMs = 0, totalWallMs = 0;
+  for (const e of entries) {
+    score += e.score || 0;
+    max += e.max || 0;
+    globalLifeScore += e.globalLifeScore || 0;
+    optionalBonus += e.optionalBonus || 0;
+    totalTokens += e.tokens || 0;
+    totalElapsedMs += e.elapsedMs || 0;
+    totalWallMs += e.wallMs || 0;
+  }
+  const pct = max > 0 ? Math.round((score / max) * 100) : 0;
+  const tokensPerSecond = totalElapsedMs > 0
+    ? Math.round((totalTokens / (totalElapsedMs / 1000)) * 100) / 100
+    : 0;
+  return {
+    score, max, pct, globalLifeScore, optionalBonus, ecoleCount: entries.length,
+    tokens: totalTokens, elapsedMs: totalElapsedMs, wallMs: totalWallMs, tokensPerSecond
+  };
+}
+
+function printBilanGlobal(shortName, modelName) {
+  const ledger = loadLedger(shortName);
+  const rawEntries = Object.values(ledger.ecoles || {});
+  const entries = rawEntries.map(getEcoleBest).filter(Boolean);
+  if (entries.length === 0) return;
+
+  console.log('');
+  console.log('  \x1b[1;35m━━━ BILAN GLOBAL — ' + (modelName || shortName) + ' (cumul multi-écoles) ━━━\x1b[0m');
+
+  const headers = ['École', 'Points', 'Pct', 'Note', 'Statut'];
+  const aligns = ['left', 'right', 'right', 'center', 'left'];
+  const rows = [];
+  let totalScore = 0, totalMax = 0, totalBonus = 0, totalSante = 0;
+  let totalTokens = 0, totalElapsedMs = 0, totalWallMs = 0;
+  const metaLines = [];
+  for (let i = 0; i < entries.length; i++) {
+    const e = entries[i];
+    const raw = rawEntries[i];
+    const attempts = getEcoleAttempts(raw);
+    totalScore += e.score || 0;
+    totalMax += e.max || 0;
+    totalBonus += e.optionalBonus || 0;
+    totalSante += e.globalLifeScore || 0;
+    totalTokens += e.tokens || 0;
+    totalElapsedMs += e.elapsedMs || 0;
+    totalWallMs += e.wallMs || 0;
+    const pct = e.max > 0 ? Math.round((e.score / e.max) * 100) : 0;
+    const g = letterGrade(pct);
+    const status = e.mandatoryTotal > 0 ? (pct >= 70 ? '\x1b[32m✔ Validé\x1b[0m' : '\x1b[31m✘ Échec\x1b[0m') : '\x1b[36m(évaluée)\x1b[0m';
+    const bonusTag = (e.optionalBonus > 0) ? ' \x1b[35m[+' + e.optionalBonus + ' bonus opt.]\x1b[0m' : '';
+    const pts = (e.score || 0) + '/' + (e.max || 0);
+    const histTag = attempts.length > 1 ? ' \x1b[90m(' + attempts.length + ' tentatives)\x1b[0m' : '';
+    const tps = e.tokensPerSecond > 0 ? (e.tokensPerSecond + ' t/s') : '\x1b[90m—\x1b[0m';
+    const dur = formatDuration(e.elapsedMs || 0);
+    rows.push([
+      e.ecole || '?',
+      pts,
+      pct + '%',
+      g.color + g.grade + '\x1b[0m',
+      status + bonusTag + histTag,
+    ]);
+    metaLines.push('\x1b[90mTemps: ' + dur + ' · ' + e.tokens + ' tokens · ' + tps + '\x1b[0m');
+  }
+
+  const totalPct = totalMax > 0 ? Math.round((totalScore / totalMax) * 100) : 0;
+  const totalGrade = letterGrade(totalPct);
+  const totalTps = totalElapsedMs > 0 ? (Math.round((totalTokens / (totalElapsedMs / 1000)) * 100) / 100 + ' t/s') : '—';
+  const footer = [
+    '\x1b[1mTOTAL CUMULÉ\x1b[0m',
+    totalScore + '/' + totalMax,
+    totalPct + '%',
+    totalGrade.color + totalGrade.grade + '\x1b[0m',
+    '\x1b[1m(Santé cumulée: ' + totalSante + ' PV)\x1b[0m',
+  ];
+
+  const { lines, widths, sepLine, footerLines } = cliTable.table(headers, rows, {
+    colAligns: aligns,
+    footer: footer,
+    footerAligns: ['left', 'right', 'right', 'center', 'left'],
+    separator: '  ',
+  });
+  console.log('  \x1b[90m' + lines[0] + '\x1b[0m');
+  console.log('  \x1b[90m' + sepLine + '\x1b[0m');
+  for (let i = 0; i < rows.length; i++) {
+    console.log('  ' + lines[i + 2]);
+    const indent = ' '.repeat(widths[0] + 2);
+    console.log('  ' + indent + metaLines[i]);
+  }
+  console.log('  \x1b[90m' + sepLine + '\x1b[0m');
+  for (const fl of footerLines) {
+    console.log('  ' + fl);
+  }
+  console.log('  \x1b[90m' + 'Temps total: ' + formatDuration(totalElapsedMs) + ' · ' + totalTokens + ' tokens · ' + totalTps + ' · Wall: ' + formatDuration(totalWallMs) + '\x1b[0m');
+  if (totalBonus > 0) {
+    console.log('  \x1b[35m+ Bonus optionnel cumulé : ' + totalBonus + ' points\x1b[0m');
+  }
+  console.log('  \x1b[90mCarnet : ' + path.relative(process.cwd(), ledgerPath(shortName)) + '\x1b[0m');
+  console.log('');
+}
+
+function buildBilanMarkdown(shortName, modelName) {
+  const ledger = loadLedger(shortName);
+  const rawEntries = Object.entries(ledger.ecoles || {});
+  const entries = rawEntries.map(([k, v]) => getEcoleBest(v)).filter(Boolean);
+  if (entries.length === 0) return '';
+  const t = computeGrandTotal(ledger);
+
+  let md = '\n---\n\n## Bilan Global Cumulé — ' + (modelName || shortName) + '\n\n';
+  md += '> Cumul des écoles évaluées (meilleure tentative conservée par école).\n\n';
+  md += '| École | Points | Quota | Pct | Note | Bonus opt. | Santé | Tentatives | Temps | Tokens | Vitesse |\n';
+  md += '|---|---|---|---|---|---|---|---|---|---|---|\n';
+  for (let i = 0; i < entries.length; i++) {
+    const e = entries[i];
+    const raw = rawEntries[i][1];
+    const attempts = getEcoleAttempts(raw);
+    const pct = e.max > 0 ? Math.round((e.score / e.max) * 100) : 0;
+    const g = letterGrade(pct);
+    const tps = e.tokensPerSecond > 0 ? (e.tokensPerSecond + ' t/s') : '—';
+    md += '| ' + e.ecole + ' | ' + e.score + ' | ' + e.max + ' | ' + pct + '% | ' + g.grade + ' | +' + (e.optionalBonus || 0) + ' | ' + (e.globalLifeScore || 0) + ' PV | ' + attempts.length + ' | ' + formatDuration(e.elapsedMs || 0) + ' | ' + (e.tokens || 0) + ' | ' + tps + ' |\n';
+  }
+  md += '| **TOTAL CUMULÉ** | **' + t.score + '** | **' + t.max + '** | **' + t.pct + '%** | **' + letterGrade(t.pct).grade + '** | **+' + t.optionalBonus + '** | **' + t.globalLifeScore + ' PV** | — | ' + formatDuration(t.elapsedMs) + ' | ' + (t.tokens || 0) + ' | ' + (t.tokensPerSecond > 0 ? t.tokensPerSecond + ' t/s' : '—') + ' |\n';
+  md += '\n> *Bonus optionnel cumulé : +' + t.optionalBonus + ' points (récompense pour les exercices optionnels réussis, au-delà du quota).*\n';
+  md += '> *Temps = durée d\'inférence cumulée (hors attentes entre tiers) · Vitesse = tokens/s moyenne sur la durée d\'inférence.*\n';
+  return md;
+}
+
+// Sauvegarde le résultat courant puis renvoie le markdown du bilan (pour l'ajouter au rapport).
+function saveAndBuildBilan(shortName, modelName, result, quantization) {
+  saveResult(shortName, modelName, result, quantization);
+  return buildBilanMarkdown(shortName, modelName);
+}
+
+// Calcule l'Indice de Calibration (C) entre le profil auto-déclaré du modèle et ses
+// performances réelles dans le bac à sable.
+//   D = niveau moyen déclaré (somme des levels / (5 * nbSkills))   -> [0, 1]
+//   P = ratio de réussite des tâches réellement exécutées           -> [0, 1]
+//   C = 1 - |D - P|                                                 -> [0, 1]
+// testResults : [{ status: 'success' | 'failed' | 'bypassed' }]
+function calculateCalibrationIndex(declaredProfile, testResults) {
+  if (!declaredProfile || !declaredProfile.skills) {
+    return { declaredLevel: 0, actualPerformance: 0, calibrationIndex: 1.0, executedCount: 0, successCount: 0 };
+  }
+
+  // D : niveau moyen déclaré sur 5, ramené à [0, 1]
+  const levels = Object.values(declaredProfile.skills).map(s => s.level);
+  const D = levels.length > 0 ? levels.reduce((sum, lvl) => sum + lvl, 0) / (levels.length * 5) : 0;
+
+  // P : ratio de réussite des tâches réellement exécutées (status !== 'bypassed')
+  const executed = (testResults || []).filter(t => t.status !== 'bypassed');
+  const totalExecuted = executed.length;
+  if (totalExecuted === 0) {
+    return { declaredLevel: D, actualPerformance: 0, calibrationIndex: 1.0, executedCount: 0, successCount: 0 };
+  }
+  const totalSuccess = executed.filter(t => t.status === 'success').length;
+  const P = totalSuccess / totalExecuted;
+
+  const C = 1 - Math.abs(D - P);
+  return {
+    declaredLevel: D,
+    actualPerformance: P,
+    calibrationIndex: C,
+    executedCount: totalExecuted,
+    successCount: totalSuccess
+  };
+}
+
+// Interprète l'Indice de Calibration en catégorie qualitative.
+function interpretCalibration(C) {
+  if (C >= 0.85) return 'Modèle Hautement Fiable / Lucide (connaît ses forces et ses limites)';
+  if (C >= 0.65) return 'Modèle Modérément Calibré';
+  return 'Biais de Surconfiance ou Sous-confiance Majeur (le modèle se surévalue ou se sous-évalue)';
+}
+
+module.exports = {
+  loadLedger,
+  saveResult,
+  computeGrandTotal,
+  printBilanGlobal,
+  buildBilanMarkdown,
+  saveAndBuildBilan,
+  calculateCalibrationIndex,
+  interpretCalibration,
+  normalizeEcoleEntry,
+  getEcoleBest,
+  getEcoleAttempts,
+  pickBest,
+  formatDuration
+};
