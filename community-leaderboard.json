@@ -1,6 +1,26 @@
 {
   "entries": [
     {
+      "model": "qwen3.6-27b-mtp",
+      "shortName": "qwen3.6-27b-mtp",
+      "quantization": "Q4_K_XL",
+      "score": 3067,
+      "max": 3101,
+      "pct": 99,
+      "globalLifeScore": 3426,
+      "optionalBonus": 359,
+      "tokens": 34577,
+      "elapsedMs": 8587934,
+      "tokensPerSecond": 4.03,
+      "ecoleCount": 1,
+      "pseudo": "FlexoDiv",
+      "submittedAt": "2026-07-24T16:54:01.070Z",
+      "contributors": 1,
+      "allPct": [
+        99
+      ]
+    },
+    {
       "model": "gemma-4-26b-a4b-it",
       "shortName": "gemma-4-26b-a4b-it",
       "quantization": null,
@@ -481,6 +501,6 @@
       ]
     }
   ],
-  "generatedAt": "2026-07-24T16:57:37.499Z",
-  "totalSubmissions": 24
+  "generatedAt": "2026-07-24T16:58:02.572Z",
+  "totalSubmissions": 25
 }
