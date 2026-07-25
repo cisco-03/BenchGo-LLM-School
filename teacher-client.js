@@ -170,7 +170,7 @@ function buildTeacherPrompt({ task, errors, studentCode, studentAnalysis, tierNu
  * Lance une erreur portant le code HTTP si la requête échoue (pour décider du rotate).
  */
 async function callOpenRouter({ model, apiKey, prompt, temperature, maxTokens }) {
-  const headers = { 'Content-Type': 'application/json' };
+  const headers = { 'Content-Type': 'application/json', 'Connection': 'close' };
   if (apiKey) headers['Authorization'] = `Bearer ${apiKey}`;
   headers['HTTP-Referer'] = 'https://benchgo-v3';
   // X-Title doit être un ByteString (Latin-1) : pas d'em dash ni d'accent.

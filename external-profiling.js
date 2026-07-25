@@ -99,7 +99,7 @@ async function _callChatCompletion({ url, apiKey, model, systemPrompt, userPromp
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 90000);
   try {
-    const headers = { 'Content-Type': 'application/json' };
+    const headers = { 'Content-Type': 'application/json', 'Connection': 'close' };
     if (apiKey) headers['Authorization'] = `Bearer ${apiKey}`;
     if (url.includes('openrouter.ai')) {
       headers['HTTP-Referer'] = 'https://benchgo-v3';

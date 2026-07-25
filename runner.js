@@ -1,4 +1,25 @@
 
+// --- Protection contre le bug undici de Node.js 24.x ---
+// Bug : TypeError: Cannot assign to read only property 'name' of object
+//   'Error: socket idle timeout' — se produit quand une connexion HTTP
+//   (fetch vers OpenRouter/LM Studio) reste idle et qu'undici déclenche son
+//   timeout interne. Le moteur undici tente d'affecter .name sur une Error
+//   dont la propriété est en lecture seule → crash du process entier.
+// Solution : intercepter cette erreur spécifique au niveau global pour ne pas
+// faire crasher le runner. L'appel fetch concerné échouera proprement (catch)
+// et le code de repli (auto-analyse, retry, etc.) prendra le relais.
+process.on('uncaughtException', (err) => {
+  if (err && /Cannot assign to read only property 'name'/.test(err.message)
+      && /socket idle timeout|UndiciError|InformationalError/.test(err.stack || '')) {
+    // Bug undici connu — on log et on ignore (le fetch concerné a déjà aborté).
+    console.error('\x1b[33m[undici] Timeout socket intercepté (bug Node.js 24.x) — continuation.\x1b[0m');
+    return;
+  }
+  // Toute autre exception non interceptée → crash normal avec stack.
+  console.error('\x1b[31m[ERREUR FATALE non interceptée]\x1b[0m', err);
+  process.exit(1);
+});
+
 const fs = require('fs');
 const path = require('path');
 const readline = require('readline');

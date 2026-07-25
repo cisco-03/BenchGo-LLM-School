@@ -197,7 +197,7 @@ async function queryLLM(prompt, difficulty, tierId, isMandatory, spinner, option
     let response;
 
     if (provSpec.openaiCompat) {
-      const headers = { 'Content-Type': 'application/json' };
+      const headers = { 'Content-Type': 'application/json', 'Connection': 'close' };
       if (resolvedKey) headers['Authorization'] = `Bearer ${resolvedKey}`;
       // OpenRouter impose des en-têtes de traçabilité
       if (provKey === 'openrouter') {

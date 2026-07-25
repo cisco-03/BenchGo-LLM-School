@@ -1,5 +1,30 @@
 # CHANGELOG - Carnet de Notes BenchGo
 
+## 2026-07-25 — Fix crash undici (socket idle timeout) sur Node.js 24.x
+
+### Contexte
+Bug récurrent : après le verdict du professeur IA, le process Node.js crash avec `TypeError: Cannot assign to read only property 'name' of object 'Error: socket idle timeout'`. Cause : bug dans le moteur HTTP interne d'undici (Node.js 24.12.0) qui, lors d'un timeout de socket idle, tente d'affecter `.name` sur une Error en lecture seule → crash du process entier. Le timeout interne d'undici se déclenche indépendamment de l'AbortController de BenchGo.
+
+### Implémentation
+
+**`runner.js` — Handler global `uncaughtException`**
+- Intercepte spécifiquement l'erreur `Cannot assign to read only property 'name'` combinée avec `socket idle timeout|UndiciError|InformationalError` dans le stack.
+- Affiche un warning `[undici] Timeout socket intercepté (bug Node.js 24.x) — continuation.` et **continue l'exécution** au lieu de crasher.
+- Toute autre exception non interceptée → crash normal avec stack (comportement par défaut préservé).
+- Placé tout au début du fichier, avant les requires, pour garantir la capture dès le démarrage.
+
+**`report-teacher.js`, `teacher-client.js`, `cloud-client.js`, `external-profiling.js` — Header `Connection: close`**
+- Ajout du header `Connection: close` sur tous les appels fetch vers des API cloud (OpenRouter, OpenAI, etc.).
+- Force la fermeture du socket après chaque réponse → évite que undici maintienne des connexions idle qui déclenchent le timeout interne.
+
+### Fichiers modifiés
+- `runner.js` : handler `uncaughtException` anti-crash undici.
+- `report-teacher.js` : header `Connection: close`.
+- `teacher-client.js` : header `Connection: close`.
+- `cloud-client.js` : header `Connection: close`.
+- `external-profiling.js` : header `Connection: close`.
+- `Docs/CHANGELOG.md` : cette entrée.
+
 ## 2026-07-25 — Avis visuel de mise à jour disponible (CLI + classement local)
 
 ### Contexte
