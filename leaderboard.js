@@ -747,14 +747,17 @@ function buildLeaderboardHTML(entries) {
   .card {
     background: linear-gradient(180deg, var(--bg-2), var(--bg-1));
     border: 1px solid var(--border); border-radius: var(--r-md);
-    box-shadow: var(--shadow-card); transition: all 0.2s ease; overflow: hidden;
-    position: relative;
+    box-shadow: var(--shadow-card); transition: all 0.2s ease;
+    position: relative; z-index: 1;
   }
   .card::before {
     content: ''; position: absolute; inset: 0 auto 0 0; width: 3px;
     background: transparent; transition: background 0.2s ease;
   }
-  .card:hover { border-color: var(--border-soft); transform: translateY(-1px); box-shadow: var(--shadow-elev); }
+  .card:hover { border-color: var(--border-soft); transform: translateY(-1px); box-shadow: var(--shadow-elev); z-index: 2; }
+  /* Quand le menu ⋮ est ouvert, cette carte doit passer au-dessus des suivantes
+     pour que le menu ne soit pas recouvert par une carte survolée. */
+  .card.menu-open { z-index: 50; }
   .card.gold::before   { background: linear-gradient(180deg, var(--gold), transparent); }
   .card.silver::before { background: linear-gradient(180deg, var(--silver), transparent); }
   .card.bronze::before { background: linear-gradient(180deg, var(--bronze), transparent); }
@@ -1670,6 +1673,7 @@ document.addEventListener('click', function(e) {
   if (btn && (e.target === btn || btn.contains(e.target))) return;
   openMenu.classList.remove('show');
   if (btn) btn.classList.remove('active');
+  document.querySelectorAll('.card.menu-open').forEach(function(c) { c.classList.remove('menu-open'); });
 });
 
 function toggleKebab(btn, idx) {
@@ -1679,9 +1683,12 @@ function toggleKebab(btn, idx) {
   // Ferme tous les autres
   document.querySelectorAll('.kebab-menu.show').forEach(function(m) { m.classList.remove('show'); });
   document.querySelectorAll('.kebab.active').forEach(function(b) { b.classList.remove('active'); });
+  document.querySelectorAll('.card.menu-open').forEach(function(c) { c.classList.remove('menu-open'); });
   if (!isOpen) {
     menu.classList.add('show');
     btn.classList.add('active');
+    var card = btn.closest('.card');
+    if (card) card.classList.add('menu-open');
   }
 }
 
