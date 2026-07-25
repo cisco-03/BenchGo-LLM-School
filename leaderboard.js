@@ -684,6 +684,24 @@ function buildLeaderboardHTML(entries) {
   .search:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(88,166,255,0.18); }
   .result-count { font-size: var(--fs-tiny); color: var(--text-muted); }
 
+  /* Select custom minimalistes */
+  .select-wrap { position: relative; display: inline-flex; align-items: center; }
+  .select-wrap::after {
+    content: '▾'; position: absolute; right: 10px; pointer-events: none;
+    color: var(--text-muted); font-size: 0.75em;
+  }
+  .select {
+    appearance: none; -webkit-appearance: none;
+    padding: 8px 28px 8px 12px; background: var(--bg-2); border: 1px solid var(--border);
+    color: var(--text); border-radius: var(--r-sm); cursor: pointer;
+    font-size: var(--fs-small); font-weight: 600;
+    transition: all 0.18s ease;
+  }
+  .select:hover { border-color: var(--accent); color: var(--text); }
+  .select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(88,166,255,0.18); }
+  .select option { background: var(--bg-2); color: var(--text); }
+  .filter-label { font-size: var(--fs-tiny); color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; }
+
   /* Boutons */
   .btn {
     border: 1px solid transparent; border-radius: var(--r-sm);
@@ -805,7 +823,33 @@ function buildLeaderboardHTML(entries) {
   .pct-bar-wrap { width: 64px; height: 5px; background: var(--bg-3); border-radius: var(--r-pill); margin-top: 3px; overflow: hidden; }
   .pct-bar-fill { height: 100%; border-radius: var(--r-pill); transition: width 0.3s ease; }
 
-  .card-actions { display: flex; align-items: center; gap: 6px; flex: 0 0 auto; }
+  .card-actions { display: flex; align-items: center; gap: 6px; flex: 0 0 auto; position: relative; }
+
+  /* Menu ⋮ minimaliste sur chaque carte */
+  .kebab {
+    width: 32px; height: 32px; display: inline-flex; align-items: center; justify-content: center;
+    background: var(--bg-3); border: 1px solid var(--border); border-radius: var(--r-sm);
+    color: var(--text-muted); font-size: 1.1em; cursor: pointer;
+    transition: all 0.18s ease; user-select: none;
+  }
+  .kebab:hover { border-color: var(--accent); color: var(--text); background: var(--bg-elev); }
+  .kebab.active { border-color: var(--accent); color: var(--accent); background: var(--bg-elev); }
+  .kebab-menu {
+    position: absolute; top: calc(100% + 6px); right: 0; z-index: 50;
+    min-width: 180px; background: var(--bg-2); border: 1px solid var(--border);
+    border-radius: var(--r-sm); box-shadow: var(--shadow-elev);
+    display: none; flex-direction: column; overflow: hidden;
+  }
+  .kebab-menu.show { display: flex; }
+  .kebab-item {
+    display: flex; align-items: center; gap: 8px; padding: 9px 12px;
+    font-size: var(--fs-small); color: var(--text); cursor: pointer; white-space: nowrap;
+    border-bottom: 1px solid var(--border-soft); transition: background 0.15s;
+  }
+  .kebab-item:last-child { border-bottom: none; }
+  .kebab-item:hover { background: var(--bg-elev); }
+  .kebab-item.danger { color: var(--red); }
+  .kebab-item.danger:hover { background: rgba(248,81,73,0.12); }
 
   .empty-msg {
     text-align: center; color: var(--text-muted); padding: var(--space-xl);
@@ -1061,26 +1105,33 @@ function buildLeaderboardHTML(entries) {
   </div>
 
   <div class="sticky-bar" id="stickyBar">
-    <div class="toolbar">
-      <div class="filter-chips" id="chips">
-        <span class="chip active" data-cat="all">Tous <span class="count">${entries.length}</span></span>
-        <span class="chip" data-cat="top">🏆 Top du top <span class="count">${catCounts.top}</span></span>
-        <span class="chip" data-cat="recommande">✅ Recommandés <span class="count">${catCounts.recommande}</span></span>
-        <span class="chip" data-cat="moyenne">📊 Dans la moyenne <span class="count">${catCounts.moyenne}</span></span>
-        <span class="chip" data-cat="rattrapage">⚠️ En rattrapage <span class="count">${catCounts.rattrapage}</span></span>
-        <span class="chip" data-cat="catastrophe">💥 Échec total <span class="count">${catCounts.catastrophe}</span></span>
-      </div>
-    </div>
+    <div class="toolbar" style="justify-content: space-between;">
+      <div class="toolbar" style="margin-block: 0;">
+        <label class="filter-label" for="catSelect">Catégorie</label>
+        <div class="select-wrap">
+          <select class="select" id="catSelect">
+            <option value="all" selected>Tous (${entries.length})</option>
+            <option value="top">🏆 Top du top (${catCounts.top})</option>
+            <option value="recommande">✅ Recommandés (${catCounts.recommande})</option>
+            <option value="moyenne">📊 Dans la moyenne (${catCounts.moyenne})</option>
+            <option value="rattrapage">⚠️ En rattrapage (${catCounts.rattrapage})</option>
+            <option value="catastrophe">💥 Échec total (${catCounts.catastrophe})</option>
+          </select>
+        </div>
 
-    <div class="toolbar">
-      <div class="filter-chips" id="sizeChips">
-        <span class="chip active" data-size="all">Toutes tailles <span class="count">${entries.length}</span></span>
-        <span class="chip" data-size="petit">🐱 &lt; 3B <span class="count">${sizeCounts.petit}</span></span>
-        <span class="chip" data-size="standard">📦 3B–14B <span class="count">${sizeCounts.standard}</span></span>
-        <span class="chip" data-size="expert">🎓 14B–30B <span class="count">${sizeCounts.expert}</span></span>
-        <span class="chip" data-size="doctorat">🧠 &gt; 30B <span class="count">${sizeCounts.doctorat}</span></span>
-        <span class="chip" data-size="inconnu">❓ Inconnue <span class="count">${sizeCounts.inconnu}</span></span>
+        <label class="filter-label" for="sizeSelect" style="margin-left: var(--space-xs);">Taille</label>
+        <div class="select-wrap">
+          <select class="select" id="sizeSelect">
+            <option value="all" selected>Toutes tailles (${entries.length})</option>
+            <option value="petit">🐱 &lt; 3B (${sizeCounts.petit})</option>
+            <option value="standard">📦 3B–14B (${sizeCounts.standard})</option>
+            <option value="expert">🎓 14B–30B (${sizeCounts.expert})</option>
+            <option value="doctorat">🧠 &gt; 30B (${sizeCounts.doctorat})</option>
+            <option value="inconnu">❓ Inconnue (${sizeCounts.inconnu})</option>
+          </select>
+        </div>
       </div>
+
       <div class="search-wrap">
         <input type="text" class="search" id="search" placeholder="🔍 Rechercher un modèle…" />
         <span class="result-count" id="resultCount"></span>
@@ -1207,12 +1258,12 @@ function markExported(shortName) {
 
 function renderCards() {
   console.log('[renderCards] début — MODELS.length=' + (typeof MODELS !== 'undefined' ? MODELS.length : 'UNDEFINED'));
-  var chipsEl = document.querySelector('#chips .chip.active');
-  var sizeEl = document.querySelector('#sizeChips .chip.active');
-  if (!chipsEl) { console.error('[renderCards] ERREUR : aucun chip de catégorie actif — le DOM n\u2019est pas prêt.'); return; }
-  if (!sizeEl) { console.error('[renderCards] ERREUR : aucun chip de taille actif.'); return; }
-  var activeCat = chipsEl.getAttribute('data-cat');
-  var activeSize = sizeEl.getAttribute('data-size');
+  var catSel = document.getElementById('catSelect');
+  var sizeSel = document.getElementById('sizeSelect');
+  if (!catSel) { console.error('[renderCards] ERREUR : select de catégorie introuvable — le DOM n’est pas prêt.'); return; }
+  if (!sizeSel) { console.error('[renderCards] ERREUR : select de taille introuvable.'); return; }
+  var activeCat = catSel.value;
+  var activeSize = sizeSel.value;
   var searchEl = document.getElementById('search');
   var q = searchEl ? searchEl.value.trim().toLowerCase() : '';
   var container = document.getElementById('cards');
@@ -1220,6 +1271,7 @@ function renderCards() {
   container.innerHTML = '';
   var shown = 0;
   var skippedCat = 0, skippedSize = 0, skippedSearch = 0;
+
   for (var i = 0; i < MODELS.length; i++) {
     var m = MODELS[i];
     if (activeCat !== 'all' && m.cat.key !== activeCat) { skippedCat++; continue; }
@@ -1279,7 +1331,7 @@ function renderCards() {
         '<div class="rank">' + rankDisp + '</div>' +
         '<div class="model-name">' +
           '<div class="name-line"><span class="cat-icon">' + m.cat.icon + '</span>' + esc(m.model) + posArrow + '</div>' +
-          '<div class="badges">' + szBadge + ' ' + quantBadge + ' ' + trendBadge + exportedBadge + ' <button class="btn btn-icon" onclick="event.stopPropagation();copyModelName(' + i + ')" title="Copier le nom du modèle">⧉ Nom</button></div>' +
+          '<div class="badges">' + szBadge + ' ' + quantBadge + ' ' + trendBadge + exportedBadge + '</div>' +
         '</div>' +
         '<div class="mini-stats">' +
           '<div class="mini-stat"><span class="lbl">%</span><span class="val" style="color:' + pc + '">' + dispPct(m.pct) + '%</span><div class="pct-bar-wrap"><div class="pct-bar-fill" style="width:' + Math.max(2,dispPct(m.pct)) + '%;background:' + pc + '"></div></div></div>' +
@@ -1290,8 +1342,13 @@ function renderCards() {
           '<div class="mini-stat"><span class="lbl">' + vitesseLbl + '</span><span class="val" style="color:' + tpsC + ';font-size:var(--fs-tiny)">' + esc(vitesseVal) + '</span></div>' +
         '</div>' +
         '<div class="card-actions">' +
-          '<button class="btn btn-primary" onclick="event.stopPropagation();openModal(' + i + ')">Détails</button>' +
-          '<button class="btn btn-danger" onclick="event.stopPropagation();deleteModel(' + i + ', this)" title="Supprimer du classement">🗑</button>' +
+          '<button class="kebab" onclick="event.stopPropagation();toggleKebab(this,' + i + ')" aria-label="Actions">⋮</button>' +
+          '<div class="kebab-menu" id="kebabMenu' + i + '" data-idx="' + i + '" onclick="event.stopPropagation()">' +
+            '<div class="kebab-item" onclick="openModal(' + i + ')">🔍 Détails</div>' +
+            '<div class="kebab-item" onclick="copyModelName(' + i + ')">⧉ Copier le nom</div>' +
+            '<div class="kebab-item" onclick="exportReport(' + i + ')">⬇ Exporter le rapport intégral</div>' +
+            '<div class="kebab-item danger" onclick="deleteModel(' + i + ', this)">🗑 Supprimer du classement</div>' +
+          '</div>' +
         '</div>' +
       '</div>' +
     '</div>';
@@ -1601,21 +1658,32 @@ document.getElementById('modal').addEventListener('click', function(e) {
 });
 document.addEventListener('keydown', function(e) { if (e.key === 'Escape') closeModal(); });
 
-document.getElementById('chips').addEventListener('click', function(e) {
-  var t = e.target.closest('.chip'); if (!t) return;
-  var chips = document.querySelectorAll('#chips .chip');
-  for (var c of chips) c.classList.remove('active');
-  t.classList.add('active');
-  renderCards();
-});
-document.getElementById('sizeChips').addEventListener('click', function(e) {
-  var t = e.target.closest('.chip'); if (!t) return;
-  var chips = document.querySelectorAll('#sizeChips .chip');
-  for (var c of chips) c.classList.remove('active');
-  t.classList.add('active');
-  renderCards();
-});
+document.getElementById('catSelect').addEventListener('change', renderCards);
+document.getElementById('sizeSelect').addEventListener('change', renderCards);
 document.getElementById('search').addEventListener('input', renderCards);
+
+// Ferme les menus ⋮ ouverts quand on clique ailleurs.
+document.addEventListener('click', function(e) {
+  var openMenu = document.querySelector('.kebab-menu.show');
+  if (!openMenu) return;
+  var btn = document.querySelector('.kebab.active');
+  if (btn && (e.target === btn || btn.contains(e.target))) return;
+  openMenu.classList.remove('show');
+  if (btn) btn.classList.remove('active');
+});
+
+function toggleKebab(btn, idx) {
+  var menu = document.getElementById('kebabMenu' + idx);
+  if (!menu) return;
+  var isOpen = menu.classList.contains('show');
+  // Ferme tous les autres
+  document.querySelectorAll('.kebab-menu.show').forEach(function(m) { m.classList.remove('show'); });
+  document.querySelectorAll('.kebab.active').forEach(function(b) { b.classList.remove('active'); });
+  if (!isOpen) {
+    menu.classList.add('show');
+    btn.classList.add('active');
+  }
+}
 
 function showToast(msg, ok) {
   var t = document.getElementById('toast');
@@ -1792,8 +1860,8 @@ function fallbackCopy(text) {
 
 function copyLeaderboard() {
   var btn = document.getElementById('btnCopyAll');
-  var activeCat = document.querySelector('#chips .chip.active').getAttribute('data-cat');
-  var activeSize = document.querySelector('#sizeChips .chip.active').getAttribute('data-size');
+  var activeCat = document.getElementById('catSelect').value;
+  var activeSize = document.getElementById('sizeSelect').value;
   var q = document.getElementById('search').value.trim().toLowerCase();
 
   var lines = [];
