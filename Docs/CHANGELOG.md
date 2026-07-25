@@ -1,5 +1,35 @@
 # CHANGELOG - Carnet de Notes BenchGo
 
+## 2026-07-25 — Fix critique : crash du runner en mode nuit (modèles déchargés, "No models loaded")
+
+### Contexte
+`node night-batch.js` ne fonctionnait plus : tous les modèles échouaient avec "No models loaded" dès le premier tier. L'auto-profilage recevait une réponse (modèle bien chargé), puis 2 secondes plus tard tous les tiers tombaient en HTTP_400 "No models loaded". Les logs LM Studio (`Memories-BenchGo/Tasks2.md`) montraient "Client disconnected. Stopping generation..." suivi d'`unloadModel` en plein streaming. Le log `Memories-BenchGo/Tasks1.md` révélait l'exception fatale :
+```
+TypeError: Cannot assign to read only property 'name' of object 'Error: socket idle timeout'
+    at new UndiciError (node:internal/deps/undici/undici:20:19)
+    at Timeout.onParserTimeout [as _onTimeout] (node:internal/deps/undici/undici:7049:30)
+```
+
+### Cause racine
+Deux bugs distincts de Node v24.12.0 (undici 7.16.0) se manifestaient via le `fetch` streaming utilisé par `lm-studio-client.js` :
+1. **`socket idle timeout` non récupérable** : pendant le prompt processing long (>300s pour les gros modèles), undici déclenche un timer interne qui jette une erreur hors de tout `try/catch` → `uncaughtException` → crash du process Node.
+2. **Fuite EventEmitter (MaxListeners)** : `http.globalAgent` (keepAlive=true) réutilise les sockets ; les listeners `connect`/`secureConnect` ajoutés sur le socket à chaque requête dépassaient `MaxListeners(10)` après ~11 appels (tiers + aide + rattrapage) → erreur "Possible EventEmitter memory leak detected" qui possède elle aussi une propriété `name` en lecture-only → même crash non récupérable.
+
+Le crash tuait le runner en plein streaming → LM Studio voyait "Client disconnected" → déchargeait le modèle → tous les tiers suivants tombaient sur "No models loaded". night-batch passait au modèle suivant (unload/load) → même crash.
+
+### Fix
+Réécriture de `lm-studio-client.js` pour remplacer `fetch` (undici) par `node:http` natif avec parsing SSE manuel :
+- `http.request()` ne passe pas par undici → élimine le `socket idle timeout` non récupérable.
+- Agent HTTP dédié `keepAlive: false, maxSockets: 1` → chaque requête a sa propre socket, libérée à la fin → élimine la fuite EventEmitter.
+- Timeout applicatif géré via `setTimeout` externe (reset à chaque chunk reçu) au lieu d'`AbortController`/listeners socket.
+- Parsing SSE manuel (split sur `data: `, gestion des fragments à cheval) — même logique que l'ancien `streamLLMResponse`.
+- Signature `queryLLM()` inchangée (même paramètres, même retour) → aucun changement côté runner.
+
+Vérifié : un run `--force --profile=LIGHT --no-teacher` enchaîne des dizaines d'appels (tier 0 + aide + explication échec + rattrapage) sans crash, le modèle reste chargé pendant tout le run.
+
+### Fichiers modifiés
+- `lm-studio-client.js` : réécriture complète (fetch → node:http + SSE manuel, agent non-keepAlive).
+
 ## 2026-07-24 — Audit de sécurité : correction de 6 failles de sécurité
 
 ### Contexte

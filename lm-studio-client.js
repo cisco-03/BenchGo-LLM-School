@@ -1,6 +1,30 @@
-
+const http = require('http');
 const logger = require('./logger');
 const { LM_STUDIO_API_URL, API_TIMEOUT_MS } = require('./config');
+
+// Agent dédié NON keepAlive : chaque requête obtient sa propre socket, qui est
+// libérée à la fin. On évite ainsi la réutilisation de socket poolée par
+// http.globalAgent (keepAlive=true) qui provoque une fuite de listeners
+// EventEmitter (MaxListeners) et des crashes sur Node v24.12.0 quand plusieurs
+// requêtes SSE se succèdent (tiers + aide + rattrapage).
+const HTTP_AGENT = new http.Agent({ keepAlive: false, maxSockets: 1 });
+
+// --- IMPORTANT : pourquoi node:http au lieu de fetch (undici) ---
+// BenchGo streamait les réponses SSE de LM Studio via `fetch` (undici, intégré à
+// Node). Sur Node v24.12.0 (undici 7.16.0), un timer interne "socket idle
+// timeout" se déclenche pendant le prompt processing long (>300s pour les gros
+// modèles) et jette une erreur NON récupérable :
+//   TypeError: Cannot assign to read only property 'name' of object 'Error: socket idle timeout'
+//     at new UndiciError (node:internal/deps/undici/undici:20:19)
+//     at Timeout.onParserTimeout [as _onTimeout] (node:internal/deps/undici/undici:7049:30)
+// Cette erreur tue le process Node en plein streaming (uncaughtException) :
+// LM Studio voit "Client disconnected. Stopping generation...", décharge le
+// modèle, et tous les tiers suivants tombent sur "No models loaded".
+// Cf. logs benchgo_2026-07-24T21-22-56 et Memories-BenchGo/Tasks1.md + Tasks2.md.
+//
+// `node:http` ne passe pas par undici et n'a pas ce bug. On parse le flux SSE
+// manuellement. Le timeout applicatif est géré via socket.setTimeout (et non
+// AbortController) pour rester sur la pile http native.
 
 function getSystemPrompt(difficulty) {
   if (difficulty === "EXPERT" || difficulty === "HARD") {
@@ -11,104 +35,29 @@ function getSystemPrompt(difficulty) {
 
 function estimateTokens(text) {
   if (!text) return 0;
-  // Approximation simple et stable: ~4 caractères par token.
   return Math.ceil(text.length / 4);
 }
 
-async function streamLLMResponse(response, spinner) {
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder('utf-8');
-  let fullContent = '';
-  let reasoningContent = '';
-  let tokenCount = 0;
-  let sseBuffer = '';
-
-  // Active le mode streaming live du spinner dès la première donnée reçue.
-  let streamingStarted = false;
-
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-
-    sseBuffer += decoder.decode(value, { stream: true });
-    const lines = sseBuffer.split('\n');
-    sseBuffer = lines.pop();
-
-    for (const line of lines) {
-      const trimmed = line.trim();
-      if (!trimmed.startsWith('data: ')) continue;
-      const payload = trimmed.slice(6);
-      if (payload === '[DONE]') continue;
-
-      try {
-        const chunk = JSON.parse(payload);
-        const delta = chunk.choices?.[0]?.delta?.content;
-        const reasoning = chunk.choices?.[0]?.delta?.reasoning_content;
-        const modelName = chunk.model;
-
-        if (!streamingStarted && (delta || reasoning)) {
-          spinner.beginStreaming();
-          streamingStarted = true;
-        }
-
-        if (delta) {
-          fullContent += delta;
-          tokenCount++;
-          spinner.updateTokens(tokenCount, fullContent.length);
-          // Affiche le fragment de réponse finale en live (flux brut, sans filtre)
-          spinner.appendStreamChunk(delta, 'content');
-        }
-        // Certains modèles de raisonnement (MiniCPM5, Qwen3, DeepSeek-R1, GLM...)
-        // diffusent leur réponse dans `reasoning_content` et laissent `content` vide.
-        // On le capture pour ne pas perdre la réponse ET l'afficher en live.
-        if (reasoning) {
-          reasoningContent += reasoning;
-          tokenCount++;
-          spinner.updateTokens(tokenCount, reasoningContent.length);
-          // Affiche le raisonnement (pensée) en live, comme les logs LM Studio
-          spinner.appendStreamChunk(reasoning, 'reasoning');
-        }
-        if (modelName && !spinner._modelName) {
-          spinner._modelName = modelName;
-        }
-      } catch (_) {}
-    }
-  }
-
-  // Termine l'affichage streaming (relance le spinner proprement)
-  if (streamingStarted) {
-    spinner.endStreaming();
-  }
-
-  // Repli : si le modèle n'a produit aucun `content` (modèle de raisonnement),
-  // on utilise le `reasoning_content` comme contenu exploitable.
-  if (!fullContent.trim() && reasoningContent.trim()) {
-    fullContent = reasoningContent;
-  }
-
-  return { content: fullContent, tokenCount, modelName: spinner._modelName };
+// Décompose LM_STUDIO_API_URL ("http://localhost:1234/v1/chat/completions")
+// en { hostname, port, path } pour node:http.
+function parseApiUrl(url) {
+  const m = url.match(/^https?:\/\/([^:/]+):(\d+)(\/.*)$/i);
+  if (!m) throw new Error(`URL API LM Studio invalide : ${url}`);
+  return { hostname: m[1], port: parseInt(m[2], 10), path: m[3] };
 }
 
 async function queryLLM(prompt, difficulty, tierId, isMandatory, spinner, options = {}) {
   const startTime = Date.now();
-  const controller = new AbortController();
-  // Timeout dédié (auto-profilage) sinon timeout global API. Permet de couper
-  // court aux modèles de raisonnement qui passent plusieurs minutes en pensée.
   const timeoutMs = Number.isInteger(options.timeoutMs) && options.timeoutMs > 0
     ? options.timeoutMs
     : API_TIMEOUT_MS;
-  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
   const contextLimitTokens = Number.isInteger(options.contextLimitTokens) && options.contextLimitTokens > 0
     ? options.contextLimitTokens
     : 16384;
   const systemPrompt = getSystemPrompt(difficulty);
 
-  // Réserve un peu de marge pour les métadonnées/messages système.
   const estimatedInputTokens = estimateTokens(systemPrompt) + estimateTokens(prompt) + 128;
   const availableForOutput = contextLimitTokens - estimatedInputTokens;
-  // maxTokens explicite (auto-profilage) sinon calculé depuis le budget contexte.
-  // maxTokens=0 (ou falsy) = sortie ILLIMITÉE (carte blanche auto-profilage) :
-  // on n'envoie pas le champ max_tokens pour ne pas tronquer le JSON du modèle.
   const maxTokensExplicit = Number.isInteger(options.maxTokens) && options.maxTokens > 0
     ? options.maxTokens
     : null;
@@ -133,53 +82,148 @@ async function queryLLM(prompt, difficulty, tierId, isMandatory, spinner, option
       temperature: 0.1,
       stream: true
     };
-    // max_tokens : uniquement si on a une limite explicite. maxTokens=0 = pas de
-    // champ (sortie illimitée, auto-profilage carte blanche).
     if (maxTokensExplicit != null) {
       requestBody.max_tokens = maxTokensExplicit;
     }
-    // response_format optionnel (auto-profilage JSON) — supporté par LM Studio (OpenAI-compat)
     if (options.responseFormat) {
       requestBody.response_format = options.responseFormat;
     }
-    // Désactivation du raisonnement étendu (auto-profilage) pour les modèles
-    // de raisonnement (GLM, Qwen3, DeepSeek-R1...) via chat_template_kwargs.
-    // LM Studio propage ce paramètre au template du modèle ; les modèles non
-    // compatibles l'ignorent silencieusement. Évite les 372s de pensée inutile.
     if (options.disableReasoning) {
       requestBody.chat_template_kwargs = { enable_thinking: false };
     }
 
-    const response = await fetch(LM_STUDIO_API_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(requestBody),
-      signal: controller.signal
+    const { hostname, port, path } = parseApiUrl(LM_STUDIO_API_URL);
+
+    let aborted = false;
+    let timeoutFired = false;
+    let fullContent = '';
+    let reasoningContent = '';
+    let tokenCount = 0;
+    let responseModelName = null;
+    let streamingStarted = false;
+
+    const bodyStr = JSON.stringify(requestBody);
+
+    const request = http.request({
+      hostname,
+      port,
+      path,
+      method: 'POST',
+      agent: HTTP_AGENT,
+      headers: {
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(bodyStr),
+        'Accept': 'text/event-stream'
+      }
     });
 
-    if (!response.ok) {
-      clearTimeout(timeoutId);
-      let errorBody = '';
-      try { errorBody = await response.text(); } catch(_) {}
-      const detail = errorBody ? ` — ${errorBody.substring(0, 200)}` : '';
-      throw new Error(`HTTP_${response.status}${detail}`);
-    }
-
-    const streamResult = await streamLLMResponse(response, spinner);
-    clearTimeout(timeoutId);
-
-    const duration = Date.now() - startTime;
-    logger.apiRequest(tierId, duration, 'OK');
-    logger.info(`API Tier ${tierId} : réponse reçue en ${duration}ms (${streamResult.tokenCount} chunks, ${streamResult.content.length} chars).`);
-
-    return {
-      content: streamResult.content.trim(),
-      modelName: streamResult.modelName || "Modele_Local"
+    // Timeout applicatif : on démarre le timer d'inactivité IMMÉDIATEMENT (pas
+    // via socket listeners, pour éviter une fuite EventEmitter sur les sockets
+    // keepAlive réutilisés — cf. memory leak MaxListeners qui crash Node v24).
+    // Le timer est reset à chaque chunk reçu (resetInactivityTimer dans res 'data').
+    let inactivityTimer = null;
+    const resetInactivityTimer = () => {
+      if (inactivityTimer) clearTimeout(inactivityTimer);
+      if (aborted) return;
+      inactivityTimer = setTimeout(() => {
+        if (aborted) return;
+        timeoutFired = true;
+        try { request.destroy(new Error('timeout')); } catch (_) { request.destroy(); }
+      }, timeoutMs);
     };
+    resetInactivityTimer();
+
+    request.on('error', (err) => {
+      aborted = true;
+      if (inactivityTimer) clearTimeout(inactivityTimer);
+      // On ne relance pas l'erreur ici (elle serait non catchée) ; le reject se
+      // fait via _reject dans le wrapper Promise plus bas.
+      const e = timeoutFired ? new Error('timeout') : err;
+      if (request._reject) request._reject(e);
+    });
+
+    request.on('response', (res) => {
+      if (res.statusCode && res.statusCode !== 200) {
+        let errorBody = '';
+        res.setEncoding('utf8');
+        res.on('data', (c) => { errorBody += c; });
+        res.on('end', () => {
+          if (inactivityTimer) clearTimeout(inactivityTimer);
+          aborted = true;
+          const detail = errorBody ? ` — ${errorBody.substring(0, 200)}` : '';
+          request.emit('error', new Error(`HTTP_${res.statusCode}${detail}`));
+        });
+        return;
+      }
+      res.setEncoding('utf8');
+      let sseBuffer = '';
+      res.on('data', (chunk) => {
+        resetInactivityTimer();
+        if (!streamingStarted) {
+          spinner.beginStreaming();
+          streamingStarted = true;
+        }
+        sseBuffer += chunk;
+        const lines = sseBuffer.split('\n');
+        sseBuffer = lines.pop();
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed.startsWith('data: ')) continue;
+          const payload = trimmed.slice(6);
+          if (payload === '[DONE]') continue;
+          try {
+            const j = JSON.parse(payload);
+            const delta = j.choices?.[0]?.delta?.content;
+            const reasoning = j.choices?.[0]?.delta?.reasoning_content;
+            const modelName = j.model;
+            if (delta) {
+              fullContent += delta;
+              tokenCount++;
+              spinner.updateTokens(tokenCount, fullContent.length);
+              spinner.appendStreamChunk(delta, 'content');
+            }
+            if (reasoning) {
+              reasoningContent += reasoning;
+              tokenCount++;
+              spinner.updateTokens(tokenCount, reasoningContent.length);
+              spinner.appendStreamChunk(reasoning, 'reasoning');
+            }
+            if (modelName && !spinner._modelName) {
+              spinner._modelName = modelName;
+              responseModelName = modelName;
+            }
+          } catch (_) {}
+        }
+      });
+      res.on('end', () => {
+        if (inactivityTimer) clearTimeout(inactivityTimer);
+        if (streamingStarted) spinner.endStreaming();
+        if (!fullContent.trim() && reasoningContent.trim()) {
+          fullContent = reasoningContent;
+        }
+        const duration = Date.now() - startTime;
+        logger.apiRequest(tierId, duration, 'OK');
+        logger.info(`API Tier ${tierId} : réponse reçue en ${duration}ms (${tokenCount} chunks, ${fullContent.length} chars).`);
+        request._resolve({ content: fullContent.trim(), tokenCount, modelName: responseModelName || "Modele_Local" });
+      });
+      res.on('error', (e) => {
+        if (inactivityTimer) clearTimeout(inactivityTimer);
+        request._reject(timeoutFired ? new Error('timeout') : e);
+      });
+    });
+
+    // Promise wrapper : on attend la fin du streaming (res 'end') ou une erreur.
+    const result = await new Promise((resolve, reject) => {
+      request._resolve = resolve;
+      request._reject = reject;
+      request.write(bodyStr);
+      request.end();
+    });
+
+    return { content: result.content, modelName: result.modelName };
   } catch (error) {
-    clearTimeout(timeoutId);
     const duration = Date.now() - startTime;
-    const isTimeout = error.name === 'AbortError';
+    const isTimeout = error.message === 'timeout' || error.name === 'AbortError';
     const reason = isTimeout
       ? `Timeout après ${timeoutMs / 1000}s — le modèle n'a pas répondu dans le délai imparti`
       : error.message;
