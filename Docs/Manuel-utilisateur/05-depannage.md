@@ -4,7 +4,7 @@
 
 Symptomes:
 - message erreur API
-- echec immediat sur tier obligatoire
+- echec immediat sur classe obligatoire
 
 Actions:
 1. Verifier que LM Studio est lance
@@ -19,7 +19,7 @@ Symptomes:
 
 Actions:
 1. Tester un profil inferieur (LIGHT ou STANDARD)
-2. Reduire la charge en lancant un seul tier
+2. Reduire la charge en lancant une seule classe
 3. Verifier les performances machine
 
 Commandes utiles:
@@ -43,14 +43,17 @@ Exemple:
 node runner.js all --context-limit=32768
 ```
 
-## Probleme 4: pas de rattrapage propose
+## Probleme 4: pas de rattrapage declenche
 
-Cause probable:
-- session non interactive (pas de TTY)
+Le rattrapage est **automatique** (plus de confirmation manuelle). Il se déclenche
+si l'un de ces 3 critères est rempli à la fin de l'examen :
+1. une classe **obligatoire** a échoué
+2. la santé globale de l'élève est < 0 PV
+3. ≥ 40 % des exercices ont échoué
 
-Explication:
-- le rattrapage demande une confirmation utilisateur
-- en environnement non interactif, il est desactive
+Si aucun critère n'est rempli, l'élève s'en sort bien et aucun rattrapage n'a lieu
+(comportement normal). Le rattrapage est aussi désactivé en mode cloud (coût par appel)
+et pour les profils FRONTIER.
 
 ## Probleme 5: profil inattendu
 

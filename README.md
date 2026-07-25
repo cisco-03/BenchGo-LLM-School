@@ -14,7 +14,7 @@ le tout dans un bac à sable VM isolé.
 
 ## ✨ Fonctionnalités principales
 
-- 🎓 **Métaphore scolaire** : 5 profils = 5 écoles (Primaire → Collège/Lycée → Université → Thèse → Post-Doc), chaque tier = une classe avec ses propres exercices.
+- 🎓 **Métaphore scolaire** : 5 profils = 5 écoles (Primaire → Collège/Lycée → Université → Thèse → Post-Doc), chaque classe possède ses propres exercices (numérotation continue affichée à l'utilisateur).
 - 🧠 **Auto-profilage & calibration** : le modèle s'auto-évalue sur 4 compétences au démarrage ; les tâches trop difficiles sont filtrées ; un Indice de Calibration C = 1 − |D − P| mesure la lucidité du modèle.
 - ❤️ **Santé globale (gamification)** : le modèle accumule des PV (succès) ou en perd (échecs). En dessous de −100 PV, élimination définitive (Game Over). 👉 [Système de points complet](./Docs/Apps-Fonctions/systeme-points.md) — calcul par exercice, classe, école et cumul multi-écoles.
 - 🆘 **Aide du professeur & rattrapage** : un indice peut être proposé au modèle en rattrapage ; un seul réessai par exercice (`MAX_TASK_RETRIES = 1`).
@@ -182,18 +182,24 @@ est mergée par le propriétaire du dépôt.
 
 ## 🏫 Architecture scolaire
 
-| Profil | École | Taille modèle | Tiers obligatoires | Tiers optionnels |
+Chaque école répartit ses épreuves en **classes** numérotées de 0 à N de façon
+continue (numéro de classe logique affiché à l'utilisateur). Le numéro du fichier
+de tier sous-jacent (`tiers/tier{N}_*.json`) peut présenter des trous, masqués à
+l'affichage. L'Épreuve Finale (tier physique 6, partagée) est la dernière classe
+de chaque école supérieure.
+
+| Profil | École | Taille modèle | Classes obligatoires | Classes optionnelles |
 |---|---|---|---|---|
 | LIGHT | 🏫 Primaire | < 3B | 0, 1 | 2, 3, 4, 5 |
 | STANDARD | 🏫 Collège/Lycée | 3B – 14B | 0, 1, 2 | 3, 4, 5, 6 |
-| EXPERT | 🎓 Université | 14B – 30B | 0, 1, 2, 3 | 6 |
-| DOCTORAT | 🔬 Thèse | > 30B | 0, 1, 2, 3, 6 | — |
-| FRONTIER | 🔬 Post-Doc | Cloud | 0, 1, 2, 3, 4, 6 | — |
+| EXPERT | 🎓 Université | 14B – 30B | 0, 1, 2, 3 | 4 (Épreuve Finale) |
+| DOCTORAT | 🔬 Thèse | > 30B | 0, 1, 2, 3, 4 (Épreuve Finale) | — |
+| FRONTIER | 🔬 Post-Doc | Cloud | 0, 1, 2, 3, 4, 5 (Épreuve Finale) | — |
 
 Chaque croisement (profil × tier) possède ses propres exercices dans `tiers/tier{N}_{profile}.json`,
 avec une chaîne de fallback automatique (`FRONTIER → DOCTORAT → EXPERT → STANDARD → LIGHT`).
 
-### Axes d'évaluation (Tier 6 — Expertise & Résistance)
+### Axes d'évaluation (Épreuve Finale — Expertise & Résistance)
 1. **Vitesse d'inférence** — chronométrage du temps de génération de l'API
 2. **Mémoire longue** — retrouver une « aiguille » au milieu d'un long texte
 3. **Optimisation VM** — limite de temps d'exécution stricte (ex : 35 ms)
@@ -321,7 +327,7 @@ benchmark-v3/
 
 | Option | Description |
 |---|---|
-| `all` ou `N` | Lance tous les tiers ou un tier spécifique (0-6) |
+| `all` ou `N` | Lance toutes les classes ou un tier physique spécifique (0-6 ; 6 = Épreuve Finale). L'affichage montre la classe logique du profil |
 | `--profile=<PROFIL>` | Force le profil (LIGHT / STANDARD / EXPERT / DOCTORAT / FRONTIER) |
 | `--context-limit=<N>` | Limite de tokens de contexte (défaut : 16384) |
 | `--provider=<NOM>` | Mode cloud (openai / anthropic / groq / together / openrouter / mistral) |

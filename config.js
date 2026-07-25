@@ -54,14 +54,43 @@ const PROFILES = {
   FRONTIER: { mandatory: [0, 1, 2, 3, 4, 6], optional: [],           label: "FRONTIER — Post-Doctorat (modèles cloud frontier)",        ecole: "Post-Doctorat" }
 };
 
-// Noms de classes par profil et numéro de tier (pour les dossiers d'export)
+// Noms de classes par profil et numéro de classe LOGIQUE (0, 1, 2... contigus).
+// Le tier physique (numéro du fichier tier{N}_*.json) peut présenter des trous
+// (ex: EXPERT utilise les tiers 0,1,2,3 puis 6 — les tiers 4/5 sont propres aux
+// petites écoles). On renumérote donc en classe logique continue pour l'affichage
+// et les dossiers d'export : le tier 6 devient la classe 4 dans EXPERT, la classe
+// 5 dans STANDARD, etc. Le mappage tier physique -> classe logique est calculé
+// automatiquement par tierToClasseNum() à partir de PROFILES (mandatory+optional).
 const CLASSE_NAMES = {
-  LIGHT:    { 0: "Classe-0-Maternelle", 1: "Classe-1-CP",        2: "Classe-2-CE1",          3: "Classe-3-CE2",        4: "Classe-4-CM1",         5: "Classe-5-CM2" },
-  STANDARD: { 0: "Classe-0-6eme",       1: "Classe-1-5eme",      2: "Classe-2-4eme",         3: "Classe-3-3eme",       4: "Classe-4-2nde",        5: "Classe-5-1ere", 6: "Classe-6-Terminale" },
-  EXPERT:   { 0: "Classe-0-Licence1",   1: "Classe-1-Licence2",  2: "Classe-2-L3-Master1",   3: "Classe-3-Master2",    6: "Classe-6-Doctorat" },
-  DOCTORAT: { 0: "Classe-0-Doctorat1",  1: "Classe-1-Doctorat2", 2: "Classe-2-Doctorat3",    3: "Classe-3-Soutenance", 6: "Classe-6-Expertise" },
-  FRONTIER: { 0: "Classe-0-PostDoc1",   1: "Classe-1-PostDoc2",  2: "Classe-2-PostDoc3",     3: "Classe-3-PostDoc4",   4: "Classe-4-Frontier", 6: "Classe-6-Ultimate" }
+  LIGHT:    { 0: "Classe-0-Maternelle", 1: "Classe-1-CP",        2: "Classe-2-CE1",   3: "Classe-3-CE2",   4: "Classe-4-CM1",   5: "Classe-5-CM2" },
+  STANDARD: { 0: "Classe-0-6eme",       1: "Classe-1-5eme",      2: "Classe-2-4eme",  3: "Classe-3-3eme",  4: "Classe-4-2nde",  5: "Classe-5-1ere", 6: "Classe-6-Terminale" },
+  EXPERT:   { 0: "Classe-0-Licence1",   1: "Classe-1-Licence2",  2: "Classe-2-Master1", 3: "Classe-3-Master2", 4: "Classe-4-Master-Final" },
+  DOCTORAT: { 0: "Classe-0-Doctorat1",  1: "Classe-1-Doctorat2", 2: "Classe-2-Doctorat3", 3: "Classe-3-Soutenance", 4: "Classe-4-These" },
+  FRONTIER: { 0: "Classe-0-PostDoc1",   1: "Classe-1-PostDoc2",  2: "Classe-2-PostDoc3",  3: "Classe-3-PostDoc4",   4: "Classe-4-Frontier", 5: "Classe-5-Ultimate" }
 };
+
+// Mappage tier physique -> classe logique, dérivé de PROFILES (mandatory + optional
+// triés). Construit une fois au chargement. Ex: EXPERT tiers [0,1,2,3,6] ->
+// { 0:0, 1:1, 2:2, 3:3, 6:4 }.
+const TIER_TO_CLASSE = (() => {
+  const map = {};
+  for (const [profileKey, profile] of Object.entries(PROFILES)) {
+    const orderedTiers = [...profile.mandatory, ...profile.optional].sort((a, b) => a - b);
+    map[profileKey] = {};
+    orderedTiers.forEach((tier, idx) => { map[profileKey][tier] = idx; });
+  }
+  return map;
+})();
+
+// Renvoie le numéro de classe logique (0-indexé, contigu) pour un profil et un tier
+// physique donnés. Retombe sur le tier physique si le profil est inconnu ou le tier
+// absent du profil (sécurité : ne casse pas l'affichage).
+function tierToClasseNum(profileArg, tierNum) {
+  const profile = (profileArg || '').toUpperCase();
+  const m = TIER_TO_CLASSE[profile];
+  if (m && Object.prototype.hasOwnProperty.call(m, tierNum)) return m[tierNum];
+  return tierNum;
+}
 
 // Auto-profilage & Calibration : le runner interroge le modèle au démarrage pour
 // qu'il s'auto-évalue sur 4 compétences clés, puis filtre les tâches trop difficiles
@@ -181,6 +210,12 @@ function parseCliArgs() {
   const noTelemetryFlag = rawArgs.includes('--no-telemetry');
   const githubTokenRaw = (() => { const a = rawArgs.find(r => r.startsWith('--github-token=')); return a ? a.split('=').slice(1).join('=') : null; })();
 
+  // --- Vérification de mise à jour ---
+  // --no-update-check : désactive l'avis visuel de mise à jour disponible au
+  //   démarrage (comparaison du SHA local avec le dernier commit GitHub main).
+  //   Utile en mode batch ou hors-ligne pour éviter un délai réseau.
+  const noUpdateCheckFlag = rawArgs.includes('--no-update-check');
+
   const profileArgExplicit = profileArgRaw ? profileArgRaw.toUpperCase() : null;
   const parsedContextLimit = contextLimitRaw ? parseInt(contextLimitRaw, 10) : null;
   const contextLimitTokens = Number.isInteger(parsedContextLimit) && parsedContextLimit > 0
@@ -199,7 +234,8 @@ function parseCliArgs() {
            teacherDisabled: teacherDisabledRaw, quantization: quantizationRaw,
            preset: presetRaw, savePreset: savePresetRaw, deletePreset: deletePresetRaw, listPresets: listPresetsFlag,
             forgetKey: forgetKeyRaw, listKeys: listKeysFlag, noSaveKeys: noSaveKeysFlag, force: forceFlag,
-            submit: submitFlag, noTelemetry: noTelemetryFlag, githubToken: githubTokenRaw };
+            submit: submitFlag, noTelemetry: noTelemetryFlag, githubToken: githubTokenRaw,
+            noUpdateCheck: noUpdateCheckFlag };
 }
 
 function detectProfileFromModelName(modelName) {
@@ -305,6 +341,8 @@ module.exports = {
   OPTIONAL_BONUS_PCT,
   PROFILES,
   CLASSE_NAMES,
+  TIER_TO_CLASSE,
+  tierToClasseNum,
   SPINNER_FRAMES,
   SPINNER_CHARS,
   WAITING_MESSAGES,

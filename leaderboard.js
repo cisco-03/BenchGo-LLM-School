@@ -9,6 +9,7 @@ const { detectProfileFromModelName } = require('./config');
 const { formatDuration } = require('./score-ledger');
 const cliTable = require('./cli-table');
 const communitySync = require('./community-sync');
+const updateChecker = require('./update-checker');
 
 const LEDGER_DIR = path.join(__dirname, 'Export-Rapports', '.carnet');
 const EXPORT_DIR = path.join(__dirname, 'Export-Rapports');
@@ -409,6 +410,12 @@ function fmtDur(ms) {
 
 function buildLeaderboardHTML(entries) {
   const now = new Date().toLocaleString('fr-FR');
+
+  // SHA du commit local embarqué dans le HTML : permet à la bannière de mise à
+  // jour (côté navigateur) de comparer avec le dernier commit poussé sur GitHub
+  // main. Si git n'est pas disponible, localSha est null et la bannière ne
+  // s'affiche pas (comparaison impossible).
+  const localSha = updateChecker.getLocalCommitSha();
 
   // Compteurs par catégorie pour les filtres
   const catCounts = { top: 0, recommande: 0, moyenne: 0, rattrapage: 0, catastrophe: 0 };
@@ -977,6 +984,59 @@ function buildLeaderboardHTML(entries) {
   .toast.show { opacity: 1; transform: translateX(-50%) translateY(-4px); }
   .toast.ok { background: var(--green); }
   .toast.err { background: var(--red); }
+
+  /* Bannière de mise à jour disponible (comparaison SHA local vs GitHub main) */
+  .update-banner {
+    margin-block: var(--space-s) var(--space-m);
+    border: 1px solid rgba(210, 153, 34, 0.45);
+    border-radius: var(--r-md);
+    background: linear-gradient(135deg, rgba(210, 153, 34, 0.12), rgba(188, 140, 255, 0.06));
+    box-shadow: 0 2px 14px rgba(210, 153, 34, 0.18), var(--shadow-card);
+    overflow: hidden;
+    animation: updatePulse 2.4s ease-in-out infinite;
+  }
+  @keyframes updatePulse {
+    0%, 100% { box-shadow: 0 2px 14px rgba(210, 153, 34, 0.18), var(--shadow-card); }
+    50% { box-shadow: 0 2px 22px rgba(210, 153, 34, 0.38), var(--shadow-card); }
+  }
+  .update-banner[hidden] { display: none; }
+  .update-banner-inner {
+    display: flex; align-items: flex-start; gap: var(--space-s);
+    padding: var(--space-s) var(--space-m);
+  }
+  .update-icon { font-size: 1.6em; line-height: 1.2; flex: 0 0 auto; }
+  .update-content { flex: 1 1 auto; min-width: 0; }
+  .update-title {
+    font-weight: 800; font-size: var(--fs-h3); color: var(--yellow);
+    margin-bottom: 4px; letter-spacing: 0.2px;
+  }
+  .update-desc { color: var(--text); font-size: var(--fs-small); line-height: 1.45; }
+  .update-commits {
+    list-style: none; margin: var(--space-xs) 0; padding: 0;
+    display: flex; flex-direction: column; gap: 4px;
+  }
+  .update-commits li {
+    font-size: var(--fs-tiny); color: var(--text-muted);
+    display: flex; gap: 8px; align-items: baseline;
+  }
+  .update-commits li .cdate { color: var(--accent); font-weight: 600; flex: 0 0 auto; }
+  .update-action {
+    margin-top: var(--space-xs); font-size: var(--fs-small); color: var(--text);
+  }
+  .update-action code, .update-desc code {
+    background: var(--bg-3); padding: 1px 6px; border-radius: 4px;
+    color: var(--purple); font-weight: 600;
+  }
+  .update-close {
+    flex: 0 0 auto; background: transparent; border: 1px solid var(--border);
+    color: var(--text-muted); width: 28px; height: 28px; border-radius: var(--r-sm);
+    cursor: pointer; font-size: 14px; line-height: 1; transition: all 0.18s ease;
+  }
+  .update-close:hover { color: var(--text); border-color: var(--accent); }
+  @media (max-width: 560px) {
+    .update-banner-inner { flex-wrap: wrap; }
+    .update-close { margin-left: auto; }
+  }
 </style>
 </head>
 <body>
@@ -986,6 +1046,19 @@ function buildLeaderboardHTML(entries) {
     <h1>Classement BenchGo V3</h1>
     <p class="subtitle">Généré le ${esc(now)} — ${entries.length} modèle${entries.length > 1 ? 's' : ''} classé${entries.length > 1 ? 's' : ''} du meilleur au pire</p>
   </header>
+
+  <div id="updateBanner" class="update-banner" hidden>
+    <div class="update-banner-inner">
+      <span class="update-icon">⬆️</span>
+      <div class="update-content">
+        <div class="update-title">Mise à jour disponible</div>
+        <div class="update-desc">Une nouvelle version de BenchGo a été publiée sur GitHub (nouveautés, corrections d'exercices, améliorations). Vous êtes en retard sur la branche <code>main</code>.</div>
+        <ul class="update-commits" id="updateCommits"></ul>
+        <div class="update-action">Pour mettre à jour : <code>git pull</code> puis relancez <code>node runner.js</code></div>
+      </div>
+      <button class="update-close" id="updateClose" title="Masquer cet avis (reviendra dans 1h)">✕</button>
+    </div>
+  </div>
 
   <div class="sticky-bar" id="stickyBar">
     <div class="toolbar">
@@ -1044,6 +1117,8 @@ function buildLeaderboardHTML(entries) {
 
 <script>
 var MODELS = ${JSON.stringify(modelsData)};
+var LOCAL_SHA = ${JSON.stringify(localSha)};
+var REMOTE_REPO = ${JSON.stringify(updateChecker.COMMUNITY_REPO)};
 
 function gradeColor(g) {
   var m = { A:'#3fb950', B:'#58a6ff', C:'#d29922', D:'#bc8cff', F:'#f85149' };
@@ -1909,6 +1984,93 @@ document.getElementById('btnSubmitCommunity').addEventListener('click', openSubm
 })();
 
 renderCards();
+
+// --- Bannière de mise à jour disponible ---
+// Compare le SHA du commit local (embarqué à la génération) avec le dernier
+// commit poussé sur la branche main du dépôt GitHub. Si différent, affiche une
+// bannière visuelle pour inciter l'utilisateur a faire 'git pull'.
+// Cache localStorage 1h pour ne pas spammer l'API GitHub a chaque ouverture.
+(function() {
+  if (!LOCAL_SHA || !REMOTE_REPO) return;
+  var banner = document.getElementById('updateBanner');
+  if (!banner) return;
+  var closeBtn = document.getElementById('updateClose');
+  var commitsList = document.getElementById('updateCommits');
+
+  // Cache localStorage : évite de re-vérifier pendant 1h et mémorise le
+  // refus de l'utilisateur (bouton ✕) jusqu'à expiration du cache.
+  var CACHE_KEY = 'benchgo_update_check';
+  var TTL_MS = 60 * 60 * 1000;
+  function readCache() {
+    try { var v = JSON.parse(localStorage.getItem(CACHE_KEY) || 'null'); return v; }
+    catch (e) { return null; }
+  }
+  function writeCache(v) { try { localStorage.setItem(CACHE_KEY, JSON.stringify(v)); } catch (e) {} }
+
+  var cached = readCache();
+  if (cached && cached.dismissedAt && (Date.now() - cached.dismissedAt) < TTL_MS) {
+    // L'utilisateur a masqué l'avis récemment → on ne réaffiche pas.
+    return;
+  }
+  if (cached && cached.checkedAt && (Date.now() - cached.checkedAt) < TTL_MS && cached.result) {
+    if (cached.result.updateAvailable) showBanner(cached.result.commits || []);
+    return;
+  }
+
+  // Requête API GitHub publique (anonyme, pas de token).
+  fetch('https://api.github.com/repos/' + REMOTE_REPO.owner + '/' + REMOTE_REPO.repo + '/commits/main', {
+    headers: { 'Accept': 'application/vnd.github+json' }
+  }).then(function(r) { return r.ok ? r.json() : null; }).then(function(data) {
+    if (!data || !data.sha) { writeCache({ checkedAt: Date.now(), result: { updateAvailable: false } }); return; }
+    var updateAvailable = data.sha !== LOCAL_SHA;
+    var result = { updateAvailable: updateAvailable, remoteSha: data.sha, commits: [] };
+    if (!updateAvailable) { writeCache({ checkedAt: Date.now(), result: result }); return; }
+    // Récupère les 5 derniers commits pour l'aperçu « Quoi de neuf ».
+    fetch('https://api.github.com/repos/' + REMOTE_REPO.owner + '/' + REMOTE_REPO.repo + '/commits?per_page=5', {
+      headers: { 'Accept': 'application/vnd.github+json' }
+    }).then(function(r) { return r.ok ? r.json() : []; }).then(function(list) {
+      result.commits = (list || []).map(function(c) {
+        return {
+          message: (c.commit && c.commit.message || '').split('\\n')[0].slice(0, 120),
+          date: c.commit && c.commit.author ? c.commit.author.date : null
+        };
+      });
+      writeCache({ checkedAt: Date.now(), result: result });
+      showBanner(result.commits);
+    }).catch(function() {
+      writeCache({ checkedAt: Date.now(), result: result });
+      showBanner([]);
+    });
+  }).catch(function() {
+    // Pas de réseau → on n'affiche rien (échec silencieux).
+  });
+
+  function showBanner(commits) {
+    if (commits && commits.length && commitsList) {
+      commitsList.innerHTML = '';
+      commits.forEach(function(c) {
+        var li = document.createElement('li');
+        var d = c.date ? c.date.slice(0, 10) : '';
+        var spanD = document.createElement('span');
+        spanD.className = 'cdate'; spanD.textContent = d;
+        var spanM = document.createElement('span');
+        spanM.textContent = c.message || '(sans message)';
+        li.appendChild(spanD); li.appendChild(spanM);
+        commitsList.appendChild(li);
+      });
+    }
+    banner.hidden = false;
+  }
+
+  if (closeBtn) {
+    closeBtn.addEventListener('click', function() {
+      banner.hidden = true;
+      var c = readCache() || {};
+      c.dismissedAt = Date.now();
+      writeCache(c);
+    });
+  }
+})();
 </script>
 </body>
 </html>`;

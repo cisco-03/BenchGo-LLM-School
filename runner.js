@@ -3,7 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const readline = require('readline');
 const logger = require('./logger');
-const { PROFILES, CLASSE_NAMES, parseCliArgs, detectProfileFromModelName, fetchModelNameFromLMStudio, fetchModelMetadataFromLMStudio, OPTIONAL_BONUS_PCT, selfProfiling, TEACHER_CONFIG, PROFILING_TIMEOUT_MS, PROFILING_WAITING_MESSAGES, POST_PROFILING_WAITING_MESSAGES } = require('./config');
+const { PROFILES, CLASSE_NAMES, tierToClasseNum, parseCliArgs, detectProfileFromModelName, fetchModelNameFromLMStudio, fetchModelMetadataFromLMStudio, OPTIONAL_BONUS_PCT, selfProfiling, TEACHER_CONFIG, PROFILING_TIMEOUT_MS, PROFILING_WAITING_MESSAGES, POST_PROFILING_WAITING_MESSAGES } = require('./config');
 const { ProgressBar, Spinner, letterGrade } = require('./progress-bar');
 const { extractJSON, extractCodeRegex } = require('./parsing-utils');
 const { queryLLM: queryLLMLocal } = require('./lm-studio-client');
@@ -25,6 +25,7 @@ const carnetProf = require('./carnet-professeur');
 const presets = require('./presets');
 const apiKeysStore = require('./api-keys-store');
 const communitySync = require('./community-sync');
+const updateChecker = require('./update-checker');
 
 const DEFAULT_CONTEXT_LIMIT_TOKENS = 16384;
 const MAX_RATTRAPAGE_ATTEMPTS = 1;
@@ -119,7 +120,8 @@ function explainTechnicalError(errors, task) {
 }
 
 function getClassName(profileArg, tierNum) {
-  const fullName = (CLASSE_NAMES[profileArg] && CLASSE_NAMES[profileArg][tierNum]) || `Classe-${tierNum}`;
+  const classNum = tierToClasseNum(profileArg, tierNum);
+  const fullName = (CLASSE_NAMES[profileArg] && CLASSE_NAMES[profileArg][classNum]) || `Classe-${classNum}`;
   const firstDash = fullName.indexOf('-');
   const secondDash = firstDash !== -1 ? fullName.indexOf('-', firstDash + 1) : -1;
   return secondDash !== -1 ? fullName.substring(secondDash + 1) : fullName;
@@ -273,13 +275,14 @@ async function askFreeText(question) {
 // dans le rapport.
 //
 // Retourne une chaîne explicative (français) ou null si l'appel a échoué.
-async function askModelForFailureExplanation({ queryFn, providerConfig, contextLimitTokens, tierNum, isMandatory, task, errors, studentCode }) {
+async function askModelForFailureExplanation({ queryFn, providerConfig, contextLimitTokens, tierNum, profileArg, isMandatory, task, errors, studentCode }) {
   if (!queryFn) return null;
+  const classNum = tierToClasseNum(profileArg, tierNum);
 
   const codePreview = (studentCode || '').trim().substring(0, 1200);
   const explanationPrompt =
     `CONTEXTE : Vous étiez en train de résoudre l'exercice ${task.id} (${task.label}) ` +
-    `en classe de Tier ${tierNum}. Vous avez échoué définitivement après plusieurs tentatives.\n\n` +
+    `en classe ${classNum}. Vous avez échoué définitivement après plusieurs tentatives.\n\n` +
     `Le professeur a corrigé votre copie et le moteur d'évaluation a renvoyé l'erreur technique suivante :\n` +
     `"${(errors || 'erreur inconnue').substring(0, 400)}"\n\n` +
     `Voici le code que vous aviez proposé :\n` +
@@ -293,7 +296,7 @@ async function askModelForFailureExplanation({ queryFn, providerConfig, contextL
     `technique n'est PAS acceptable.\n` +
     `Répondez UNIQUEMENT par votre explication, sans balise de code.`;
 
-  const explainSpinner = new Spinner(`Tier ${tierNum} — Professeur : demande d'explication pour l'échec ${task.id}...`);
+  const explainSpinner = new Spinner(`Classe ${classNum} — Professeur : demande d'explication pour l'échec ${task.id}...`);
   explainSpinner.start();
   try {
     const response = await queryFn(
@@ -304,13 +307,13 @@ async function askModelForFailureExplanation({ queryFn, providerConfig, contextL
       explainSpinner,
       { contextLimitTokens, providerConfig }
     );
-    explainSpinner.stop(`Tier ${tierNum} — Explication reçue`);
+    explainSpinner.stop(`Classe ${classNum} — Explication reçue`);
     const content = (response && response.content || '').trim();
     if (!content) return null;
     // Nettoyage : retire d'éventuels blocs de code pour ne garder que l'explication textuelle.
     return content.replace(/```[\s\S]*?```/g, '').trim();
   } catch (e) {
-    explainSpinner.fail(`Tier ${tierNum} — Explication impossible (erreur API)`);
+    explainSpinner.fail(`Classe ${classNum} — Explication impossible (erreur API)`);
     logger.warn(`Explication d'échec impossible pour ${task.id} : ${e.message}`);
     return null;
   }
@@ -323,8 +326,9 @@ async function runTierAttempt({ tierNum, tierData, isMandatory, profileArg, cont
   // nom historique pour ne pas casser l'appel, mais elle désigne le profil
   // de filtrage effectif.
   const attemptTag = attemptNumber > 1 ? ` (RATTRAPAGE ${attemptNumber - 1}/${MAX_RATTRAPAGE_ATTEMPTS})` : '';
+  const classNum = tierToClasseNum(profileArg, tierNum);
 
-  console.log(`\x1b[33m━━ TIER ${tierNum} : ${tierData.title}${attemptTag} ━━\x1b[0m`);
+  console.log(`\x1b[33m━━ CLASSE ${classNum} : ${tierData.title}${attemptTag} ━━\x1b[0m`);
   console.log(`  Statut : ${isMandatory ? `\x1b[32mOBLIGATOIRE [profil ${profileArg}]\x1b[0m` : `\x1b[36mOPTIONNEL pour ${profileArg} (BYPASS autorisé)\x1b[0m`}`);
 
   let tierScore = 0;
@@ -391,7 +395,7 @@ async function runTierAttempt({ tierNum, tierData, isMandatory, profileArg, cont
       const helpPrompt = `CONTEXTE : L'exercice ${rtask.id} (${rtask.label}) a échoué lors de votre première tentative.\n` +
         `En tant que professeur, je vous propose un indice pour vous aider à le résoudre.\n` +
         `Voulez-vous recevoir cet indice ? Répondez UNIQUEMENT par "AIDE_OUI" ou "AIDE_NON".`;
-      const helpSpinner = new Spinner(`Tier ${tierNum} — Professeur : proposition d'aide pour ${rtask.id}...`);
+      const helpSpinner = new Spinner(`Classe ${classNum} — Professeur : proposition d'aide pour ${rtask.id}...`);
       helpSpinner.start();
       const helpStart = performance.now();
       try {
@@ -399,7 +403,7 @@ async function runTierAttempt({ tierNum, tierData, isMandatory, profileArg, cont
           helpPrompt, tierData.difficulty, tierNum, isMandatory, helpSpinner,
           { contextLimitTokens, providerConfig }
         );
-        helpSpinner.stop(`Tier ${tierNum} — Réponse du modèle reçue`);
+        helpSpinner.stop(`Classe ${classNum} — Réponse du modèle reçue`);
         tierElapsedMs += Math.round(performance.now() - helpStart);
         tierTokens += (helpSpinner.tokenCount || 0);
         const helpContent = (helpResponse && helpResponse.content) || '';
@@ -413,19 +417,19 @@ async function runTierAttempt({ tierNum, tierData, isMandatory, profileArg, cont
           console.log(`  \x1b[90m👨‍🏫 Professeur : Le modèle décline l'aide pour l'exercice ${rtask.id}.\x1b[0m`);
         }
       } catch (helpErr) {
-        helpSpinner.fail(`Tier ${tierNum} — Erreur lors de la proposition d'aide`);
+        helpSpinner.fail(`Classe ${classNum} — Erreur lors de la proposition d'aide`);
         console.log(`  \x1b[90m👨‍🏫 Professeur : Impossible de contacter le modèle. Rattrapage sans indice.\x1b[0m`);
       }
     }
 
-    const spinner = new Spinner(`Tier ${tierNum} — Essais restants: ${attemptsLeft} | Score Tier: ${tierScore}/${totalPossiblePoints} | Santé: ${gameState.globalLifeScore}`);
+    const spinner = new Spinner(`Classe ${classNum} — Essais restants: ${attemptsLeft} | Score: ${tierScore}/${totalPossiblePoints} | Santé: ${gameState.globalLifeScore}`);
     spinner.start();
 
     // Génération du Prompt Stratégique (Section 4)
     // Prompt cohérent : on demande au modèle de renvoyer ses solutions sous forme
     // de Markdown structuré, sans consigne contradictoire.
-    let dynamicPrompt = `CONTEXTE D'EVALUATION : Vous êtes dans l'école ${PROFILES[profileArg]?.ecole || profileArg}, classe de Tier ${tierNum} (${tierData.title}).\n\n`;
-    dynamicPrompt += `EXERCICES À RÉSOUDRE (Score Tier: ${tierScore}, Santé Globale: ${gameState.globalLifeScore}):\n`;
+    let dynamicPrompt = `CONTEXTE D'EVALUATION : Vous êtes dans l'école ${PROFILES[profileArg]?.ecole || profileArg}, classe ${classNum} (${tierData.title}).\n\n`;
+    dynamicPrompt += `EXERCICES À RÉSOUDRE (Score: ${tierScore}, Santé Globale: ${gameState.globalLifeScore}):\n`;
     for (let t of availableTasks) {
       dynamicPrompt += `- ID: ${t.id} | Desc: ${t.label} | Valeur: ${t.points} points\n`;
     }
@@ -469,13 +473,13 @@ async function runTierAttempt({ tierNum, tierData, isMandatory, profileArg, cont
       for (let tierAttempt = 1; tierAttempt <= 2; tierAttempt++) {
         const tierAttemptTag = tierAttempt > 1 ? ` (retry anti-timeout, reasoning off)` : '';
         const spinner2 = tierAttempt > 1
-          ? new Spinner(`Tier ${tierNum} — Essais restants: ${attemptsLeft} | Score Tier: ${tierScore}/${totalPossiblePoints} | Santé: ${gameState.globalLifeScore}${tierAttemptTag}`)
+          ? new Spinner(`Classe ${classNum} — Essais restants: ${attemptsLeft} | Score: ${tierScore}/${totalPossiblePoints} | Santé: ${gameState.globalLifeScore}${tierAttemptTag}`)
           : spinner;
         if (tierAttempt === 1) {
           // spinner déjà démarré plus haut (avant la génération du prompt)
         } else {
           spinner2.start();
-          console.log(`  \x1b[33m[RETRY ANTI-TIMEOUT]\x1b[0m Tier ${tierNum} — nouvelle tentative avec raisonnement désactivé (le modèle avait dépassé le délai).`);
+          console.log(`  \x1b[33m[RETRY ANTI-TIMEOUT]\x1b[0m Classe ${classNum} — nouvelle tentative avec raisonnement désactivé (le modèle avait dépassé le délai).`);
         }
         tierSpinner = spinner2;
         const callOptions = tierAttempt === 1
@@ -491,7 +495,7 @@ async function runTierAttempt({ tierNum, tierData, isMandatory, profileArg, cont
             callOptions
           );
           if (responseData) {
-            if (tierAttempt > 1) spinner.stop(`Tier ${tierNum} — Réponse reçue (retry réussi)`);
+            if (tierAttempt > 1) spinner.stop(`Classe ${classNum} — Réponse reçue (retry réussi)`);
             break;
           }
         } catch (tierCallErr) {
@@ -499,14 +503,14 @@ async function runTierAttempt({ tierNum, tierData, isMandatory, profileArg, cont
           const isTimeoutErr = tierCallErr && tierCallErr.name === 'AbortError';
           if (tierAttempt === 1 && isTimeoutErr) {
             tierRetryReason = 'timeout';
-            spinner.fail(`Tier ${tierNum} — timeout dépassé, retry avec raisonnement off...`);
+            spinner.fail(`Classe ${classNum} — timeout dépassé, retry avec raisonnement off...`);
             continue;
           }
           // Autre erreur ou 2e tentative → on remonte en mode mandatory réel.
           if (tierAttempt > 1) {
             // 2e échec : on remet le spinner d'origine et on sort pour laisser
             // queryFn gérer l'erreur (exit si mandatory).
-            spinner.fail(`Tier ${tierNum} — échec définitif après retry : ${tierCallErr.message}`);
+            spinner.fail(`Classe ${classNum} — échec définitif après retry : ${tierCallErr.message}`);
           }
           // Relance avec isMandatory=true pour le comportement historique (exit).
           responseData = await queryFn(
@@ -519,11 +523,11 @@ async function runTierAttempt({ tierNum, tierData, isMandatory, profileArg, cont
       const inferenceTimeMs = Math.round(endTime - startTime);
 
       if (!responseData) {
-        spinner.fail(`Tier ${tierNum} ignoré (optionnel ou erreur API)`);
+        spinner.fail(`Classe ${classNum} ignorée (optionnel ou erreur API)`);
         break; // API err
       }
       
-      spinner.stop(`Tier ${tierNum} — Réponse reçue en ${inferenceTimeMs}ms`);
+      spinner.stop(`Classe ${classNum} — Réponse reçue en ${inferenceTimeMs}ms`);
       // Cumul chronométrie : temps d'inférence + tokens produits (via le spinner
       // de l'appel courant, qui a reçu updateTokens pendant le streaming).
       tierElapsedMs += inferenceTimeMs;
@@ -537,7 +541,7 @@ async function runTierAttempt({ tierNum, tierData, isMandatory, profileArg, cont
       let selectedId = null;
       const stopMatch = rawResponse.match(/SELECTION\s*:\s*STOP/i);
       if (stopMatch || rawResponse.trim().endsWith("STOP")) {
-         console.log(`  \x1b[36mLe modèle a décidé d'arrêter la session de test pour ce tier.\x1b[0m`);
+          console.log(`  \x1b[36mLe modèle a décidé d'arrêter la session de test pour cette classe.\x1b[0m`);
          break;
       }
 
@@ -600,7 +604,7 @@ async function runTierAttempt({ tierNum, tierData, isMandatory, profileArg, cont
          const penalty = 35; // Pénalité pour réponse vide ou non pertinente
          tierScore -= penalty;
          gameState.globalLifeScore -= penalty;
-         console.log(`  \x1b[31m✘ Pénalité pour réponse non exploitable : -${penalty} Points (Tier: ${tierScore}, Santé: ${gameState.globalLifeScore})\x1b[0m`);
+          console.log(`  \x1b[31m✘ Pénalité pour réponse non exploitable : -${penalty} Points (Score: ${tierScore}, Santé: ${gameState.globalLifeScore})\x1b[0m`);
 
          if (gameState.globalLifeScore <= -100) break; // Sortie immédiate si le score est trop bas
 
@@ -632,7 +636,7 @@ async function runTierAttempt({ tierNum, tierData, isMandatory, profileArg, cont
                optionalBonusTotal += bonus;
                _bonusTag = ` (+${bonus} bonus opt.)`;
              }
-             console.log(`  \x1b[32m✔ Succès ! +${pts}${_bonusTag} Points (Tier: ${tierScore}, Santé: ${gameState.globalLifeScore})\x1b[0m`);
+              console.log(`  \x1b[32m✔ Succès ! +${pts}${_bonusTag} Points (Score: ${tierScore}, Santé: ${gameState.globalLifeScore})\x1b[0m`);
 
              // Verbosité logic
              if (studentCode && studentCode.length > 0 && rawResponse.length > studentCode.length * 4) {
@@ -660,11 +664,11 @@ async function runTierAttempt({ tierNum, tierData, isMandatory, profileArg, cont
                   console.log(`  \x1b[36m👨‍🏫 Professeur : le modèle doit expliquer la cause de son échec sur ${task.id}.\x1b[0m`);
                  let failureExplanation = null;
                  try {
-                   failureExplanation = await askModelForFailureExplanation({
-                     queryFn, providerConfig, contextLimitTokens,
-                     tierNum, isMandatory, task,
-                     errors, studentCode
-                   });
+                    failureExplanation = await askModelForFailureExplanation({
+                      queryFn, providerConfig, contextLimitTokens,
+                      tierNum, profileArg, isMandatory, task,
+                      errors, studentCode
+                    });
                  } catch (e) {
                    logger.warn(`Explication d'échec échouée pour ${task.id} : ${e.message}`);
                  }
@@ -744,7 +748,7 @@ async function runTierAttempt({ tierNum, tierData, isMandatory, profileArg, cont
                      tierScore += pts;
                      gameState.globalLifeScore += pts;
                      taskNetPoints[task.id] = (taskNetPoints[task.id] || 0) + pts;
-                     console.log(`  \x1b[32m✅ Pénalité annulée pour ${task.id} (Tier: ${tierScore}, Santé: ${gameState.globalLifeScore})\x1b[0m`);
+                      console.log(`  \x1b[32m✅ Pénalité annulée pour ${task.id} (Score: ${tierScore}, Santé: ${gameState.globalLifeScore})\x1b[0m`);
                      // Carnet : contestation de pénalité — l'élève a objectivement
                      // raison, le grader s'est trompé. Signal fort : action requise
                      // côté énoncé/évaluateur.
@@ -756,7 +760,7 @@ async function runTierAttempt({ tierNum, tierData, isMandatory, profileArg, cont
                        verdict: 'penalite_annulee_par_le_professeur'
                      });
                   } else {
-                     console.log(`  \x1b[31m✘ Pénalité maintenue : -${pts} Points (Tier: ${tierScore}, Santé: ${gameState.globalLifeScore})\x1b[0m`);
+                      console.log(`  \x1b[31m✘ Pénalité maintenue : -${pts} Points (Score: ${tierScore}, Santé: ${gameState.globalLifeScore})\x1b[0m`);
                   }
                   permanentlyFailedIds.push(task.id);
 
@@ -773,7 +777,7 @@ async function runTierAttempt({ tierNum, tierData, isMandatory, profileArg, cont
                 tierScore -= pts;
                 gameState.globalLifeScore -= pts;
                 taskNetPoints[task.id] = (taskNetPoints[task.id] || 0) - pts;
-                console.log(`  \x1b[31m✘ Échec sur l'exercice ${task.id} ! Pénalité : -${pts} Points (Tier: ${tierScore}, Santé: ${gameState.globalLifeScore})\x1b[0m`);
+                 console.log(`  \x1b[31m✘ Échec sur l'exercice ${task.id} ! Pénalité : -${pts} Points (Score: ${tierScore}, Santé: ${gameState.globalLifeScore})\x1b[0m`);
                 // Explication pédagogique de l'erreur (jamais d'erreur brute seule,
                 // qui ferait croire à un bug du moteur BenchGo).
                 const reasonBrief = explainTechnicalError(errors, task);
@@ -815,7 +819,7 @@ async function runTierAttempt({ tierNum, tierData, isMandatory, profileArg, cont
       }
       
     } catch(e) {
-      spinner.fail(`Tier ${tierNum} — Erreur inattendue`);
+      spinner.fail(`Classe ${classNum} — Erreur inattendue`);
       console.error(`  \x1b[31m[ERREUR]\x1b[0m ${e.message}`);
       break;
     }
@@ -849,15 +853,15 @@ async function runTierAttempt({ tierNum, tierData, isMandatory, profileArg, cont
     console.log(`\n  \x1b[41m\x1b[37m ✘ ÉLIMINATION : Santé critique atteinte (${gameState.globalLifeScore}) \x1b[0m`);
     console.log(`  \x1b[31mLe modèle est définitivement exclu du test (trop d'échecs/erreurs).\x1b[0m`);
   } else if (tierPassed) {
-    console.log(`\n  \x1b[42m\x1b[30m ✔ TIER ${tierNum} RÉUSSI : ${tierScore}/${totalPossiblePoints} Points — Classe Validée avec Mention ! \x1b[0m`);
+    console.log(`\n  \x1b[42m\x1b[30m ✔ CLASSE ${classNum} RÉUSSIE : ${tierScore}/${totalPossiblePoints} Points — Classe Validée avec Mention ! \x1b[0m`);
   } else {
-    console.log(`\n  \x1b[41m\x1b[37m ✘ TIER ${tierNum} ÉCHEC : ${tierScore}/${totalPossiblePoints} Points (Seuil requis: ${validationThreshold}) \x1b[0m`);
+    console.log(`\n  \x1b[41m\x1b[37m ✘ CLASSE ${classNum} ÉCHEC : ${tierScore}/${totalPossiblePoints} Points (Seuil requis: ${validationThreshold}) \x1b[0m`);
     // Simulating the exact fatal error reported in user issue if mandatory
     if (isMandatory) {
-      console.log(`\n  \x1b[31mERREUR FATALE : TEST ECHOUE - Score Tier : ${tierScore}\x1b[0m`);
-      console.log(`  \x1b[31mNon-validation ! Niveau non atteint de validation pour le tier ${tierNum} : Echec.\x1b[0m`);
+      console.log(`\n  \x1b[31mERREUR FATALE : TEST ECHOUE - Score : ${tierScore}\x1b[0m`);
+      console.log(`  \x1b[31mNon-validation ! Niveau non atteint de validation pour la classe ${classNum} : Echec.\x1b[0m`);
     } else {
-      console.log(`  \x1b[36mℹ Tier optionnel pour le profil ${profileArg} — non pénalisé dans le score obligatoire.\x1b[0m`);
+      console.log(`  \x1b[36mℹ Classe optionnelle pour le profil ${profileArg} — non pénalisée dans le score obligatoire.\x1b[0m`);
     }
   }
 
@@ -911,7 +915,7 @@ async function runTierAttempt({ tierNum, tierData, isMandatory, profileArg, cont
   if (helpUsedCount > 0) tierAnnotations.push(`avec aide (${helpUsedCount})`);
   if (retriedCount > 0) tierAnnotations.push(`avec rattrapage (${retriedCount})`);
 
-  const { report } = buildTierReport(tierData, evalResults, rawResponseAll, { helpUsedCount, retriedCount, tierAnnotations });
+  const { report } = buildTierReport(tierData, evalResults, rawResponseAll, { helpUsedCount, retriedCount, tierAnnotations, classNum });
 
   return {
     eliminated: gameState.globalLifeScore <= -100,
@@ -1043,7 +1047,8 @@ async function main() {
            teacherModel, teacherApiKey, teacherEndpoint, teacherDisabled, quantization: cliQuantization,
            preset: presetName, savePreset: savePresetName, deletePreset: deletePresetName, listPresets: listPresetsFlag,
            forgetKey: forgetKeyName, listKeys: listKeysFlag, noSaveKeys: noSaveKeysFlag, force: forceFlag,
-           submit: submitFlag, noTelemetry: noTelemetryFlag, githubToken: cliGithubToken } = cliArgs;
+            submit: submitFlag, noTelemetry: noTelemetryFlag, githubToken: cliGithubToken,
+            noUpdateCheck: noUpdateCheckFlag } = cliArgs;
   let tierArg = tierArgRaw;
 
   // --- Flags d'action unique : traités puis sortie immédiate ---
@@ -1118,6 +1123,36 @@ async function main() {
     }
     // Envoie le ping (silencieux, non bloquant).
     communitySync.sendPing().catch(() => {});
+  }
+
+  // --- Avis de mise à jour disponible ---
+  // Compare le SHA du commit local avec le dernier commit poussé sur GitHub main.
+  // Si une nouveauté/correction est disponible, affiche une bannière colorée pour
+  // inciter l'utilisateur à faire `git pull`. --no-update-check désactive ce check.
+  // Le check est mis en cache 1h dans .benchgo-profile.json pour ne pas spammer
+  // l'API GitHub. Échec silencieux (pas de réseau / pas git → pas d'avis).
+  if (!noUpdateCheckFlag) {
+    try {
+      const updateInfo = await updateChecker.checkForUpdate();
+      if (updateInfo.updateAvailable) {
+        console.log('  \x1b[1;33m━━━ MISE À JOUR DISPONIBLE ━━━\x1b[0m');
+        console.log('  \x1b[33mUne nouvelle version de BenchGo a été publiée sur GitHub.\x1b[0m');
+        console.log('  \x1b[90mVotre version locale est en retard sur la branche main du dépôt\x1b[0m');
+        console.log('  \x1b[90mcommunautaire (nouveautés, corrections d\'exercices, améliorations).\x1b[0m');
+        if (updateInfo.commits && updateInfo.commits.length > 0) {
+          console.log('  \x1b[90mDerniers changements publiés :\x1b[0m');
+          for (const c of updateInfo.commits.slice(0, 5)) {
+            const msg = c.message || '(sans message)';
+            const date = c.date ? c.date.slice(0, 10) : '';
+            console.log(`    \x1b[36m${date}\x1b[0m ${msg}`);
+          }
+        }
+        console.log('  \x1b[1;36mPour mettre à jour : \x1b[1;36mgit pull\x1b[0m');
+        console.log('  \x1b[90m(Puis relancez node runner.js)\x1b[0m\n');
+      }
+    } catch (e) {
+      // Échec silencieux — ne jamais bloquer le runner.
+    }
   }
 
   // --- Questionnaire interactif au démarrage ---
@@ -1645,9 +1680,9 @@ async function main() {
     console.log(`  \x1b[1;36m━━━ CONFIGURATION DE L'ÉCOLE ━━━\x1b[0m`);
     console.log(`  \x1b[1;33mÉcole              :\x1b[0m \x1b[1;33m${profile.ecole}\x1b[0m`);
     console.log(`  \x1b[1;33mProfil             :\x1b[0m \x1b[1;33m${profile.label}\x1b[0m`);
-    console.log(`  \x1b[1;33mTiers obligatoires  :\x1b[0m \x1b[1;33m${profile.mandatory.join(', ')}\x1b[0m`);
+    console.log(`  \x1b[1;33mClasses obligatoires:\x1b[0m \x1b[1;33m${profile.mandatory.map(t => tierToClasseNum(profileArg, t)).join(', ')}\x1b[0m`);
     if (profile.optional.length > 0) {
-      console.log(`  \x1b[1;33mTiers optionnels    :\x1b[0m \x1b[1;33m${profile.optional.join(', ')}\x1b[0m`);
+      console.log(`  \x1b[1;33mClasses optionnelles:\x1b[0m \x1b[1;33m${profile.optional.map(t => tierToClasseNum(profileArg, t)).join(', ')}\x1b[0m`);
     }
     console.log('');
 
@@ -1664,7 +1699,7 @@ async function main() {
   );
 
   if (tierKeys.length === 0) {
-    console.log(`\x1b[31mAucun tier applicable pour la cible '${tierArg}' avec le profil ${profileArg}.\x1b[0m`);
+    console.log(`\x1b[31mAucune classe applicable pour la cible '${tierArg}' avec le profil ${profileArg}.\x1b[0m`);
     return { ecoleLabel, profileArg, skipped: true };
   }
 
@@ -1683,7 +1718,7 @@ async function main() {
 
   if (rattrapageEnabled) {
     logger.info(`Mode rattrapage activé pour le profil ${profileArg}.`);
-    console.log(`  \x1b[36mMode rattrapage actif : une seconde tentative est proposée en cas d'échec de tier.\x1b[0m\n`);
+    console.log(`  \x1b[36mMode rattrapage actif : une seconde tentative est proposée en cas d'échec de classe.\x1b[0m\n`);
   }
 
   let stopGlobalEval = false;
@@ -1791,7 +1826,7 @@ async function main() {
       if (isMandatory) {
         // Tier obligatoire échoué : on stoppe le run principal (comportement
         // inchangé), mais on permet le rattrapage final avant de conclure.
-        console.log(`\n  \x1b[31m[ARRET] Le tier obligatoire ${tierNum} a échoué — arrêt du run principal.\x1b[0m`);
+        console.log(`\n  \x1b[31m[ARRET] La classe obligatoire ${tierToClasseNum(profileArg, tierNum)} a échoué — arrêt du run principal.\x1b[0m`);
         stopGlobalEval = true;
       }
       if (rattrapageEnabled) {
@@ -1847,7 +1882,7 @@ async function main() {
     }
 
     if (stopGlobalEval) {
-      globalReport += `\n> **⚠️ ARRÊT PRÉMATURÉ :** L'évaluation a été stoppée (Modèle éliminé ou Tier obligatoire échoué).\n`;
+      globalReport += `\n> **⚠️ ARRÊT PRÉMATURÉ :** L'évaluation a été stoppée (Modèle éliminé ou classe obligatoire échouée).\n`;
     }
   }
 
@@ -1860,7 +1895,7 @@ async function main() {
   //   3. >= 40% des exercices de l'examen ont échoué (échec massif).
   // Si aucun critère n'est rempli, l'élève s'en sort bien → pas de rattrapage.
   if (rattrapageEnabled && rattrapageQueue.length > 0 && gameState.globalLifeScore > -100) {
-    const tierLabels = rattrapageQueue.map(q => `Tier ${q.tierNum} (${getClassName(profileArg, q.tierNum)})`).join(', ');
+    const tierLabels = rattrapageQueue.map(q => `Classe ${tierToClasseNum(profileArg, q.tierNum)} (${getClassName(profileArg, q.tierNum)})`).join(', ');
 
     // --- Évaluation automatique des critères ---
     const hasMandatoryFail = rattrapageQueue.some(q => q.isMandatory);
@@ -1878,9 +1913,9 @@ async function main() {
 
     console.log('');
     console.log(`  \x1b[1;36m━━━━━━━━━━━━━ SÉANCE DE RATTRAPAGE ━━━━━━━━━━━━━\x1b[0m`);
-    console.log(`  \x1b[36mTiers échoués éligibles au rattrapage : ${tierLabels}\x1b[0m`);
+    console.log(`  \x1b[36mClasses échouées éligibles au rattrapage : ${tierLabels}\x1b[0m`);
     console.log(`  \x1b[90mÉvaluation automatique des critères :\x1b[0m`);
-    console.log(`    \x1b[90m• Tier obligatoire échoué : ${hasMandatoryFail ? 'OUI' : 'non'}\x1b[0m`);
+    console.log(`    \x1b[90m• Classe obligatoire échouée : ${hasMandatoryFail ? 'OUI' : 'non'}\x1b[0m`);
     console.log(`    \x1b[90m• Santé \u003c 0 : ${healthCritical ? 'OUI (' + gameState.globalLifeScore + ' PV)' : 'non (' + gameState.globalLifeScore + ' PV)'}\x1b[0m`);
     console.log(`    \x1b[90m• Échec massif (\u003e= 40%) : ${massFailure ? 'OUI (' + Math.round(failedRatio * 100) + '%)' : 'non (' + Math.round(failedRatio * 100) + '%)'}\x1b[0m`);
 
@@ -1974,7 +2009,7 @@ async function main() {
           }
           console.log(`  \x1b[36mScore retenu (rattrapage) : ${retryResult.tierPassedCount}/${retryResult.tierTotalCount} (${retryResult.tierPct}%).\x1b[0m`);
         } else {
-          console.log(`  \x1b[90mRattrapage du Tier ${tierNum} sans amélioration — score initial conservé.\x1b[0m`);
+          console.log(`  \x1b[90mRattrapage de la classe ${tierToClasseNum(profileArg, tierNum)} sans amélioration — score initial conservé.\x1b[0m`);
         }
 
         if (retryResult.eliminated) {
@@ -2098,10 +2133,10 @@ async function main() {
   console.log('\x1b[36m\u255A\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u255D\x1b[0m\n');
 
   globalReport += `\n---\n\n## Tableau récapitulatif des points par exercice\n\n`;
-  globalReport += `| Tier | Exercice | Type | Points obtenus | Points max | Statut | Aide | Rattrapage |\n`;
+  globalReport += `| Classe | Exercice | Type | Points obtenus | Points max | Statut | Aide | Rattrapage |\n`;
   globalReport += `|---|---|---|---|---|---|---|---|\n`;
   for (const r of allEvalResults) {
-    const tierNumMatch = (r._tierNum != null) ? r._tierNum : '';
+    const tierNumMatch = (r._tierNum != null) ? tierToClasseNum(profileArg, r._tierNum) : '';
     const st = r.status === 'bypassed' ? '⊘ Bypassé' : (r.status === 'success' ? '✔ Validé' : '✘ Échec');
     const help = r.helpUsed ? 'Oui' : 'Non';
     const retry = r.retried ? 'Oui' : 'Non';
@@ -2124,7 +2159,7 @@ async function main() {
     globalReport += `Les erreurs techniques brutes du moteur d'exécution ne sont jamais affichées seules : `;
     globalReport += `elles sont systématiquement accompagnées d'une analyse pédagogique.\n\n`;
     for (const r of failedWithExplanations) {
-      const tierNumMatch = (r._tierNum != null) ? `Tier ${r._tierNum} — ` : '';
+      const tierNumMatch = (r._tierNum != null) ? `Classe ${tierToClasseNum(profileArg, r._tierNum)} — ` : '';
       globalReport += `### ${tierNumMatch}${r.id} — ${r.taskType || 'Exercice'}\n\n`;
       globalReport += `**Explication de l'élève :** ${r.failureExplanation}\n\n`;
       if (r.teacherCorrection) {
@@ -2172,7 +2207,8 @@ async function main() {
   let targetDir = ecoleDir;
   if (tierArg && tierArg !== "all") {
     const tierNum = parseInt(tierArg);
-    const classeLabel = (CLASSE_NAMES[profileArg] && CLASSE_NAMES[profileArg][tierNum]) || `Classe-${tierNum}`;
+    const classNum = tierToClasseNum(profileArg, tierNum);
+    const classeLabel = (CLASSE_NAMES[profileArg] && CLASSE_NAMES[profileArg][classNum]) || `Classe-${classNum}`;
     targetDir = path.join(ecoleDir, classeLabel);
   } else {
     // Mode "all" : on range dans un sous-dossier représentant le niveau/profil
@@ -2231,7 +2267,7 @@ async function main() {
   // et examiner chaque demande — comme un élève qui remet sa copie au professeur.
   if (allCarnetEntries.length > 0) {
     const classeLabelForCarnet = (tierArg && tierArg !== "all")
-      ? ((CLASSE_NAMES[profileArg] && CLASSE_NAMES[profileArg][parseInt(tierArg)]) || `Classe-${tierArg}`)
+      ? (() => { const tNum = parseInt(tierArg); const cNum = tierToClasseNum(profileArg, tNum); return (CLASSE_NAMES[profileArg] && CLASSE_NAMES[profileArg][cNum]) || `Classe-${cNum}`; })()
       : 'Toutes-classes';
     const carnetModel = effectiveModel || modelName || '(inconnu)';
     try {

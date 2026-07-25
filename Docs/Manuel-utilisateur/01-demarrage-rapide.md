@@ -31,7 +31,7 @@ node runner.js all
 ```
 
 Cette commande :
-- lance tous les tiers applicables
+- lance toutes les classes applicables
 - tente la détection automatique du profil si vous ne forcez pas `--profile`
 - crée un rapport Markdown final
 - crée un log persistant
@@ -41,7 +41,7 @@ Cette commande :
 - **Rapport Markdown** : dans `Export-Rapports/`, organisé par date et profil
 - **Logs** : dossier `logs/` à la racine du projet, un fichier horodaté par run
 
-## 5. Lancer un seul tier (exemple)
+## 5. Lancer une seule classe (exemple)
 
 ```powershell
 node runner.js 2

@@ -51,10 +51,37 @@ Epreuves:
 - logique de retry async avec abandon propre
 - debogage securite: protection contre prototype pollution
 
-## Correspondance tiers selon profil
+## Épreuve Finale - Expertise et résistance
 
-- LIGHT: tiers 0 et 1 obligatoires
-- STANDARD: tiers 0, 1, 2 obligatoires
-- EXPERT: tiers 0, 1, 2, 3 obligatoires
+Objectif:
+- valider la résistance ultime (logique, optimisation, mémoire, robustesse)
 
-Les tiers optionnels peuvent etre bypasses sans penaliser le score obligatoire.
+Cette épreuve est partagée par plusieurs écoles (STANDARD en optionnel, EXPERT en
+optionnel, DOCTORAT et FRONTIER en obligatoire). Elle correspond au fichier
+`tiers/tier6_master.json` (tier physique 6).
+
+Epreuves:
+- tri imposé sans utiliser Array.prototype.sort()
+- memoire longue (rappel d'une variable cachee dans un long texte)
+- robustesse face aux cas limites et aux contraintes strictes
+
+## Numérotation des classes
+
+Chaque école répartit ses épreuves en classes numérotées de 0 à N de façon **continue**
+(0, 1, 2, 3, 4...). Le numéro affiché dans le CLI, les rapports et les dossiers d'export
+est le numéro de classe logique, pas le numéro du fichier de tier sous-jacent.
+
+Les fichiers de tiers (`tiers/tier{N}_*.json`) portent un numéro physique qui peut
+présenter des trous (le tier 6 est l'épreuve finale partagée). Ces trous sont masqués
+à l'utilisateur : EXPERT utilise les tiers 0,1,2,3 puis 6, affichés comme classes
+0, 1, 2, 3, 4.
+
+## Correspondance classes selon profil
+
+- LIGHT: classes 0 et 1 obligatoires (2 a 5 optionnelles)
+- STANDARD: classes 0, 1, 2 obligatoires (3 a 6 optionnelles)
+- EXPERT: classes 0, 1, 2, 3 obligatoires (classe 4 = Épreuve Finale optionnelle)
+- DOCTORAT: classes 0, 1, 2, 3, 4 obligatoires (classe 4 = Épreuve Finale)
+- FRONTIER: classes 0, 1, 2, 3, 4 obligatoires (classe 5 = Épreuve Finale)
+
+Les classes optionnelles peuvent etre bypasses sans penaliser le score obligatoire.

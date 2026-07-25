@@ -8,8 +8,8 @@ Ce chapitre liste toutes les commandes utiles pour l'utilisateur.
 node runner.js [tier|all] [--profile=LIGHT|STANDARD|EXPERT|DOCTORAT|FRONTIER] [--context-limit=N]
 ```
 
-- `tier` : 0, 1, 2, 3 (ou plus selon le profil)
-- `all` : exécute tous les tiers applicables au profil
+- `tier` : numéro de tier physique (0, 1, 2, 3, et 6 pour l'Épreuve Finale partagée). Le runner affiche ensuite le numéro de classe logique correspondant au profil (ex: le tier 6 s'affiche comme classe 4 en EXPERT). Voir `06-reference-tiers.md` pour la correspondance.
+- `all` : exécute toutes les classes applicables au profil
 - `--profile` : force un profil
 - `--context-limit` : fixe la fenêtre de contexte estimée (tokens)
 
@@ -34,7 +34,11 @@ node runner.js 0
 node runner.js 1
 node runner.js 2
 node runner.js 3
+node runner.js 6
 ```
+
+> Le numéro passé correspond au fichier de tier (`tiers/tier{N}_*.json`). L'affichage
+> montre la classe logique (continue) du profil.
 
 ### Forcer un profil
 
@@ -73,15 +77,19 @@ node runner.js all --profile=STANDARD --context-limit=32768
 - Si un profil inconnu est passé en CLI : fallback sur `STANDARD` avec warning
 - Si la session n'est pas interactive : pas de rattrapage (question utilisateur désactivée)
 
-## Rattrapage interactif
+## Rattrapage automatique
 
-Pour LIGHT et STANDARD, si un tier échoue, le système peut proposer :
+Pour LIGHT, STANDARD et EXPERT (profils éligibles), une séance de rattrapage
+automatique est proposée en fin d'examen si l'un de ces critères est rempli :
 
-- `Voulez-vous lancer une séance de rattrapage pour le Tier X ? [o/N]`
+1. une classe **obligatoire** a échoué
+2. la santé globale de l'élève est négative (< 0)
+3. au moins 40 % des exercices ont échoué
 
 Règles :
-- au maximum 1 rattrapage par tier
+- au maximum 1 rattrapage par classe
 - le meilleur score entre tentative 1 et tentative 2 est conservé
+- aucune question manuelle : le rattrapage est déclenché automatiquement
 
 ## Exemple de session complète
 
@@ -92,7 +100,7 @@ node runner.js all --profile=STANDARD --context-limit=16384
 ```
 
 Résultat attendu :
-- progression par tier
+- progression par classe
 - score final global + obligatoire
 - verdict
 - rapport Markdown sauvegardé dans `Export-Rapports/`
@@ -164,7 +172,28 @@ node runner.js --submit --github-token=ghp_xxxxxxxxxxxx
 
 # Désactiver la télémétrie anonyme (ping compteur d'utilisateurs)
 node runner.js --no-telemetry
+
+# Désactiver l'avis de mise à jour disponible au démarrage (comparaison SHA local vs GitHub)
+node runner.js --no-update-check
 ```
 
 > 📖 Voir le [chapitre 8 — Communauté & classement participatif](./08-communaute.md)
 > pour le détail complet (token GitHub, détection des nouveaux modèles, etc.)
+
+---
+
+## Avis de mise à jour disponible
+
+Au démarrage du runner et dans le classement local (`classement.html`), BenchGo
+compare automatiquement le SHA de votre commit local avec le dernier commit
+poussé sur la branche `main` du dépôt GitHub. Si une nouveauté ou une correction
+a été publiée, une **bannière visuelle** s'affiche :
+
+- **CLI** : bannière jaune avec les 5 derniers commits distants (date + message)
+  et la commande à exécuter (`git pull`).
+- **Classement local** : bannière animée (pulse) sous l'en-tête, avec aperçu des
+  changements et bouton ✕ pour masquer 1h.
+
+Cette vérification est **anonyme** (API GitHub publique, aucun token requis,
+aucune donnée personnelle transmise) et **mise en cache 1h** pour ne pas spammer
+l'API. En cas d'échec réseau, aucun avis ne s'affiche (échec silencieux).

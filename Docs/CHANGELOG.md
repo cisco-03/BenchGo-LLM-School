@@ -1,5 +1,52 @@
 # CHANGELOG - Carnet de Notes BenchGo
 
+## 2026-07-25 — Avis visuel de mise à jour disponible (CLI + classement local)
+
+### Contexte
+BenchGo est un dépôt GitHub évolutif : des corrections d'exercices, des nouveautés et des améliorations y sont poussées régulièrement. Les utilisateurs qui ont cloné le dépôt n'étaient pas avertis qu'une mise à jour était disponible — ils devaient deviner qu'il fallait faire `git pull`. Demande exprimée dans `Memories-BenchGo/Tasks1.md` : un effet visuel pour avertir tout le monde quand une nouveauté ou une correction a été publiée, afin que chacun mette à jour son dépôt local.
+
+### Implémentation
+Nouveau module `update-checker.js` qui compare le SHA du commit local (`git rev-parse HEAD`) avec le dernier commit poussé sur la branche `main` du dépôt communautaire (`cisco-03/BenchGo-LLM-School`) via l'API GitHub publique anonyme (pas de token requis, pas de donnée personnelle transmise).
+
+Deux points d'intégration :
+1. **CLI (`runner.js`)** : bannière colorée jaune affichée au démarrage, juste après le bloc télémétrie et avant le questionnaire interactif. Affiche les 5 derniers commits distants (date + message) pour donner un aperçu « Quoi de neuf ». Flag `--no-update-check` pour désactiver le check (utile en mode batch/hors-ligne).
+2. **Classement local (`leaderboard.js`)** : bannière visuelle côté navigateur, juste sous l'en-tête. Le SHA local est embarqué dans le HTML à la génération ; le navigateur fetch l'API GitHub et compare. Cache `localStorage` 1h + mémorisation du refus (bouton ✕) jusqu'à expiration du cache. Animation pulse pour attirer l'œil.
+
+Le classement consolidé (`consolidate-leaderboard.js`) n'a pas besoin d'avis : il tourne en CI sur le dépôt lui-même, donc toujours à jour.
+
+### Robustesse
+- Cache local 1h (`.benchgo-profile.json` côté CLI, `localStorage` côté navigateur) pour ne pas spammer l'API GitHub (rate limit 60 req/h/IP).
+- Échec silencieux : pas de réseau / pas git / dépôt inaccessible → pas d'avis (ne bloque jamais le runner ni l'affichage du classement).
+- Aucune donnée personnelle transmise (API GitHub publique, anonyme).
+
+### Fichiers modifiés
+- `update-checker.js` : nouveau module. `getLocalCommitSha()`, `getRemoteCommitSha()`, `getRecentRemoteCommits()`, `checkForUpdate()` (avec cache TTL 1h).
+- `config.js` : ajout du flag `--no-update-check` dans `parseCliArgs()`.
+- `runner.js` : import de `update-checker`, bannière CLI après le bloc télémétrie, respect de `noUpdateCheckFlag`.
+- `leaderboard.js` : import de `update-checker`, embarquement du SHA local dans le HTML, bannière visuelle (HTML + CSS + JS client fetch GitHub).
+
+## 2026-07-25 — Renumérotation logique des classes + renommage de l'épreuve finale
+
+### Contexte
+Les profils EXPERT (Université) et DOCTORAT (Thèse) affichaient un saut bizarre : après la classe 3, on passait directement à la « classe 6 » sans les classes 4 et 5. De plus, cette classe 6 s'appelait « Doctorat » alors même qu'elle se trouvait à l'intérieur de l'école Université, et que l'école suivante s'appelait déjà « Doctorat-Thèse » — d'où une confusion manifeste (signalée dans `Memories-BenchGo/Tasks1.md`).
+
+### Cause
+Il existe 7 tiers physiques (`tiers/tier{N}_*.json`, numérotés 0 à 6). Les tiers 4 et 5 n'existent que pour LIGHT et STANDARD (niveaux CM1/CM2 et 2nde/1ère) ; les écoles supérieures (EXPERT, DOCTORAT, FRONTIER) sautent donc au tier 6. Ce numéro physique fuyait dans l'affichage utilisateur : `━━ TIER 6 : Doctorat ━━`, dossiers `Classe-6-Doctorat`, etc. Le titre du tier 6 (« Doctorat ») entrait en collision avec le nom de l'école DOCTORAT.
+
+### Fix
+1. **Renumérotation logique** : nouveau mappage `TIER_TO_CLASSE` (dans `config.js`) dérivé de `PROFILES` (mandatory + optional triés). Le tier physique est converti en numéro de classe logique contigu (0, 1, 2, 3, 4...) pour chaque profil. Helper `tierToClasseNum(profileArg, tierNum)`. Exemple : tier physique 6 devient classe 4 pour EXPERT, classe 5 pour FRONTIER, classe 6 pour STANDARD (séquence déjà continue).
+2. **Renommage de l'épreuve finale** : le titre du `tier6_master.json` passe de « Tier 6 — Doctorat (Expertise & Résistance) » à « Épreuve Finale (Expertise & Résistance) ». Neutralise la collision avec l'école DOCTORAT.
+3. **CLASSE_NAMES renumérotées** : les noms de classes utilisent désormais les indices logiques contigus. EXPERT : `Classe-4-Master-Final` (au lieu de `Classe-6-Doctorat`). DOCTORAT : `Classe-4-These`. FRONTIER : `Classe-5-Ultimate`.
+4. **Affichage cohérent** : le runner affiche `━━ CLASSE N : ...` (classe logique) au lieu de `━━ TIER N : ...`. Les spinners, messages de validation/échec, prompt envoyé au modèle, dossiers d'export, carnet du professeur, rapports markdown et tableaux récap utilisent tous le numéro de classe logique. Les logs internes (`logger.info`) conservent le tier physique pour le débogage.
+
+### Fichiers modifiés
+- `config.js` : ajout de `TIER_TO_CLASSE`, `tierToClasseNum()`, renumérotation de `CLASSE_NAMES`, export des nouveaux symboles.
+- `tiers/tier6_master.json` : renommage du `title`.
+- `runner.js` : import de `tierToClasseNum`, calcul de `classNum` dans `runTierAttempt` et `askModelForFailureExplanation`, remplacement de tous les affichages « Tier X » par « Classe N » (console, prompt, dossiers, carnet, rapports, tableaux), passage de `classNum` à `buildTierReport`.
+- `report-generator.js` : `buildTierReport` affiche `## Classe N` et le tableau par exercice avec la classe logique.
+- `Docs/Manuel-utilisateur/03-fonctionnement-benchmark.md` : section profils mise à jour (5 écoles, classes logiques, Épreuve Finale).
+- `Docs/Manuel-utilisateur/06-reference-tiers.md` : ajout de la section Épreuve Finale, section numérotation des classes, correspondance classes/profils corrigée.
+
 ## 2026-07-25 — Fix critique : crash du runner en mode nuit (modèles déchargés, "No models loaded")
 
 ### Contexte

@@ -30,15 +30,27 @@ Il ne se contente pas de verifier des mots cles: il execute aussi le code quand 
 
 ## Profils d evaluation
 
-- LIGHT:
-  - tiers obligatoires: 0, 1
-  - tiers optionnels: 2, 3
-- STANDARD:
-  - tiers obligatoires: 0, 1, 2
-  - tiers optionnel: 3
-- EXPERT:
-  - tiers obligatoires: 0, 1, 2, 3
-  - aucun tier optionnel
+Chaque école répartit ses épreuves en classes numérotées de 0 a N de façon continue
+(le numéro affiché est la classe logique, pas le numéro du fichier de tier).
+
+- LIGHT (Primaire, < 3B):
+  - classes obligatoires: 0, 1
+  - classes optionnelles: 2, 3, 4, 5
+- STANDARD (College/Lycee, 3B a 14B):
+  - classes obligatoires: 0, 1, 2
+  - classes optionnelles: 3, 4, 5, 6 (classe 6 = Épreuve Finale)
+- EXPERT (Universite, 14B a 30B):
+  - classes obligatoires: 0, 1, 2, 3
+  - classe optionnelle: 4 (Épreuve Finale)
+- DOCTORAT (These, > 30B):
+  - classes obligatoires: 0, 1, 2, 3, 4 (Épreuve Finale)
+  - aucune classe optionnelle
+- FRONTIER (Post-Doctorat, modèles cloud frontier):
+  - classes obligatoires: 0, 1, 2, 3, 4, 5 (classe 5 = Épreuve Finale)
+  - aucune classe optionnelle
+
+L'Épreuve Finale (Expertise et résistance) est partagée par STANDARD, EXPERT,
+DOCTORAT et FRONTIER. Elle correspond au fichier `tiers/tier6_master.json`.
 
 ## Detection automatique du profil
 

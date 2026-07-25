@@ -149,7 +149,7 @@ Le script affiche alors la file d'attente complète et démarre :
    3. Qwen3.5 9B [qwen/qwen3.5-9b] 9B Q4_K_M
 
   Debut a 23:15:42. Laissez tourner, les rapports seront dans Export-Rapports/.
-  Ctrl+C pour interrompre (le modele en cours finira son tier en cours).
+   Ctrl+C pour interrompre (le modele en cours finira sa classe en cours).
 ```
 
 Vous pouvez alors aller dormir. Le script s'occupe de tout.
@@ -219,7 +219,7 @@ Pour **chaque modèle** de la file d'attente, et pour **chaque école** sélecti
 3. **Benchmark** : `node runner.js --force --profile=<ecole>` exécute le benchmark complet :
    - auto-profilage du modèle (auto-évaluation sur 4 compétences),
    - filtrage des tâches trop difficiles selon le profil,
-   - exécution de tous les tiers applicables,
+   - exécution de toutes les classes applicables,
    - rattrapage automatique si nécessaire (voir §8),
    - génération du rapport Markdown dans `Export-Rapports/`,
    - mise à jour du carnet de scores persistant,
@@ -275,8 +275,8 @@ interactifs pour qu'ils fonctionnent sans intervention :
 
 ### Rattrapage automatique
 Le rattrapage est **toujours automatique** (déjà le cas en interactif). Il se déclenche si
-l'un de ces 3 critères est rempli à la fin des tiers :
-1. Au moins un tier **obligatoire** a échoué,
+l'un de ces 3 critères est rempli à la fin des classes :
+1. Au moins une classe **obligatoire** a échoué,
 2. La santé globale de l'élève est **< 0 PV**,
 3. **≥ 40 %** des exercices ont échoué (échec massif).
 

@@ -12,7 +12,7 @@ A la fin du run, vous obtenez:
 ## Difference entre score global et score obligatoire
 
 - Score global: toutes les evaluations executees
-- Score obligatoire: uniquement les tiers obligatoires pour le profil
+- Score obligatoire: uniquement les classes obligatoires pour le profil
 
 Le score obligatoire est la reference principale pour juger le modele.
 
@@ -35,20 +35,20 @@ C'est un seuillage descendant : chaque palier est >= sa valeur, donc A prime sur
 
 ## Regle du verdict
 
-Le verdict s'appuie sur le **pourcentage obligatoire** s'il y a des tiers
+Le verdict s'appuie sur le **pourcentage obligatoire** s'il y a des classes
 obligatoires pour le profil, sinon sur le pourcentage global :
 
 - >= 80% : MODELE RECOMMANDE
 - 50-79% : MODELE PARTIEL - RESERVES
 - < 50% : MODELE NON RECOMMANDE
 
-## Lecture des resultats par tier
+## Lecture des resultats par classe
 
-Chaque tier affiche:
+Chaque classe affiche:
 - un tableau des taches
 - score tache par tache
 - note tache
-- etat du tier (reussi/echecs)
+- etat de la classe (reussi/echecs)
 
 ## Rapport Markdown genere
 
@@ -65,7 +65,7 @@ Le rapport contient:
 Format:
 
 - rapport_v3_nommodele_profil.md
-- rapport_v3_nommodele_profil_tierX.md (si vous ciblez un tier unique)
+- rapport_v3_nommodele_profil_classeN.md (si vous ciblez une classe unique ; N est le numéro de tier physique)
 
 Le nom du modele est nettoye automatiquement pour rester compatible fichier.
 
@@ -73,7 +73,7 @@ Le nom du modele est nettoye automatiquement pour rester compatible fichier.
 
 Le fichier de logs enregistre notamment:
 - config effective du run
-- hash du prompt par tier
+- hash du prompt par classe
 - duree API
 - statut parsing
 - resultats d evaluation

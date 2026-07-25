@@ -31,7 +31,8 @@ function shortenModelName(rawName) {
 }
 
 function buildTierReport(tierData, evalResults, rawResponse, stats = {}) {
-  let report = `## Tier ${tierData.tier} — ${tierData.title}\n\n`;
+  const classNum = (stats && stats.classNum != null) ? stats.classNum : tierData.tier;
+  let report = `## Classe ${classNum} — ${tierData.title}\n\n`;
   report += `**Difficulté :** ${tierData.difficulty}\n\n`;
 
   let totalPassed = 0;
@@ -85,7 +86,7 @@ function buildTierReport(tierData, evalResults, rawResponse, stats = {}) {
   const annotation = (stats.tierAnnotations && stats.tierAnnotations.length > 0)
     ? ` (${stats.tierAnnotations.join(', ')})`
     : '';
-  report += `**Score du tier : ${points}/${maxPointsTotal} Points${annotation}**\n`;
+  report += `**Score de la classe : ${points}/${maxPointsTotal} Points${annotation}**\n`;
   if (points >= 70) {
     report += `> 🏆 **Classe Validée avec Mention**\n\n`;
   } else {
@@ -93,7 +94,7 @@ function buildTierReport(tierData, evalResults, rawResponse, stats = {}) {
   }
 
   // --- Tableau récapitulatif des points par exercice ---
-  report += `### Tableau des points par exercice — Tier ${tierData.tier}\n\n`;
+  report += `### Tableau des points par exercice — Classe ${classNum}\n\n`;
   report += `| Exercice | Type | Points obtenus | Points max | Statut | Aide | Rattrapage |\n`;
   report += `|---|---|---|---|---|---|---|\n`;
   for (const tr of evalResults) {
