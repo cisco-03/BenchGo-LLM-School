@@ -1,5 +1,29 @@
 # CHANGELOG - Carnet de Notes BenchGo
 
+## 2026-07-26 — fix: écoles manquantes hors de portée affichées pour les petits modèles (night-batch)
+
+### Contexte
+Dans la liste des modèles LM Studio non testés (sortie CLI de `night-batch.js` et table HTML du classement consommant `missingSchoolsLabel`), la colonne « Écoles manquantes » listait systématiquement toutes les écoles (`LIGHT,STANDARD,EXPERT,DOCTORAT`) y compris pour des modèles de petite taille qui n'ont pas vocation à passer les écoles supérieures. Exemples relevés par l'utilisateur :
+- Gemma 4 12B (12B → STANDARD) affichait `LIGHT,STANDARD,EXPERT,DOCTORAT` alors qu'EXPERT et DOCTORAT sont inaccessibles pour sa capacité.
+- Ornith 1.0 9B (9B → STANDARD) affichait `EXPERT,DOCTORAT` en partiel, alors qu'il ne devrait afficher que les écoles réellement attendues (`LIGHT`, `STANDARD`).
+
+### Cause racine
+`listLlmModels()` (`night-batch.js:254`) calculait `missingSchools = allSchoolKeys.filter(k => !testedSchools.includes(k))` sans tenir compte de la taille du modèle. Le seuil d'école détecté existait déjà (`schoolForModel()` ligne 358) mais n'était pas utilisé pour borner les écoles attendues.
+
+### Implémentation
+- **`night-batch.js:262-294`** : ajout de `relevantSchoolKeysFor(m)` qui renvoie les écoles de `LIGHT` jusqu'à l'école détectée pour la taille du modèle (incluse). Pour un 12B (STANDARD) → `[LIGHT, STANDARD]`. Pour un 9B → `[LIGHT, STANDARD]`. Pour un 26B (EXPERT) → `[LIGHT, STANDARD, EXPERT]`. Si la taille n'est pas détectable, on retombe sur toutes les écoles (comportement historique, pas de régression pour les modèles non reconnus).
+  - `missingSchools` ne contient plus que les écoles pertinentes non testées.
+  - `status.kind === 'complete'` se déclenche désormais quand toutes les écoles pertinentes sont testées (et non plus toutes les écoles).
+- `leaderboard.js:2618/2622` consomme `m.status.missing` via `nightBatch.missingSchoolsLabel()` : la correction remonte automatiquement à la table HTML du classement sans modification supplémentaire.
+
+### Vérification
+- `node --check night-batch.js` → OK.
+- Cohérence avec les seuils de `config.js:detectProfileFromModelName` (< 3B LIGHT, ≤14B STANDARD, ≤30B EXPERT, sinon DOCTORAT) et `night-batch.js:schoolForModel` (mêmes seuils).
+
+### Fichiers modifiés
+- `night-batch.js`
+- `Docs/CHANGELOG.md` : cette entrée.
+
 ## 2026-07-26 — fix: apostrophe non échappée cassant le JS du classement (E901)
 
 ### Contexte

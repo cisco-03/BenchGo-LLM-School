@@ -261,18 +261,36 @@ function listLlmModels() {
     if (!Array.isArray(arr)) return { ok: false, models: [], error: 'Reponse JSON inattendue' };
     const ledgers = loadAllLedgers();
     const allSchoolKeys = SCHOOLS.filter(s => s.cli !== null).map(s => s.key);
+    // Renvoie les cles d'ecoles "accessibles" a un modele, c'est-a-dire toutes
+    // les ecoles de LIGHT jusqu'a l'ecole detectee pour sa taille (incluse).
+    // Raison : un modele de 12B (STANDARD) n'a pas vocation a passer EXPERT ou
+    // DOCTORAT (trop difficiles pour sa capacite). Les lister comme "manquantes"
+    // est trompeur : on n'attend de lui que LIGHT + STANDARD. Si la taille n'est
+    // pas detectable, on retombe sur toutes les ecoles (comportement historique).
+    function relevantSchoolKeysFor(m) {
+      const s = schoolForModel(m);
+      if (!s) return allSchoolKeys.slice();
+      const idx = allSchoolKeys.indexOf(s.key);
+      if (idx < 0) return allSchoolKeys.slice();
+      return allSchoolKeys.slice(0, idx + 1);
+    }
     const models = arr.map(m => {
       const modelKey = m.modelKey;
       const ledger = matchLedger(modelKey, ledgers);
       const testedSchools = ledgerSchoolKeys(ledger);
-      const missingSchools = allSchoolKeys.filter(k => !testedSchools.includes(k));
+      const relevantKeys = relevantSchoolKeysFor(m);
+      // On ne considere comme "manquantes" que les ecoles pertinents pour la
+      // taille du modele (LIGHT..son ecole). Les ecoles au-dela (trop difficiles)
+      // sont ignorees : elles ne seront jamais demandees a ce modele.
+      const relevantTested = testedSchools.filter(k => relevantKeys.includes(k));
+      const missingSchools = relevantKeys.filter(k => !relevantTested.includes(k));
       let status;
       if (!ledger || testedSchools.length === 0) {
-        status = { kind: 'never', tested: [], missing: allSchoolKeys.slice(), quant: ledger ? ledger.quantization : null };
+        status = { kind: 'never', tested: [], missing: relevantKeys.slice(), quant: ledger ? ledger.quantization : null };
       } else if (missingSchools.length === 0) {
-        status = { kind: 'complete', tested: testedSchools, missing: [], quant: ledger.quantization };
+        status = { kind: 'complete', tested: relevantTested, missing: [], quant: ledger.quantization };
       } else {
-        status = { kind: 'partial', tested: testedSchools, missing: missingSchools, quant: ledger.quantization };
+        status = { kind: 'partial', tested: relevantTested, missing: missingSchools, quant: ledger.quantization };
       }
       return {
         modelKey,
