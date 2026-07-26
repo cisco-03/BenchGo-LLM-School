@@ -116,14 +116,23 @@ Le script propose ensuite les écoles (niveaux) à faire passer :
 ```
   === ECOLES A TESTER ===
   Selectionnez les ecoles (niveaux) a faire passer a chaque modele.
-  Syntaxe : numeros separes par des virgules (ex: 1,2) ou "all".
-  "auto" laisse le runner deviner le profil depuis le nom du modele.
+  Syntaxe : numeros separes par les virgules (ex: 1,2) ou "all".
+  Option 6 = AUTO PAR MODELE : chaque modele passe uniquement l'ecole
+  adaptee a sa taille de parametres (3B->Primaire, 15B->College-Lycee, etc.).
+  Ideal quand la file melange des modeles de tailles differentes.
 
    1. Primaire (< 3B)
    2. College-Lycee (3B - 14B)
    3. Universite (14B - 30B)
    4. These (> 30B)
-   5. Auto-detection (1 ecole)
+   5. Auto-detection (1 ecole) (auto-detection runner)
+   6. Auto par modele (ecole selon la taille)
+
+  Aperçu option 6 (auto par modele) :
+    Ornith 1.0 9B                      → College-Lycee (3B - 14B)
+    Nanbeige Nanbeige4 3B Thinking 2511 → College-Lycee (3B - 14B)
+    Gemma 4 26B A4B QAT                → Universite (14B - 30B)
+    Gemma 3 1B IT                      → Primaire (< 3B)
 
   Ecoles a tester :
 ```
@@ -133,10 +142,18 @@ Tapez :
 - `1,2` pour Primaire + Collège-Lycée,
 - `all` pour toutes les écoles réelles (Primaire → Thèse),
 - `5` (ou `auto`) pour laisser le runner détecter le profil depuis le nom du modèle
-  (1 seule école par modèle, adaptée à sa taille).
+  (1 seule école par modèle, adaptée à sa taille),
+- `6` (ou `auto-per-model`) pour le mode **auto par modèle** : chaque modèle passe
+  uniquement l'école correspondant à sa taille de paramètres, détectée depuis son
+  nom. Idéal quand la file mélange des modèles de tailles différentes (un 1B, un 15B,
+  un 26B...) — chacun fait l'école adaptée sans avoir à sélectionner manuellement.
 
-> **Astuce** : `auto` est le choix le plus simple — chaque modèle passe l'école
-> correspondant à sa taille (un 9B → Collège-Lycée, un 1B → Primaire, etc.).
+> **Astuce** : `auto` (option 5) et `auto-per-model` (option 6) donnent le même
+> résultat en pratique — chaque modèle passe l'école correspondant à sa taille.
+> La différence est la source de détection : l'option 5 laisse le runner deviner
+> le profil depuis le nom du modèle ; l'option 6 le calcule dans le mode nuit
+> (aperçu affiché avant lancement, et l'école apparaît dans le résumé de la file).
+> Préférez l'option 6 pour visualiser l'attribution avant de lancer la nuit.
 
 Le script affiche alors la file d'attente complète et démarre :
 
@@ -166,7 +183,9 @@ node night-batch.js --models=mythos-9b-unhinged,qwen/qwen3.5-9b --schools=STANDA
 ```
 
 - `--models=` : liste de **modelKeys** séparés par virgules (voir `lms ls` pour les connaître).
-- `--schools=` : liste d'écoles séparées par virgules parmi `LIGHT, STANDARD, EXPERT, DOCTORAT, auto`.
+- `--schools=` : liste d'écoles séparées par virgules parmi `LIGHT, STANDARD, EXPERT, DOCTORAT, auto, auto-per-model`.
+  - `auto` : le runner devine le profil depuis le nom du modèle (1 école).
+  - `auto-per-model` : le mode nuit calcule l'école de chaque modèle depuis sa taille (1 école, aperçu affiché).
 
 Les modelKeys sont les identifiants internes de LM Studio (colonne de gauche de `lms ls`).
 Exemple :
@@ -188,7 +207,7 @@ Ici les modelKeys sont `ornith-1.0-9b@q4_k_m`, `mythos-9b-unhinged`, `qwen/qwen3
 | Flag | Description |
 |---|---|
 | `--models=key1,key2` | Modèles à tester (modelKeys séparés par virgules). Sans ce flag en session non-interactive, le script s'arrête. |
-| `--schools=LIGHT,STANDARD` | Écoles à tester (séparées par virgules). Valeurs : `LIGHT`, `STANDARD`, `EXPERT`, `DOCTORAT`, `auto`. Sans ce flag en non-interactif → `auto`. |
+| `--schools=LIGHT,STANDARD` | Écoles à tester (séparées par virgules). Valeurs : `LIGHT`, `STANDARD`, `EXPERT`, `DOCTORAT`, `auto`, `auto-per-model`. Sans ce flag en non-interactif → `auto`. |
 | `--no-teacher` | Désactive le professeur IA correcteur (OpenRouter) pour toute la session. Utile si vous n'avez pas de clé OpenRouter ou voulez aller plus vite. |
 
 ### Exemples
@@ -206,6 +225,9 @@ node night-batch.js --models=all
 
 # 1 modèle, Primaire + Collège-Lycée
 node night-batch.js --models=ornith-1.0-9b@q4_k_m --schools=LIGHT,STANDARD
+
+# File mixte (1B + 15B + 26B) : chaque modèle passe l'école adaptée à sa taille
+node night-batch.js --models=gemma-3-1b-it,google/gemma-4-12b-qat,google/gemma-4-26b-a4b-qat --schools=auto-per-model
 ```
 
 ---
@@ -350,6 +372,20 @@ node night-batch.js
 ```
 Choisissez modèles et écoles à l'écran, puis laissez tourner.
 
+### Exemple 6 — File mixte : école adaptée à chaque modèle
+```powershell
+node night-batch.js --models=gemma-3-1b-it,google/gemma-4-12b-qat,google/gemma-4-26b-a4b-qat --schools=auto-per-model
+```
+La file mélange des modèles de tailles différentes (1B, 12B, 26B). Avec `auto-per-model`,
+chaque modèle passe uniquement l'école correspondant à sa taille :
+- `gemma-3-1b-it` (1B) → Primaire (LIGHT),
+- `google/gemma-4-12b-qat` (12B) → Collège-Lycée (STANDARD),
+- `google/gemma-4-26b-a4b-qat` (26B) → Université (EXPERT).
+
+Idéal pour tester un parc hétérogène en une seule nuit sans sélectionner manuellement
+l'école de chaque modèle. En mode interactif, c'est l'option 6 du menu écoles
+(aperçu de l'attribution affiché avant lancement).
+
 ---
 
 ## 11. Dépannage
@@ -370,8 +406,8 @@ valides. Copiez-collez l'un d'eux. Note : les modelKeys sont sensibles à la cas
 incluent parfois le `@q4_k_m` (quantification).
 
 ### « Aucune école de --schools= reconnue »
-Vérifiez l'orthographe : `LIGHT`, `STANDARD`, `EXPERT`, `DOCTORAT`, `auto`
-(insensible à la casse).
+Vérifiez l'orthographe : `LIGHT`, `STANDARD`, `EXPERT`, `DOCTORAT`, `auto`,
+`auto-per-model` (insensible à la casse).
 
 ### « lms load échoué »
 Le modèle n'a pas pu être chargé en mémoire (souvent un problème de RAM disponible).

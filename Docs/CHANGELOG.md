@@ -1,5 +1,30 @@
 # CHANGELOG - Carnet de Notes BenchGo
 
+## 2026-07-26 — Mode nuit : école adaptée à chaque modèle (auto-par-modèle)
+
+### Contexte
+Demande utilisateur (`Memories-BenchGo/Tasks1.md`, 2e demande) : en mode nuit (`night-batch.js`), lorsqu'une file d'attente mélange des modèles de tailles de paramètres différentes (un 3B, un 15B, un 26B...), il fallait appliquer les mêmes écoles à tous. L'utilisateur voulait que chaque modèle passe uniquement l'école correspondant à sa taille (3B → Primaire, 15B → Collège-Lycée, 26B → Université...) dans la même session.
+
+### Implémentation
+- **Nouvelle option `auto-per-model`** (option 6 du menu écoles) : chaque modèle de la file passe uniquement l'école adaptée à sa taille de paramètres, détectée via `detectProfileFromModelName` (config.js) sur le `displayName`, puis `modelKey`, puis `paramsString` (fallback).
+- **`schoolForModel(m)`** : détermine l'école (profil) pour un modèle. Retourne `null`/école `auto` si taille indétectable (le runner devinera le profil).
+- **`isAutoPerModel(schools)`** : détecte le mode auto-par-modèle dans la sélection d'écoles.
+- **Menu interactif** : l'option 6 affiche un aperçu de l'attribution (quelle école pour chaque modèle sélectionné) avant lancement.
+- **File d'attente** : en mode auto-par-modèle, le résumé affiche l'attribution `modèle → école` au lieu de la liste d'écoles globale. La boucle d'exécution calcule `modelSchools` par modèle (1 école) au lieu d'utiliser la liste globale.
+- **Flag CLI** : `--schools=auto-per-model` pour le mode non-interactif.
+- Export de `schoolForModel`, `schoolLabelForModel`, `isAutoPerModel` dans `module.exports`.
+
+### Comportement
+- 3B (seuil < 3B strict) → Primaire (LIGHT).
+- 3B–14B → Collège-Lycée (STANDARD).
+- 14B–30B → Université (EXPERT).
+- > 30B → Thèse (DOCTORAT).
+- Taille indétectable → auto-détection (le runner devine le profil depuis le nom).
+
+### Fichiers modifiés
+- `night-batch.js` : import `detectProfileFromModelName`, entrée SCHOOLS `auto-per-model`, fonctions `schoolForModel`/`schoolLabelForModel`/`isAutoPerModel`, menu interactif avec aperçu, boucle d'exécution par modèle, exports.
+- `Docs/CHANGELOG.md` : cette entrée.
+
 ## 2026-07-26 — Affichage des modèles LM Studio non testés dans le classement CLI
 
 ### Contexte

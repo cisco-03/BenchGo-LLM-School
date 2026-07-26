@@ -35,7 +35,7 @@ const { spawnSync, spawn } = require('child_process');
 const readline = require('readline');
 const fs = require('fs');
 const path = require('path');
-const { PROFILES } = require('./config');
+const { PROFILES, detectProfileFromModelName } = require('./config');
 
 const PROJECT_ROOT = __dirname;
 const RUNNER = path.join(PROJECT_ROOT, 'runner.js');
@@ -59,8 +59,23 @@ const SCHOOLS = [
   { key: 'STANDARD', label: 'College-Lycee (3B - 14B)',   cli: 'STANDARD' },
   { key: 'EXPERT',   label: 'Universite (14B - 30B)',     cli: 'EXPERT' },
   { key: 'DOCTORAT', label: 'These (> 30B)',               cli: 'DOCTORAT' },
-  { key: 'auto',     label: 'Auto-detection (1 ecole)',   cli: null }
+  { key: 'auto',     label: 'Auto-detection (1 ecole)',   cli: null },
+  // Mode auto-par-modele : chaque modele passe UNIQUEMENT l'ecole adaptee a
+  // sa taille de parametres (detectee via detectProfileFromModelName). Permet de
+  // melanger des modeles de tailles differentes dans la meme session de nuit
+  // (un 3B fait Primaire, un 15B fait College-Lycee, etc.) sans selectionner
+  // manuellement l'ecole de chacun. cli=null : l'ecole est calculee par modele.
+  { key: 'auto-per-model', label: 'Auto par modele (ecole selon la taille)', cli: null }
 ];
+
+// Détecte si la sélection d'écoles correspond au mode « auto par modèle »
+// (option 6, key 'auto-per-model'). Dans ce mode, l'école de chaque modèle
+// est calculée individuellement via schoolForModel() au lieu d'utiliser une
+// liste globale d'écoles identique pour tous.
+function isAutoPerModel(schools) {
+  if (!schools) return false;
+  return schools.some(s => s && s.key === 'auto-per-model');
+}
 
 // --- Couleurs ANSI (constantes pour lisibilite CLI) ---
 const C = {
@@ -330,17 +345,78 @@ async function selectModelsInteractive(models) {
   });
 }
 
+// Détermine l'école (profil) adaptée à un modèle depuis sa taille de paramètres.
+// Utilise detectProfileFromModelName (config.js) sur le displayName puis le
+// modelKey (fallback). Retourne l'objet SCHOOLS correspondant au profil détecté,
+// ou null si la taille n'est pas détectable (modèle non reconnu).
+//
+// Seuils (alignés sur config.js) :
+//   < 3B   → LIGHT    (Primaire)
+//   3-14B  → STANDARD (College-Lycee)
+//   14-30B → EXPERT   (Universite)
+//   > 30B  → DOCTORAT (These)
+function schoolForModel(m) {
+  if (!m) return null;
+  let detected = null;
+  // 1) Détecte depuis le displayName (nom lisible, souvent avec la taille).
+  if (m.displayName) {
+    detected = detectProfileFromModelName(m.displayName).detected;
+  }
+  // 2) Fallback : depuis le modelKey (ex: "deepseek-r1-distill-qwen-14b@q4_k_s").
+  if (!detected && m.modelKey) {
+    detected = detectProfileFromModelName(m.modelKey).detected;
+  }
+  // 3) Fallback : depuis paramsString (ex: "14B", "3B", "26B-A4B"). Le runner LM
+  //    Studio fournit une taille fiable ici même quand le nom ne l'indique pas.
+  if (!detected && m.params) {
+    const sizeMatch = String(m.params).match(/([\d]+[.,]?[\d]*)\s*b/i);
+    if (sizeMatch) {
+      const sz = parseFloat(sizeMatch[1].replace(',', '.'));
+      if (sz < 3) detected = 'LIGHT';
+      else if (sz <= 14) detected = 'STANDARD';
+      else if (sz <= 30) detected = 'EXPERT';
+      else detected = 'DOCTORAT';
+    }
+  }
+  if (!detected) return null;
+  return SCHOOLS.find(s => s.key === detected) || null;
+}
+
+// Label lisible du profil détecté pour un modèle (ex: "Primaire (< 3B)").
+// Retourne '— (taille inconnue)' si non détectable.
+function schoolLabelForModel(m) {
+  const s = schoolForModel(m);
+  return s ? s.label : '— (taille inconnue)';
+}
+
 // Selection interactive des ecoles.
-async function selectSchoolsInteractive() {
+async function selectSchoolsInteractive(selectedModels) {
   console.log(`\n  ${C.bold}${C.cyan}=== ECOLES A TESTER ===${C.reset}`);
   console.log(`  ${C.gray}Selectionnez les ecoles (niveaux) a faire passer a chaque modele.${C.reset}`);
-  console.log(`  ${C.gray}Syntaxe : numeros separes par des virgules (ex: 1,2) ou "all".${C.reset}`);
-  console.log(`  ${C.gray}"auto" laisse le runner deviner le profil depuis le nom du modele.${C.reset}\n`);
+  console.log(`  ${C.gray}Syntaxe : numeros separes par les virgules (ex: 1,2) ou "all".${C.reset}`);
+  console.log(`  ${C.gray}Option 6 = AUTO PAR MODELE : chaque modele passe uniquement l'ecole${C.reset}`);
+  console.log(`  ${C.gray}adaptee a sa taille de parametres (3B->Primaire, 15B->College-Lycee, etc.).${C.reset}`);
+  console.log(`  ${C.gray}Ideal quand la file melange des modeles de tailles differentes.${C.reset}\n`);
   SCHOOLS.forEach((s, i) => {
     const idx = String(i + 1).padStart(2);
-    console.log(`  ${C.bold}${idx}.${C.reset} ${s.label}`);
+    // Pour l'option 'auto', on précise que c'est l'auto-détection classique
+    // (1 école par modèle, le runner devine le profil).
+    let extra = '';
+    if (s.key === 'auto') extra = ' (auto-detection runner)';
+    console.log(`  ${C.bold}${idx}.${C.reset} ${s.label}${C.gray}${extra}${C.reset}`);
   });
-  console.log('');
+
+  // Aperçu de l'attribution auto-par-modèle (option 6) pour aider l'utilisateur
+  // à anticiper : montre quelle école chaque modèle sélectionné ferait.
+  if (selectedModels && selectedModels.length > 0) {
+    console.log(`\n  ${C.gray}Aperçu option 6 (auto par modèle) :${C.reset}`);
+    for (const m of selectedModels) {
+      const lbl = schoolLabelForModel(m);
+      console.log(`  ${C.gray}  ${m.displayName.padEnd(30)} → ${lbl}${C.reset}`);
+    }
+    console.log('');
+  }
+
   return new Promise(resolve => {
     const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
     rl.question(`  ${C.cyan}Ecoles a tester :${C.reset} `, answer => {
@@ -488,7 +564,7 @@ async function main() {
       schools = [SCHOOLS.find(s => s.key === 'auto')];
       console.log(`  ${C.gray}Non-interactif sans --schools : auto-detection du profil par modele.${C.reset}`);
     } else {
-      schools = await selectSchoolsInteractive();
+      schools = await selectSchoolsInteractive(selected);
       if (schools.length === 0) {
         console.log(`  ${C.yellow}Aucune ecole selectionnee. Abandon.${C.reset}`);
         if (serverHandle.startedByUs) stopServer();
@@ -497,13 +573,42 @@ async function main() {
     }
   }
 
-  const totalRuns = selected.length * schools.length;
+  // Mode auto-par-modele : on calcule l'ecole de chaque modele individuellement.
+  // Un modele dont la taille n'est pas detectable est envoye en auto-detection
+  // (le runner devinera le profil depuis le nom). On construit un plan
+  // { model, school } par modele pour l'affichage et l'execution.
+  const autoPerModel = isAutoPerModel(schools);
+  let plan;
+  if (autoPerModel) {
+    plan = selected.map(m => {
+      const school = schoolForModel(m) || SCHOOLS.find(s => s.key === 'auto');
+      return { model: m, school };
+    });
+    // Vérifie qu'au moins un modèle a une école détectée (sinon tout est en auto).
+    const detectedCount = plan.filter(p => p.school.key !== 'auto').length;
+    if (detectedCount === 0) {
+      console.log(`  ${C.yellow}Aucun modele n'a une taille de parametres detectable.${C.reset}`);
+      console.log(`  ${C.gray}Le runner utilisera l'auto-detection pour chacun.${C.reset}`);
+    }
+  } else {
+    plan = null;
+  }
+
+  const totalRuns = autoPerModel ? plan.length : selected.length * schools.length;
   console.log(`\n  ${C.bold}${C.cyan}=== FILE D'ATTENTE DE NUIT ===${C.reset}`);
   console.log(`  ${C.bold}Modeles :${C.reset} ${selected.length}  |  ${C.bold}Ecoles :${C.reset} ${schools.map(s => s.key).join(', ')}  |  ${C.bold}Runs totaux :${C.reset} ${totalRuns}`);
-  console.log(`  ${C.gray}Ordre : pour chaque modele, on enchaine toutes les ecoles selectionnees.${C.reset}`);
-  selected.forEach((m, i) => {
-    console.log(`  ${C.bold}${String(i + 1).padStart(2)}.${C.reset} ${m.displayName} ${C.gray}[${m.modelKey}] ${m.params} ${m.quant}${C.reset}`);
-  });
+  if (autoPerModel) {
+    console.log(`  ${C.gray}Mode auto-par-modele : chaque modele passe l'ecole adaptee a sa taille.${C.reset}`);
+    console.log(`  ${C.gray}Attribution :${C.reset}`);
+    for (const p of plan) {
+      console.log(`  ${C.bold}  ${p.model.displayName.padEnd(28)}${C.reset} ${C.gray}→ ${p.school.label}${C.reset}`);
+    }
+  } else {
+    console.log(`  ${C.gray}Ordre : pour chaque modele, on enchaine toutes les ecoles selectionnees.${C.reset}`);
+    selected.forEach((m, i) => {
+      console.log(`  ${C.bold}${String(i + 1).padStart(2)}.${C.reset} ${m.displayName} ${C.gray}[${m.modelKey}] ${m.params} ${m.quant}${C.reset}`);
+    });
+  }
   console.log(`\n  ${C.gray}Debut a ${nowClock()}. Laissez tourner, les rapports seront dans Export-Rapports/.${C.reset}`);
   console.log(`  ${C.gray}Ctrl+C pour interrompre (le modele en cours finira son tier en cours).${C.reset}\n`);
 
@@ -515,6 +620,16 @@ async function main() {
     console.log(`${C.bold}${C.magenta}  MODELE ${i + 1}/${selected.length} - ${m.displayName} ${C.gray}[${m.modelKey}]${C.reset}`);
     console.log(`${C.bold}${C.magenta}  ${m.params} - ${m.quant} - ${fmtBytes(m.size)} - ${m.publisher}${C.reset}`);
     console.log(`${C.bold}${C.magenta}==================================================${C.reset}`);
+
+    // Détermine la liste d'écoles pour CE modèle. En mode auto-par-modèle,
+    // c'est une seule école (calculée depuis la taille du modèle). Sinon,
+    // ce sont toutes les écoles sélectionnées globalement.
+    let modelSchools;
+    if (autoPerModel) {
+      modelSchools = [plan[i].school];
+    } else {
+      modelSchools = schools;
+    }
 
     console.log(`  ${C.gray}[${nowClock()}] Dechargement des modeles precedents...${C.reset}`);
     unloadAll();
@@ -528,9 +643,9 @@ async function main() {
     console.log(`  ${C.green}Modele charge.${C.reset}`);
 
     let modelOk = true;
-    for (let j = 0; j < schools.length; j++) {
-      const school = schools[j];
-      console.log(`\n  ${C.bold}${C.cyan}=== ECOLE ${j + 1}/${schools.length} - ${school.label} ===${C.reset}`);
+    for (let j = 0; j < modelSchools.length; j++) {
+      const school = modelSchools[j];
+      console.log(`\n  ${C.bold}${C.cyan}=== ECOLE ${j + 1}/${modelSchools.length} - ${school.label} ===${C.reset}`);
 
       const bench = runBenchmark(m.modelKey, school.cli, extraRunnerArgs);
       const mins = (bench.durationMs / 60000).toFixed(1);
@@ -538,7 +653,7 @@ async function main() {
       console.log(`\n  ${bench.ok ? C.green : C.red}[${nowClock()}] ${m.displayName} / ${school.label} termine en ${mins} min (status=${bench.status}).${C.reset}`);
       results.push({ model: m, school: school.key, ok: bench.ok, status: bench.status, durationMs: bench.durationMs });
     }
-    console.log(`\n  ${modelOk ? C.green : C.red}[${nowClock()}] Modele ${m.displayName} termine (${schools.length} ecole(s)).${C.reset}`);
+    console.log(`\n  ${modelOk ? C.green : C.red}[${nowClock()}] Modele ${m.displayName} termine (${modelSchools.length} ecole(s)).${C.reset}`);
   }
 
   console.log(`\n  ${C.gray}[${nowClock()}] Dechargement de tous les modeles...${C.reset}`);
@@ -581,7 +696,10 @@ module.exports = {
   ECOLE_NAME_TO_KEY,
   runLms,
   statusBadge,
-  missingSchoolsLabel
+  missingSchoolsLabel,
+  schoolForModel,
+  schoolLabelForModel,
+  isAutoPerModel
 };
 
 if (require.main === module) {
