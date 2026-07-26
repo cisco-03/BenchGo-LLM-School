@@ -1,6 +1,26 @@
 {
   "entries": [
     {
+      "model": "gemma-4-12b-it-qat",
+      "shortName": "gemma-4-12b-it-qat",
+      "quantization": "Q4_K_XL",
+      "score": 5622,
+      "max": 5676,
+      "pct": 99,
+      "globalLifeScore": 6309,
+      "optionalBonus": 687,
+      "tokens": 31450,
+      "elapsedMs": 4391852,
+      "tokensPerSecond": 7.16,
+      "ecoleCount": 2,
+      "pseudo": "FlexoDiv",
+      "submittedAt": "2026-07-26T15:55:12.572Z",
+      "contributors": 1,
+      "allPct": [
+        99
+      ]
+    },
+    {
       "model": "qwen3.6-27b-mtp",
       "shortName": "qwen3.6-27b-mtp",
       "quantization": "Q4_K_XL",
@@ -75,26 +95,6 @@
       "ecoleCount": 1,
       "pseudo": "FlexoDiv",
       "submittedAt": "2026-07-24T16:54:11.165Z",
-      "contributors": 1,
-      "allPct": [
-        98
-      ]
-    },
-    {
-      "model": "gemma-4-12b-it-qat",
-      "shortName": "gemma-4-12b-it-qat",
-      "quantization": "Q4_K_XL",
-      "score": 2964,
-      "max": 3018,
-      "pct": 98,
-      "globalLifeScore": 3306,
-      "optionalBonus": 342,
-      "tokens": 21139,
-      "elapsedMs": 2927753,
-      "tokensPerSecond": 7.22,
-      "ecoleCount": 1,
-      "pseudo": "FlexoDiv",
-      "submittedAt": "2026-07-24T16:54:14.351Z",
       "contributors": 1,
       "allPct": [
         98
@@ -501,6 +501,6 @@
       ]
     }
   ],
-  "generatedAt": "2026-07-26T22:15:28.508Z",
+  "generatedAt": "2026-07-26T22:16:25.749Z",
   "totalSubmissions": 25
 }
