@@ -570,9 +570,25 @@ async function main() {
   process.exit(0);
 }
 
-main().catch(e => {
-  console.error(`\n${C.red}[ERREUR FATALE night-batch]${C.reset} ${e.message}`);
-  console.error(e.stack);
-  try { unloadAll(); } catch (_) {}
-  process.exit(1);
-});
+// Export des fonctions réutilisables par d'autres modules (notamment
+// leaderboard.js affiche les modèles LM Studio non testés dans le CLI).
+// main() n'est lancé que lorsqu'on exécute ce script directement.
+module.exports = {
+  listLlmModels,
+  matchLedger,
+  normalizeForMatch,
+  SCHOOLS,
+  ECOLE_NAME_TO_KEY,
+  runLms,
+  statusBadge,
+  missingSchoolsLabel
+};
+
+if (require.main === module) {
+  main().catch(e => {
+    console.error(`\n${C.red}[ERREUR FATALE night-batch]${C.reset} ${e.message}`);
+    console.error(e.stack);
+    try { unloadAll(); } catch (_) {}
+    process.exit(1);
+  });
+}

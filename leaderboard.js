@@ -10,6 +10,7 @@ const { formatDuration } = require('./score-ledger');
 const cliTable = require('./cli-table');
 const communitySync = require('./community-sync');
 const updateChecker = require('./update-checker');
+const nightBatch = require('./night-batch');
 
 const LEDGER_DIR = path.join(__dirname, 'Export-Rapports', '.carnet');
 const EXPORT_DIR = path.join(__dirname, 'Export-Rapports');
@@ -2390,6 +2391,68 @@ function loadLedgerByName(shortName) {
   return null;
 }
 
+// Affiche les modèles LM Studio téléchargés qui ne sont PAS (ou partiellement)
+// testés dans le classement. Récupère la liste via lms ls --json --llm (réutilise
+// la logique de night-batch.js) et la compare aux carnets de scores existants.
+// Permet de voir d'un coup d'œil quels modèles restent à tester, sans basculer
+// entre le CLI et LM Studio.
+//
+// Affichage en 2 sections :
+//   1. Jamais testés (priorité : aucun carnet n'existe pour ce modèle).
+//   2. Partiels (un carnet existe mais des écoles manquent).
+//
+// Tolérant : si lms n'est pas installé / daemon inactif, affiche un avertissement
+// discret et n'interrompt pas la génération du classement.
+function printUntestedLmStudioModels() {
+  let result;
+  try {
+    result = nightBatch.listLlmModels();
+  } catch (e) {
+    logger.warn('listLlmModels indisponible : ' + e.message);
+    return;
+  }
+  if (!result.ok) {
+    console.log(`  \x1b[33m━━━ MODÈLES LM STUDIO NON TESTÉS ━━━\x1b[0m`);
+    console.log(`  \x1b[90mImpossible de lister les modèles LM Studio (${result.error || 'lms indisponible'}).\x1b[0m`);
+    console.log(`  \x1b[90mLancez LM Studio (ou 'lms daemon up') puis relancez le classement.\x1b[0m`);
+    return;
+  }
+
+  const neverTested = result.models.filter(m => m.status.kind === 'never');
+  const partial = result.models.filter(m => m.status.kind === 'partial');
+  const total = neverTested.length + partial.length;
+
+  if (total === 0) {
+    console.log(`  \x1b[32m━━━ MODÈLES LM STUDIO — TOUS TESTÉS ━━━\x1b[0m`);
+    console.log(`  \x1b[90m${result.models.length} modèle(s) LM Studio détecté(s), tous présents dans le classement.\x1b[0m`);
+    return;
+  }
+
+  console.log(`  \x1b[33m━━━ MODÈLES LM STUDIO NON TESTÉS (${total}) ━━━\x1b[0m`);
+  console.log(`  \x1b[90m${result.models.length} modèle(s) téléchargé(s) dans LM Studio, ${total} absent(s) du classement.\x1b[0m`);
+
+  const headers = ['Modèle', 'Param', 'Quant', 'Statut', 'Écoles manquantes'];
+  const aligns = ['left', 'right', 'left', 'left', 'left'];
+  const rows = [];
+
+  for (const m of neverTested) {
+    const badge = nightBatch.statusBadge(m.status);
+    rows.push([m.displayName || m.modelKey, m.params || '?', m.quant || '?', badge.label, nightBatch.missingSchoolsLabel(m.status) || '—']);
+  }
+  for (const m of partial) {
+    const badge = nightBatch.statusBadge(m.status);
+    rows.push([m.displayName || m.modelKey, m.params || '?', m.quant || '?', badge.label, nightBatch.missingSchoolsLabel(m.status) || '—']);
+  }
+
+  const res = cliTable.table(headers, rows, { colAligns: aligns, separator: '  ' });
+  console.log(`  \x1b[90m    ${res.lines[0]}\x1b[0m`);
+  console.log(`  \x1b[90m    ${res.sepLine}\x1b[0m`);
+  for (let i = 0; i < rows.length; i++) {
+    console.log(`  \x1b[90m${res.lines[i + 2]}\x1b[0m`);
+  }
+  console.log(`  \x1b[90mAstuce : node night-batch.js pour tester ces modèles automatiquement.\x1b[0m`);
+}
+
 // Génère le classement complet (HTML + Markdown) et le sauvegarde.
 function generateLeaderboard() {
   const ledgers = loadAllLedgers();
@@ -2492,6 +2555,14 @@ function generateLeaderboard() {
   for (let i = 0; i < lbRows.length; i++) {
     console.log(`  ${lbMedals[i]} ${lbRes.lines[i + 2]}`);
   }
+  console.log('');
+
+  // --- Modèles LM Studio présents mais non testés ---
+  // Compare les modelKeys de lms ls avec les carnets de scores existants pour
+  // afficher les modèles téléchargés dans LM Studio mais jamais (ou partiellement)
+  // testés par BenchGo. Évite les va-et-vient fastidieux entre LM Studio et le CLI.
+  printUntestedLmStudioModels();
+
   console.log('');
   console.log(`  \x1b[32mClassement HTML       : ${relHtml}\x1b[0m`);
   console.log(`  \x1b[90mClassement MD         : ${relMd}\x1b[0m`);

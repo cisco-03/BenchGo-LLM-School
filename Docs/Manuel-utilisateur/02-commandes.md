@@ -161,6 +161,12 @@ node leaderboard.js
 node leaderboard.js --serve
 ```
 
+À chaque génération, le CLI affiche aussi la **liste des modèles LM Studio non
+testés** (jamais testés + partiels) juste après le tableau de classement. Cela
+évite de faire des va-et-vient entre le CLI et LM Studio pour savoir quels
+modèles restent à tester. Colonne « Écoles manquantes » : les niveaux scolaires
+encore à passer pour ce modèle. Astuce finale pointe vers `node night-batch.js`.
+
 ### Communauté & soumission de résultats
 
 ```powershell

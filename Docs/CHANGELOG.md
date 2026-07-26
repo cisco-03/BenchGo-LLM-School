@@ -1,5 +1,24 @@
 # CHANGELOG - Carnet de Notes BenchGo
 
+## 2026-07-26 — Affichage des modèles LM Studio non testés dans le classement CLI
+
+### Contexte
+Demande utilisateur (`Memories-BenchGo/Tasks1.md`) : lors de la génération du classement (`node leaderboard.js`), l'utilisateur doit faire des va-et-vient fastidieux entre le CLI et LM Studio pour comparer les listes et identifier quels modèles téléchargés n'ont pas encore été testés. La demande est d'afficher directement dans le CLI, juste après le tableau de classement, la liste des modèles LM Studio présents mais absents du classement.
+
+### Implémentation
+- **`night-batch.js`** : export des fonctions réutilisables (`listLlmModels`, `matchLedger`, `normalizeForMatch`, `SCHOOLS`, `ECOLE_NAME_TO_KEY`, `runLms`, `statusBadge`, `missingSchoolsLabel`) via `module.exports`. `main()` désormais gardé par `if (require.main === module)` pour permettre l'import sans déclencher le mode nuit.
+- **`leaderboard.js`** : nouvelle fonction `printUntestedLmStudioModels()` appelée dans `generateLeaderboard()` après le tableau de classement. Récupère les modèles via `lms ls --json --llm` (réutilise `night-batch.listLlmModels()`), croise avec les carnets de scores et affiche :
+  - Section « Jamais testés » (priorité : aucun carnet n'existe).
+  - Section « Partiels » (un carnet existe mais des écoles manquent).
+  - Tableau CLI avec colonnes Modèle / Param / Quant / Statut / Écoles manquantes.
+  - Message si LM Studio daemon inactif ou `lms` indisponible (non bloquant).
+  - Astuce finale pointant vers `node night-batch.js` pour tester automatiquement.
+
+### Fichiers modifiés
+- `night-batch.js` : `module.exports` + garde `main()` derrière `require.main`.
+- `leaderboard.js` : import `night-batch`, fonction `printUntestedLmStudioModels()`, appel dans `generateLeaderboard()`.
+- `Docs/CHANGELOG.md` : cette entrée.
+
 ## 2026-07-25 — Fix crash undici (socket idle timeout) sur Node.js 24.x
 
 ### Contexte
