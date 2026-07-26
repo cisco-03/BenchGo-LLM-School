@@ -101,6 +101,26 @@
       ]
     },
     {
+      "model": "ornith-1.0-9b@q5_k_m",
+      "shortName": "ornith-1.0-9b@q5_k_m",
+      "quantization": "Q5_K_M",
+      "score": 2615,
+      "max": 2694,
+      "pct": 97,
+      "globalLifeScore": 2965,
+      "optionalBonus": 350,
+      "tokens": 7997,
+      "elapsedMs": 904552,
+      "tokensPerSecond": 8.84,
+      "ecoleCount": 1,
+      "pseudo": "FlexoDiv",
+      "submittedAt": "2026-07-26T15:15:15.520Z",
+      "contributors": 1,
+      "allPct": [
+        97
+      ]
+    },
+    {
       "model": "ornith-1.0-9b",
       "shortName": "ornith-1.0-9b",
       "quantization": "Q4_K_M",
@@ -501,6 +521,6 @@
       ]
     }
   ],
-  "generatedAt": "2026-07-26T22:16:25.749Z",
-  "totalSubmissions": 25
+  "generatedAt": "2026-07-26T22:16:54.719Z",
+  "totalSubmissions": 26
 }
