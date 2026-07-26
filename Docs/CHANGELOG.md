@@ -1,5 +1,37 @@
 # CHANGELOG - Carnet de Notes BenchGo
 
+## 2026-07-26 — feat: classement local dans night-batch + prompt professeur renforcé
+
+### Contexte
+Deux demandes utilisateur (cf. `Memories-BenchGo/Tasks1.md`) :
+1. Dans `node night-batch.js --list-only`, classer les modèles LM Studio téléchargés selon leur score du classement local BenchGo (du plus fort au plus faible), pour repérer immédiatement le plus faible à retirer. Enrichir la liste de colonnes plus précises.
+2. Renforcer le « prompt du professeur » : souhaiter la bienvenue aux modèles (élèves), leur expliquer qu'ils intègrent une grande école avec plusieurs écoles/classes/exercices notés, que tout compte avec des points, et que leur prestation détermine leur intégration au classement final mondial des LLM. Insister sur le sérieux (donner à 100%).
+
+### Implémentation
+
+#### 1. Classement local dans night-batch.js (`--list-only`)
+- **`night-batch.js`** : ajout de `computeLedgerMetrics(ledger)` qui agrège le carnet d'un modèle (meilleure tentative par école) en `{ score, max, pct, globalLifeScore, tokensPerSecond, elapsedMs, attempts, trend }`. Reproduit localement la logique de `score-ledger.js`/`leaderboard.js#aggregateLedger` sans coupler les modules (night-batch reste autonome).
+- `listLlmModels()` enrichit désormais chaque modèle d'un champ `metrics` (null si jamais testé).
+- **Tri** : les modèles déjà testés sont triés du plus fort au plus faible (pct, puis score, puis santé décroissante), puis les modèles jamais testés sont placés à la fin (par nom). Permet de repérer le dernier des testés = le plus faible = bon candidat au retrait.
+- **Affichage** (`selectModelsInteractive`) : 5 nouvelles colonnes — `Pct` (% global), `Vit.` (vitesse tok/s), `Tent.` (nombre max de tentatives sur une école), `Tnd` (tendance ▲/▼/=), `Temps` (durée d'inférence cumulée). Helpers `fmtDuration()` et `trendGlyph()` ajoutés. Message d'ordre mis à jour + astuce pour le retrait du plus faible.
+- Compatibilité : `leaderboard.js` consomme déjà `nightBatch.statusBadge`/`missingSchoolsLabel` sans changement.
+
+#### 2. Prompt du professeur renforcé
+- **`lm-studio-client.js:getSystemPrompt`** et **`cloud-client.js:getSystemPrompt`** : nouveau préambule d'accueil en français — bienvenue dans BenchGo V3, grande école d'excellence, écoles (Primaire → Post-Doc) découpées en classes, exercices notés (points gagnés/perdus), santé globale (buffer de PV, élimination si trop bas), classement final mondial des LLM, consigne de donner 100% et d'écrire du code JS complet/exécutable. Le niveau EXPERT/FRONTIER conserve le rôle « ingénieur logiciel principal ».
+- **`runner.js:407`** : le prompt dynamique de chaque tier débute désormais par un rappel de l'enjeu (classement mondial, points, santé, donner 100%) avant le contexte d'évaluation (école + classe).
+
+### Vérification
+- `node --check night-batch.js`, `node --check lm-studio-client.js`, `node --check cloud-client.js`, `node --check runner.js` → OK.
+- `node night-batch.js --list-only` → tri correct (99% → 99% → 96% → 96% → 95% → 91%), colonnes alignées, tendance ▼ affichée pour Mythos 9B (2 tentatives, régression).
+- Prompt système : ~1500 caractères, cohérent entre LM Studio et cloud.
+
+### Fichiers modifiés
+- `night-batch.js` — `computeLedgerMetrics`, `normalizeEcoleEntryLocal`, `pickBestLocal`, `fmtDuration`, `trendGlyph`, tri `listLlmModels`, affichage `selectModelsInteractive`.
+- `lm-studio-client.js` — `getSystemPrompt`.
+- `cloud-client.js` — `getSystemPrompt`.
+- `runner.js` — préambule du prompt dynamique.
+- `Docs/CHANGELOG.md` — cette entrée.
+
 ## 2026-07-26 — fix: écoles manquantes hors de portée affichées pour les petits modèles (night-batch)
 
 ### Contexte

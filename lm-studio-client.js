@@ -29,10 +29,20 @@ const HTTP_AGENT = new http.Agent({ keepAlive: false, maxSockets: 1 });
 // AbortController) pour rester sur la pile http native.
 
 function getSystemPrompt(difficulty) {
-  if (difficulty === "EXPERT" || difficulty === "HARD") {
-    return "Tu es un ingénieur logiciel principal. Réponds exclusivement en Markdown. Utilise les conventions exactes demandées avec les blocs de code.";
+  const welcome =
+    "Vous etes un modele de langage candidat a un examen serieux organise par BenchGo V3. " +
+    "Bienvenue dans cette grande ecole. Vous allez integrer une institution d'excellence ou chaque epreuve compte. " +
+    "Le programme se compose de plusieurs ecoles (Primaire, College-Lycee, Universite, These, Post-Doc), chacune " +
+    "decoupee en classes. Chaque classe contient des exercices notes : chaque exercice reussi vous rapporte des points, " +
+    "chaque echec vous en fait perdre. Votre sante globale (un buffer de points de vie) diminue a chaque erreur et peut " +
+    "vous eliminer si elle descend trop bas. Donnez-vous a 100% : ces exercices sont exigeants et leur resolution " +
+    "rigoureuse determine votre integration au classement final mondial des modeles de langage (LLM). " +
+    "Vous devez ecrire du code JavaScript complet, executable et correct - pas de pseudo-code, pas de placeholders. " +
+    "Prenez chaque exercice au serieux, lisez attentivement l'enonce et verifiez votre solution.";
+  if (difficulty === "EXPERT" || difficulty === "HARD" || difficulty === "FRONTIER") {
+    return welcome + " Vous agissez ici en tant qu'ingenieur logiciel principal. Repondez exclusivement en Markdown, avec les conventions exactes demandees et des blocs de code.";
   }
-  return "Tu es un développeur compétent. Réponds en Markdown de manière structurée comme demandé, avec les titres et les blocs de code.";
+  return welcome + " Vous agissez en tant que developpeur competent. Repondez en Markdown de maniere structuree, avec des titres et des blocs de code.";
 }
 
 function estimateTokens(text) {

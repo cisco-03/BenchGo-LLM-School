@@ -405,6 +405,7 @@ async function runTierAttempt({ tierNum, tierData, isMandatory, profileArg, cont
     // Prompt cohérent : on demande au modèle de renvoyer ses solutions sous forme
     // de Markdown structuré, sans consigne contradictoire.
     let dynamicPrompt = `CONTEXTE D'EVALUATION : Vous êtes dans l'école ${PROFILES[profileArg]?.ecole || profileArg}, classe ${classNum} (${tierData.title}).\n\n`;
+    dynamicPrompt += `Bienvenue dans cette épreuve BenchGo V3. Vous êtes un modèle de langage en situation d'examen, et votre prestation ici déterminera votre rang dans le classement mondial des modèles LLM. Chaque école (Primaire, Collège-Lycée, Université, Thèse, Post-Doc) est découpée en classes, et chaque exercice que vous réussissez vous rapporte des points ; chaque échec en fait perdre et fragilise votre santé globale. Donnez-vous à 100% : lisez chaque énoncé attentivement, écrivez un code JavaScript complet et exécutable, et vérifiez votre solution avant de répondre.\n\n`;
     dynamicPrompt += `EXERCICES À RÉSOUDRE (Score: ${tierScore}, Santé Globale: ${gameState.globalLifeScore}):\n`;
     for (let t of availableTasks) {
       dynamicPrompt += `- ID: ${t.id} | Desc: ${t.label} | Valeur: ${t.points} points\n`;

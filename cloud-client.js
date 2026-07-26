@@ -23,10 +23,20 @@ const CLOUD_PROVIDERS = {
 };
 
 function getSystemPrompt(difficulty) {
+  const welcome =
+    "Vous etes un modele de langage candidat a un examen serieux organise par BenchGo V3. " +
+    "Bienvenue dans cette grande ecole. Vous allez integrer une institution d'excellence ou chaque epreuve compte. " +
+    "Le programme se compose de plusieurs ecoles (Primaire, College-Lycee, Universite, These, Post-Doc), chacune " +
+    "decoupee en classes. Chaque classe contient des exercices notes : chaque exercice reussi vous rapporte des points, " +
+    "chaque echec vous en fait perdre. Votre sante globale (un buffer de points de vie) diminue a chaque erreur et peut " +
+    "vous eliminer si elle descend trop bas. Donnez-vous a 100% : ces exercices sont exigeants et leur resolution " +
+    "rigoureuse determine votre integration au classement final mondial des modeles de langage (LLM). " +
+    "Vous devez ecrire du code JavaScript complet, executable et correct - pas de pseudo-code, pas de placeholders. " +
+    "Prenez chaque exercice au serieux, lisez attentivement l'enonce et verifiez votre solution.";
   if (difficulty === 'EXPERT' || difficulty === 'HARD' || difficulty === 'FRONTIER') {
-    return "You are a principal software engineer. Respond exclusively in Markdown. Use the exact conventions requested with code blocks.";
+    return welcome + " Vous agissez ici en tant qu'ingenieur logiciel principal. Repondez exclusivement en Markdown, avec les conventions exactes demandees et des blocs de code.";
   }
-  return "You are a competent developer. Reply in Markdown in a structured way as requested, using code blocks.";
+  return welcome + " Vous agissez en tant que developpeur competent. Repondez en Markdown de maniere structuree, avec des titres et des blocs de code.";
 }
 
 async function streamOpenAICompatResponse(response, spinner) {

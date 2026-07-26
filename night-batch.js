@@ -248,6 +248,91 @@ function ledgerSchoolKeys(ledger) {
   return keys;
 }
 
+// Normalise une entree d'ecole d'un carnet vers { best, attempts }.
+// Reproduit la logique de score-ledger.js#normalizeEcoleEntry sans dependre
+// du module (night-batch reste autonome : pas de couplage inutile entre les
+// gestionnaires de carnets).
+function normalizeEcoleEntryLocal(raw) {
+  if (!raw) return { best: null, attempts: [] };
+  if (raw.attempts && Array.isArray(raw.attempts)) {
+    let best = raw.best;
+    if (!best && raw.attempts.length > 0) best = pickBestLocal(raw.attempts);
+    return { best, attempts: raw.attempts.slice() };
+  }
+  if (raw.score != null || raw.max != null || raw.pct != null) {
+    return { best: raw, attempts: [raw] };
+  }
+  return { best: null, attempts: [] };
+}
+
+// Selectionne la meilleure tentative d'une liste (pct le plus eleve ; egalite ->
+// derniere). Meme convention que score-ledger.js#pickBest.
+function pickBestLocal(attempts) {
+  if (!attempts || attempts.length === 0) return null;
+  let best = attempts[0];
+  for (let i = 1; i < attempts.length; i++) {
+    if ((attempts[i].pct || 0) >= (best.pct || 0)) best = attempts[i];
+  }
+  return best;
+}
+
+// Calcule les metriques agregees d'un carnet (meilleure tentative par ecole) :
+// pct global, score, sante, vitesse (tok/s), tentatives (max sur une ecole),
+// tendance (delta de pct entre les 2 dernieres tentatives globales), temps
+// total d'inference. Renvoie null si le carnet est vide / absent.
+// Ces metriques alimentent les nouvelles colonnes de --list-only et le tri
+// du plus fort au plus faible.
+function computeLedgerMetrics(ledger) {
+  if (!ledger || !ledger.ecoles) return null;
+  const entries = Object.values(ledger.ecoles).map(normalizeEcoleEntryLocal).filter(e => e.best);
+  if (entries.length === 0) return null;
+  let score = 0, max = 0, globalLifeScore = 0;
+  let totalTokens = 0, totalElapsedMs = 0;
+  let maxAttempts = 0;
+  let trendSumPrev = 0, trendSumLast = 0, trendCount = 0;
+  for (const e of entries) {
+    score += e.best.score || 0;
+    max += e.best.max || 0;
+    globalLifeScore += e.best.globalLifeScore || 0;
+    totalTokens += e.best.tokens || 0;
+    totalElapsedMs += e.best.elapsedMs || 0;
+    maxAttempts = Math.max(maxAttempts, e.attempts.length);
+    // Tendance : moyenne des deltas de pct entre les 2 dernieres tentatives
+    // de chaque ecole ayant au moins 2 tentatives.
+    if (e.attempts.length >= 2) {
+      const sorted = e.attempts.slice().sort((a, b) => {
+        const da = (a.date || '') + (a.time || '');
+        const db = (b.date || '') + (b.time || '');
+        return da.localeCompare(db);
+      });
+      const aPrev = sorted[sorted.length - 2];
+      const aLast = sorted[sorted.length - 1];
+      const pPrev = aPrev.max > 0 ? Math.round((aPrev.score / aPrev.max) * 100) : 0;
+      const pLast = aLast.max > 0 ? Math.round((aLast.score / aLast.max) * 100) : 0;
+      trendSumPrev += pPrev;
+      trendSumLast += pLast;
+      trendCount++;
+    }
+  }
+  const pct = max > 0 ? Math.round((score / max) * 100) : 0;
+  const tokensPerSecond = totalElapsedMs > 0
+    ? Math.round((totalTokens / (totalElapsedMs / 1000)) * 100) / 100
+    : 0;
+  // Tendance : 'up' (monte), 'down' (descend), 'stable' ou null (pas assez d'historique).
+  let trend = null;
+  if (trendCount > 0) {
+    const avgPrev = Math.round(trendSumPrev / trendCount);
+    const avgLast = Math.round(trendSumLast / trendCount);
+    const delta = avgLast - avgPrev;
+    trend = delta > 0 ? 'up' : (delta < 0 ? 'down' : 'stable');
+  }
+  return {
+    score, max, pct, globalLifeScore,
+    tokensPerSecond, elapsedMs: totalElapsedMs,
+    attempts: maxAttempts, trend
+  };
+}
+
 // Liste les modeles LLM telecharges via lms ls --json --llm. Chaque modele est
 // enrichi d'un statut de test (deja teste / partiel / jamais teste) calcule en
 // croisant son modelKey avec les carnets de scores existants.
@@ -300,14 +385,27 @@ function listLlmModels() {
         quant: (m.quantization && m.quantization.name) || '?',
         size: m.sizeBytes || 0,
         arch: m.architecture || '?',
-        status
+        status,
+        // Metriques agreggees depuis le carnet (meilleure tentative par ecole).
+        // Absentes si le modele n'a jamais ete teste (kind === 'never').
+        metrics: computeLedgerMetrics(ledger)
       };
     });
-    const order = { never: 0, partial: 1, complete: 2 };
+    // Tri : modeles deja testes du plus fort au plus faible (pct, puis score,
+    // puis sante), puis les modeles jamais testes a la fin (par nom). Permet
+    // de repérer immédiatement le modele le plus faible (dernier des testes)
+    // pour le retirer, et de privilegier le test des nouveaux d'abord.
     models.sort((a, b) => {
-      const oa = order[a.status.kind] || 9;
-      const ob = order[b.status.kind] || 9;
-      if (oa !== ob) return oa - ob;
+      const aTested = a.status.kind !== 'never' && a.metrics;
+      const bTested = b.status.kind !== 'never' && b.metrics;
+      if (aTested && !bTested) return -1;
+      if (!aTested && bTested) return 1;
+      if (aTested && bTested) {
+        const ma = a.metrics, mb = b.metrics;
+        if (mb.pct !== ma.pct) return mb.pct - ma.pct;
+        if (mb.score !== ma.score) return mb.score - ma.score;
+        return (mb.globalLifeScore || 0) - (ma.globalLifeScore || 0);
+      }
       return (a.displayName || '').localeCompare(b.displayName || '');
     });
     return { ok: true, models };
@@ -328,15 +426,40 @@ function missingSchoolsLabel(status) {
   return status.missing.join(',');
 }
 
+// Formate une duree en ms vers un affichage compact (ex: 1.2s, 1m05s, 1h02m).
+// Reprise minimale de score-ledger.js#formatDuration (sans coupler les modules).
+function fmtDuration(ms) {
+  if (!Number.isFinite(ms) || ms <= 0) return '\u2014';
+  const s = ms / 1000;
+  if (s < 60) return s.toFixed(1) + 's';
+  const totalSec = Math.round(s);
+  const m = Math.floor(totalSec / 60);
+  const sec = totalSec % 60;
+  if (m < 60) return m + 'm' + String(sec).padStart(2, '0') + 's';
+  const h = Math.floor(m / 60);
+  const min = m % 60;
+  return h + 'h' + String(min).padStart(2, '0') + 'm';
+}
+
+// Renvoie le glyphe + couleur ANSI d'une tendance (up/down/stable/null).
+function trendGlyph(trend) {
+  if (trend === 'up') return `${C.green}\u25B2${C.reset}`;
+  if (trend === 'down') return `${C.red}\u25BC${C.reset}`;
+  if (trend === 'stable') return `${C.gray}=${C.reset}`;
+  return `${C.gray}\u2014${C.reset}`;
+}
+
 // Selection interactive des modeles.
 async function selectModelsInteractive(models) {
   console.log(`\n  ${C.bold}${C.cyan}=== MODELES LLM TELECHARGES ===${C.reset}`);
   console.log(`  ${C.gray}Selectionnez les modeles a tester cette nuit.${C.reset}`);
   console.log(`  ${C.gray}Syntaxe : numeros separes par les virgules (ex: 1,3,5) ou "all".${C.reset}`);
-  console.log(`  ${C.gray}Ordre : jamais testes > partiels > complets (les nouveaux d'abord).${C.reset}\n`);
+  console.log(`  ${C.gray}Ordre : modeles testes du plus fort au plus faible, puis jamais testes a la fin.${C.reset}`);
+  console.log(`  ${C.gray}Astuce : le dernier des testes est le plus faible — un bon candidat au retrait.${C.reset}\n`);
 
-  const idxW = 4, nameW = 30, paramW = 5, quantW = 7, sizeW = 8, pubW = 16, statusW = 13, missW = 22;
-  const header = `  ${' '.padEnd(idxW)}${'Modèle'.padEnd(nameW)}${'Param'.padStart(paramW)} ${'Quant'.padEnd(quantW)} ${'Taille'.padStart(sizeW)}  ${'Editeur'.padEnd(pubW)} ${'Statut'.padEnd(statusW)} ${'Ecoles manquantes'}`;
+  const idxW = 4, nameW = 30, paramW = 5, quantW = 7, sizeW = 8, pubW = 14, statusW = 13;
+  const pctW = 5, tpsW = 8, attW = 5, trendW = 4, timeW = 8, missW = 22;
+  const header = `  ${' '.padEnd(idxW)}${'Modèle'.padEnd(nameW)}${'Param'.padStart(paramW)} ${'Quant'.padEnd(quantW)} ${'Taille'.padStart(sizeW)}  ${'Editeur'.padEnd(pubW)} ${'Statut'.padEnd(statusW)} ${'Pct'.padStart(pctW)} ${'Vit.'.padStart(tpsW)} ${'Tent.'.padStart(attW)} ${'Tnd'.padStart(trendW)} ${'Temps'.padStart(timeW)}  ${'Ecoles manquantes'}`;
   console.log(`${C.gray}${header}${C.reset}`);
   models.forEach((m, i) => {
     const idx = String(i + 1).padStart(2) + '.';
@@ -347,7 +470,18 @@ async function selectModelsInteractive(models) {
     const missStr = missing ? `${C.gray}${missing.padEnd(missW)}${C.reset}` : ''.padEnd(missW);
     const name = (m.displayName || '').padEnd(nameW).slice(0, nameW);
     const pub = (m.publisher || '?').padEnd(pubW).slice(0, pubW);
-    console.log(`  ${C.bold}${idx.padEnd(idxW)}${C.reset} ${name} ${C.gray}${(m.params || '?').padEnd(paramW)} ${(m.quant || '?').padEnd(quantW)} ${sz}  ${pub}${C.reset} ${statusStr} ${missStr}`);
+    // Metriques de classement local (absentes si jamais teste).
+    const mt = m.metrics;
+    const pctStr = mt ? `${String(mt.pct + '%').padStart(pctW)}` : `${C.gray}${'?'.padStart(pctW)}${C.reset}`;
+    const tpsStr = mt && mt.tokensPerSecond > 0
+      ? `${C.gray}${(mt.tokensPerSecond + ' t/s').padStart(tpsW)}${C.reset}`
+      : `${C.gray}${'\u2014'.padStart(tpsW)}${C.reset}`;
+    const attStr = mt ? `${String(mt.attempts).padStart(attW)}` : `${C.gray}${'?'.padStart(attW)}${C.reset}`;
+    const trendStr = mt ? `${trendGlyph(mt.trend).padEnd(trendW)}` : `${C.gray}${'\u2014'.padEnd(trendW)}${C.reset}`;
+    const timeStr = mt && mt.elapsedMs > 0
+      ? `${C.gray}${fmtDuration(mt.elapsedMs).padStart(timeW)}${C.reset}`
+      : `${C.gray}${'\u2014'.padStart(timeW)}${C.reset}`;
+    console.log(`  ${C.bold}${idx.padEnd(idxW)}${C.reset} ${name} ${C.gray}${(m.params || '?').padEnd(paramW)} ${(m.quant || '?').padEnd(quantW)} ${sz}  ${pub}${C.reset} ${statusStr} ${pctStr} ${tpsStr} ${attStr} ${trendStr} ${timeStr}  ${missStr}`);
   });
   console.log('');
   return new Promise(resolve => {
