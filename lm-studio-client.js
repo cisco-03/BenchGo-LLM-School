@@ -1,6 +1,8 @@
 const http = require('http');
 const logger = require('./logger');
 const { LM_STUDIO_API_URL, API_TIMEOUT_MS } = require('./config');
+const { BenchgoError } = require('./cli-help');
+const benchMetrics = require('./benchmark-metrics');
 
 // Agent dédié NON keepAlive : chaque requête obtient sa propre socket, qui est
 // libérée à la fin. On évite ainsi la réutilisation de socket poolée par
@@ -204,6 +206,14 @@ async function queryLLM(prompt, difficulty, tierId, isMandatory, spinner, option
         const duration = Date.now() - startTime;
         logger.apiRequest(tierId, duration, 'OK');
         logger.info(`API Tier ${tierId} : réponse reçue en ${duration}ms (${tokenCount} chunks, ${fullContent.length} chars).`);
+        // Benchmarking intégré (§2) : enregistre latence + tokens pour ce modèle.
+        benchMetrics.record({
+          modelName: responseModelName || 'Modele_Local',
+          durationMs: duration,
+          tokens: tokenCount,
+          tierId,
+          status: 'OK'
+        });
         request._resolve({ content: fullContent.trim(), tokenCount, modelName: responseModelName || "Modele_Local" });
       });
       res.on('error', (e) => {
@@ -228,18 +238,34 @@ async function queryLLM(prompt, difficulty, tierId, isMandatory, spinner, option
       ? `Timeout après ${timeoutMs / 1000}s — le modèle n'a pas répondu dans le délai imparti`
       : error.message;
 
+    // Journalisation détaillée pour diagnostic futur (chaque échec API est tracé
+    // avec son code, sa durée et le tier concerné — permet de corréler les bugs
+    // aux logs LM Studio et aux timeouts undici).
+    const isUnreachable = /ECONNREFUSED|ECONNRESET|ENOTFOUND|EHOSTUNREACH/.test(error.code || error.message || '');
+    const isHttpErr = /^HTTP_\d+/.test(error.message || '');
+    const code = isTimeout ? 'E502_LM_TIMEOUT'
+      : isUnreachable ? 'E503_LM_UNREACHABLE'
+      : isHttpErr ? 'E504_LM_HTTP_ERROR'
+      : 'E504_LM_HTTP_ERROR';
     logger.apiRequest(tierId || '?', duration, 'ERREUR');
-    logger.error(`API Tier ${tierId} — ${reason}`);
+    logger.error(`API Tier ${tierId} — code=${code} — raison=${reason}`);
+    // Benchmarking intégré (§2) : enregistre l'échec pour le taux d'erreur.
+    benchMetrics.record({
+      modelName: (spinner && spinner._modelName) || 'Modele_Local',
+      durationMs: duration,
+      tokens: 0,
+      tierId,
+      status: isTimeout ? 'TIMEOUT' : 'ERREUR'
+    });
 
     if (isMandatory) {
-      console.error(`\n\x1b[31m[ERREUR API]\x1b[0m ${reason}`);
-      console.error(`  -> Vérifiez que LM Studio tourne sur le port 1234.`);
-      if (isTimeout) {
-        console.error(`  -> Le modèle a mis plus de ${timeoutMs / 1000}s à répondre. Augmenter API_TIMEOUT_MS ou utiliser un profil inférieur.`);
-      }
-      process.exit(1);
+      // Erreur code-court : propagée au runner qui l'affichera proprement (sans
+      // stack brute par défaut) et la journalisera. On ne fait plus process.exit
+      // ici — le handler global de main() gère la sortie.
+      throw new BenchgoError(code, `Tier ${tierId} (obligatoire) — ${reason}`);
     } else {
-      console.error(`\n  \x1b[33m[WARN]\x1b[0m API Tier ${tierId} échoué (optionnel) : ${reason}`);
+      console.error(`\n  \x1b[33m[WARN ${code}]\x1b[0m API Tier ${tierId} échoué (optionnel) : ${reason}`);
+      logger.warn(`API Tier ${tierId} (optionnel) ignoré — ${code} — ${reason}`);
       return null;
     }
   }

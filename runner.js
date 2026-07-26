@@ -47,6 +47,15 @@ const presets = require('./presets');
 const apiKeysStore = require('./api-keys-store');
 const communitySync = require('./community-sync');
 const updateChecker = require('./update-checker');
+const cliHelp = require('./cli-help');
+const { BenchgoError } = cliHelp;
+const benchMetrics = require('./benchmark-metrics');
+const { logEvalCacheStats } = require('./task-evaluator');
+const { runSentinels } = require('./health-sentinels');
+const scoringUtils = require('./scoring-utils');
+const { isRattrapageEligibleProfile, shouldReplaceBestResult, explainTechnicalError, getClassName } = scoringUtils;
+const hybridMode = require('./hybrid-mode');
+const { exportCsv: exportRunsCsv, detectUnstableModels } = scoreLedger;
 
 const DEFAULT_CONTEXT_LIMIT_TOKENS = 16384;
 const MAX_RATTRAPAGE_ATTEMPTS = 1;
@@ -86,67 +95,13 @@ function extractStudentCode(rawResponse, taskId) {
   return studentCode;
 }
 
-function isRattrapageEligibleProfile(profileArg) {
-  return profileArg === 'LIGHT' || profileArg === 'STANDARD';
-}
-
-function shouldReplaceBestResult(currentBest, candidate) {
-  if (!currentBest) return true;
-  if (candidate.tierPassedCount > currentBest.tierPassedCount) return true;
-  if (candidate.tierPassedCount < currentBest.tierPassedCount) return false;
-  return candidate.tierPct >= currentBest.tierPct;
-}
+// --- Fonctions pures extraites vers scoring-utils.js (§4 Maintenabilité) ---
+// isRattrapageEligibleProfile, shouldReplaceBestResult, explainTechnicalError,
+// getClassName sont désormais importées depuis ./scoring-utils pour être
+// testables unitairement et réduire la taille de runner.js.
 
 // --- Traduction pédagogique des erreurs techniques brutes du moteur JS ---
-// Le sandbox VM renvoie des erreurs cryptiques (ex: "élèves is not defined",
-// "Invalid or unexpected token") qui font croire à un bug du benchmark. Cette
-// fonction produit une explication humaine compréhensible utilisée comme repli
-// si le modèle n'a pas pu fournir sa propre explication.
-function explainTechnicalError(errors, task) {
-  const e = (errors || '').toLowerCase();
-  const taskId = (task && task.id) || 'cet exercice';
-
-  if (/is not defined/.test(e)) {
-    const m = (errors || '').match(/([A-Za-z_$][\w$]*)\s+is not defined/i);
-    const sym = m ? m[1] : 'une variable';
-    return `L'élève a utilisé ${sym} sans l'avoir déclarée. Le moteur d'exécution ne trouve pas cette référence — il s'agit soit d'une variable/fonction oubliée, soit d'une faute de frappe dans le nom. L'élève aurait dû déclarer ${sym} avant de l'utiliser.`;
-  }
-  if (/invalid or unexpected token/.test(e)) {
-    return `Le code contient un caractère invalide ou inattendu (souvent un signe parasite, une mauvaise apostrophe, un caractère copié depuis un traitement de texte, ou un bout d'expression mal collé). Le moteur ne peut pas analyser la syntaxe — l'élève aurait dû relire son code caractère par caractère.`;
-  }
-  if (/unexpected token/.test(e)) {
-    return `La syntaxe du code est incorrecte à un endroit précis (parenthèse, accolade ou opérateur mal placé). L'élève a probablement oublié un séparateur ou mal appairé des symboles.`;
-  }
-  if (/unexpected end of input|end of script/.test(e)) {
-    return `Le code est incomplet : il manque une accolade fermante, une parenthèse ou un point-virgule à la fin. L'élève a interrompu son code trop tôt.`;
-  }
-  if (/is not a function/.test(e)) {
-    const m = (errors || '').match(/([A-Za-z_$][\w$.]*)\s+is not a function/i);
-    const sym = m ? m[1] : 'une expression';
-    return `L'élève a essayé d'appeler ${sym} comme une fonction, mais ce n'en est pas une. Soit la valeur n'existe pas, soit c'est un nombre/une chaîne/undefined.`;
-  }
-  if (/cannot read propert(?:y|ies) of (?:undefined|null)/.test(e)) {
-    return `L'élève a essayé de lire une propriété sur une valeur undefined ou null. Il n'a pas protégé son accès et a oublié de vérifier que l'objet existait avant d'accéder à un de ses champs.`;
-  }
-  if (/maximum call stack|rangeerror/.test(e)) {
-    return `Récursion infinie détectée : la fonction s'appelle elle-même sans condition d'arrêt. Le moteur a saturé la pile d'exécution.`;
-  }
-  if (/timeout|temps d'exécution dépassé/.test(e)) {
-    return `L'algorithme n'est pas assez efficace ou boucle indéfiniment — il a dépassé le temps d'exécution autorisé. L'élève aurait dû optimiser sa solution.`;
-  }
-  if (/assertion échouée|assertion echouee/.test(e)) {
-    return `Le code s'exécute mais ne produit pas le résultat attendu par le test. La logique de l'élève est incorrecte, même si la syntaxe est valide.`;
-  }
-  return `L'élève n'a pas réussi à produire un code correct pour ${taskId}. Erreur technique du moteur : ${(errors || 'inconnue').substring(0, 200)}. Une analyse plus poussée du code aurait été nécessaire pour identifier précisément la cause.`;
-}
-
-function getClassName(profileArg, tierNum) {
-  const classNum = tierToClasseNum(profileArg, tierNum);
-  const fullName = (CLASSE_NAMES[profileArg] && CLASSE_NAMES[profileArg][classNum]) || `Classe-${classNum}`;
-  const firstDash = fullName.indexOf('-');
-  const secondDash = firstDash !== -1 ? fullName.indexOf('-', firstDash + 1) : -1;
-  return secondDash !== -1 ? fullName.substring(secondDash + 1) : fullName;
-}
+// (Implémentation déplacée vers scoring-utils.js — importée ci-dessus.)
 
 function printScorecard(scorecard, ecoleLabel, isFinal, globalLifeScore) {
   const subtitle = isFinal ? 'FINAL' : 'EN COURS';
@@ -1058,6 +1013,15 @@ async function proposeCommunitySubmission(shortName, options) {
 async function main() {
   console.clear();
 
+  // --- Actions uniques (help, status, version) — traitées AVANT la bannière ---
+  // Ces commandes ne lancent pas le benchmark : on les intercepte immédiatement
+  // pour garder une sortie propre (sans en-tête BenchGo). Journalisées dans
+  // cli-help.js pour diagnostic futur.
+  if (cliHelp.handleSingleAction(process.argv.slice(2))) {
+    logger.close();
+    return;
+  }
+
   console.log('\n\x1b[36m\u2554\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2557\x1b[0m');
   console.log('\x1b[36m\u2551         BENCHGO V3 — EXÉCUTION COMPORTEMENTALE           \u2551\x1b[0m');
   console.log('\x1b[36m\u2551   (VM Sandbox + Tests RFC 7946 + Flood Fill + React Sim)  \u2551\x1b[0m');
@@ -1069,8 +1033,11 @@ async function main() {
            preset: presetName, savePreset: savePresetName, deletePreset: deletePresetName, listPresets: listPresetsFlag,
            forgetKey: forgetKeyName, listKeys: listKeysFlag, noSaveKeys: noSaveKeysFlag, force: forceFlag,
             submit: submitFlag, noTelemetry: noTelemetryFlag, githubToken: cliGithubToken,
-            noUpdateCheck: noUpdateCheckFlag } = cliArgs;
+            noUpdateCheck: noUpdateCheckFlag, dryRun: dryRunFlag, hybrid: hybridFlag } = cliArgs;
   let tierArg = tierArgRaw;
+
+  if (dryRunFlag) logger.info('CLI: --dry-run actif — validation de la configuration sans exécution');
+  if (hybridFlag) logger.info('CLI: --hybrid actif — auto-soumission GitHub si seuil atteint');
 
   // --- Flags d'action unique : traités puis sortie immédiate ---
   // --list-presets / --list-keys : affichage puis exit.
@@ -1422,8 +1389,7 @@ async function main() {
   if (isCloudMode) {
     // Mode cloud : pas d'auto-détection LM Studio, le modèle est fourni explicitement
     if (!resolvedCloudModel) {
-      console.error('\x1b[31m[ERREUR]\x1b[0m --provider spécifié sans --model. Ex: --model=gpt-4o');
-      process.exit(1);
+      throw new BenchgoError('E601_NO_MODEL', `--provider=${resolvedProvider} sans --model`);
     }
     logger.info(`Mode cloud : provider=${resolvedProvider}, modèle=${resolvedCloudModel}`);
     console.log(`  Mode              : \x1b[1;35mCLOUD\x1b[0m`);
@@ -1508,6 +1474,39 @@ async function main() {
   console.log(`  \x1b[1;33mContexte max        :\x1b[0m \x1b[1;33m${contextLimitTokens} tokens\x1b[0m`);
   console.log(`  \x1b[1;33mQuantification      :\x1b[0m ${resolvedQuantization ? `\x1b[1;35m${resolvedQuantization}\x1b[0m` : '\x1b[90m— (inconnue)\x1b[0m'}`);
   console.log('');
+
+  // --- --dry-run : validation de la configuration sans exécution ---
+  // Plan §1 (CLI/UX). On a résolu profil/provider/modèle/clés/professeur et
+  // affiché la config globale. On valide la cohérence (modèle présent en cloud,
+  // profil connu, professeur OK) puis on quitte proprement SANS lancer
+  // l'auto-profilage ni l'évaluation. Utile pour vérifier une commande complexe
+  // avant de l'engager (gain de temps : ~5s vs plusieurs minutes).
+  if (dryRunFlag) {
+    const problems = [];
+    if (isCloudMode && !resolvedCloudModel) {
+      problems.push('Mode CLOUD sans --model (modèle élève manquant).');
+    }
+    if (!PROFILES[profileArg]) {
+      problems.push(`Profil inconnu : ${profileArg}.`);
+    }
+    if (isCloudMode && !resolvedApiKey && !['lmstudio', 'ollama', 'custom'].includes(resolvedProvider)) {
+      problems.push(`Provider ${resolvedProvider} sans clé API (requis en cloud).`);
+    }
+    console.log(`  \x1b[1;36m━━━ DRY-RUN — VALIDATION DE LA CONFIGURATION ━━━\x1b[0m`);
+    if (problems.length === 0) {
+      console.log(`  \x1b[32m✔ Configuration valide — prêt à lancer le benchmark.\x1b[0m`);
+      console.log(`  \x1b[90mProfesseur IA : ${teacherConfigResolved && teacherConfigResolved.enabled ? 'activé (' + (teacherConfigResolved.provider || 'openrouter') + ')' : 'désactivé (auto-analyse)'}\x1b[0m`);
+      console.log(`  \x1b[90mBudget contexte : ${contextLimitTokens} tokens · Quantification : ${resolvedQuantization || 'inconnue'}\x1b[0m`);
+      logger.info('CLI: dry-run — configuration valide, sortie sans exécution');
+    } else {
+      console.log(`  \x1b[31m✘ Configuration invalide :\x1b[0m`);
+      for (const p of problems) console.log(`    \x1b[31m• ${p}\x1b[0m`);
+      logger.warn('CLI: dry-run — ' + problems.length + ' problème(s) : ' + problems.join(' | '));
+    }
+    console.log('');
+    logger.close();
+    process.exit(problems.length === 0 ? 0 : 1);
+  }
 
   // --- Vérification anticipée : modèle déjà testé (avant l'auto-profilage) ---
   // On consulte le carnet de scores AVANT de lancer l'auto-profilage (~95s) et
@@ -1900,6 +1899,25 @@ async function main() {
         });
       }
       printScorecard(tierScorecard, ecoleLabel, false, gameState.globalLifeScore);
+
+      // --- Sentinelles sanitaires (§4 Maintenabilité) ---
+      // Vérifie la cohérence des résultats du tier (NaN, sommes de points,
+      // seuils). Non bloquant par défaut : journalise un WARN en cas
+      // d'incohérence pour diagnostic futur. Évite de produire des rapports avec
+      // des données corrompues silencieusement.
+      if (bestResult.evalResults && bestResult.evalResults.length > 0) {
+        const tierPct = bestResult.tierTotalCount > 0
+          ? Math.round((bestResult.tierPassedCount / bestResult.tierTotalCount) * 100)
+          : 0;
+        runSentinels({
+          evalResults: bestResult.evalResults,
+          tierPassedCount: bestResult.tierPassedCount,
+          tierTotalCount: bestResult.tierTotalCount,
+          pct: tierPct,
+          globalLifeScore: gameState.globalLifeScore,
+          strict: false
+        });
+      }
     }
 
     if (stopGlobalEval) {
@@ -2367,6 +2385,11 @@ async function main() {
     if (bilanMd) globalReport += bilanMd;
   }
 
+  // --- Section Benchmarking intégré (§2 Performance) ---
+  // Ajoute le récapitulatif latence/tokens par modèle à la fin du rapport.
+  const benchSection = benchMetrics.buildReportSection();
+  if (benchSection) globalReport += benchSection;
+
   fs.writeFileSync(outputPath, globalReport, 'utf8');
   const logRelPath = path.relative(__dirname, logger.getFilePath());
   console.log(`  \x1b[32mRapport sauvegardé : ${relPath}\x1b[0m`);
@@ -2434,6 +2457,8 @@ async function main() {
   // messages rotatifs (« Je prends connaissance de mes exercices... ») pour qu'il
   // ne croie pas que le CLI a planté et ne ferme pas la fenêtre.
   let lastResult = null;
+  const allSchoolResults = [];  // résumé par école pour saveLastRun (§1 CLI/UX)
+  const runStartMs = Date.now();
   const prepSpinner = new Spinner('Préparation de la session d\'examen');
   prepSpinner.setWaitingMessages(POST_PROFILING_WAITING_MESSAGES);
   prepSpinner.start();
@@ -2456,13 +2481,29 @@ async function main() {
     }
     try {
       lastResult = await runSchool(schoolProfile, { isSecondSchool });
+      // Accumulation du résumé par école pour saveLastRun (§1 CLI/UX).
+      if (lastResult && !lastResult.skipped) {
+        allSchoolResults.push({
+          ecole: lastResult.ecoleLabel || PROFILES[schoolProfile].ecole,
+          profile: lastResult.profileArg || schoolProfile,
+          points: lastResult.globalScore ? lastResult.globalScore.passed : 0,
+          maxPoints: lastResult.globalScore ? lastResult.globalScore.total : 0,
+          mandatoryPassed: lastResult.globalScore ? lastResult.globalScore.mandatoryPassed : 0,
+          mandatoryTotal: lastResult.globalScore ? lastResult.globalScore.mandatoryTotal : 0,
+          pctGlobal: lastResult.pctGlobal || 0,
+          pctMandatory: lastResult.pctMandatory || 0,
+          eliminated: Boolean(lastResult.eliminated)
+        });
+      }
       // Si le modèle a été éliminé pendant cette école, on n'enchaîne pas la suite.
       if (lastResult && lastResult.eliminated) {
         console.log(`  \x1b[31mModèle éliminé sur ${lastResult.ecoleLabel} — arrêt des écoles suivantes.\x1b[0m`);
+        logger.warn('Run: modèle éliminé sur ' + (lastResult.ecoleLabel || '?') + ' — arrêt des écoles suivantes');
         break;
       }
     } catch (e) {
       logger.error(`Erreur fatale sur l'école ${PROFILES[schoolProfile].ecole} : ${e.message}`);
+      logger.error(`Stack : ${e.stack}`);
       console.error(`\x1b[31m[ERREUR]\x1b[0m École ${PROFILES[schoolProfile].ecole} : ${e.message}`);
       break;
     }
@@ -2477,14 +2518,165 @@ async function main() {
     await proposeCommunitySubmission(lastResult.shortName, { submitFlag, cliGithubToken });
   }
 
+  // --- Résumé de fin de run (§1 CLI/UX) ---
+  // Tableau synthétique (école, modèle, temps, points, santé, tier atteint) affiché
+  // en console PUIS sauvegardé dans Export-Rapports/dernier-run.json pour `status`
+  // et la reprise. Journalisé pour diagnostic (chaque résumé est tracé).
+  const runDurationMs = Date.now() - runStartMs;
+  const summaryModel = lastResult ? (lastResult.effectiveModel || lastResult.shortName) : null;
+  const totalPts = allSchoolResults.reduce((s, e) => s + (e.points || 0), 0);
+  const totalMax = allSchoolResults.reduce((s, e) => s + (e.maxPoints || 0), 0);
+  const totalMandP = allSchoolResults.reduce((s, e) => s + (e.mandatoryPassed || 0), 0);
+  const totalMandT = allSchoolResults.reduce((s, e) => s + (e.mandatoryTotal || 0), 0);
+  const globalPct = totalMax > 0 ? Math.round((totalPts / totalMax) * 100) : 0;
+  const verdict = globalPct >= 80 ? 'RECOMMANDÉ' : (globalPct >= 50 ? 'PARTIEL' : 'NON RECOMMANDÉ');
+
+  // --- Benchmarking intégré (§2) : résumé console + stats cache LRU ---
+  // Affiche la latence/débit par modèle et le hit-rate du cache d'évaluation
+  // pour que l'utilisateur voie l'impact des optimisations (objectif visible §7).
+  benchMetrics.printSummary();
+  logEvalCacheStats();
+
+  console.log(`\n  \x1b[1;36m━━━ RÉSUMÉ DU RUN ━━━\x1b[0m`);
+  if (summaryModel) console.log(`  \x1b[1mModèle       :\x1b[0m ${summaryModel}`);
+  console.log(`  \x1b[1mMode         :\x1b[0m ${isCloudMode ? 'CLOUD (' + resolvedProvider.toUpperCase() + ')' : 'LOCAL (LM Studio)'}`);
+  console.log(`  \x1b[1mProfil       :\x1b[0m ${profile.label}`);
+  console.log(`  \x1b[1mCible        :\x1b[0m ${tierArg.toUpperCase()}`);
+  console.log(`  \x1b[1mTemps        :\x1b[0m ${(runDurationMs / 1000).toFixed(1)}s`);
+  console.log(`  \x1b[1mPoints       :\x1b[0m ${totalPts}/${totalMax} (${globalPct}%)`);
+  if (totalMandT > 0) {
+    const mpct = Math.round((totalMandP / totalMandT) * 100);
+    console.log(`  \x1b[1mObligatoire  :\x1b[0m ${totalMandP}/${totalMandT} (${mpct}%)`);
+  }
+  const vc = verdict === 'RECOMMANDÉ' ? '\x1b[32m' : (verdict === 'PARTIEL' ? '\x1b[33m' : '\x1b[31m');
+  console.log(`  \x1b[1mVerdict      :\x1b[0m ${vc}${verdict}\x1b[0m`);
+  if (allSchoolResults.length > 1) {
+    console.log(`  \x1b[1mÉcoles       :\x1b[0m`);
+    for (const e of allSchoolResults) {
+      const epct = e.maxPoints > 0 ? Math.round((e.points / e.maxPoints) * 100) : 0;
+      const flag = e.eliminated ? ' \x1b[31m(éliminé)\x1b[0m' : '';
+      console.log(`    • ${(e.ecole || '?').padEnd(20)} ${e.points}/${e.maxPoints} (${epct}%)${flag}`);
+    }
+  }
+  console.log(`  \x1b[90mRésumé sauvegardé : Export-Rapports/dernier-run.json (lisible via 'node runner.js status')\x1b[0m`);
+  console.log('');
+
+  // --- Objectif visible (§7 Stratégie) ---
+  // Rappelle à l'utilisateur les améliorations actives ce run pour que la
+  // progression soit mesurable à chaque exécution (gain de temps, lisibilité,
+  // fiabilité, données nouvelles). Concret et succinct.
+  console.log(`  \x1b[1;36m━━━ AMÉLIORATIONS ACTIVES CE RUN ━━━\x1b[0m`);
+  console.log(`  \x1b[90m• Cache LRU évaluation (hit-rate journalisé) + cache tiers par profil\x1b[0m`);
+  console.log(`  \x1b[90m• Retry/backoff API (timeout, 429, 5xx) + benchmarking latence/tokens\x1b[0m`);
+  console.log(`  \x1b[90m• Sentinelles sanitaires (NaN, cohérence sommes) en arrière-plan\x1b[0m`);
+  if (hybridFlag) console.log(`  \x1b[90m• Mode hybride : auto-soumission GitHub (seuil ≥ 50%) + file persistante\x1b[0m`);
+  console.log(`  \x1b[90m• Export CSV des runs → Export-Rapports/runs_export.csv (comparaison inter-modèles)\x1b[0m`);
+  console.log(`  \x1b[90m• Dashboard : node leaderboard.js --serve → http://localhost:3939/dashboard\x1b[0m`);
+  console.log('');
+
+  // Récupère le rapport du dernier run pour le stocker dans le résumé.
+  let lastReportFile = null;
+  if (lastResult && lastResult.shortName && tierArg === 'all') {
+    try {
+      const led = scoreLedger.loadLedger(lastResult.shortName);
+      const entries = Object.values(led.ecoles || {}).map(scoreLedger.getEcoleBest).filter(Boolean);
+      const lastEntry = entries[entries.length - 1];
+      if (lastEntry && lastEntry.reportFile) lastReportFile = lastEntry.reportFile;
+    } catch (_) {}
+  }
+
+  cliHelp.saveLastRun({
+    model: summaryModel,
+    provider: isCloudMode ? resolvedProvider : 'local',
+    profile: profileArg,
+    tier: tierArg,
+    points: totalPts,
+    maxPoints: totalMax,
+    mandatoryPassed: totalMandP,
+    mandatoryTotal: totalMandT,
+    durationMs: runDurationMs,
+    verdict,
+    tierReached: tierArg,
+    reportFile: lastReportFile,
+    ecoles: allSchoolResults
+  });
+  logger.info('Run: résumé final — ' + (summaryModel || '?') + ' ' + totalPts + '/' + totalMax + ' (' + globalPct + '%) — ' + verdict + ' — ' + (runDurationMs / 1000).toFixed(1) + 's');
+
+  // --- Mode hybride (§5 Intégration) ---
+  // Si --hybrid est actif, on soumet automatiquement les résultats vers GitHub
+  // si le seuil de qualité est atteint (≥ 50%). En cas d'échec réseau, le
+  // modèle est mis en file persistante pour retry au prochain run. On draine
+  // aussi la file d'attente existante au démarrage du prochain run --hybrid.
+  if (hybridFlag && lastResult && lastResult.shortName && tierArg === 'all') {
+    console.log(`  \x1b[1;35m━━━ MODE HYBRIDE — AUTO-SOUMISSION GITHUB ━━━\x1b[0m`);
+    const hybridToken = cliGithubToken || communitySync.getStoredGithubToken();
+    // Draine d\\'abord la file d\\'attente (soumissions précédentes en échec).
+    if (hybridToken) {
+      console.log(`  \x1b[90mTraitement de la file d'attente persistante...\x1b[0m`);
+      const drain = await hybridMode.drainQueue(hybridToken);
+      console.log(`  \x1b[90mFile drainée : ${drain.succeeded} succès, ${drain.failed} échecs, ${drain.drained - drain.succeeded - drain.failed} retirés.\x1b[0m`);
+    }
+    // Puis soumet le modèle courant (ou le met en file).
+    try {
+      const ledger = scoreLedger.loadLedger(lastResult.shortName);
+      if (ledger && ledger.ecoles && Object.keys(ledger.ecoles).length > 0) {
+        const summary = { pct: globalPct };
+        const res = await hybridMode.submitOrEnqueue(lastResult.shortName, ledger, summary, hybridToken);
+        if (res.submitted) {
+          console.log(`  \x1b[32m✔ ${lastResult.shortName} soumis automatiquement sur GitHub (${globalPct}% ≥ seuil).\x1b[0m`);
+        } else if (res.queued) {
+          console.log(`  \x1b[33m→ ${lastResult.shortName} mis en file d'attente (raison: ${res.reason}). Sera soumis au prochain run --hybrid.\x1b[0m`);
+        } else {
+          console.log(`  \x1b[90m→ ${lastResult.shortName} non soumis (raison: ${res.reason}).\x1b[0m`);
+        }
+      }
+    } catch (e) {
+      logger.warn('Hybrid: auto-soumission échouée — ' + e.message);
+      console.log(`  \x1b[33m→ Auto-soumission échouée : ${e.message}\x1b[0m`);
+    }
+    console.log('');
+  }
+
+  // --- Export CSV des runs (§6 Données / Analytics) ---
+  // Régénère le CSV global (tous modèles, toutes écoles, toutes tentatives) pour
+  // comparaison inter-modèles et analyse de convergence. Affiché en console
+  // pour que l'utilisateur sache où le trouver.
+  if (tierArg === 'all') {
+    const csvRes = exportRunsCsv();
+    if (csvRes) {
+      console.log(`  \x1b[1;36m━━━ EXPORT CSV DES RUNS ━━━\x1b[0m`);
+      console.log(`  \x1b[32m✔ ${csvRes.rows} lignes exportées → ${path.relative(__dirname, csvRes.file)}\x1b[0m`);
+      console.log(`  \x1b[90mOuvertable dans Excel / Google Sheets pour comparaison inter-modèles.\x1b[0m`);
+
+      // Analyse de convergence : signale les modèles instables (> 20% d'amplitude).
+      const unstable = detectUnstableModels();
+      if (unstable.length > 0) {
+        console.log(`  \x1b[33m⚠ ${unstable.length} modèle(s) instable(s) détecté(s) (amplitude > 20% entre runs) :\x1b[0m`);
+        for (const u of unstable.slice(0, 5)) {
+          console.log(`    \x1b[33m• ${u.modelName} sur ${u.ecole} : ${u.min}%–${u.max}% (amplitude ${u.amplitude}%, ${u.attempts} tentatives)\x1b[0m`);
+        }
+        if (unstable.length > 5) console.log(`    \x1b[90m... et ${unstable.length - 5} autre(s).\x1b[0m`);
+      }
+      console.log('');
+    }
+  }
+
   logger.close();
 }
 
 main().catch(e => {
-  logger.error(`ERREUR FATALE : ${e.message}`);
-  logger.error(`Stack : ${e.stack}`);
+  if (e && e.isBenchgo) {
+    // Erreur code-court (E502_..., E601_...) : affichage propre, log déjà écrit
+    // par BenchgoError.print(). On logge aussi la stack (DEBUG) pour le diagnostic.
+    logger.error(`BenchgoError ${e.code} — ${e.detail || ''}`);
+    logger.error(`Stack : ${e.stack}`);
+    e.print();
+  } else {
+    logger.error(`ERREUR FATALE : ${e.message}`);
+    logger.error(`Stack : ${e.stack}`);
+    console.error(`\x1b[31m[ERREUR FATALE]\x1b[0m ${e.message}`);
+    console.error(e.stack);
+  }
   logger.close();
-  console.error(`\x1b[31m[ERREUR FATALE]\x1b[0m ${e.message}`);
-  console.error(e.stack);
   process.exit(1);
 });

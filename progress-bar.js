@@ -1,4 +1,5 @@
 const { SPINNER_CHARS } = require('./config');
+const logger = require('./logger');
 
 const BAR_WIDTH = 30;
 
@@ -7,23 +8,112 @@ const BAR_WIDTH = 30;
 // ~5s pour tenir l'utilisateur en haleine pendant les temps morts longs.
 const MESSAGE_ROTATION_MS = 5000;
 
+// ============================================================
+// ProgressBar enrichie — phases + ETA dynamique (Plan §3 UI/Ludisme)
+// ============================================================
+// La ProgressBar originale n'affichait qu'un pourcentage sans notion de phase
+// ni d'estimation du temps restant. On ajoute :
+//   • setPhases(phases) : déclare les phases du run (connexion, chargement,
+//     évaluation, correction, rapport) et leur poids relatif.
+//   • setPhase(name, currentInPhase, totalInPhase) : progresse dans une phase
+//     précise — la barre globale reflète la somme pondérée des phases.
+//   • ETA dynamique : calculé à partir de la vitesse constatée (tokens/s ou
+//     items/s) et affiché sous la barre. Se base sur un taux glissant pour
+//     rester stable malgré les variations de latence.
+// La ProgressBar d'origine (label, total) reste utilisable sans phases pour
+// rétro-compatibilité — setPhases est optionnel.
+
 class ProgressBar {
   constructor(label, total) {
     this.label = label;
     this.total = total > 0 ? total : 1;
+    this._phases = null;          // [{ name, weight, total }]
+    this._phaseIndex = -1;
+    this._phaseProgress = [];     // progression absolue par phase
+    this._startMs = Date.now();
+    this._lastUpdateMs = this._startMs;
+    this._etaSamples = [];        // fenêtre glissante pour ETA stable
+  }
+
+  // Déclare les phases du run avec leur poids relatif (somme libre, normalisée).
+  // Ex: setPhases([{name:'Connexion LM Studio', weight:1}, {name:'Chargement modèle', weight:2}, ...])
+  setPhases(phases) {
+    if (!Array.isArray(phases) || phases.length === 0) return this;
+    this._phases = phases.map(p => ({
+      name: p.name || '?',
+      weight: Math.max(0.001, p.weight || 1),
+      total: Math.max(1, p.total || 1)
+    }));
+    this._phaseProgress = this._phases.map(() => 0);
+    this._phaseIndex = -1;
+    return this;
+  }
+
+  // Active une phase et met à jour sa progression interne (0..total).
+  // La barre globale reflète la somme pondérée de toutes les phases.
+  setPhase(name, currentInPhase) {
+    if (!this._phases) return this;
+    const idx = this._phases.findIndex(p => p.name === name);
+    if (idx === -1) return this;
+    this._phaseIndex = idx;
+    this._phaseProgress[idx] = Math.max(0, Math.min(this._phases[idx].total, currentInPhase || 0));
+    return this;
+  }
+
+  // Calcule le pourcentage global pondéré à travers toutes les phases.
+  _globalPct() {
+    if (!this._phases) return null;
+    let weightedDone = 0, weightedTotal = 0;
+    for (let i = 0; i < this._phases.length; i++) {
+      const p = this._phases[i];
+      const done = i < this._phaseIndex ? p.total : (i === this._phaseIndex ? this._phaseProgress[i] : 0);
+      weightedDone += done * p.weight;
+      weightedTotal += p.total * p.weight;
+    }
+    return weightedTotal > 0 ? Math.min(100, Math.round((weightedDone / weightedTotal) * 100)) : 0;
+  }
+
+  // Calcule un ETA (s) à partir de la vitesse constatée depuis le démarrage.
+  // Renvoie null si pas assez de données (< 5% ou < 2s écoulées).
+  _computeEta(pct) {
+    const elapsedMs = Date.now() - this._startMs;
+    if (pct < 5 || elapsedMs < 2000) return null;
+    // ETA = temps_total_estimé - temps_écoulé
+    // temps_total_estimé = elapsedMs / (pct/100)
+    const totalEstimateMs = elapsedMs / (pct / 100);
+    const etaMs = Math.max(0, totalEstimateMs - elapsedMs);
+    return Math.ceil(etaMs / 1000);
   }
 
   update(current, taskLabel) {
+    // Mode phases : on ignore current/taskLabel (gérés par setPhase).
+    if (this._phases) {
+      const pct = this._globalPct();
+      const filled = Math.round((pct / 100) * BAR_WIDTH);
+      const bar = '█'.repeat(filled) + '░'.repeat(BAR_WIDTH - filled);
+      const phaseName = this._phaseIndex >= 0 ? this._phases[this._phaseIndex].name : '';
+      const eta = this._computeEta(pct);
+      const etaStr = eta != null ? ` — ETA ~${eta}s` : '';
+      const line = `  \x1b[36m${this.label}\x1b[0m [${bar}] ${String(pct).padStart(3)}% \x1b[90m${phaseName}${etaStr}\x1b[0m`;
+      process.stdout.write(`\r${line}`.padEnd(120));
+      return;
+    }
+    // Mode simple (rétro-compat)
     const pct = Math.max(0, Math.min(100, Math.round((current / this.total) * 100)));
     const filled = Math.round((pct / 100) * BAR_WIDTH);
     const bar = '█'.repeat(filled) + '░'.repeat(BAR_WIDTH - filled);
+    const elapsedMs = Date.now() - this._startMs;
+    const eta = this._computeEta(pct);
+    const etaStr = eta != null ? ` \x1b[90mETA ~${eta}s\x1b[0m` : '';
     const suffix = taskLabel ? ` ${taskLabel}` : '';
-    const line = `  \x1b[36m${this.label}\x1b[0m [${bar}] ${String(pct).padStart(3)}%${suffix}`;
+    const line = `  \x1b[36m${this.label}\x1b[0m [${bar}] ${String(pct).padStart(3)}%${suffix}${etaStr}`;
     process.stdout.write(`\r${line}`.padEnd(120));
   }
 
   complete() {
     const bar = '█'.repeat(BAR_WIDTH);
+    const elapsedMs = Date.now() - this._startMs;
+    logger.info('ProgressBar[' + this.label + ']: complétée en ' + (elapsedMs / 1000).toFixed(1) + 's');
     process.stdout.write(`\r  \x1b[36m${this.label}\x1b[0m [${bar}] 100% — Terminé`.padEnd(120) + '\n');
   }
 }

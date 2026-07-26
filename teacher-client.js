@@ -1,5 +1,7 @@
 const logger = require('./logger');
 const { TEACHER_CONFIG } = require('./config');
+const { BenchgoError } = require('./cli-help');
+const { withRetry, isRetryableError } = require('./http-middleware');
 
 // --- Professeur IA (correcteur indépendant) — Free Router ---
 // Le professeur est un modèle cloud distinct de l'élève testé. Après un échec
@@ -254,33 +256,53 @@ async function askTeacherToCorrectStudentAnalysis({ teacherConfig, task, errors,
   const prompt = buildTeacherPrompt({ task, errors, studentCode, studentAnalysis, tierNum });
   const maxAttempts = Math.min(candidates.length, Math.max(1, teacherConfig.maxRetries || 3));
 
+  // Politique de retry (Plan §2) : pour chaque modèle, on tente avec timeout +
+  // backoff exponentiel (2 retries intra-modèle). Si le modèle échoue définitivement
+  // (401/403 ou tous retries épuisés), on rotate vers le suivant. On ne throw PAS
+  // au niveau global : le professeur est un confort, l'élève se replie sur
+  // l'auto-analyse. Chaque tentative et rotation est journalisée pour diagnostic.
   let lastError = '';
   for (let i = 0; i < maxAttempts; i++) {
     const model = candidates[i];
+    const attemptStart = Date.now();
     try {
-      logger.info(`Teacher: essai ${i + 1}/${maxAttempts} avec ${model}`);
-      const content = await callOpenRouter({
-        model,
-        apiKey: teacherConfig.apiKey,
-        prompt,
-        temperature: teacherConfig.temperature,
-        maxTokens: teacherConfig.maxTokens
+      logger.info(`Teacher: essai ${i + 1}/${maxAttempts} avec ${model} (avec retry intra-modèle)`);
+      // withRetry gère timeout + backoff exponentiel + isRetryableError.
+      const content = await withRetry({
+        label: 'Teacher/' + model,
+        timeoutMs: 60000,
+        maxRetries: 2,           // 2 retries intra-modèle (3 tentatives au total)
+        baseDelayMs: 1000,
+        maxDelayMs: 8000,
+        fn: () => callOpenRouter({
+          model,
+          apiKey: teacherConfig.apiKey,
+          prompt,
+          temperature: teacherConfig.temperature,
+          maxTokens: teacherConfig.maxTokens
+        })
       });
       if (content) {
-        logger.info(`Teacher: ${model} a répondu (${content.length} chars).`);
+        const dur = Date.now() - attemptStart;
+        logger.info(`Teacher: ${model} a répondu (${content.length} chars, ${dur}ms).`);
         return { content, model };
       }
     } catch (e) {
       lastError = e.message;
-      logger.warn(`Teacher: ${model} a échoué : ${lastError}`);
-      // 429 (rate limit) ou 5xx → on rotate vers le modèle suivant.
-      // 401/403 (clé invalide) → pas la peine de rotate, on sort.
-      if (e.httpStatus === 401 || e.httpStatus === 403) break;
-      // Backoff léger avant le modèle suivant
+      const dur = Date.now() - attemptStart;
+      logger.warn(`Teacher: ${model} a échoué définitivement (${dur}ms) — ${lastError}`);
+      // 401/403 (clé invalide) → pas la peine de rotate, on sort immédiatement.
+      if (e.httpStatus === 401 || e.httpStatus === 403 || (e.code && /401|403/.test(e.code))) {
+        logger.error('Teacher: clé OpenRouter invalide (401/403) — arrêt du rotate');
+        break;
+      }
+      // Backoff léger avant de rotate vers le modèle suivant (Free Router).
       if (i < maxAttempts - 1) await new Promise(r => setTimeout(r, 800));
     }
   }
-  logger.warn(`Teacher: tous les essais ont échoué. Dernier : ${lastError}`);
+  // Pas de throw ici : le professeur est un confort, l'élève se replie sur
+  // l'auto-analyse. On journalise avec le code court E701 pour le diagnostic.
+  logger.warn('Teacher: E701_TEACHER_UNAVAILABLE — tous les essais ont échoué. Dernier : ' + lastError);
   return null;
 }
 

@@ -1,5 +1,7 @@
 const logger = require('./logger');
 const { API_TIMEOUT_MS } = require('./config');
+const { BenchgoError } = require('./cli-help');
+const benchMetrics = require('./benchmark-metrics');
 
 // Fournisseurs cloud supportés
 // openaiCompat: true  → format OpenAI /v1/chat/completions avec streaming SSE standard
@@ -270,6 +272,14 @@ async function queryLLM(prompt, difficulty, tierId, isMandatory, spinner, option
     const duration = Date.now() - startTime;
     logger.apiRequest(tierId, duration, 'OK');
     logger.info(`Cloud Tier ${tierId} : réponse reçue en ${duration}ms (${streamResult.tokenCount} chunks, ${streamResult.content.length} chars).`);
+    // Benchmarking intégré (§2) : enregistre latence + tokens pour ce modèle cloud.
+    benchMetrics.record({
+      modelName: model,
+      durationMs: duration,
+      tokens: streamResult.tokenCount,
+      tierId,
+      status: 'OK'
+    });
 
     return {
       content:   streamResult.content.trim(),
@@ -286,16 +296,21 @@ async function queryLLM(prompt, difficulty, tierId, isMandatory, spinner, option
 
     logger.apiRequest(tierId || '?', duration, 'ERREUR');
     logger.error(`Cloud Tier ${tierId} — ${reason}`);
+    // Benchmarking intégré (§2) : enregistre l'échec pour le taux d'erreur.
+    benchMetrics.record({
+      modelName: model,
+      durationMs: duration,
+      tokens: 0,
+      tierId,
+      status: isTimeout ? 'TIMEOUT' : 'ERREUR'
+    });
 
     if (isMandatory) {
-      console.error(`\n\x1b[31m[ERREUR CLOUD]\x1b[0m ${reason}`);
-      if (isTimeout) {
-        // Le timeout utilisé dépend du contexte : auto-profilage (PROFILING_TIMEOUT_MS)
-        // ou appel normal (API_TIMEOUT_MS). On indique les deux au cas où.
-        const timeoutName = timeoutMs === API_TIMEOUT_MS ? 'API_TIMEOUT_MS' : 'timeoutMs';
-        console.error(`  -> Vérifiez votre connexion internet ou augmentez ${timeoutName} dans config.js.`);
-      }
-      process.exit(1);
+      // Erreur code-court propagée au runner (affichage propre + log).
+      const code = isTimeout ? 'E502_LM_TIMEOUT'
+        : /ECONNRESET|ECONNREFUSED|ENOTFOUND|EHOSTUNREACH/.test(error.code || reason) ? 'E503_LM_UNREACHABLE'
+        : 'E504_LM_HTTP_ERROR';
+      throw new BenchgoError(code, `Cloud Tier ${tierId} (obligatoire) — ${reason}`);
     } else {
       console.error(`\n  \x1b[33m[WARN]\x1b[0m Cloud Tier ${tierId} échoué (optionnel) : ${reason}`);
       return null;

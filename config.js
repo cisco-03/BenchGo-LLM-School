@@ -216,6 +216,15 @@ function parseCliArgs() {
   //   Utile en mode batch ou hors-ligne pour éviter un délai réseau.
   const noUpdateCheckFlag = rawArgs.includes('--no-update-check');
 
+  // --- --dry-run : valide la configuration sans exécuter le benchmark ---
+  // Plan §1 (CLI/UX). Le runner résout profil/provider/modèle/clés, affiche la
+  // config globale, puis quitte sans lancer l'auto-profilage ni l'évaluation.
+  const dryRunFlag = rawArgs.includes('--dry-run');
+
+  // --- --hybrid : mode nuit hybride (CLI + auto-soumission GitHub si seuil) ---
+  // Plan §5 (Intégration). Activé par night-batch.js ou manuellement.
+  const hybridFlag = rawArgs.includes('--hybrid');
+
   const profileArgExplicit = profileArgRaw ? profileArgRaw.toUpperCase() : null;
   const parsedContextLimit = contextLimitRaw ? parseInt(contextLimitRaw, 10) : null;
   const contextLimitTokens = Number.isInteger(parsedContextLimit) && parsedContextLimit > 0
@@ -235,7 +244,7 @@ function parseCliArgs() {
            preset: presetRaw, savePreset: savePresetRaw, deletePreset: deletePresetRaw, listPresets: listPresetsFlag,
             forgetKey: forgetKeyRaw, listKeys: listKeysFlag, noSaveKeys: noSaveKeysFlag, force: forceFlag,
             submit: submitFlag, noTelemetry: noTelemetryFlag, githubToken: githubTokenRaw,
-            noUpdateCheck: noUpdateCheckFlag };
+            noUpdateCheck: noUpdateCheckFlag, dryRun: dryRunFlag, hybrid: hybridFlag };
 }
 
 function detectProfileFromModelName(modelName) {

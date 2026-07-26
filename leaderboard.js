@@ -421,10 +421,18 @@ function buildLeaderboardHTML(entries) {
   // Compteurs par catégorie pour les filtres
   const catCounts = { top: 0, recommande: 0, moyenne: 0, rattrapage: 0, catastrophe: 0 };
   const sizeCounts = { petit: 0, standard: 0, expert: 0, doctorat: 0, inconnu: 0 };
+  // Filtre Santé (§3 UI/Ludisme) : positif (≥ 0 PV) vs négatif (< 0 PV).
+  const healthCounts = { positif: 0, negatif: 0 };
+  // Filtre École : compte combien de modèles ont été testés sur chaque école.
+  const ecoleCounts = {};
   entries.forEach((e, idx) => {
     const rank = idx + 1;
     catCounts[getCategory(e, rank).key]++;
     sizeCounts[getParamSize(e.model).key]++;
+    if ((e.globalLifeScore || 0) >= 0) healthCounts.positif++; else healthCounts.negatif++;
+    for (const ec of (e.ecoles || [])) {
+      ecoleCounts[ec.ecole] = (ecoleCounts[ec.ecole] || 0) + 1;
+    }
   });
 
   // Les données complètes de chaque modèle sont sérialisées en JSON pour la modale
@@ -518,7 +526,9 @@ function buildLeaderboardHTML(entries) {
             }))
           }))
         };
-      })
+      }),
+      // Liste simple des noms d'écoles testées (pour le filtre École côté client).
+      ecoleNames: (e.ecoles || []).map(ec => ec.ecole)
     };
   });
 
@@ -1085,6 +1095,30 @@ function buildLeaderboardHTML(entries) {
     .update-banner-inner { flex-wrap: wrap; }
     .update-close { margin-left: auto; }
   }
+
+  /* --- Animations d'entrée au scroll (§3 UI/Ludisme) --- */
+  /* Les cartes apparaissent avec un fondu + translation quand elles entrent
+     dans le viewport. Géré par IntersectionObserver qui ajoute .visible. */
+  .card {
+    opacity: 0;
+    transform: translateY(16px);
+    transition: opacity 0.5s ease, transform 0.5s ease;
+  }
+  .card.visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .card { opacity: 1; transform: none; transition: none; }
+  }
+
+  /* --- Media print : masque la sticky-bar et la modale pour Exporter PDF --- */
+  @media print {
+    .sticky-bar, .search-wrap, .toolbar, .modal-overlay, .update-banner, .footer { display: none !important; }
+    .card { opacity: 1 !important; transform: none !important; break-inside: avoid; }
+    body { background: white !important; color: black !important; }
+    .cards { padding: 0 !important; }
+  }
 </style>
 </head>
 <body>
@@ -1134,6 +1168,23 @@ function buildLeaderboardHTML(entries) {
             <option value="inconnu">❓ Inconnue (${sizeCounts.inconnu})</option>
           </select>
         </div>
+
+        <label class="filter-label" for="healthSelect" style="margin-left: var(--space-xs);">Santé</label>
+        <div class="select-wrap">
+          <select class="select" id="healthSelect">
+            <option value="all" selected>Toutes (${entries.length})</option>
+            <option value="positif">💚 Saine (≥ 0 PV) (${healthCounts.positif})</option>
+            <option value="negatif">❤️‍🩹 En difficulté (&lt; 0 PV) (${healthCounts.negatif})</option>
+          </select>
+        </div>
+
+        <label class="filter-label" for="ecoleSelect" style="margin-left: var(--space-xs);">École</label>
+        <div class="select-wrap">
+          <select class="select" id="ecoleSelect">
+            <option value="all" selected>Toutes écoles</option>
+            ${Object.keys(ecoleCounts).sort().map(ec => `<option value="${esc(ec)}">🏫 ${esc(ec)} (${ecoleCounts[ec]})</option>`).join('')}
+          </select>
+        </div>
       </div>
 
       <div class="search-wrap">
@@ -1141,6 +1192,8 @@ function buildLeaderboardHTML(entries) {
         <span class="result-count" id="resultCount"></span>
         <button class="btn btn-primary" id="btnCopyAll" title="Copier tout le classement (texte brut) pour le partager">⧉ Copier le classement</button>
         <button class="btn btn-community" id="btnSubmitCommunity" title="Envoyer vos résultats sur le classement communautaire GitHub">🌐 Envoyer à la communauté</button>
+        <button class="btn btn-primary" id="btnExportPng" title="Exporter le classement visible en PNG (capture du DOM via SVG foreignObject)">🖼 Exporter PNG</button>
+        <button class="btn btn-primary" id="btnExportPdf" title="Imprimer / Exporter en PDF (dialogue navigateur)">📄 Exporter PDF</button>
       </div>
     </div>
   </div>
@@ -1264,22 +1317,35 @@ function renderCards() {
   console.log('[renderCards] début — MODELS.length=' + (typeof MODELS !== 'undefined' ? MODELS.length : 'UNDEFINED'));
   var catSel = document.getElementById('catSelect');
   var sizeSel = document.getElementById('sizeSelect');
+  var healthSel = document.getElementById('healthSelect');
+  var ecoleSel = document.getElementById('ecoleSelect');
   if (!catSel) { console.error('[renderCards] ERREUR : select de catégorie introuvable — le DOM n’est pas prêt.'); return; }
   if (!sizeSel) { console.error('[renderCards] ERREUR : select de taille introuvable.'); return; }
   var activeCat = catSel.value;
   var activeSize = sizeSel.value;
+  var activeHealth = healthSel ? healthSel.value : 'all';
+  var activeEcole = ecoleSel ? ecoleSel.value : 'all';
   var searchEl = document.getElementById('search');
   var q = searchEl ? searchEl.value.trim().toLowerCase() : '';
   var container = document.getElementById('cards');
   if (!container) { console.error('[renderCards] ERREUR : conteneur #cards introuvable.'); return; }
   container.innerHTML = '';
   var shown = 0;
-  var skippedCat = 0, skippedSize = 0, skippedSearch = 0;
+  var skippedCat = 0, skippedSize = 0, skippedSearch = 0, skippedHealth = 0, skippedEcole = 0;
 
   for (var i = 0; i < MODELS.length; i++) {
     var m = MODELS[i];
     if (activeCat !== 'all' && m.cat.key !== activeCat) { skippedCat++; continue; }
     if (activeSize !== 'all' && m.paramSize.key !== activeSize) { skippedSize++; continue; }
+    if (activeHealth !== 'all') {
+      var isPositif = (m.globalLifeScore || 0) >= 0;
+      if (activeHealth === 'positif' && !isPositif) { skippedHealth++; continue; }
+      if (activeHealth === 'negatif' && isPositif) { skippedHealth++; continue; }
+    }
+    if (activeEcole !== 'all') {
+      var hasEcole = (m.ecoleNames || []).indexOf(activeEcole) !== -1;
+      if (!hasEcole) { skippedEcole++; continue; }
+    }
     if (q && m.model.toLowerCase().indexOf(q) === -1 && m.shortName.toLowerCase().indexOf(q) === -1) { skippedSearch++; continue; }
     shown++;
 
@@ -1358,9 +1424,35 @@ function renderCards() {
     '</div>';
     container.insertAdjacentHTML('beforeend', html);
   }
-  console.log('[renderCards] fini — affichés=' + shown + '/' + MODELS.length + ' | skip cat=' + skippedCat + ' skip size=' + skippedSize + ' skip search=' + skippedSearch);
+  console.log('[renderCards] fini — affichés=' + shown + '/' + MODELS.length + ' | skip cat=' + skippedCat + ' skip size=' + skippedSize + ' skip health=' + skippedHealth + ' skip ecole=' + skippedEcole + ' skip search=' + skippedSearch);
   document.getElementById('resultCount').textContent = shown + '/' + MODELS.length;
   document.getElementById('emptyMsg').style.display = shown === 0 ? 'block' : 'none';
+  // --- Animations d'entrée au scroll (§3 UI/Ludisme) ---
+  // Attache un IntersectionObserver aux cartes fraîchement rendues pour déclencher
+  // le fondu + translation quand elles entrent dans le viewport. Recréé à chaque
+  // renderCards car innerHTML est vidé. Respecte prefers-reduced-motion.
+  attachScrollAnimations();
+}
+
+// Attache l'IntersectionObserver aux cartes visibles (animations d'entrée §3).
+// Les cartes déjà visibles au chargement reçoivent .visible immédiatement.
+function attachScrollAnimations() {
+  var cards = document.querySelectorAll('#cards .card');
+  if (!cards.length) return;
+  if (!('IntersectionObserver' in window)) {
+    // Repli : tout visible immédiatement (navigateur ancien).
+    cards.forEach(function(c) { c.classList.add('visible'); });
+    return;
+  }
+  var io = new IntersectionObserver(function(entries) {
+    entries.forEach(function(entry) {
+      if (entry.isIntersecting) {
+        entry.target.classList.add('visible');
+        io.unobserve(entry.target);
+      }
+    });
+  }, { root: null, rootMargin: '0px', threshold: 0.05 });
+  cards.forEach(function(c) { io.observe(c); });
 }
 
 function openModal(idx) {
@@ -1665,6 +1757,10 @@ document.addEventListener('keydown', function(e) { if (e.key === 'Escape') close
 document.getElementById('catSelect').addEventListener('change', renderCards);
 document.getElementById('sizeSelect').addEventListener('change', renderCards);
 document.getElementById('search').addEventListener('input', renderCards);
+var _healthSel = document.getElementById('healthSelect');
+if (_healthSel) _healthSel.addEventListener('change', renderCards);
+var _ecoleSel = document.getElementById('ecoleSelect');
+if (_ecoleSel) _ecoleSel.addEventListener('change', renderCards);
 
 // Ferme les menus ⋮ ouverts quand on clique ailleurs.
 document.addEventListener('click', function(e) {
@@ -1728,6 +1824,84 @@ function copyModelName(idx) {
   if (navigator.clipboard && navigator.clipboard.writeText) {
     navigator.clipboard.writeText(name).then(function() { showToast('Nom copié : ' + name, true); }, function() { fallbackCopy(name); });
   } else { fallbackCopy(name); }
+}
+
+// --- Export PNG du classement (§3 UI/Ludisme) ---
+// Capture le DOM du conteneur #cards via SVG foreignObject (aucune dépendance
+// externe). Sérialise le HTML+CSS inline, l'embarque dans un SVG, dessine le
+// SVG dans un canvas, puis télécharge le canvas en PNG.
+// Limites connues : les polices web et images externes peuvent ne pas rendres
+// (CORS). Le fond sombre est forcé pour un rendu cohérent avec le thème.
+function exportLeaderboardPng() {
+  var node = document.getElementById('cards');
+  if (!node) { showToast('Conteneur #cards introuvable', false); return; }
+  var btn = document.getElementById('btnExportPng');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Capture…'; }
+  try {
+    // Clone le noeud pour injecter le CSS inline (foreignObject ne lit pas les
+    // feuilles de style externes). On récupère les styles calculés du noeud
+    // original et on les applique au clone.
+    var clone = node.cloneNode(true);
+    // Récupère la largeur réelle du conteneur.
+    var rect = node.getBoundingClientRect();
+    var width = Math.max(800, Math.ceil(rect.width));
+    var height = Math.max(600, Math.ceil(node.scrollHeight));
+
+    // Sérialise le clone en HTML. On doit échapper les caractères spéciaux XML.
+    var serializer = new XMLSerializer();
+    var html = serializer.serializeToString(clone);
+    // Wrap dans un div avec fond sombre pour cohérence avec le thème.
+    var wrapped = '<div xmlns="http://www.w3.org/1999/xhtml" style="background:#0a0e14;padding:24px;width:' + width + 'px;box-sizing:border-box;font-family:-apple-system,Segoe UI,sans-serif;color:#c9d1d9">' + html + '</div>';
+
+    var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="' + width + '" height="' + height + '"><foreignObject width="100%" height="100%">' + wrapped + '</foreignObject></svg>';
+    var svgBlob = new Blob([svg], { type: 'image/svg+xml;charset=utf-8' });
+    var url = URL.createObjectURL(svgBlob);
+
+    var img = new Image();
+    img.onload = function() {
+      var canvas = document.createElement('canvas');
+      // Échelle 2x pour un rendu net (retina-like).
+      canvas.width = width * 2;
+      canvas.height = height * 2;
+      var ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#0a0e14';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.scale(2, 2);
+      ctx.drawImage(img, 0, 0);
+      URL.revokeObjectURL(url);
+      canvas.toBlob(function(blob) {
+        var dlUrl = URL.createObjectURL(blob);
+        var a = document.createElement('a');
+        a.href = dlUrl;
+        var ts = new Date().toISOString().slice(0, 10);
+        a.download = 'classement_benchgo_' + ts + '.png';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(dlUrl);
+        if (btn) { btn.disabled = false; btn.textContent = '🖼 Exporter PNG'; }
+        showToast('PNG exporté', true);
+      }, 'image/png');
+    };
+    img.onerror = function() {
+      URL.revokeObjectURL(url);
+      if (btn) { btn.disabled = false; btn.textContent = '🖼 Exporter PNG'; }
+      showToast('Échec capture PNG (CORS/police). Essayez Exporter PDF.', false);
+    };
+    img.src = url;
+  } catch (e) {
+    if (btn) { btn.disabled = false; btn.textContent = '🖼 Exporter PNG'; }
+    showToast('Erreur PNG : ' + e.message, false);
+  }
+}
+
+// --- Export PDF du classement (§3 UI/Ludisme) ---
+// Utilise window.print() : le navigateur propose l'enregistrement en PDF. On
+// ajoute une media-query print pour masquer la sticky-bar et la modale et
+// n'imprimer que les cartes. Simple, fiable, sans dépendance.
+function exportLeaderboardPdf() {
+  showToast("Dialogue d'impression ouvert — choisissez « Enregistrer en PDF »", true);
+  window.print();
 }
 
 // Exporte le rapport intégral d'un modèle : déclenche le téléchargement d'un
@@ -2045,6 +2219,10 @@ async function doSubmitAll() {
   }
 }
 document.getElementById('btnSubmitCommunity').addEventListener('click', openSubmitModal);
+var _btnPng = document.getElementById('btnExportPng');
+if (_btnPng) _btnPng.addEventListener('click', exportLeaderboardPng);
+var _btnPdf = document.getElementById('btnExportPdf');
+if (_btnPdf) _btnPdf.addEventListener('click', exportLeaderboardPdf);
 
 // Barre sticky : ajoute la classe .stuck dès qu'on scrolle pour renforcer le
 // contraste (fond + opaque + ombre) et signaler visuellement le "détachement".
@@ -2817,6 +2995,55 @@ function startServer(port) {
       return;
     }
 
+    // --- Dashboard web (§3 UI/Ludisme) ---
+    // /api/dashboard-data : renvoie les données agrégées de tous les modèles
+    // (historique par école, tokens/s, points) pour le rendu Chart.js côté client.
+    if (url.pathname === '/api/dashboard-data' && req.method === 'GET') {
+      try {
+        const ledgers = loadAllLedgers();
+        const data = ledgers.map(aggregateLedger).filter(Boolean).map(e => ({
+          shortName: e.shortName,
+          model: e.model,
+          pct: e.pct,
+          score: e.score,
+          max: e.max,
+          globalLifeScore: e.globalLifeScore,
+          optionalBonus: e.optionalBonus,
+          ecoleCount: e.ecoleCount,
+          elapsedMs: e.elapsedMs || 0,
+          tokens: e.tokens || 0,
+          tokensPerSecond: e.tokensPerSecond || 0,
+          quantization: e.quantization || null,
+          lastUpdated: e.lastUpdated,
+          ecoles: (e.ecoles || []).map(ec => ({
+            ecole: ec.ecole,
+            pct: ec.pct,
+            score: ec.score,
+            max: ec.max,
+            date: ec.date,
+            attemptsCount: ec.attemptsCount,
+            globalLifeScore: ec.globalLifeScore,
+            tokensPerSecond: ec.tokensPerSecond
+          }))
+        }));
+        res.writeHead(200, securityHeaders);
+        res.end(JSON.stringify({ ok: true, models: data }));
+      } catch (e) {
+        res.writeHead(200, securityHeaders);
+        res.end(JSON.stringify({ ok: false, error: e.message }));
+      }
+      return;
+    }
+
+    // /dashboard : page statique embarquant Chart.js (CDN) qui fetch /api/dashboard-data
+    // et affiche la progression d'une école dans le temps + l'historique d'un modèle.
+    if (url.pathname === '/dashboard') {
+      const dash = buildDashboardHTML();
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+      res.end(dash, 'utf8');
+      return;
+    }
+
     // Page par défaut : sert le classement HTML (ou le Markdown si demandé)
     let content, type;
     if (url.pathname === '/classement.md') {
@@ -2855,6 +3082,8 @@ function startServer(port) {
     console.log('  \x1b[90mOuvrez le navigateur. Cliquez sur "🗑 Supprimer" pour retirer un modèle.\x1b[0m');
     console.log('  \x1b[90mBouton "🌐 Envoyer à la communauté" pour soumettre vos résultats sur GitHub.\x1b[0m');
     console.log('  \x1b[90mModale → bouton "⬇ Exporter le rapport intégral" pour télécharger le MD.\x1b[0m');
+    console.log('  \x1b[90mBoutons "🖼 Exporter PNG" / "📄 Exporter PDF" : capture ou impression du classement.\x1b[0m');
+    console.log(`  \x1b[1;36mDashboard progression/historique : ${url}/dashboard\x1b[0m`);
     console.log('  \x1b[90mCtrl+C pour arrêter le serveur.\x1b[0m\n');
 
     // Ouvre le navigateur par défaut
@@ -2873,6 +3102,162 @@ function getModelEntryByShortName(shortName) {
   return entry || null;
 }
 
+// --- Dashboard web (§3 UI/Ludisme) ---
+// Construit une page HTML autonome qui embarque Chart.js (via CDN) et fetch
+// /api/dashboard-data pour visualiser l'historique d'un modèle et la progression
+// d'une école dans le temps. Aucune dépendance npm : Chart.js est chargé depuis
+// le CDN jsdelivr (fallback cdnjs si le premier échoue).
+function buildDashboardHTML() {
+  return `<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dashboard BenchGo V3 — Progression & Historique</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script>
+  // Fallback CDN si jsdelivr est injoignable (réseau limité).
+  if (typeof Chart === 'undefined') {
+    document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"><\\/script>');
+  }
+</script>
+<style>
+  :root { --bg:#0a0e14; --bg1:#11161d; --bg2:#161b22; --text:#c9d1d9; --accent:#58a6ff; --green:#3fb950; --red:#f85149; --yellow:#d29922; --purple:#bc8cff; }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--text); font-family: -apple-system, 'Segoe UI', sans-serif; margin: 0; padding: 24px; }
+  h1 { color: var(--accent); border-bottom: 1px solid var(--bg2); padding-bottom: 12px; }
+  h2 { color: var(--text); margin-top: 32px; }
+  .controls { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin: 16px 0; }
+  label { font-size: 0.9rem; color: #8b949e; }
+  select { background: var(--bg2); color: var(--text); border: 1px solid #30363d; border-radius: 6px; padding: 6px 10px; }
+  .charts { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-top: 16px; }
+  .chart-box { background: var(--bg1); border: 1px solid var(--bg2); border-radius: 8px; padding: 16px; min-height: 320px; }
+  canvas { max-height: 300px; }
+  .loading { color: #8b949e; text-align: center; padding: 40px; }
+  .empty { color: var(--red); }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  @media (max-width: 900px) { .charts { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<h1>📊 Dashboard BenchGo V3 — Progression & Historique</h1>
+<p style="color:#8b949e">Visualisez l'évolution des modèles et écoles dans le temps. Données issues des carnets de scores locaux.</p>
+<p><a href="/">← Retour au classement</a></p>
+
+<h2>Progression d'une école dans le temps</h2>
+<div class="controls">
+  <label for="ecoleChartSelect">École :</label>
+  <select id="ecoleChartSelect"><option value="">Chargement…</option></select>
+</div>
+<div class="chart-box"><canvas id="ecoleChart"></canvas><div id="ecoleEmpty" class="empty" style="display:none">Aucune donnée pour cette école.</div></div>
+
+<h2>Historique d'un modèle</h2>
+<div class="controls">
+  <label for="modelChartSelect">Modèle :</label>
+  <select id="modelChartSelect"><option value="">Chargement…</option></select>
+</div>
+<div class="chart-box"><canvas id="modelChart"></canvas><div id="modelEmpty" class="empty" style="display:none">Aucune donnée pour ce modèle.</div></div>
+
+<h2>Comparaison vitesse (tokens/s) vs score (%)</h2>
+<div class="chart-box"><canvas id="scatterChart"></canvas></div>
+
+<div id="loading" class="loading">Chargement des données…</div>
+
+<script>
+var MODELS = [];
+var ecoleChart = null, modelChart = null, scatterChart = null;
+
+fetch('/api/dashboard-data').then(r => r.json()).then(function(data) {
+  document.getElementById('loading').style.display = 'none';
+  if (!data.ok || !data.models) { document.getElementById('loading').textContent = 'Erreur : ' + (data.error || 'données indisponibles'); document.getElementById('loading').style.display = 'block'; return; }
+  MODELS = data.models;
+  populateEcoleSelect();
+  populateModelSelect();
+  drawScatter();
+  updateEcoleChart();
+  updateModelChart();
+}).catch(function(err) {
+  document.getElementById('loading').textContent = 'Erreur réseau : ' + err.message;
+  document.getElementById('loading').className = 'empty';
+});
+
+function populateEcoleSelect() {
+  var sel = document.getElementById('ecoleChartSelect');
+  var ecoles = {};
+  MODELS.forEach(function(m) { (m.ecoles||[]).forEach(function(e){ ecoles[e.ecole]=true; }); });
+  var keys = Object.keys(ecoles).sort();
+  sel.innerHTML = keys.length ? keys.map(function(e){return '<option value="'+e+'">'+e+'</option>';}).join('') : '<option value="">(aucune école)</option>';
+  sel.addEventListener('change', updateEcoleChart);
+}
+
+function populateModelSelect() {
+  var sel = document.getElementById('modelChartSelect');
+  sel.innerHTML = MODELS.length ? MODELS.map(function(m){return '<option value="'+m.shortName+'">'+m.model+'</option>';}).join('') : '<option value="">(aucun modèle)</option>';
+  sel.addEventListener('change', updateModelChart);
+}
+
+// Progression d'une école dans le temps : % par modèle (dates), trié par date.
+function updateEcoleChart() {
+  var ecole = document.getElementById('ecoleChartSelect').value;
+  var ctx = document.getElementById('ecoleChart');
+  var empty = document.getElementById('ecoleEmpty');
+  if (ecoleChart) { ecoleChart.destroy(); ecoleChart = null; }
+  var rows = [];
+  MODELS.forEach(function(m) {
+    (m.ecoles||[]).forEach(function(e) {
+      if (e.ecole === ecole && e.date) rows.push({ x: e.date, y: e.pct, label: m.model });
+    });
+  });
+  rows.sort(function(a,b){ return a.x < b.x ? -1 : a.x > b.x ? 1 : 0; });
+  if (rows.length === 0) { empty.style.display = 'block'; ctx.style.display = 'none'; return; }
+  empty.style.display = 'none'; ctx.style.display = 'block';
+  ecoleChart = new Chart(ctx, {
+    type: 'line',
+    data: { labels: rows.map(function(r){return r.x;}), datasets: [{ label: ecole+' — % par run', data: rows.map(function(r){return r.y;}), borderColor: '#58a6ff', backgroundColor: 'rgba(88,166,255,0.15)', fill: true, tension: 0.3, pointRadius: 4 }] },
+    options: { responsive: true, plugins: { tooltip: { callbacks: { label: function(c){ return rows[c.dataIndex].label + ': ' + c.parsed.y + '%'; } } } }, scales: { y: { beginAtZero: true, max: 100, ticks: { color: '#8b949e' }, grid: { color: '#21262d' } }, x: { ticks: { color: '#8b949e' }, grid: { color: '#21262d' } } } }
+  });
+}
+
+// Historique d'un modèle : % par école (barres) + santé (ligne).
+function updateModelChart() {
+  var sn = document.getElementById('modelChartSelect').value;
+  var ctx = document.getElementById('modelChart');
+  var empty = document.getElementById('modelEmpty');
+  if (modelChart) { modelChart.destroy(); modelChart = null; }
+  var m = MODELS.find(function(x){return x.shortName === sn;});
+  if (!m || !m.ecoles || m.ecoles.length === 0) { empty.style.display = 'block'; ctx.style.display = 'none'; return; }
+  empty.style.display = 'none'; ctx.style.display = 'block';
+  var labels = m.ecoles.map(function(e){return e.ecole;});
+  var pcts = m.ecoles.map(function(e){return e.pct;});
+  var health = m.ecoles.map(function(e){return e.globalLifeScore;});
+  modelChart = new Chart(ctx, {
+    type: 'bar',
+    data: { labels: labels, datasets: [
+      { label: '% réussite', data: pcts, backgroundColor: 'rgba(63,185,80,0.6)', borderColor: '#3fb950', borderWidth: 1, yAxisID: 'y' },
+      { label: 'Santé (PV)', data: health, type: 'line', borderColor: '#d29922', backgroundColor: 'rgba(210,153,34,0.2)', yAxisID: 'y1', tension: 0.2 }
+    ]},
+    options: { responsive: true, scales: { y: { beginAtZero: true, max: 100, position: 'left', ticks: { color: '#8b949e' }, grid: { color: '#21262d' } }, y1: { position: 'right', ticks: { color: '#8b949e' }, grid: { drawOnChartArea: false } }, x: { ticks: { color: '#8b949e' }, grid: { color: '#21262d' } } } }
+  });
+}
+
+// Scatter : vitesse (tokens/s) vs score (%) pour comparer les modèles.
+function drawScatter() {
+  var ctx = document.getElementById('scatterChart');
+  var pts = MODELS.filter(function(m){return m.tokensPerSecond > 0;}).map(function(m){
+    return { x: m.tokensPerSecond, y: m.pct, label: m.model };
+  });
+  scatterChart = new Chart(ctx, {
+    type: 'scatter',
+    data: { datasets: [{ label: 'Modèles (vitesse vs score)', data: pts, backgroundColor: 'rgba(188,140,255,0.7)', pointRadius: 6 }] },
+    options: { responsive: true, plugins: { tooltip: { callbacks: { label: function(c){ return c.raw.label + ': ' + c.raw.x + ' t/s, ' + c.raw.y + '%'; } } } }, scales: { x: { title: { display: true, text: 'Vitesse (tokens/s)', color: '#8b949e' }, ticks: { color: '#8b949e' }, grid: { color: '#21262d' } }, y: { title: { display: true, text: 'Score (%)', color: '#8b949e' }, beginAtZero: true, max: 100, ticks: { color: '#8b949e' }, grid: { color: '#21262d' } } } }
+  });
+}
+</script>
+</body>
+</html>`;
+}
+
 module.exports = {
   loadAllLedgers,
   aggregateLedger,
@@ -2885,7 +3270,8 @@ module.exports = {
   buildReasoningMarkdown,
   generateLeaderboard,
   deleteLedger,
-  startServer
+  startServer,
+  buildDashboardHTML
 };
 
 if (require.main === module) {

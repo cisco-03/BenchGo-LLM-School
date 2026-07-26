@@ -5,6 +5,7 @@ const { letterGrade } = require('./progress-bar');
 const cliTable = require('./cli-table');
 
 const LEDGER_DIR = path.join(__dirname, 'Export-Rapports', '.carnet');
+const CSV_EXPORT_FILE = path.join(__dirname, 'Export-Rapports', 'runs_export.csv');
 
 function ledgerPath(shortName) {
   return path.join(LEDGER_DIR, shortName + '.json');
@@ -90,6 +91,11 @@ function saveResult(shortName, modelName, result, quantization) {
   const ledger = loadLedger(shortName);
   ledger.model = modelName;
   ledger.shortName = shortName;
+  // Horodatage précis (ms) du résultat (§6 Données) : permet l'analyse de
+  // convergence temporelle et la comparaison inter-modèles fine. Stocké en plus
+  // du date/time (jour/heure) existant pour rétro-compat.
+  if (!result.timestampMs) result.timestampMs = Date.now();
+  if (!result.timestampIso) result.timestampIso = new Date().toISOString();
   // La quantification est une propriété du modèle physique (pas de l'école). On la
   // conserve au niveau du carnet pour que le classement puisse l'afficher même sans
   // recharger tous les résultats. Si fournie, on écrase la valeur précédente (la
@@ -298,6 +304,129 @@ function interpretCalibration(C) {
   return 'Biais de Surconfiance ou Sous-confiance Majeur (le modèle se surévalue ou se sous-évalue)';
 }
 
+// --- Export CSV des runs (§6 Données / Analytics) ---
+// Exporte tous les runs (toutes tentatives, toutes écoles, tous modèles) dans
+// un fichier CSV pour comparaison inter-modèles et analyse de convergence.
+// Chaque ligne = une tentative d'un modèle sur une école. Inclut l'horodatage
+// précis (ms), le score, la santé, les tokens, la vitesse, la calibration.
+function escapeCsv(value) {
+  if (value == null) return '';
+  const s = String(value);
+  if (/[",\n]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
+  return s;
+}
+
+function exportCsv(outputPath) {
+  const outFile = outputPath || CSV_EXPORT_FILE;
+  const headers = [
+    'timestamp_ms', 'timestamp_iso', 'modele', 'shortName', 'quantization',
+    'ecole', 'profil', 'points', 'maxPoints', 'pct', 'note',
+    'mandatoryPassed', 'mandatoryTotal', 'mandatoryPct',
+    'sante', 'bonusOptionnel', 'aideCount', 'rattrapageCount',
+    'calibrationIndex', 'declaredLevel',
+    'tokens', 'elapsedMs', 'tokensPerSecond', 'tentativeNumero',
+    'reportFile'
+  ];
+  const rows = [];
+
+  // Charge tous les carnets.
+  if (fs.existsSync(LEDGER_DIR)) {
+    const files = fs.readdirSync(LEDGER_DIR).filter(f => f.endsWith('.json'));
+    for (const file of files) {
+      try {
+        const ledger = JSON.parse(fs.readFileSync(path.join(LEDGER_DIR, file), 'utf8'));
+        if (!ledger || !ledger.ecoles) continue;
+        const shortName = ledger.shortName || path.basename(file, '.json');
+        const modelName = ledger.model || shortName;
+        const quant = ledger.quantization || '';
+        for (const [ecole, raw] of Object.entries(ledger.ecoles)) {
+          const attempts = getEcoleAttempts(raw);
+          attempts.forEach((att, idx) => {
+            const pct = att.max > 0 ? Math.round((att.score / att.max) * 100) : 0;
+            const grade = letterGrade(pct).grade;
+            const mandPct = att.mandatoryTotal > 0 ? Math.round((att.mandatoryPassed / att.mandatoryTotal) * 100) : 0;
+            rows.push([
+              att.timestampMs || '',
+              att.timestampIso || '',
+              modelName, shortName, quant,
+              ecole, att.profile || '',
+              att.score || 0, att.max || 0, pct, grade,
+              att.mandatoryPassed || 0, att.mandatoryTotal || 0, mandPct,
+              att.globalLifeScore || 0, att.optionalBonus || 0,
+              att.helpCount || 0, att.retriedCount || 0,
+              att.calibrationIndex != null ? att.calibrationIndex.toFixed(3) : '',
+              att.declaredLevel != null ? att.declaredLevel.toFixed(3) : '',
+              att.tokens || 0, att.elapsedMs || 0, att.tokensPerSecond || 0,
+              idx + 1,
+              att.reportFile || ''
+            ]);
+          });
+        }
+      } catch (e) {
+        logger.warn('CSV: carnet ignoré (' + file + ') — ' + e.message);
+      }
+    }
+  }
+
+  // Tri par timestamp_ms croissant (chronologique).
+  rows.sort((a, b) => {
+    const ta = a[0] ? Number(a[0]) : 0;
+    const tb = b[0] ? Number(b[0]) : 0;
+    return ta - tb;
+  });
+
+  const csv = [headers.join(',')].concat(rows.map(r => r.map(escapeCsv).join(','))).join('\n') + '\n';
+  try {
+    fs.mkdirSync(path.dirname(outFile), { recursive: true });
+    fs.writeFileSync(outFile, csv, 'utf8');
+    logger.info('CSV: export écrit — ' + rows.length + ' lignes — ' + outFile);
+    return { file: outFile, rows: rows.length };
+  } catch (e) {
+    logger.error('CSV: échec écriture export — ' + e.message);
+    return null;
+  }
+}
+
+// --- Analyse de convergence (§6) ---
+// Détecte les modèles instables : santé qui fluctue > 20% entre runs (écart-type
+// relatif sur la santé des tentatives d'une école). Renvoie la liste des modèles
+// instables avec leur amplitude de fluctuation pour les signaler dans les
+// recommandations des rapports.
+function detectUnstableModels() {
+  const unstable = [];
+  if (!fs.existsSync(LEDGER_DIR)) return unstable;
+  const files = fs.readdirSync(LEDGER_DIR).filter(f => f.endsWith('.json'));
+  for (const file of files) {
+    try {
+      const ledger = JSON.parse(fs.readFileSync(path.join(LEDGER_DIR, file), 'utf8'));
+      if (!ledger || !ledger.ecoles) continue;
+      const shortName = ledger.shortName || path.basename(file, '.json');
+      const modelName = ledger.model || shortName;
+      for (const [ecole, raw] of Object.entries(ledger.ecoles)) {
+        const attempts = getEcoleAttempts(raw);
+        if (attempts.length < 2) continue; // besoin de ≥ 2 tentatives
+        const pcts = attempts.map(a => a.max > 0 ? (a.score / a.max) * 100 : 0);
+        const min = Math.min(...pcts);
+        const max = Math.max(...pcts);
+        const amplitude = max - min;
+        if (amplitude > 20) {
+          unstable.push({
+            shortName, modelName, ecole,
+            amplitude: Math.round(amplitude * 10) / 10,
+            min: Math.round(min), max: Math.round(max),
+            attempts: attempts.length
+          });
+          logger.warn('Convergence: modèle instable — ' + modelName + ' sur ' + ecole +
+            ' (amplitude=' + Math.round(amplitude) + '% sur ' + attempts.length + ' tentatives)');
+        }
+      }
+    } catch (e) {
+      // ignore
+    }
+  }
+  return unstable;
+}
+
 module.exports = {
   loadLedger,
   saveResult,
@@ -311,5 +440,8 @@ module.exports = {
   getEcoleBest,
   getEcoleAttempts,
   pickBest,
-  formatDuration
+  formatDuration,
+  exportCsv,
+  detectUnstableModels,
+  CSV_EXPORT_FILE
 };

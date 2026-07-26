@@ -9,11 +9,20 @@ if (!fs.existsSync(LOG_DIR)) {
 
 const timestampTag = new Date().toISOString().replace(/[:.]/g, '-');
 const logFilePath = path.join(LOG_DIR, `benchgo_${timestampTag}.log`);
-const stream = fs.createWriteStream(logFilePath, { flags: 'a' });
 
+// On écrit les logs de façon SYNCHRONE (fs.appendFileSync). Au détriment d'une
+// légère perte de perf (les logs sont peu nombreux : ~1-10 lignes par exécution),
+// on garantit que TOUTE ligne journalisée est persistée sur disque avant un
+// éventuel process.exit(). Cela corrige le bug historique où les logs des
+// actions uniques (help, status, version, dry-run) disparaissaient silencieusement
+// car le WriteStream asynchrone n'était pas vidé à temps par process.exit().
 function writeLine(level, message) {
   const line = `[${new Date().toISOString()}] [${level}] ${message}\n`;
-  stream.write(line);
+  try {
+    fs.appendFileSync(logFilePath, line, 'utf8');
+  } catch (_) {
+    // Si le disque est plein ou en lecture seule, on ne fait pas crasher le run.
+  }
 }
 
 function info(message) {
@@ -63,7 +72,12 @@ function getFilePath() {
 }
 
 function close() {
-  stream.end();
+  // Avec appendFileSync, il n'y a pas de stream à fermer — no-op. On garde la
+  // fonction pour rétro-compatibilité avec les appelants existants.
+}
+
+function closeSync() {
+  // Idem : pas de stream asynchrone à vider. No-op (rétro-compat).
 }
 
 module.exports = {
@@ -78,5 +92,6 @@ module.exports = {
   modelDetection,
   runConfig,
   getFilePath,
-  close
+  close,
+  closeSync
 };

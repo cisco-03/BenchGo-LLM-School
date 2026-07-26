@@ -1,5 +1,204 @@
 # CHANGELOG - Carnet de Notes BenchGo
 
+## 2026-07-26 — fix: apostrophe non échappée cassant le JS du classement (E901)
+
+### Contexte
+Le HTML généré par `leaderboard.js` (`Export-Rapports/classement.html`) contenait une erreur de syntaxe JS à la ligne 1369 : la chaîne `'Dialogue d'impression ouvert...'` utilisait des simples quotes avec une apostrophe non échappée dans `d'impression`, ce qui fermait prématurément la chaîne et cassait tout le `<script>` inline (boutons Exporter PDF/PNG, filtres, modale).
+
+### Cause racine
+La fonction `exportLeaderboardPdf()` est définie à l'intérieur d'un template literal backtick dans `buildLeaderboardHTML()`. Un `\'` à l'intérieur d'un backtick est consommé comme escape et produit `'` à la sortie — l'apostrophe reste donc non échappée dans le JS inliné. Le premier essai (`d\'impression`) n'a pas corrigé le bug car le backtick mange le backslash.
+
+### Implémentation
+- **`leaderboard.js:1903`** : la chaîne `showToast(...)` passe de simples quotes à **doubles quotes** — `d'impression` devient un littéral valide dans une chaîne double-quoted, qui survit intact à l'interpolation du backtick et reste du JS valide dans le HTML inliné.
+
+### Vérification
+- Extraction du `<script>` du HTML régénéré → `node --check` passe (syntaxe valide).
+- `node tests/run-tests.js` → 27/27 tests passent (aucune régression).
+
+### Fichiers modifiés
+- `leaderboard.js`
+- `Export-Rapports/classement.html` (régénéré)
+- `Docs/CHANGELOG.md` : cette entrée.
+
+## 2026-07-26 — Plan d'amélioration §7 : Stratégie + roadmap
+
+### Contexte
+Plan d'amélioration axe 7 : roadmap courte + objectif visible mesurable. L'utilisateur doit voir une amélioration mesurable à chaque exécution.
+
+### Implémentation
+- **`Docs/roadmap.md`** (nouveau) : roadmap des axes livrés (§1-6) + itérations suivantes + objectif visible continu.
+- **`runner.js`** : bloc « Améliorations actives ce run » affiché en fin de run rappelant les fonctionnalités actives (cache, retry, sentinelles, hybrid, CSV, dashboard) pour que la progression soit mesurable à chaque exécution.
+
+### Fichiers modifiés
+- `Docs/roadmap.md` (nouveau), `runner.js`
+- `Docs/CHANGELOG.md` : cette entrée.
+
+## 2026-07-26 — Plan d'amélioration §6 : Données / Analytics
+
+### Contexte
+Plan d'amélioration axe 6 : horodatage précis (ms) par étape + export CSV des runs pour comparaison inter-modèles + analyse de convergence (détection des modèles instables).
+
+### Implémentation
+- **`score-ledger.js`** :
+  - `saveResult()` ajoute `timestampMs` (Date.now()) + `timestampIso` à chaque résultat pour une traçabilité fine.
+  - `exportCsv(outputPath)` : exporte tous les runs (toutes tentatives, toutes écoles, tous modèles) dans `Export-Rapports/runs_export.csv` avec 25 colonnes (horodatage ms, modèle, école, points, santé, tokens, vitesse, calibration, tentative...). Tri chronologique. Échappement CSV correct.
+  - `detectUnstableModels()` : détecte les modèles dont la santé fluctue > 20% d'amplitude entre tentatives d'une école (≥ 2 tentatives). Journalise un WARN par modèle instable.
+- **`runner.js`** : en fin de run `all`, régénère le CSV global + affiche les modèles instables en console. Le CSV est ouvertable dans Excel/Sheets pour comparaison.
+
+### Comportement
+- `Export-Rapports/runs_export.csv` régénéré à chaque run `all` (39 lignes au premier essai sur les carnets existants).
+- Les modèles instables (amplitude > 20%) sont signalés en console avec min/max/amplitude.
+
+### Fichiers modifiés
+- `score-ledger.js`, `runner.js`
+- `Docs/CHANGELOG.md` : cette entrée.
+
+## 2026-07-26 — Plan d'amélioration §5 : Intégration / Automatisation
+
+### Contexte
+Plan d'amélioration axe 5 : mode nuit hybride (CLI + auto-soumission GitHub si seuil atteint) avec file d'attente persistante en cas d'échec réseau, webhook, backup cloud AES-256-GCM.
+
+### Implémentation
+- **Nouveau module `hybrid-mode.js`** :
+  - `submitOrEnqueue(shortName, ledger, summary, token)` : soumet automatiquement si score ≥ 50% (DEFAULT_SUBMIT_THRESHOLD), sinon met en file.
+  - File persistante `Export-Rapports/.hybrid-queue.json` : les soumissions en échec réseau sont conservées pour retry au prochain run `--hybrid`.
+  - `drainQueue(token)` : rejoue toutes les soumissions en attente au démarrage d'un run `--hybrid` (vidange réseau).
+  - `shouldAutoSubmit(summary, threshold)` : décision seuil-based.
+- **Nouveau module `cloud-backup.js`** :
+  - `encrypt(plaintext, passphrase)` / `decrypt(backupObj, passphrase)` : AES-256-GCM via `node:crypto` (aucune dépendance externe). Clé dérivée PBKDF2 (210 000 itérations, SHA-256), sel aléatoire 16 octets, IV 12 octets, authTag 16 octets. Format JSON versionné.
+  - `encryptFile` / `decryptToFile` / `encryptDirectory` : helpers pour chiffrer `.carnet/` entier.
+  - Mauvaise passphrase → authTag invalide → erreur propre (données altérées détectées).
+- **`runner.js`** : en mode `--hybrid`, draine la file puis soumet le modèle courant (ou met en file). Affiche le résultat (soumis / en file / sous seuil).
+- **`config.js`** : flag `--hybrid` ajouté à `parseCliArgs()`.
+
+### Comportement
+- `node runner.js all --hybrid --github-token=ghp_...` : soumet automatiquement les modèles ≥ 50%, met en file les échecs réseau, rejoue la file au prochain run.
+- `cloud-backup.js` prêt à brancher sur un endpoint S3 (l'utilisateur fournit endpoint + credentials via env).
+
+### Fichiers modifiés
+- `hybrid-mode.js` (nouveau), `cloud-backup.js` (nouveau)
+- `config.js`, `runner.js`
+- `Docs/CHANGELOG.md` : cette entrée.
+
+## 2026-07-26 — Plan d'amélioration §4 : Maintenabilité / Architecture
+
+### Contexte
+Plan d'amélioration axe 4 : modularisation (fonctions pures extraites), tests unitaires ciblés, sentinelles sanitaires (NaN, cohérence des sommes).
+
+### Implémentation
+- **Nouveau module `scoring-utils.js`** : extraction des fonctions pures de `runner.js` — `isRattrapageEligibleProfile`, `shouldReplaceBestResult`, `explainTechnicalError`, `getClassName`. Aucun effet de bord, testables unitairement. `runner.js` les importe (réduction de ~60 lignes).
+- **Nouveau module `health-sentinels.js`** :
+  - `checkNoNaN` (S1) : détecte les NaN dans points/maxPoints/pct.
+  - `checkPointsConsistency` (S2) : points > maxPoints, points négatifs, somme maxPoints != tierTotalCount.
+  - `checkGlobalCoherence` (S3) : pct hors [0,100], santé absurde (> 10000), NaN.
+  - `runSentinels({ evalResults, tierPassedCount, tierTotalCount, pct, globalLifeScore, strict })` : exécute toutes les sentinelles, non bloquant par défaut (WARN journalisé), `strict` pour faire échouer le run.
+- **Nouveau sous-dossier `tests/`** :
+  - `run-tests.js` : lanceur sans dépendance (découverte `test-*.js`, assert Node, résumé + code de sortie).
+  - `test-sentinels.js` (8 cas), `test-lru-cache.js` (6 cas), `test-parsing.js` (4 cas), `test-scoring-utils.js` (9 cas).
+- **`runner.js`** : sentinelles exécutées après chaque tier (non bloquant) — journalise un WARN en cas d'incohérence pour diagnostic.
+
+### Comportement
+- `node tests/run-tests.js` → 27/27 tests passent (scoring, parsing, sentinelles, LRU).
+- Chaque tier est vérifié par les sentinelles en arrière-plan (NaN/sommes détectés silencieusement en WARN).
+
+### Fichiers modifiés
+- `scoring-utils.js` (nouveau), `health-sentinels.js` (nouveau)
+- `tests/run-tests.js`, `tests/test-sentinels.js`, `tests/test-lru-cache.js`, `tests/test-parsing.js`, `tests/test-scoring-utils.js` (nouveaux)
+- `runner.js`
+- `Docs/CHANGELOG.md` : cette entrée.
+
+## 2026-07-26 — Plan d'amélioration §3 : UI / Ludisme
+
+### Contexte
+Plan d'amélioration axe 3 : progress-bar enrichie (phases + ETA), classement gamifié (animations, filtres interactifs, export PNG/PDF), dashboard web.
+
+### Implémentation
+- **`progress-bar.js`** : `ProgressBar` enrichie avec `setPhases(phases)` (phases pondérées), `setPhase(name, current)` (progression par phase), ETA dynamique (basé sur la vitesse constatée, fenêtre glissante). Rétro-compatible (mode simple sans phases). `complete()` journalise la durée.
+- **`leaderboard.js`** :
+  - Nouveaux filtres : **Santé** (positive ≥ 0 PV / négative < 0 PV) et **École** (dynamique selon les écoles testées). Compteurs calculés à la génération.
+  - `ecoleNames` ajouté au `modelsData` pour le filtrage côté client.
+  - Animations d'entrée au scroll : CSS `.card` (opacity + translateY) + `IntersectionObserver` (respecte `prefers-reduced-motion`).
+  - Export **PNG** : capture du DOM via SVG foreignObject (aucune dépendance) → canvas 2x → téléchargement. Fallback message si CORS.
+  - Export **PDF** : `window.print()` + media-query print (masque sticky-bar/modale, fond blanc).
+  - Nouveaux boutons « 🖼 Exporter PNG » et « 📄 Exporter PDF » dans la sticky-bar.
+- **Dashboard web** (`/dashboard` + `/api/dashboard-data`) :
+  - Page HTML autonome embarquant Chart.js (CDN jsdelivr + fallback cdnjs).
+  - Graphique 1 : progression d'une école dans le temps (% par run, trié par date).
+  - Graphique 2 : historique d'un modèle (% par école en barres + santé en ligne, double axe Y).
+  - Graphique 3 : scatter vitesse (tokens/s) vs score (%) pour comparer les modèles.
+  - Route `/api/dashboard-data` renvoie les carnets agrégés en JSON.
+- **`leaderboard.js`** : message de démarrage du serveur mentionne le dashboard (`/dashboard`).
+
+### Comportement
+- `node leaderboard.js --serve` → `http://localhost:3939/dashboard` affiche les 3 graphiques.
+- Filtres Santé + École fonctionnels ; animations d'entrée au scroll ; export PNG/PDF depuis la sticky-bar.
+
+### Fichiers modifiés
+- `progress-bar.js`, `leaderboard.js`
+- `Docs/CHANGELOG.md` : cette entrée.
+
+## 2026-07-26 — Plan d'amélioration §2 : Performance / Fiabilité
+
+### Contexte
+Plan d'amélioration `.kilo/plans/1785055945228-plan-amelioration-benchgo.md` axe 2 : améliorer la fiabilité des appels API (timeout, retry, fallback) et mesurer la latence/débit pour prioriser les optimisations. Coucher de cache pour éviter les appels LLM redondants.
+
+### Implémentation
+- **Nouveau module `lru-cache.js`** : cache LRU sans dépendance externe (Map JS avec move-to-end), TTL optionnel, statistiques hit/miss/éviction journalisées.
+- **Nouveau module `http-middleware.js`** : wrapper `withRetry()` (timeout + backoff exponentiel + critères de retry : 429/5xx/timeout/erreurs réseau, PAS sur 401/403/404) + fallback modèle secondaire. Politique centralisée cohérente pour les deux clients.
+- **Nouveau module `benchmark-metrics.js`** : collecte latence (ms) + tokens par appel API, agrégation par modèle, section Markdown récapitulative injectée dans le rapport, résumé console en fin de run. Journalisation de chaque mesure (INFO) pour corrélation avec les logs serveur.
+- **`task-evaluator.js`** : cache LRU des résultats d'évaluation par (taskId, hash SHA-256 du code étudiant normalisé) avec TTL 30 min. Évite le re-exécution sandbox VM pour un code identique (rattrapage, re-run). Stats de hit-rate journalisées.
+- **`tier-loader.js`** : cache des tiers chargés par profil avec invalidation par mtime+size des fichiers `tiers/*.json`. Évite de relire+parse les 16 JSON à chaque appel dans un run multi-écoles. Export `invalidateTierCache()` pour l'auto-updater.
+- **`teacher-client.js`** : `askTeacherToCorrectStudentAnalysis()` utilise `withRetry()` (2 retries intra-modèle + backoff exponentiel) avant de rotate vers le modèle gratuit suivant. Code court `E701_TEACHER_UNAVAILABLE` journalisé.
+- **`lm-studio-client.js`** : enregistrement des métriques (latence + tokens + statut) dans `benchmark-metrics` à chaque appel (succès ET échec). Erreurs obligatoires propagées via `BenchgoError` (codes E502/E503/E504).
+- **`cloud-client.js`** : idem — enregistrement métriques + `BenchgoError` pour erreurs obligatoires (suppression du `process.exit(1)` brut au profit de la propagation propre).
+- **`runner.js`** : section « Benchmarking intégré » ajoutée à la fin du rapport Markdown ; résumé console latence/débit + stats cache LRU affichés en fin de run.
+
+### Comportement
+- Un même code étudiant ré-évalué (rattrapage) renvoie le verdict mis en cache — gain de temps + cohérence garantie.
+- Un appel API qui timeout ou reçoit 429/5xx est automatiquement retry avec backoff exponentiel (1s, 2s, 4s...) avant d'échouer.
+- Le rapport final inclut un tableau latence/débit/taux d'erreur par modèle pour prioriser les optimisations.
+
+### Fichiers modifiés
+- `lru-cache.js` (nouveau), `http-middleware.js` (nouveau), `benchmark-metrics.js` (nouveau)
+- `task-evaluator.js`, `tier-loader.js`, `teacher-client.js`, `lm-studio-client.js`, `cloud-client.js`, `runner.js`
+- `Docs/CHANGELOG.md` : cette entrée.
+
+## 2026-07-26 — Plan d'amélioration §1 : CLI / UX
+
+### Contexte
+Plan d'amélioration `.kilo/plans/1785055945228-plan-amelioration-benchgo.md` axe 1 (levier d'impact le plus fort) : pages de commandes contextuelles, résumé de fin de run, erreurs lisibles avec code court. Objectif : que l'utilisateur voie une amélioration mesurable à chaque exécution.
+
+### Implémentation
+- **Nouveau module `cli-help.js`** :
+  - `printHelp(topic)` : aide contextuelle complète (commandes, options, exemples, profiles) avec ancrage par topic.
+  - `printStatus()` : résumé du dernier run depuis `Export-Rapports/dernier-run.json` (modèle, provider, profil, points, obligatoire, santé, durée, verdict, écoles).
+  - `printVersion()` : version courante extraite de `Docs/CHANGELOG.md`.
+  - `handleSingleAction(rawArgs)` : interception des commandes `help`/`status`/`version` AVANT la bannière BenchGo (sortie propre).
+  - `BenchgoError` : classe d'erreur avec code court (`E502_LM_TIMEOUT`, `E503_LM_UNREACHABLE`, `E504_LM_HTTP_ERROR`, `E601_NO_MODEL`, `E602_BAD_PROFILE`, `E701_TEACHER_UNAVAILABLE`, `E801_GITHUB_SUBMIT_FAILED`, `E901_CONFIG_INVALID`) + suggestion corrective. `print()` affiche sans stack brute.
+  - `saveLastRun(summary)` : sauvegarde le résumé dans `dernier-run.json` pour `status` et la reprise.
+- **`config.js`** : nouveaux flags `--dry-run` et `--hybrid` dans `parseCliArgs()`.
+- **`runner.js`** :
+  - Actions uniques interceptées avant `main()`.
+  - `--dry-run` : valide la configuration (modèle présent en cloud, profil connu, clé API) sans lancer l'auto-profilage ni l'évaluation — sortie en ~5s.
+  - `E601_NO_MODEL` levé (BenchgoError) si `--provider` sans `--model` (remplace le `process.exit(1)` brut).
+  - Résumé de fin de run : tableau synthétique (modèle, mode, profil, temps, points, obligatoire, verdict, écoles) affiché en console + sauvegardé dans `dernier-run.json`.
+  - Handler `main().catch()` : distingue `BenchgoError` (affichage propre code+suggestion) des erreurs fatales (stack).
+  - `--hybrid` flag propagé (préparation §5).
+- **`logger.js`** : passage en écriture SYNCHRONE (`fs.appendFileSync`) — corrige le bug historique où les logs des actions uniques (help/status/version/dry-run) disparaissaient car le `WriteStream` asynchrone n'était pas vidé avant `process.exit()`. `close()`/`closeSync()` no-op (rétro-compat).
+- **`lm-studio-client.js`** + **`cloud-client.js`** : erreurs obligatoires propagées via `BenchgoError` (codes E502/E503/E504) au lieu de `process.exit(1)` — le runner gère l'affichage propre et la journalisation.
+- **`teacher-client.js`** : code court `E701_TEACHER_UNAVAILABLE` journalisé quand tous les essais Free Router échouent (repli auto-analyse non bloquant).
+
+### Comportement
+- `node runner.js help` / `status` / `version` : actions uniques propres, sans bannière, journalisées.
+- `node runner.js all --dry-run` : valide la config en ~5s sans lancer le benchmark.
+- `node runner.js all --provider=openai` (sans --model) : affiche `[ERREUR E601_NO_MODEL]` + suggestion, sans stack brute.
+- Chaque run sauvegarde `Export-Rapports/dernier-run.json` lisible via `node runner.js status`.
+
+### Fichiers modifiés
+- `cli-help.js` (nouveau)
+- `config.js`, `runner.js`, `logger.js`, `lm-studio-client.js`, `cloud-client.js`, `teacher-client.js`
+- `Docs/CHANGELOG.md` : cette entrée.
+
 ## 2026-07-26 — Mode nuit : école adaptée à chaque modèle (auto-par-modèle)
 
 ### Contexte
