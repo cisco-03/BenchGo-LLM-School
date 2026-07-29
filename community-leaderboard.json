@@ -481,6 +481,26 @@
       ]
     },
     {
+      "model": "lfm2.5-vl-1.6b",
+      "shortName": "lfm2.5-vl-1.6b",
+      "quantization": null,
+      "score": -162,
+      "max": 2644,
+      "pct": -6,
+      "globalLifeScore": 42,
+      "optionalBonus": 204,
+      "tokens": 6014,
+      "elapsedMs": 146414,
+      "tokensPerSecond": 41.08,
+      "ecoleCount": 1,
+      "pseudo": "FlexoDiv",
+      "submittedAt": "2026-07-29T06:37:17.128Z",
+      "contributors": 1,
+      "allPct": [
+        -6
+      ]
+    },
+    {
       "model": "mistral-7b-instruct-v0.1",
       "shortName": "mistral-7b-instruct-v0.1",
       "quantization": null,
@@ -541,6 +561,6 @@
       ]
     }
   ],
-  "generatedAt": "2026-07-29T06:43:02.583Z",
-  "totalSubmissions": 27
+  "generatedAt": "2026-07-29T06:43:25.997Z",
+  "totalSubmissions": 28
 }
