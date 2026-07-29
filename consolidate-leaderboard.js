@@ -278,7 +278,12 @@ function buildConsolidatedHTML(entries) {
   const totalSubmissions = entries.reduce((s, e) => s + (e.contributors || 1), 0)
 
   function safeForScript(json) {
-    return String(json).replace(/</g, '\\u003c').replace(/>/g, '\\u003e').replace(/&/g, '\\u0026')
+    return String(json)
+      .replace(/</g, '\\u003c')
+      .replace(/>/g, '\\u003e')
+      .replace(/&/g, '\\u0026')
+      .replace(/\`/g, '\\u0060')
+      .replace(/\$\{/g, '\\u0024\\u007b')
   }
 
   function buildArguments(entry) {
@@ -1137,7 +1142,7 @@ function openModal(idx) {
     var eTemps = e.elapsedMs > 0 ? fmtDurJS(e.elapsedMs) : '—';
     var eVitesse = e.tokensPerSecond > 0 ? '<span style="color:' + eTpsC + '">' + e.tokensPerSecond + ' t/s</span>' : '—';
     if (hasHistory) {
-      ecoleCell += ' <span class="hist-toggle" onclick="toggleHistory(this)" title="Voir l\'historique des re-tests">▸ ' + attempts.length + ' tentatives</span>';
+      ecoleCell += ' <span class="hist-toggle" onclick="toggleHistory(this)" title="Voir l\\'historique des re-tests">▸ ' + attempts.length + ' tentatives</span>';
     }
     body += '<tr' + (hasHistory ? ' class="ecole-main"' : '') + '>' +
       '<td>' + ecoleCell + '</td>' +
@@ -1243,7 +1248,7 @@ function openModal(idx) {
             body += '<div class="report-empty">Aucun code exploitable produit.</div>';
           }
           if (r.failureExplanation) {
-            body += '<div class="report-exo-label">Explication de l\'échec (par l\'élève)</div>';
+            body += '<div class="report-exo-label">Explication de l\\'échec (par l\\'élève)</div>';
             body += '<div class="report-expl">' + esc(r.failureExplanation) + '</div>';
           }
           if (r.teacherCorrection) {
@@ -1412,14 +1417,14 @@ function exportReport(idx) {
           if (r2.status === 'bypassed') continue;
           md += '**Exercice ' + r2.id + '** (' + (r2.status === 'success' ? 'validé' : 'échec') + ')\\n\\n';
            if (r2.code && String(r2.code).trim()) {
-             md += q2 + q2 + 'javascript' + String.fromCharCode(10) + String(r2.code).trim() + String.fromCharCode(10) + q2 + q2 + String.fromCharCode(10) + String.fromCharCode(10);
+              md += '\`\`\`javascript\\n' + String(r2.code).trim() + '\\n\`\`\`\\n\\n';
            }
            if (r2.failureExplanation) md += '**Explication échec :** ' + r2.failureExplanation + '\\n\\n';
            if (r2.teacherCorrection) md += '**🎓 Correction professeur :** ' + r2.teacherCorrection + '\\n\\n';
          }
        }
        if (t.rawResponse && String(t.rawResponse).trim()) {
-         md += '##### Réponse brute' + String.fromCharCode(10) + String.fromCharCode(10) + q2 + q2 + 'text' + String.fromCharCode(10) + String(t.rawResponse).trim() + String.fromCharCode(10) + q2 + q2 + String.fromCharCode(10) + String.fromCharCode(10);
+          md += '##### Réponse brute\\n\\n\`\`\`text\\n' + String(t.rawResponse).trim() + '\\n\`\`\`\\n\\n';
        }
     }
     md += '---\\n\\n';

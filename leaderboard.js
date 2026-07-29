@@ -1228,6 +1228,7 @@ function buildLeaderboardHTML(entries) {
         <span class="result-count" id="resultCount"></span>
         <button class="btn btn-primary" id="btnCopyAll" title="Copier tout le classement (texte brut) pour le partager">⧉ Copier le classement</button>
         <button class="btn btn-community" id="btnSubmitCommunity" title="Envoyer vos résultats sur le classement communautaire GitHub">🌐 Envoyer à la communauté</button>
+        <button class="btn btn-accent" id="btnCommunityRanking" title="Ouvrir le classement communautaire en ligne">🌍 Classement communautaire</button>
         <button class="btn btn-primary" id="btnExportPdf" title="Imprimer / Exporter en PDF (dialogue navigateur)">📄 Exporter PDF</button>
         <button class="btn btn-primary" id="btnExportCsv" title="Exporter le classement en CSV (tableur)">📊 Exporter CSV</button>
         <button class="btn btn-primary" id="btnExportMd" title="Exporter le classement en tableau Markdown">📝 Exporter Markdown</button>
@@ -1995,7 +1996,7 @@ function exportLeaderboardCsv() {
       m.wallMs > 0 ? fmtDurJS(m.wallMs) : ''
     ]);
   }
-  var csv = rows.map(function(r) { return r.join(','); }).join('\n');
+  var csv = rows.map(function(r) { return r.join(','); }).join('\\n');
   downloadTextFile(csv, 'classement_benchgo_' + new Date().toISOString().slice(0,10) + '.csv', 'text/csv;charset=utf-8');
   showToast('CSV exporté (' + MODELS.length + ' modèles)', true);
 }
@@ -2017,14 +2018,14 @@ function exportLeaderboardMd() {
     lines.push('| ' + medal + ' | ' + mdCell(m.model) + ' | ' + mdCell(m.quantization || '—') + ' | ' + m.score + '/' + m.max + ' | ' + dispPct(m.pct) + '% | ' + m.grade + ' | ' + oblig + ' | ' + m.globalLifeScore + ' PV | ' + (m.optionalBonus > 0 ? '+' + m.optionalBonus : '—') + ' | ' + m.ecoleCount + ' | ' + vit + ' | ' + temps + ' |');
   }
   lines.push('');
-  downloadTextFile(lines.join('\n'), 'classement_benchgo_' + new Date().toISOString().slice(0,10) + '.md', 'text/markdown;charset=utf-8');
+  downloadTextFile(lines.join('\\n'), 'classement_benchgo_' + new Date().toISOString().slice(0,10) + '.md', 'text/markdown;charset=utf-8');
   showToast('Markdown exporté (' + MODELS.length + ' modèles)', true);
 }
 
 // Échappe une cellule CSV (guillemets doubles si virgule ou guillemet).
 function csvCell(s) {
   s = String(s == null ? '' : s);
-  if (s.indexOf(',') >= 0 || s.indexOf('"') >= 0 || s.indexOf('\n') >= 0) {
+  if (s.indexOf(',') >= 0 || s.indexOf('"') >= 0 || s.indexOf('\\n') >= 0) {
     return '"' + s.replace(/"/g, '""') + '"';
   }
   return s;
@@ -2368,6 +2369,10 @@ async function doSubmitAll() {
   }
 }
 document.getElementById('btnSubmitCommunity').addEventListener('click', openSubmitModal);
+document.getElementById('btnCommunityRanking').addEventListener('click', function() {
+  var url = window.location.href.includes('/api/') ? '/api/community-ranking' : '../gh-pages-output/community-leaderboard.html';
+  window.open(url, '_blank');
+});
 var _btnPdf = document.getElementById('btnExportPdf');
 if (_btnPdf) _btnPdf.addEventListener('click', exportLeaderboardPdf);
 var _btnCsv = document.getElementById('btnExportCsv');
@@ -3248,6 +3253,20 @@ function startServer(port) {
       const dash = buildDashboardHTML();
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
       res.end(dash, 'utf8');
+      return;
+    }
+
+    // /api/community-ranking : sert le classement communautaire consolidé
+    if (url.pathname === '/api/community-ranking') {
+      const communityPath = path.join(__dirname, 'gh-pages-output', 'community-leaderboard.html');
+      try {
+        const communityHtml = fs.readFileSync(communityPath, 'utf8');
+        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+        res.end(communityHtml, 'utf8');
+      } catch (e) {
+        res.writeHead(404, { 'Content-Type': 'text/html; charset=utf-8' });
+        res.end('<h1>Classement communautaire non trouvé</h1><p>Génère-le d\'abord avec <code>node consolidate-leaderboard.js</code>.</p>', 'utf8');
+      }
       return;
     }
 
