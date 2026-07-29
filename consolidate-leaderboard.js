@@ -71,20 +71,22 @@ function loadAllSubmissions() {
 // Agrège un carnet en une entrée de classement (meilleure tentative par école).
 function aggregateCarnet(carnet) {
   if (!carnet || !carnet.ecoles) return null;
-  const ecoleEntries = Object.values(carnet.ecoles);
+  const ecoleEntries = Object.entries(carnet.ecoles);
   let score = 0, max = 0, globalLifeScore = 0, optionalBonus = 0;
-  let totalTokens = 0, totalElapsedMs = 0;
+  let totalTokens = 0, totalElapsedMs = 0, totalWallMs = 0;
+  let mandatoryPassed = 0, mandatoryTotal = 0;
+  let helpCount = 0, retriedCount = 0;
   let ecoleCount = 0;
+  const ecoles = [];
 
-  for (const raw of ecoleEntries) {
-    // Récupère la meilleure tentative
+  for (const [ecoleName, raw] of ecoleEntries) {
     let best = null;
     if (raw && raw.best) {
       best = raw.best;
     } else if (raw && raw.attempts && raw.attempts.length > 0) {
       best = raw.attempts.reduce((b, a) => ((a.pct || 0) >= (b.pct || 0)) ? a : b);
     } else if (raw && raw.score != null) {
-      best = raw; // ancien format
+      best = raw;
     }
     if (!best) continue;
     ecoleCount++;
@@ -94,6 +96,47 @@ function aggregateCarnet(carnet) {
     optionalBonus += best.optionalBonus || 0;
     totalTokens += best.tokens || 0;
     totalElapsedMs += best.elapsedMs || 0;
+    totalWallMs += best.wallMs || 0;
+    mandatoryPassed += best.mandatoryPassed || 0;
+    mandatoryTotal += best.mandatoryTotal || 0;
+    helpCount += best.helpCount || 0;
+    retriedCount += best.retriedCount || 0;
+
+    const ePct = best.max > 0 ? Math.round((best.score / best.max) * 100) : 0;
+    ecoles.push({
+      ecole: best.ecole || ecoleName,
+      score: best.score || 0,
+      max: best.max || 0,
+      pct: ePct,
+      optionalBonus: best.optionalBonus || 0,
+      globalLifeScore: best.globalLifeScore || 0,
+      helpCount: best.helpCount || 0,
+      retriedCount: best.retriedCount || 0,
+      date: best.date || '—',
+      elapsedMs: best.elapsedMs || 0,
+      tokens: best.tokens || 0,
+      tokensPerSecond: best.tokensPerSecond || 0,
+      tiers: (best.tiers || []).map(t => ({
+        tierNum: t.tierNum,
+        tierTitle: t.tierTitle || '',
+        className: t.className || '',
+        isMandatory: !!t.isMandatory,
+        rawResponse: t.rawResponse || null,
+        evalResults: (t.evalResults || []).map(r => ({
+          id: r.id,
+          taskType: r.taskType || null,
+          status: r.status,
+          points: r.points || 0,
+          maxPoints: r.maxPoints || 0,
+          helpUsed: !!r.helpUsed,
+          retried: !!r.retried,
+          code: r.code || null,
+          failureExplanation: r.failureExplanation || null,
+          teacherCorrection: r.teacherCorrection || null
+        }))
+      })),
+      selfProfile: best.selfProfile || null
+    });
   }
 
   if (ecoleCount === 0 || max === 0) return null;
@@ -102,6 +145,7 @@ function aggregateCarnet(carnet) {
   const tokensPerSecond = totalElapsedMs > 0
     ? Math.round((totalTokens / (totalElapsedMs / 1000)) * 100) / 100
     : 0;
+  const mandatoryPct = mandatoryTotal > 0 ? Math.round((mandatoryPassed / mandatoryTotal) * 100) : 0;
 
   return {
     model: carnet.model || carnet.shortName || 'Inconnu',
@@ -110,9 +154,13 @@ function aggregateCarnet(carnet) {
     modelUrl: carnet.modelUrl || guessModelUrl(carnet.model, carnet.publisher) || null,
     publisher: carnet.publisher || null,
     score, max, pct, globalLifeScore, optionalBonus,
-    tokens: totalTokens, elapsedMs: totalElapsedMs, tokensPerSecond,
+    mandatoryPassed, mandatoryTotal, mandatoryPct,
+    helpCount, retriedCount,
+    tokens: totalTokens, elapsedMs: totalElapsedMs, wallMs: totalWallMs, tokensPerSecond,
     ecoleCount,
-    pseudo: null, // rempli plus haut
+    ecoles,
+    ecoleNames: ecoles.map(e => e.ecole),
+    pseudo: null,
     submittedAt: null
   };
 }
@@ -214,38 +262,125 @@ function buildConsolidatedHTML(entries) {
   }
 
   // Compteurs par catégorie pour les filtres
-  const catCounts = { top: 0, recommande: 0, moyenne: 0, rattrapage: 0, catastrophe: 0 };
-  const sizeCounts = { petit: 0, standard: 0, expert: 0, doctorat: 0, inconnu: 0 };
+  const catCounts = { top: 0, recommande: 0, moyenne: 0, rattrapage: 0, catastrophe: 0 }
+  const sizeCounts = { petit: 0, standard: 0, expert: 0, doctorat: 0, inconnu: 0 }
+  const healthCounts = { positif: 0, negatif: 0 }
+  const ecoleCounts = {}
   entries.forEach((e, idx) => {
-    catCounts[getCategory(e.pct, idx + 1).key]++;
-    sizeCounts[getParamSize(e.model).key]++;
-  });
+    catCounts[getCategory(e.pct, idx + 1).key]++
+    sizeCounts[getParamSize(e.model).key]++
+    if ((e.globalLifeScore || 0) >= 0) healthCounts.positif++; else healthCounts.negatif++
+    for (const ec of (e.ecoles || [])) {
+      ecoleCounts[ec.ecole] = (ecoleCounts[ec.ecole] || 0) + 1
+    }
+  })
 
-  const totalSubmissions = entries.reduce((s, e) => s + (e.contributors || 1), 0);
+  const totalSubmissions = entries.reduce((s, e) => s + (e.contributors || 1), 0)
 
-  // Sérialise les données pour le JS côté client
-  // Sécurité : on échappe les séquences </script> et <!-- dans le JSON injecté
-  // dans la balise <script> pour empêcher le XSS par injection de pseudo/model.
-  // JSON.stringify ne protège pas contre ces séquences HTML.
   function safeForScript(json) {
-    return String(json).replace(/</g, '\\u003c').replace(/>/g, '\\u003e').replace(/&/g, '\\u0026');
+    return String(json).replace(/</g, '\\u003c').replace(/>/g, '\\u003e').replace(/&/g, '\\u0026')
   }
+
+  function buildArguments(entry) {
+    const forces = []
+    const faiblesses = []
+    const notes = []
+
+    if (entry.pct >= 95) forces.push('maîtrise quasi-parfaite des exercices')
+    else if (entry.pct >= 80) forces.push('bonne maîtrise globale des exercices')
+    else if (entry.pct >= 70) forces.push('niveau acceptable, validation du seuil obligatoire')
+
+    if (entry.mandatoryPct === 100) forces.push('100% du contenu obligatoire validé')
+    else if (entry.mandatoryPct >= 80) forces.push('contenu obligatoire largement validé')
+    else if (entry.mandatoryPct < 50 && entry.mandatoryTotal > 0) faiblesses.push('échec sur le contenu obligatoire de base')
+
+    if (entry.optionalBonus > 0) forces.push('exercices optionnels réussis (+' + entry.optionalBonus + ' bonus)')
+    if (entry.helpCount > 0) faiblesses.push('a eu besoin d\'aide du professeur (' + entry.helpCount + 'x)')
+    if (entry.retriedCount > 0) faiblesses.push('exercices en rattrapage (' + entry.retriedCount + 'x)')
+
+    if (entry.globalLifeScore > 0 && entry.pct >= 80) forces.push('santé robuste (' + entry.globalLifeScore + ' PV)')
+    else if (entry.globalLifeScore < 0) faiblesses.push('santé critique (' + entry.globalLifeScore + ' PV)')
+
+    if (entry.pct < 50) faiblesses.push('plus de la moitié des exercices échoués')
+
+    if (entry.tokensPerSecond > 0) {
+      if (entry.tokensPerSecond >= 60 && entry.pct >= 80) {
+        forces.push('rapide ET efficace (' + entry.tokensPerSecond + ' t/s · ' + entry.pct + '%)')
+      } else if (entry.tokensPerSecond < 20 && entry.pct >= 80) {
+        forces.push('LENT mais efficace — la vitesse ne fait pas tout (' + entry.tokensPerSecond + ' t/s · ' + entry.pct + '%)')
+      } else if (entry.tokensPerSecond >= 60 && entry.pct < 50) {
+        faiblesses.push('rapide mais peu fiable — vitesse sans efficacité (' + entry.tokensPerSecond + ' t/s · ' + entry.pct + '%)')
+      } else {
+        notes.push('vitesse moyenne (' + entry.tokensPerSecond + ' t/s)')
+      }
+    }
+
+    notes.push('évalué sur ' + entry.ecoleCount + ' école' + (entry.ecoleCount > 1 ? 's' : ''))
+    if (entry.contributors > 1) notes.push('testé par ' + entry.contributors + ' contributeurs')
+
+    return { forces, faiblesses, notes }
+  }
+
+  function getVerdict(entry) {
+    const v = entry.mandatoryTotal > 0 ? entry.mandatoryPct : entry.pct
+    if (v >= 80) return { label: 'RECOMMANDÉ', color: '#28a745', rank: 1 }
+    if (v >= 50) return { label: 'PARTIEL — RÉSERVES', color: '#ffc107', rank: 2 }
+    return { label: 'NON RECOMMANDÉ', color: '#dc3545', rank: 3 }
+  }
+
   const modelsJson = safeForScript(JSON.stringify(entries.map((e, idx) => {
-    const rank = idx + 1;
-    const cat = getCategory(e.pct, rank);
-    const psize = getParamSize(e.model);
+    const rank = idx + 1
+    const cat = getCategory(e.pct, rank)
+    const psize = getParamSize(e.model)
+    const verdict = getVerdict(e)
+    const grade = gradeLetter(e.pct)
+    const args = buildArguments(e)
     return {
       rank, model: e.model, shortName: e.shortName,
       quantization: e.quantization, modelUrl: e.modelUrl || null,
       pct: e.pct, score: e.score, max: e.max,
-      grade: gradeLetter(e.pct), globalLifeScore: e.globalLifeScore,
+      grade, globalLifeScore: e.globalLifeScore,
+      mandatoryPct: e.mandatoryPct, mandatoryPassed: e.mandatoryPassed, mandatoryTotal: e.mandatoryTotal,
       optionalBonus: e.optionalBonus || 0, ecoleCount: e.ecoleCount,
-      elapsedMs: e.elapsedMs || 0, tokens: e.tokens || 0,
-      tokensPerSecond: e.tokensPerSecond || 0,
+      helpCount: e.helpCount || 0, retriedCount: e.retriedCount || 0,
+      elapsedMs: e.elapsedMs || 0, wallMs: e.wallMs || 0,
+      tokens: e.tokens || 0, tokensPerSecond: e.tokensPerSecond || 0,
       contributors: e.contributors || 1, pseudo: e.pseudo,
-      cat, paramSize: psize
-    };
-  })));
+      submittedAt: e.submittedAt || null,
+      cat, paramSize: psize, verdict, args,
+      ecoles: (e.ecoles || []).map(ec => ({
+        ecole: ec.ecole,
+        score: ec.score, max: ec.max, pct: ec.pct, grade: gradeLetter(ec.pct),
+        optionalBonus: ec.optionalBonus || 0, globalLifeScore: ec.globalLifeScore || 0,
+        helpCount: ec.helpCount || 0, retriedCount: ec.retriedCount || 0,
+        calibrationIndex: ec.calibrationIndex != null ? ec.calibrationIndex : null,
+        date: ec.date || '—',
+        elapsedMs: ec.elapsedMs || 0, tokens: ec.tokens || 0, tokensPerSecond: ec.tokensPerSecond || 0,
+        attempts: [{
+          n: 1, date: ec.date || '—', time: null, score: ec.score || 0, max: ec.max || 0,
+          pct: ec.pct || 0, grade: gradeLetter(ec.pct || 0), optionalBonus: ec.optionalBonus || 0,
+          globalLifeScore: ec.globalLifeScore || 0, helpCount: ec.helpCount || 0, retriedCount: ec.retriedCount || 0,
+          calibrationIndex: ec.calibrationIndex != null ? ec.calibrationIndex : null,
+          elapsedMs: ec.elapsedMs || 0, tokens: ec.tokens || 0, tokensPerSecond: ec.tokensPerSecond || 0
+        }],
+        selfProfile: ec.selfProfile || null,
+        tiers: (ec.tiers || []).map(t => ({
+          tierNum: t.tierNum, tierTitle: t.tierTitle || '', className: t.className || '',
+          isMandatory: !!t.isMandatory, rawResponse: t.rawResponse || null,
+          evalResults: (t.evalResults || []).map(r => ({
+            id: r.id, taskType: r.taskType || null, status: r.status,
+            points: r.points || 0, maxPoints: r.maxPoints || 0,
+            helpUsed: !!r.helpUsed, retried: !!r.retried,
+            code: r.code || null, failureExplanation: r.failureExplanation || null,
+            teacherCorrection: r.teacherCorrection || null
+          }))
+        }))
+      })),
+      ecoleNames: e.ecoleNames || []
+    }
+  })))
+
+  const ecoleOptions = Object.keys(ecoleCounts).sort().map(ec => `<option value="${esc(ec)}">🏫 ${esc(ec)} (${ecoleCounts[ec]})</option>`).join('')
 
   return `<!DOCTYPE html>
 <html lang="fr">
@@ -255,7 +390,6 @@ function buildConsolidatedHTML(entries) {
 <title>Classement Communautaire — BenchGo V3</title>
 <style>
   :root {
-    /* Palette GitHub-dark raffinée (identique au leaderboard local) */
     --bg-0: #0a0e14;
     --bg-1: #11161d;
     --bg-2: #161b22;
@@ -276,14 +410,12 @@ function buildConsolidatedHTML(entries) {
     --silver: #c9d1d4;
     --bronze: #e3b341;
 
-    /* Espacements fluides */
     --space-xs: clamp(0.375rem, 0.3462rem + 0.1282vw, 0.5rem);
     --space-s:  clamp(0.75rem, 0.6923rem + 0.2564vw, 1rem);
     --space-m:  clamp(1rem, 0.8846rem + 0.5128vw, 1.5rem);
     --space-l:  clamp(1.5rem, 1.3077rem + 1.0256vw, 2.5rem);
     --space-xl: clamp(2.5rem, 2.1154rem + 1.6667vw, 4rem);
 
-    /* Typographie fluide (clamp) */
     --fs-display: clamp(1.9rem, 1.5538rem + 1.5385vw, 2.75rem);
     --fs-h1:      clamp(1.5rem, 1.3615rem + 0.6154vw, 1.85rem);
     --fs-h2:      clamp(1.15rem, 1.0808rem + 0.3077vw, 1.3rem);
@@ -292,7 +424,6 @@ function buildConsolidatedHTML(entries) {
     --fs-small:   clamp(0.78rem, 0.7654rem + 0.0641vw, 0.83rem);
     --fs-tiny:    clamp(0.68rem, 0.6692rem + 0.0449vw, 0.71rem);
 
-    /* Rayons & ombres */
     --r-sm: 8px;
     --r-md: 12px;
     --r-lg: 16px;
@@ -300,14 +431,12 @@ function buildConsolidatedHTML(entries) {
     --shadow-card: 0 1px 0 rgba(255,255,255,0.03), 0 2px 8px rgba(0,0,0,0.25);
     --shadow-elev: 0 8px 32px rgba(0,0,0,0.45);
 
-    /* Container boxed intelligent */
     --container-max: 1600px;
     --container-pad: clamp(0.75rem, 3vw, 2rem);
   }
 
   * { box-sizing: border-box; margin: 0; padding: 0; }
 
-  /* Scrollbars TOUJOURS invisibles partout */
   html, body, * {
     scrollbar-width: none;
     -ms-overflow-style: none;
@@ -335,7 +464,6 @@ function buildConsolidatedHTML(entries) {
     padding-inline: var(--container-pad);
   }
 
-  /* En-tête */
   header.hero { text-align: center; padding-block: var(--space-m) var(--space-l); }
   header.hero .badge-top {
     display: inline-flex; align-items: center; gap: 6px;
@@ -352,13 +480,11 @@ function buildConsolidatedHTML(entries) {
   }
   header.hero .subtitle { color: var(--text-muted); margin-top: 6px; font-size: var(--fs-small); }
 
-  /* Toolbars */
   .toolbar {
     display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-xs);
     margin-block: var(--space-s);
   }
 
-  /* Barre sticky */
   .sticky-bar {
     position: sticky; top: 0; z-index: 100;
     background: rgba(10, 14, 20, 0.82);
@@ -377,24 +503,37 @@ function buildConsolidatedHTML(entries) {
     background: rgba(10, 14, 20, 0.94);
     box-shadow: 0 4px 18px rgba(0, 0, 0, 0.45);
   }
-  .filter-chips { display: flex; flex-wrap: wrap; gap: 6px; flex: 1 1 auto; min-width: 0; }
-  .chip {
-    padding: 6px 12px; border: 1px solid var(--border); background: var(--bg-2);
-    color: var(--text-muted); border-radius: var(--r-pill);
-    font-size: var(--fs-small); cursor: pointer; white-space: nowrap;
-    transition: all 0.18s ease; user-select: none;
-    display: inline-flex; align-items: center; gap: 4px;
+
+  .select-wrap { position: relative; display: inline-flex; align-items: center; }
+  .select-wrap::after {
+    content: '▾'; position: absolute; right: 10px; pointer-events: none;
+    color: var(--text-muted); font-size: 0.75em;
   }
-  .chip:hover { border-color: var(--accent); color: var(--text); transform: translateY(-1px); }
-  .chip.active {
-    background: linear-gradient(135deg, var(--accent-2), var(--accent));
-    border-color: transparent; color: #fff; font-weight: 600;
-    box-shadow: 0 2px 10px rgba(31,111,235,0.35);
+  .select {
+    appearance: none; -webkit-appearance: none;
+    padding: 8px 28px 8px 12px; background: var(--bg-2); border: 1px solid var(--border);
+    color: var(--text); border-radius: var(--r-sm); cursor: pointer;
+    font-size: var(--fs-small); font-weight: 600;
+    transition: all 0.18s ease;
   }
-  .chip .count {
-    opacity: 0.75; margin-left: 2px; font-size: 0.85em;
-    background: rgba(255,255,255,0.08); padding: 0 6px; border-radius: var(--r-pill);
+  .select:hover { border-color: var(--accent); color: var(--text); }
+  .select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(88,166,255,0.18); }
+  .select option { background: var(--bg-2); color: var(--text); }
+  .filter-label { font-size: var(--fs-tiny); color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; }
+
+  .btn {
+    border: 1px solid transparent; border-radius: var(--r-sm);
+    cursor: pointer; font-weight: 600; transition: all 0.18s ease;
+    display: inline-flex; align-items: center; gap: 6px; white-space: nowrap;
   }
+  .btn-primary {
+    padding: 8px 16px; border-color: var(--accent-2);
+    background: linear-gradient(135deg, rgba(56,139,253,0.18), rgba(31,111,235,0.12));
+    color: var(--accent); font-size: var(--fs-small);
+  }
+  .btn-primary:hover { background: linear-gradient(135deg, var(--accent-2), var(--accent)); color: #fff; box-shadow: 0 3px 12px rgba(31,111,235,0.4); }
+  .btn-primary:active { transform: scale(0.97); }
+  .btn-primary.done { background: var(--green); border-color: var(--green); color: #fff; }
 
   .search-wrap { display: flex; align-items: center; gap: var(--space-xs); flex: 0 0 auto; }
   .search {
@@ -406,21 +545,20 @@ function buildConsolidatedHTML(entries) {
   .search:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(88,166,255,0.18); }
   .result-count { font-size: var(--fs-tiny); color: var(--text-muted); }
 
-  /* Conteneur des cartes */
   .cards { display: flex; flex-direction: column; gap: var(--space-s); margin-block: var(--space-m); }
 
-  /* Carte modèle */
   .card {
     background: linear-gradient(180deg, var(--bg-2), var(--bg-1));
     border: 1px solid var(--border); border-radius: var(--r-md);
-    box-shadow: var(--shadow-card); transition: all 0.2s ease; overflow: hidden;
-    position: relative;
+    box-shadow: var(--shadow-card); transition: all 0.2s ease;
+    position: relative; z-index: 1;
   }
   .card::before {
     content: ''; position: absolute; inset: 0 auto 0 0; width: 3px;
     background: transparent; transition: background 0.2s ease;
   }
-  .card:hover { border-color: var(--border-soft); transform: translateY(-1px); box-shadow: var(--shadow-elev); }
+  .card:hover { border-color: var(--border-soft); transform: translateY(-1px); box-shadow: var(--shadow-elev); z-index: 2; }
+  .card.menu-open { z-index: 50; }
   .card.gold::before   { background: linear-gradient(180deg, var(--gold), transparent); }
   .card.silver::before { background: linear-gradient(180deg, var(--silver), transparent); }
   .card.bronze::before { background: linear-gradient(180deg, var(--bronze), transparent); }
@@ -428,7 +566,20 @@ function buildConsolidatedHTML(entries) {
   .card.silver { border-color: rgba(201,209,212,0.3); }
   .card.bronze { border-color: rgba(227,179,65,0.35); }
 
-  .card-row { display: flex; align-items: center; gap: var(--space-m); padding: var(--space-s) var(--space-m); }
+  .card {
+    opacity: 0;
+    transform: translateY(16px);
+    transition: opacity 0.5s ease, transform 0.5s ease;
+  }
+  .card.visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .card { opacity: 1; transform: none; transition: none; }
+  }
+
+  .card-row { display: flex; align-items: center; gap: var(--space-m); padding: var(--space-s) var(--space-m); cursor: pointer; }
 
   .rank {
     flex: 0 0 auto; min-width: 44px; height: 44px;
@@ -463,7 +614,6 @@ function buildConsolidatedHTML(entries) {
   .badge.contrib { color: #d2a8ff; border-color: rgba(188,140,255,0.30); background: rgba(188,140,255,0.08); }
   .badge.pseudo { color: var(--green); border-color: rgba(63,185,80,0.30); background: rgba(63,185,80,0.08); }
 
-  /* Mini-stats — flexbox grow */
   .mini-stats { display: flex; align-items: center; gap: var(--space-m); flex: 0 0 auto; flex-wrap: wrap; }
   .mini-stat { display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 52px; }
   .mini-stat .lbl {
@@ -475,71 +625,217 @@ function buildConsolidatedHTML(entries) {
   .pct-bar-wrap { width: 64px; height: 5px; background: var(--bg-3); border-radius: var(--r-pill); margin-top: 3px; overflow: hidden; }
   .pct-bar-fill { height: 100%; border-radius: var(--r-pill); transition: width 0.3s ease; }
 
+  .card-actions { display: flex; align-items: center; gap: 6px; flex: 0 0 auto; position: relative; }
+
+  .kebab {
+    width: 32px; height: 32px; display: inline-flex; align-items: center; justify-content: center;
+    background: var(--bg-3); border: 1px solid var(--border); border-radius: var(--r-sm);
+    color: var(--text-muted); font-size: 1.1em; cursor: pointer;
+    transition: all 0.18s ease; user-select: none;
+  }
+  .kebab:hover { border-color: var(--accent); color: var(--text); background: var(--bg-elev); }
+  .kebab.active { border-color: var(--accent); color: var(--accent); background: var(--bg-elev); }
+  .kebab-menu {
+    position: absolute; top: calc(100% + 6px); right: 0; z-index: 50;
+    min-width: 180px; background: var(--bg-2); border: 1px solid var(--border);
+    border-radius: var(--r-sm); box-shadow: var(--shadow-elev);
+    display: none; flex-direction: column; overflow: hidden;
+  }
+  .kebab-menu.show { display: flex; }
+  .kebab-item {
+    display: flex; align-items: center; gap: 8px; padding: 9px 12px;
+    font-size: var(--fs-small); color: var(--text); cursor: pointer; white-space: nowrap;
+    border-bottom: 1px solid var(--border-soft); transition: background 0.15s;
+  }
+  .kebab-item:last-child { border-bottom: none; }
+  .kebab-item:hover { background: var(--bg-elev); }
+
   .empty-msg {
     text-align: center; color: var(--text-muted); padding: var(--space-xl);
     font-style: italic; display: none; font-size: var(--fs-body);
   }
 
-  footer.footer { text-align: center; color: var(--text-dim); font-size: var(--fs-tiny); margin-top: var(--space-l); padding-block: var(--space-m); }
-  footer.footer a { color: var(--accent); }
-  footer.footer code { background: var(--bg-3); padding: 1px 6px; border-radius: 4px; color: var(--purple); }
-
-  /* Responsive fluide : mini-stats passe sous le nom sur écrans étroits */
   @media (max-width: 720px) {
     .card-row { flex-wrap: wrap; }
     .mini-stats { width: 100%; justify-content: space-between; padding-top: var(--space-s); border-top: 1px solid var(--border-soft); }
   }
 
-  /* Boutons d'export */
-  .btn-export {
-    padding: 6px 12px; border: 1px solid var(--border); background: var(--bg-2);
-    color: var(--text-muted); border-radius: var(--r-sm); font-size: var(--fs-small);
-    cursor: pointer; transition: all 0.15s; white-space: nowrap;
-  }
-  .btn-export:hover { border-color: var(--accent); color: var(--text); }
-
-  /* Modale détail */
   .modal-overlay {
-    position: fixed; inset: 0; background: rgba(0,0,0,0.65); backdrop-filter: blur(4px);
-    display: none; align-items: flex-start; justify-content: center; z-index: 1000;
-    padding: var(--space-m); overflow-y: auto;
+    position: fixed; inset: 0; background: rgba(1,4,9,0.78);
+    backdrop-filter: blur(4px); display: none; align-items: flex-start; justify-content: center;
+    z-index: 1000; padding: var(--space-m) var(--space-s); overflow-y: auto;
+    scrollbar-width: none; -ms-overflow-style: none;
   }
+  .modal-overlay::-webkit-scrollbar { width: 0; height: 0; display: none; }
   .modal-overlay.show { display: flex; }
   .modal {
-    background: var(--bg-1); border: 1px solid var(--border); border-radius: var(--r-lg);
-    max-width: 680px; width: 100%; box-shadow: var(--shadow-elev); margin: auto;
+    background: linear-gradient(180deg, var(--bg-2), var(--bg-1));
+    border: 1px solid var(--border); border-radius: var(--r-lg);
+    max-width: 1180px; width: 100%; margin: auto; overflow: hidden;
+    box-shadow: var(--shadow-elev);
   }
-  .modal-head { display: flex; align-items: center; gap: var(--space-m); padding: var(--space-m) var(--space-l); border-bottom: 1px solid var(--border-soft); }
-  .modal-head .rank { flex: 0 0 auto; }
+  .modal-head { display: flex; align-items: flex-start; gap: var(--space-s); padding: var(--space-m) var(--space-l); background: var(--bg-3); border-bottom: 1px solid var(--border); }
+  .modal-head .rank { flex: 0 0 auto; width: 52px; height: 52px; font-size: var(--fs-h2); }
   .modal-head .title { flex: 1 1 auto; min-width: 0; }
-  .modal-head .title h2 { font-size: var(--fs-h2); word-break: break-all; color: var(--accent); }
-  .modal-head .tags { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
-  .modal-head .cat-tag { font-size: var(--fs-tiny); padding: 2px 8px; border-radius: var(--r-pill); background: var(--bg-3); color: var(--text-muted); }
+  .modal-head .title h2 { color: var(--accent); font-size: var(--fs-h1); word-break: break-all; margin-bottom: 6px; font-weight: 800; }
+  .modal-head .tags { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  .verdict-badge {
+    display: inline-block; padding: 4px 12px; border-radius: var(--r-sm);
+    font-size: var(--fs-tiny); font-weight: 700; color: #fff;
+  }
+  .cat-tag { font-size: var(--fs-small); color: var(--text-muted); }
   .modal-close {
     flex: 0 0 auto; background: none; border: none; color: var(--text-muted);
-    font-size: 1.6rem; cursor: pointer; line-height: 1; padding: 4px 8px;
+    font-size: 1.6em; cursor: pointer; padding: 0 4px; line-height: 1; transition: color 0.15s;
   }
-  .modal-close:hover { color: var(--text); }
-  .modal-body { padding: var(--space-m) var(--space-l); }
-  .modal-body h3 { font-size: var(--fs-h3); margin: var(--space-m) 0 var(--space-xs); color: var(--text); }
+  .modal-close:hover { color: var(--red); }
+  .modal-body { padding: var(--space-m) var(--space-l); max-height: calc(100vh - 220px); overflow-y: auto; scrollbar-width: none; -ms-overflow-style: none; }
+  .modal-body::-webkit-scrollbar { width: 0; height: 0; display: none; }
+  .modal-body h3 {
+    color: var(--accent); font-size: var(--fs-small); text-transform: uppercase;
+    letter-spacing: 0.8px; margin: var(--space-m) 0 var(--space-s);
+    padding-bottom: 6px; border-bottom: 1px solid var(--border-soft); font-weight: 700;
+  }
   .modal-body h3:first-child { margin-top: 0; }
+
   .full-stats { display: flex; flex-wrap: wrap; gap: var(--space-s); }
-  .full-stat { background: var(--bg-2); border: 1px solid var(--border-soft); border-radius: var(--r-sm); padding: var(--space-xs) var(--space-s); min-width: 80px; }
-  .full-stat .lbl { font-size: var(--fs-tiny); color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; }
-  .full-stat .val { font-size: var(--fs-body); font-weight: 700; margin-top: 2px; }
+  .full-stat {
+    flex: 1 1 110px; min-width: 0;
+    background: var(--bg-1); border: 1px solid var(--border-soft);
+    border-radius: var(--r-sm); padding: var(--space-s); text-align: center;
+  }
+  .full-stat .lbl { font-size: var(--fs-tiny); color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; }
+  .full-stat .val { font-size: clamp(0.72rem, 0.68rem + 0.2vw, 0.88rem); font-weight: 800; margin-top: 4px; word-break: break-all; overflow-wrap: anywhere; line-height: 1.15; }
+  .full-stat .bar { width: 100%; height: 5px; background: var(--bg-3); border-radius: var(--r-pill); margin-top: 6px; overflow: hidden; }
+  .full-stat .bar > div { height: 100%; border-radius: var(--r-pill); }
+
+  .args-grid { display: flex; flex-wrap: wrap; gap: var(--space-m); }
+  .args-block { flex: 1 1 280px; min-width: 0; }
+  .args-block .args-title {
+    font-size: var(--fs-small); text-transform: uppercase; letter-spacing: 0.6px;
+    margin-bottom: var(--space-xs); font-weight: 700;
+  }
+  .args-forces .args-title { color: var(--green); }
+  .args-weak .args-title   { color: var(--red); }
+  .args-notes .args-title  { color: var(--text-muted); }
+  .args-list { list-style: none; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+  .args-list li { font-size: var(--fs-small); line-height: 1.5; padding-left: 16px; position: relative; }
+  .args-list li::before { content: "•"; position: absolute; left: 4px; color: var(--text-dim); }
+  .args-empty { font-size: var(--fs-small); color: var(--text-dim); font-style: italic; }
+
+  .ecoles-table { width: 100%; border-collapse: collapse; font-size: var(--fs-small); }
+  .ecoles-table th, .ecoles-table td { padding: 9px 10px; text-align: left; border-bottom: 1px solid var(--border-soft); }
+  .ecoles-table th { color: var(--text-dim); font-size: var(--fs-tiny); text-transform: uppercase; letter-spacing: 0.5px; font-weight: 700; }
+  .ecoles-table td.num { text-align: right; }
+  .ecoles-table .grade { font-weight: 800; text-align: center; }
+  .ecoles-table tr:hover { background: var(--bg-2); }
+
+  .hist-toggle {
+    display: inline-block; font-size: var(--fs-tiny); color: var(--accent); cursor: pointer;
+    padding: 2px 8px; border: 1px solid var(--border); border-radius: var(--r-pill);
+    margin-left: 6px; user-select: none; transition: all 0.15s;
+  }
+  .hist-toggle:hover { background: var(--accent-2); color: #fff; border-color: var(--accent-2); }
+  .hist-row > td { padding: 0 !important; }
+  .hist-block { padding: var(--space-s) var(--space-m); background: var(--bg-1); border-top: 1px solid var(--border-soft); border-bottom: 1px solid var(--border-soft); }
+  .hist-title { font-size: var(--fs-tiny); color: var(--text-dim); margin-bottom: var(--space-xs); text-transform: uppercase; letter-spacing: 0.5px; font-weight: 700; }
+  .hist-table { width: 100%; border-collapse: collapse; font-size: var(--fs-small); }
+  .hist-table th, .hist-table td { padding: 6px 8px; text-align: left; border-bottom: 1px solid var(--border-soft); }
+  .hist-table th { color: var(--text-dim); font-size: var(--fs-tiny); text-transform: uppercase; letter-spacing: 0.5px; font-weight: 700; }
+  .hist-table td.num { text-align: right; }
+  .hist-best { background: rgba(56,139,253,0.08); }
+  .best-tag { color: var(--gold); font-size: 0.9em; }
+
+  .meta-line {
+    font-size: var(--fs-tiny); color: var(--text-muted); margin-top: var(--space-m);
+    padding-top: var(--space-s); border-top: 1px solid var(--border-soft);
+  }
+  .meta-line code { background: var(--bg-3); padding: 1px 6px; border-radius: 4px; font-family: 'Cascadia Code', 'Consolas', monospace; color: var(--purple); }
+
   .model-url-section { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-xs); margin-bottom: var(--space-s); }
+  .model-url-display { display: inline-flex; align-items: center; gap: 6px; }
   .model-url-link {
     color: var(--accent); text-decoration: none; font-size: var(--fs-small);
     word-break: break-all; border-bottom: 1px dashed transparent; transition: border-color 0.15s;
   }
   .model-url-link:hover { border-bottom-color: var(--accent); }
-  .meta-line { font-size: var(--fs-tiny); color: var(--text-muted); margin-top: var(--space-m); padding-top: var(--space-s); border-top: 1px solid var(--border-soft); }
 
-  /* Media print : masquer la sticky-bar et la modale pour Exporter PDF */
+  .report-block { margin-top: var(--space-s); }
+  .report-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-s); margin-bottom: var(--space-s); }
+  .report-actions-hint { font-size: var(--fs-tiny); color: var(--text-dim); font-style: italic; }
+  .report-school { margin-bottom: var(--space-m); border: 1px solid var(--border-soft); border-radius: var(--r-sm); overflow: hidden; }
+  .report-school-head, .report-tier-head {
+    display: flex; align-items: center; gap: var(--space-xs); cursor: pointer;
+    padding: var(--space-xs) var(--space-s); background: var(--bg-3);
+    font-weight: 700; font-size: var(--fs-small); user-select: none;
+    transition: background 0.15s;
+  }
+  .report-school-head:hover, .report-tier-head:hover { background: var(--bg-elev); }
+  .report-school-head .caret, .report-tier-head .caret { color: var(--text-dim); transition: transform 0.18s; }
+  .report-school-head.open .caret, .report-tier-head.open .caret { transform: rotate(90deg); }
+  .report-school-head .sch-title { flex: 1; min-width: 0; color: var(--accent); }
+  .report-tier-head .th-title { flex: 1; min-width: 0; color: var(--text); }
+  .report-tier-head .th-badge { font-size: var(--fs-tiny); padding: 1px 7px; border-radius: var(--r-pill); font-weight: 600; }
+  .report-tier-head .th-badge.mand { background: rgba(63,185,80,0.15); color: var(--green); border: 1px solid rgba(63,185,80,0.3); }
+  .report-tier-head .th-badge.opt  { background: rgba(210,153,34,0.15); color: var(--yellow); border: 1px solid rgba(210,153,34,0.3); }
+  .report-school-body, .report-tier-body { display: none; padding: var(--space-s); background: var(--bg-1); }
+  .report-school-body.open, .report-tier-body.open { display: block; }
+  .report-tier { margin-bottom: var(--space-xs); border: 1px solid var(--border-soft); border-radius: var(--r-sm); overflow: hidden; }
+  .report-exo { margin-block: var(--space-s); padding: var(--space-s); background: var(--bg-2); border: 1px solid var(--border-soft); border-radius: var(--r-sm); }
+  .report-exo-head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-xs); margin-bottom: var(--space-xs); font-size: var(--fs-small); }
+  .report-exo-head .exo-id { font-weight: 700; color: var(--accent); }
+  .report-exo-head .exo-status { padding: 1px 8px; border-radius: var(--r-pill); font-size: var(--fs-tiny); font-weight: 700; }
+  .report-exo-head .exo-status.success { background: rgba(63,185,80,0.15); color: var(--green); }
+  .report-exo-head .exo-status.fail    { background: rgba(248,81,73,0.15); color: var(--red); }
+  .report-exo-head .exo-status.bypass  { background: rgba(139,148,158,0.15); color: var(--text-muted); }
+  .report-exo-head .exo-pts { margin-left: auto; color: var(--text-muted); font-size: var(--fs-tiny); }
+  .report-exo-label { font-size: var(--fs-tiny); color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; margin-top: var(--space-xs); margin-bottom: 4px; font-weight: 700; }
+  .report-code {
+    background: var(--bg-0); border: 1px solid var(--border-soft); border-radius: var(--r-sm);
+    padding: var(--space-s); margin-block: 4px; overflow-x: auto;
+    font-family: 'Cascadia Code', 'Consolas', 'Courier New', monospace;
+    font-size: var(--fs-tiny); color: var(--text); line-height: 1.5;
+    white-space: pre; scrollbar-width: none; -ms-overflow-style: none;
+  }
+  .report-code::-webkit-scrollbar { width: 0; height: 0; display: none; }
+  .report-expl { font-size: var(--fs-small); color: var(--text); margin-block: 4px; padding: var(--space-xs) var(--space-s); background: rgba(248,81,73,0.06); border-left: 3px solid var(--red); border-radius: 4px; }
+  .report-teacher { font-size: var(--fs-small); color: var(--text); margin-block: 4px; padding: var(--space-xs) var(--space-s); background: rgba(188,140,255,0.08); border-left: 3px solid var(--purple); border-radius: 4px; }
+  .report-teacher b { color: var(--purple); }
+  .report-raw {
+    background: var(--bg-0); border: 1px dashed var(--border); border-radius: var(--r-sm);
+    padding: var(--space-s); margin-top: var(--space-xs);
+    font-family: 'Cascadia Code', 'Consolas', monospace; font-size: var(--fs-tiny);
+    color: var(--text-muted); line-height: 1.5; white-space: pre-wrap; word-break: break-word;
+    max-height: 400px; overflow-y: auto; scrollbar-width: none; -ms-overflow-style: none;
+  }
+  .report-raw::-webkit-scrollbar { width: 0; height: 0; display: none; }
+  .report-selfprofile { font-size: var(--fs-small); color: var(--text); margin-block: var(--space-xs); padding: var(--space-s); background: var(--bg-2); border: 1px solid var(--border-soft); border-radius: var(--r-sm); }
+  .report-selfprofile .sp-title { font-weight: 700; color: var(--accent); margin-bottom: var(--space-xs); font-size: var(--fs-small); }
+  .report-selfprofile ul { list-style: none; padding: 0; display: flex; flex-direction: column; gap: 3px; }
+  .report-selfprofile li { padding-left: 14px; position: relative; }
+  .report-selfprofile li::before { content: "•"; position: absolute; left: 2px; color: var(--text-dim); }
+  .report-empty { color: var(--text-dim); font-style: italic; font-size: var(--fs-small); padding: var(--space-s); }
+
+  footer.footer {
+    text-align: center; color: var(--text-dim); font-size: var(--fs-tiny);
+    margin-top: var(--space-l); padding-block: var(--space-m);
+  }
+
+  .toast {
+    position: fixed; bottom: var(--space-m); left: 50%; transform: translateX(-50%);
+    padding: 10px 22px; border-radius: var(--r-pill); font-size: var(--fs-small);
+    color: #fff; opacity: 0; transition: opacity 0.3s, transform 0.3s;
+    pointer-events: none; z-index: 9999; box-shadow: var(--shadow-elev);
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(-4px); }
+  .toast.ok { background: var(--green); }
+  .toast.err { background: var(--red); }
+
   @media print {
-    .sticky-bar, .modal-overlay, .btn-export { display: none !important; }
-    body { padding: 0; background: #fff !important; color: #000 !important; }
-    .card { border: 1px solid #ccc !important; box-shadow: none !important; }
+    .sticky-bar, .search-wrap, .toolbar, .modal-overlay, .footer { display: none !important; }
+    .card { opacity: 1 !important; transform: none !important; break-inside: avoid; }
+    body { background: white !important; color: black !important; }
+    .cards { padding: 0 !important; }
   }
 </style>
 </head>
@@ -552,30 +848,57 @@ function buildConsolidatedHTML(entries) {
   </header>
 
   <div class="sticky-bar" id="stickyBar">
-    <div class="toolbar">
-      <div class="filter-chips" id="chips">
-        <span class="chip active" data-cat="all">Tous <span class="count">${entries.length}</span></span>
-        <span class="chip" data-cat="top">🏆 Top du top <span class="count">${catCounts.top}</span></span>
-        <span class="chip" data-cat="recommande">✅ Recommandés <span class="count">${catCounts.recommande}</span></span>
-        <span class="chip" data-cat="moyenne">📊 Dans la moyenne <span class="count">${catCounts.moyenne}</span></span>
-        <span class="chip" data-cat="rattrapage">⚠️ En rattrapage <span class="count">${catCounts.rattrapage}</span></span>
-        <span class="chip" data-cat="catastrophe">💥 Échec total <span class="count">${catCounts.catastrophe}</span></span>
+    <div class="toolbar" style="justify-content: space-between;">
+      <div class="toolbar" style="margin-block: 0;">
+        <label class="filter-label" for="catSelect">Catégorie</label>
+        <div class="select-wrap">
+          <select class="select" id="catSelect">
+            <option value="all" selected>Tous (${entries.length})</option>
+            <option value="top">🏆 Top du top (${catCounts.top})</option>
+            <option value="recommande">✅ Recommandés (${catCounts.recommande})</option>
+            <option value="moyenne">📊 Dans la moyenne (${catCounts.moyenne})</option>
+            <option value="rattrapage">⚠️ En rattrapage (${catCounts.rattrapage})</option>
+            <option value="catastrophe">💥 Échec total (${catCounts.catastrophe})</option>
+          </select>
+        </div>
+
+        <label class="filter-label" for="sizeSelect" style="margin-left: var(--space-xs);">Taille</label>
+        <div class="select-wrap">
+          <select class="select" id="sizeSelect">
+            <option value="all" selected>Toutes tailles (${entries.length})</option>
+            <option value="petit">🐱 &lt; 3B (${sizeCounts.petit})</option>
+            <option value="standard">📦 3B–14B (${sizeCounts.standard})</option>
+            <option value="expert">🎓 14B–30B (${sizeCounts.expert})</option>
+            <option value="doctorat">🧠 &gt; 30B (${sizeCounts.doctorat})</option>
+            <option value="inconnu">❓ Inconnue (${sizeCounts.inconnu})</option>
+          </select>
+        </div>
+
+        <label class="filter-label" for="healthSelect" style="margin-left: var(--space-xs);">Santé</label>
+        <div class="select-wrap">
+          <select class="select" id="healthSelect">
+            <option value="all" selected>Toutes (${entries.length})</option>
+            <option value="positif">💚 Saine (≥ 0 PV) (${healthCounts.positif})</option>
+            <option value="negatif">❤️‍🩹 En difficulté (&lt; 0 PV) (${healthCounts.negatif})</option>
+          </select>
+        </div>
+
+        <label class="filter-label" for="ecoleSelect" style="margin-left: var(--space-xs);">École</label>
+        <div class="select-wrap">
+          <select class="select" id="ecoleSelect">
+            <option value="all" selected>Toutes écoles</option>
+            ${ecoleOptions}
+          </select>
+        </div>
       </div>
-    </div>
-    <div class="toolbar">
-      <div class="filter-chips" id="sizeChips">
-        <span class="chip active" data-size="all">Toutes tailles <span class="count">${entries.length}</span></span>
-        <span class="chip" data-size="petit">🐱 &lt; 3B <span class="count">${sizeCounts.petit}</span></span>
-        <span class="chip" data-size="standard">📦 3B–14B <span class="count">${sizeCounts.standard}</span></span>
-        <span class="chip" data-size="expert">🎓 14B–30B <span class="count">${sizeCounts.expert}</span></span>
-        <span class="chip" data-size="doctorat">🧠 &gt; 30B <span class="count">${sizeCounts.doctorat}</span></span>
-      </div>
+
       <div class="search-wrap">
         <input type="text" class="search" id="search" placeholder="🔍 Rechercher un modèle…" />
         <span class="result-count" id="resultCount"></span>
-        <button class="btn btn-export" id="btnExportPdf" title="Imprimer / Exporter en PDF">📄 PDF</button>
-        <button class="btn btn-export" id="btnExportCsv" title="Exporter en CSV">📊 CSV</button>
-        <button class="btn btn-export" id="btnExportMd" title="Exporter en tableau Markdown">📝 MD</button>
+        <button class="btn btn-primary" id="btnCopyAll" title="Copier tout le classement (texte brut) pour le partager">⧉ Copier le classement</button>
+        <button class="btn btn-primary" id="btnExportPdf" title="Imprimer / Exporter en PDF (dialogue navigateur)">📄 Exporter PDF</button>
+        <button class="btn btn-primary" id="btnExportCsv" title="Exporter le classement en CSV (tableur)">📊 Exporter CSV</button>
+        <button class="btn btn-primary" id="btnExportMd" title="Exporter le classement en tableau Markdown">📝 Exporter Markdown</button>
       </div>
     </div>
   </div>
@@ -585,65 +908,138 @@ function buildConsolidatedHTML(entries) {
 
   <footer class="footer">
     <p>Classement communautaire généré par <a href="https://github.com/cisco-03/BenchGo-LLM-School">BenchGo V3</a> — participatif et open source</p>
-    <p>Pour soumettre vos résultats : <code>node runner.js --submit</code> ou bouton "🌐 Envoyer à la communauté" dans le classement local</p>
+    <p>Pour soumettre vos résultats : <code>node runner.js --submit</code> ou le bouton "🌐 Envoyer à la communauté" dans le classement local</p>
   </footer>
 </div>
+
 <div id="modal" class="modal-overlay">
   <div class="modal">
     <div class="modal-head">
       <div class="rank" id="mRank"></div>
       <div class="title">
         <h2 id="mTitle"></h2>
-        <div class="tags" id="mTags"></div>
+        <div class="tags">
+          <span class="verdict-badge" id="mVerdict"></span>
+          <span class="cat-tag" id="mCat"></span>
+        </div>
       </div>
-      <button class="modal-close" onclick="closeModal()" aria-label="Fermer">&times;</button>
+      <button class="modal-close" onclick="closeModal()" aria-label="Fermer">×</button>
     </div>
     <div class="modal-body" id="mBody"></div>
   </div>
 </div>
 
+<div id="toast" class="toast"></div>
+
 <script>
 var MODELS = ${modelsJson};
-function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
-function pctColor(p) { return p>=80?'#3fb950':p>=70?'#d29922':p>=50?'#db6d28':'#f85149'; }
-function gradeColor(g) { return g==='A'?'#3fb950':g==='B'?'#58a6ff':g==='C'?'#d29922':g==='D'?'#db6d28':'#f85149'; }
-function fmtDur(ms) { if(!ms||ms<=0) return '—'; var s=ms/1000; if(s<60) return s.toFixed(1)+'s'; var t=Math.round(s),m=Math.floor(t/60),sec=t%60; if(m<60) return m+'m'+String(sec).padStart(2,'0')+'s'; var h=Math.floor(m/60),mn=m%60; return h+'h'+String(mn).padStart(2,'0')+'m'; }
 
-var activeCat = 'all', activeSize = 'all', searchQ = '';
+function gradeColor(g) {
+  var m = { A:'#3fb950', B:'#58a6ff', C:'#d29922', D:'#bc8cff', F:'#f85149' };
+  return m[g] || '#8b949e';
+}
+function pctColor(p) {
+  var pct = Math.max(0, Math.min(100, p));
+  var hue = pct * 1.2;
+  return 'hsl(' + hue.toFixed(0) + ', 72%, 48%)';
+}
+function dispPct(p) { return Math.max(0, Math.min(100, p)); }
+function fmtDurJS(ms) {
+  if (!isFinite(ms) || ms <= 0) return '—';
+  var s = ms / 1000;
+  if (s < 60) return s.toFixed(1) + 's';
+  var totalSec = Math.round(s);
+  var m = Math.floor(totalSec / 60);
+  var sec = totalSec % 60;
+  if (m < 60) return m + 'm' + String(sec).padStart(2,'0') + 's';
+  var h = Math.floor(m / 60);
+  var min = m % 60;
+  return h + 'h' + String(min).padStart(2,'0') + 'm';
+}
+function tpsColor(tps) {
+  if (tps <= 0) return '#8b949e';
+  if (tps >= 80) return '#3fb950';
+  if (tps >= 50) return '#58a6ff';
+  if (tps >= 25) return '#d29922';
+  if (tps >= 10) return '#e3b341';
+  return '#f85149';
+}
+function esc(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
 function renderCards() {
+  var catSel = document.getElementById('catSelect');
+  var sizeSel = document.getElementById('sizeSelect');
+  var healthSel = document.getElementById('healthSelect');
+  var ecoleSel = document.getElementById('ecoleSelect');
+  if (!catSel || !sizeSel) return;
+  var activeCat = catSel.value;
+  var activeSize = sizeSel.value;
+  var activeHealth = healthSel ? healthSel.value : 'all';
+  var activeEcole = ecoleSel ? ecoleSel.value : 'all';
+  var searchEl = document.getElementById('search');
+  var q = searchEl ? searchEl.value.trim().toLowerCase() : '';
   var container = document.getElementById('cards');
+  if (!container) return;
   container.innerHTML = '';
   var shown = 0;
+
   for (var i = 0; i < MODELS.length; i++) {
     var m = MODELS[i];
     if (activeCat !== 'all' && m.cat.key !== activeCat) continue;
     if (activeSize !== 'all' && m.paramSize.key !== activeSize) continue;
-    if (searchQ && m.model.toLowerCase().indexOf(searchQ) === -1 && m.shortName.toLowerCase().indexOf(searchQ) === -1) continue;
+    if (activeHealth !== 'all') {
+      var isPositif = (m.globalLifeScore || 0) >= 0;
+      if (activeHealth === 'positif' && !isPositif) continue;
+      if (activeHealth === 'negatif' && isPositif) continue;
+    }
+    if (activeEcole !== 'all') {
+      var hasEcole = (m.ecoleNames || []).indexOf(activeEcole) !== -1;
+      if (!hasEcole) continue;
+    }
+    if (q && m.model.toLowerCase().indexOf(q) === -1 && m.shortName.toLowerCase().indexOf(q) === -1) continue;
     shown++;
-    var cardClass = m.rank === 1 ? 'gold' : m.rank === 2 ? 'silver' : m.rank === 3 ? 'bronze' : '';
-    var rankDisp = m.rank <= 3 ? '<span class="medal">' + ['🥇','🥈','🥉'][m.rank-1] + '</span>' : m.rank;
-    var pc = pctColor(m.pct), gc = gradeColor(m.grade);
+
+    var cardClass = i === 0 ? 'gold' : i === 1 ? 'silver' : i === 2 ? 'bronze' : '';
+    var rankDisp = i < 3
+      ? '<span class="medal">' + (i === 0 ? '🥇' : i === 1 ? '🥈' : '🥉') + '</span>'
+      : (i + 1);
+    var pc = pctColor(m.pct);
     var sc = m.globalLifeScore < 0 ? '#f85149' : '#3fb950';
-    var tpsC = m.tokensPerSecond >= 50 ? '#3fb950' : m.tokensPerSecond >= 25 ? '#d29922' : m.tokensPerSecond > 0 ? '#f85149' : '#8b949e';
-    var quantBadge = m.quantization ? '<span class="badge quant">🧩 ' + esc(m.quantization) + '</span>' : '';
-    var contribBadge = m.contributors > 1 ? '<span class="badge contrib">👥 testé par ' + m.contributors + ' personnes</span>' : '';
-    var pseudoBadge = m.pseudo ? '<span class="badge pseudo">✍️ ' + esc(m.pseudo) + '</span>' : '';
-    var vitesseVal = m.tokensPerSecond > 0 ? (m.tokensPerSecond + ' t/s') : (m.elapsedMs > 0 ? fmtDur(m.elapsedMs) : '—');
+    var gc = gradeColor(m.grade);
+    var helpStr = (m.helpCount > 0 || m.retriedCount > 0)
+      ? (m.helpCount > 0 ? 'aide:' + m.helpCount : '') + (m.retriedCount > 0 ? (m.helpCount > 0 ? ' ' : '') + 'rat.:' + m.retriedCount : '')
+      : '—';
+    var tpsC = tpsColor(m.tokensPerSecond);
+    var vitesseVal = m.tokensPerSecond > 0 ? m.tokensPerSecond + ' t/s' : (m.elapsedMs > 0 ? fmtDurJS(m.elapsedMs) : '—');
     var vitesseLbl = m.tokensPerSecond > 0 ? 'Vitesse' : 'Temps';
-    var html = '<div class="card ' + cardClass + '" onclick="openModal(' + i + ')" style="cursor:pointer">' +
+    var szBadge = '<span class="badge" title="' + esc(m.paramSize.label) + '">' + m.paramSize.icon + ' ' + esc(m.paramSize.short) + '</span>';
+    var quantBadge = m.quantization ? '<span class="badge quant" title="Quantification">🧩 ' + esc(m.quantization) + '</span>' : '';
+    var contribBadge = m.contributors > 1 ? '<span class="badge contrib">👥 ' + m.contributors + ' testeurs</span>' : '';
+    var pseudoBadge = m.pseudo ? '<span class="badge pseudo">✍️ ' + esc(m.pseudo) + '</span>' : '';
+
+    var html = '<div class="card ' + cardClass + '" onclick="openModal(' + i + ')">' +
       '<div class="card-row">' +
         '<div class="rank">' + rankDisp + '</div>' +
         '<div class="model-name">' +
           '<div class="name-line"><span class="cat-icon">' + m.cat.icon + '</span>' + esc(m.model) + '</div>' +
-          '<div class="badges">' + quantBadge + ' ' + contribBadge + ' ' + pseudoBadge + ' <span class="badge">' + m.paramSize.icon + ' ' + esc(m.paramSize.label) + '</span></div>' +
+          '<div class="badges">' + szBadge + ' ' + quantBadge + ' ' + contribBadge + ' ' + pseudoBadge + '</div>' +
         '</div>' +
         '<div class="mini-stats">' +
-          '<div class="mini-stat"><span class="lbl">%</span><span class="val" style="color:' + pc + '">' + m.pct + '%</span><div class="pct-bar-wrap"><div class="pct-bar-fill" style="width:' + Math.max(2,m.pct) + '%;background:' + pc + '"></div></div></div>' +
+          '<div class="mini-stat"><span class="lbl">%</span><span class="val" style="color:' + pc + '">' + dispPct(m.pct) + '%</span><div class="pct-bar-wrap"><div class="pct-bar-fill" style="width:' + Math.max(2,dispPct(m.pct)) + '%;background:' + pc + '"></div></div></div>' +
           '<div class="mini-stat"><span class="lbl">Note</span><span class="val grade" style="color:' + gc + '">' + m.grade + '</span></div>' +
-          '<div class="mini-stat"><span class="lbl">Points</span><span class="val">' + m.score + '/' + m.max + '</span></div>' +
           '<div class="mini-stat"><span class="lbl">Santé</span><span class="val" style="color:' + sc + '">' + m.globalLifeScore + ' PV</span></div>' +
-          '<div class="mini-stat"><span class="lbl">Écoles</span><span class="val">' + m.ecoleCount + '</span></div>' +
+          '<div class="mini-stat"><span class="lbl">Oblig.</span><span class="val">' + (m.mandatoryTotal > 0 ? m.mandatoryPct + '%' : '—') + '</span></div>' +
+          '<div class="mini-stat"><span class="lbl">Aide/Rat.</span><span class="val" style="font-size:var(--fs-tiny)">' + esc(helpStr) + '</span></div>' +
           '<div class="mini-stat"><span class="lbl">' + vitesseLbl + '</span><span class="val" style="color:' + tpsC + ';font-size:var(--fs-tiny)">' + esc(vitesseVal) + '</span></div>' +
+        '</div>' +
+        '<div class="card-actions">' +
+          '<button class="kebab" onclick="event.stopPropagation();toggleKebab(this,' + i + ')" aria-label="Actions">⋮</button>' +
+          '<div class="kebab-menu" id="kebabMenu' + i + '" data-idx="' + i + '" onclick="event.stopPropagation()">' +
+            '<div class="kebab-item" onclick="openModal(' + i + ')">🔍 Détails</div>' +
+            '<div class="kebab-item" onclick="copyModelName(' + i + ')">⧉ Copier le nom</div>' +
+          '</div>' +
         '</div>' +
       '</div>' +
     '</div>';
@@ -651,69 +1047,61 @@ function renderCards() {
   }
   document.getElementById('resultCount').textContent = shown + '/' + MODELS.length;
   document.getElementById('emptyMsg').style.display = shown === 0 ? 'block' : 'none';
+  attachScrollAnimations();
 }
 
-// Filtres catégorie
-document.querySelectorAll('#chips .chip').forEach(function(chip) {
-  chip.addEventListener('click', function() {
-    document.querySelectorAll('#chips .chip').forEach(function(c) { c.classList.remove('active'); });
-    chip.classList.add('active');
-    activeCat = chip.dataset.cat;
-    renderCards();
-  });
-});
-// Filtres taille
-document.querySelectorAll('#sizeChips .chip').forEach(function(chip) {
-  chip.addEventListener('click', function() {
-    document.querySelectorAll('#sizeChips .chip').forEach(function(c) { c.classList.remove('active'); });
-    chip.classList.add('active');
-    activeSize = chip.dataset.size;
-    renderCards();
-  });
-});
-// Recherche
-document.getElementById('search').addEventListener('input', function(e) {
-  searchQ = e.target.value.toLowerCase().trim();
-  renderCards();
-});
-// Barre sticky
-(function() {
-  var bar = document.getElementById('stickyBar');
-  function onScroll() { if (window.scrollY > 4) bar.classList.add('stuck'); else bar.classList.remove('stuck'); }
-  window.addEventListener('scroll', onScroll, { passive: true });
-  onScroll();
-})();
+function attachScrollAnimations() {
+  var cards = document.querySelectorAll('#cards .card');
+  if (!cards.length) return;
+  if (!('IntersectionObserver' in window)) {
+    cards.forEach(function(c) { c.classList.add('visible'); });
+    return;
+  }
+  var io = new IntersectionObserver(function(entries) {
+    entries.forEach(function(entry) {
+      if (entry.isIntersecting) {
+        entry.target.classList.add('visible');
+        io.unobserve(entry.target);
+      }
+    });
+  }, { root: null, rootMargin: '0px', threshold: 0.05 });
+  cards.forEach(function(c) { io.observe(c); });
+}
 
-// --- Modale détail ---
 function openModal(idx) {
   var m = MODELS[idx];
   if (!m) return;
-  document.getElementById('mRank').innerHTML = m.rank <= 3
-    ? '<span class="medal">' + ['🥇','🥈','🥉'][m.rank-1] + '</span>'
-    : m.rank;
+  document.getElementById('mRank').innerHTML = (idx < 3 ? '<span class="medal">' + (idx === 0 ? '🥇' : idx === 1 ? '🥈' : '🥉') + '</span>' : (idx + 1));
   document.getElementById('mTitle').textContent = m.model;
-  document.getElementById('mTags').innerHTML =
-    '<span class="cat-tag">' + m.cat.icon + ' ' + esc(m.cat.label) + '</span>' +
-    '<span class="cat-tag">' + m.paramSize.icon + ' ' + esc(m.paramSize.label) + '</span>' +
-    (m.quantization ? '<span class="cat-tag">🧩 ' + esc(m.quantization) + '</span>' : '') +
-    (m.contributors > 1 ? '<span class="cat-tag">👥 ' + m.contributors + ' testeurs</span>' : '') +
-    (m.pseudo ? '<span class="cat-tag">✍️ ' + esc(m.pseudo) + '</span>' : '');
+  var vb = document.getElementById('mVerdict');
+  vb.textContent = m.verdict.label;
+  vb.style.background = m.verdict.color;
+  document.getElementById('mCat').innerHTML = m.cat.icon + ' ' + esc(m.cat.label) + ' · ' + m.paramSize.icon + ' ' + esc(m.paramSize.label);
 
-  var pc = pctColor(m.pct), gc = gradeColor(m.grade);
+  var pc = pctColor(m.pct);
   var sc = m.globalLifeScore < 0 ? '#f85149' : '#3fb950';
-  var tpsC = m.tokensPerSecond >= 50 ? '#3fb950' : m.tokensPerSecond >= 25 ? '#d29922' : m.tokensPerSecond > 0 ? '#f85149' : '#8b949e';
+  var gc = gradeColor(m.grade);
+  var oc = m.mandatoryTotal > 0 ? pctColor(m.mandatoryPct) : '#8b949e';
 
   var body = '';
   body += '<h3>Statistiques</h3>';
   body += '<div class="full-stats">';
   body += statBox('Points', m.score + ' / ' + m.max);
-  body += statBox('% global', '<span style="color:' + pc + '">' + Math.max(0, Math.min(100, m.pct)) + '%</span>');
+  body += statBoxBar('% global', dispPct(m.pct) + '%', pc, dispPct(m.pct));
   body += statBox('Note', '<span style="color:' + gc + ';font-size:1.4em">' + m.grade + '</span>');
+  body += statBoxBar('Obligatoire', m.mandatoryTotal > 0 ? m.mandatoryPct + '% (' + m.mandatoryPassed + '/' + m.mandatoryTotal + ')' : '—', oc, m.mandatoryPct);
   body += statBox('Santé', '<span style="color:' + sc + '">' + m.globalLifeScore + ' PV</span>');
   body += statBox('Bonus', m.optionalBonus > 0 ? '+' + m.optionalBonus : '—');
+  body += statBox('Aide prof.', m.helpCount > 0 ? m.helpCount + 'x' : '—');
+  body += statBox('Rattrapage', m.retriedCount > 0 ? m.retriedCount + 'x' : '—');
   body += statBox('Écoles', m.ecoleCount);
-  if (m.tokensPerSecond > 0) body += statBox('Vitesse', '<span style="color:' + tpsC + '">' + m.tokensPerSecond + ' t/s</span>');
-  if (m.elapsedMs > 0) body += statBox('Temps inf.', fmtDur(m.elapsedMs));
+  body += statBox('Quantif.', m.quantization ? '<span style="color:#bc8cff">' + esc(m.quantization) + '</span>' : '—');
+  if (m.elapsedMs > 0 || m.tokens > 0) {
+    body += statBox('Temps inf.', fmtDurJS(m.elapsedMs));
+    body += statBox('Tokens', m.tokens > 0 ? m.tokens : '—');
+    body += statBox('Vitesse', m.tokensPerSecond > 0 ? '<span style="color:' + tpsColor(m.tokensPerSecond) + '">' + m.tokensPerSecond + ' t/s</span>' : '—');
+    body += statBox('Temps réel', fmtDurJS(m.wallMs));
+  }
   body += '</div>';
 
   if (m.modelUrl) {
@@ -721,7 +1109,167 @@ function openModal(idx) {
     body += '<div class="model-url-section"><a href="' + esc(m.modelUrl) + '" target="_blank" rel="noopener noreferrer" class="model-url-link">🌐 ' + esc(m.modelUrl) + '</a></div>';
   }
 
+  body += '<h3>Forces & Faiblesses</h3>';
+  body += '<div class="args-grid">';
+  body += argsCol('args-forces', '✅ Forces', m.args.forces);
+  body += argsCol('args-weak', '❌ Faiblesses', m.args.faiblesses);
+  body += '</div>';
+  if (m.args.notes.length > 0) {
+    body += '<div class="args-block args-notes" style="margin-top:var(--space-s);">';
+    body += '<div class="args-title">ℹ Notes</div><ul class="args-list">';
+    for (var n of m.args.notes) body += '<li>' + esc(n) + '</li>';
+    body += '</ul></div>';
+  }
+
+  body += '<h3>Détail par école</h3>';
+  body += '<table class="ecoles-table"><thead><tr>' +
+    '<th>École</th><th class="num">Points</th><th>%</th><th>Note</th>' +
+    '<th class="num">Bonus</th><th class="num">Santé</th><th class="num">Aide</th><th class="num">Rat.</th><th class="num">Calib.</th>' +
+    '<th class="num">Temps</th><th class="num">Vitesse</th><th>Date</th><th>Tent.</th>' +
+    '</tr></thead><tbody>';
+  for (var e of m.ecoles) {
+    var egc = gradeColor(e.grade);
+    var epc = pctColor(e.pct);
+    var attempts = e.attempts || [];
+    var hasHistory = attempts.length > 1;
+    var ecoleCell = esc(e.ecole);
+    var eTpsC = tpsColor(e.tokensPerSecond);
+    var eTemps = e.elapsedMs > 0 ? fmtDurJS(e.elapsedMs) : '—';
+    var eVitesse = e.tokensPerSecond > 0 ? '<span style="color:' + eTpsC + '">' + e.tokensPerSecond + ' t/s</span>' : '—';
+    if (hasHistory) {
+      ecoleCell += ' <span class="hist-toggle" onclick="toggleHistory(this)" title="Voir l\'historique des re-tests">▸ ' + attempts.length + ' tentatives</span>';
+    }
+    body += '<tr' + (hasHistory ? ' class="ecole-main"' : '') + '>' +
+      '<td>' + ecoleCell + '</td>' +
+      '<td class="num">' + e.score + '/' + e.max + '</td>' +
+      '<td style="color:' + epc + '">' + e.pct + '%</td>' +
+      '<td class="grade" style="color:' + egc + '">' + e.grade + '</td>' +
+      '<td class="num">' + (e.optionalBonus > 0 ? '+' + e.optionalBonus : '—') + '</td>' +
+      '<td class="num">' + e.globalLifeScore + '</td>' +
+      '<td class="num">' + (e.helpCount > 0 ? e.helpCount : '—') + '</td>' +
+      '<td class="num">' + (e.retriedCount > 0 ? e.retriedCount : '—') + '</td>' +
+      '<td class="num">' + (e.calibrationIndex != null ? 'C=' + e.calibrationIndex.toFixed(2) : '—') + '</td>' +
+      '<td class="num">' + eTemps + '</td>' +
+      '<td class="num">' + eVitesse + '</td>' +
+      '<td>' + esc(e.date) + '</td>' +
+      '<td class="num">' + attempts.length + '</td>' +
+      '</tr>';
+    if (hasHistory) {
+      body += '<tr class="hist-row" style="display:none;"><td colspan="13">' +
+        '<div class="hist-block">' +
+        '<div class="hist-title">Historique des ' + attempts.length + ' tentatives (chronologique) :</div>' +
+        '<table class="hist-table"><thead><tr>' +
+        '<th>#</th><th class="num">Points</th><th>%</th><th>Note</th>' +
+        '<th class="num">Bonus</th><th class="num">Santé</th><th class="num">Aide</th><th class="num">Rat.</th><th class="num">Calib.</th>' +
+        '<th class="num">Temps</th><th class="num">Vitesse</th><th>Date</th>' +
+        '</tr></thead><tbody>';
+      for (var a of attempts) {
+        var agc = gradeColor(a.grade);
+        var apc = pctColor(a.pct);
+        var isBest = (a.pct === e.pct && a.score === e.score);
+        var bestTag = isBest ? ' <span class="best-tag" title="Meilleure tentative">★</span>' : '';
+        var aTpsC = tpsColor(a.tokensPerSecond);
+        var aTemps = a.elapsedMs > 0 ? fmtDurJS(a.elapsedMs) : '—';
+        var aVitesse = a.tokensPerSecond > 0 ? '<span style="color:' + aTpsC + '">' + a.tokensPerSecond + ' t/s</span>' : '—';
+        body += '<tr' + (isBest ? ' class="hist-best"' : '') + '>' +
+          '<td class="num">' + a.n + bestTag + '</td>' +
+          '<td class="num">' + a.score + '/' + a.max + '</td>' +
+          '<td style="color:' + apc + '">' + a.pct + '%</td>' +
+          '<td class="grade" style="color:' + agc + '">' + a.grade + '</td>' +
+          '<td class="num">' + (a.optionalBonus > 0 ? '+' + a.optionalBonus : '—') + '</td>' +
+          '<td class="num">' + a.globalLifeScore + '</td>' +
+          '<td class="num">' + (a.helpCount > 0 ? a.helpCount : '—') + '</td>' +
+          '<td class="num">' + (a.retriedCount > 0 ? a.retriedCount : '—') + '</td>' +
+          '<td class="num">' + (a.calibrationIndex != null ? 'C=' + a.calibrationIndex.toFixed(2) : '—') + '</td>' +
+          '<td class="num">' + aTemps + '</td>' +
+          '<td class="num">' + aVitesse + '</td>' +
+          '<td>' + esc(a.date) + (a.time ? ' ' + esc(a.time).replace('-', 'h') : '') + '</td>' +
+          '</tr>';
+      }
+      body += '</tbody></table></div></td></tr>';
+    }
+  }
+  body += '</tbody></table>';
+
+  body += '<h3>📋 Rapport intégral (comportement & raisonnement)</h3>';
+  body += '<div class="report-actions">';
+  body += '<button class="btn btn-primary" id="btnExportReport" onclick="exportReport(' + idx + ')" title="Télécharger le rapport intégral (Markdown) prêt à transmettre à Gemini/ChatGPT pour analyse → NotebookLM">⬇ Exporter le rapport intégral</button>';
+  body += '<span class="report-actions-hint">Télécharge un fichier .md à envoyer à un modèle cloud (Gemini, ChatGPT…) pour analyse → verdict → NotebookLM.</span>';
+  body += '</div>';
+  body += '<div class="report-block">';
+  var hasAnyTier = false;
+  for (var e of m.ecoles) {
+    var tiers = e.tiers || [];
+    var sp = e.selfProfile;
+    if (tiers.length === 0 && !sp) continue;
+    hasAnyTier = true;
+    body += '<div class="report-school">';
+    body += '<div class="report-school-head" onclick="toggleReport(this)"><span class="caret">▶</span><span class="sch-title">🏫 ' + esc(e.ecole) + '</span><span class="exo-pts">' + tiers.length + ' tier(s)</span></div>';
+    body += '<div class="report-school-body">';
+    if (sp && sp.skills) {
+      body += '<div class="report-selfprofile">';
+      body += '<div class="sp-title">🧠 Auto-profilage déclaré par le modèle</div><ul>';
+      var spLabels = {
+        javascript_basics: 'JavaScript — Bases & Algorithmique simple',
+        javascript_async: 'JavaScript Asynchrone (Promises, concurrence, retry)',
+        algorithms_advanced: 'Algorithmes & Structures de données avancées',
+        code_debugging: 'Débogage & Sécurité applicative'
+      };
+      for (var sk in spLabels) {
+        var lvl = sp.skills[sk] ? sp.skills[sk].level : '?';
+        body += '<li><b>' + esc(spLabels[sk]) + '</b> : niveau ' + lvl + '/5</li>';
+      }
+      if (sp.justification) body += '<li><i>Justification :</i> ' + esc(sp.justification) + '</li>';
+      body += '</ul></div>';
+    }
+    for (var t of tiers) {
+      body += '<div class="report-tier">';
+      var mandBadge = t.isMandatory ? '<span class="th-badge mand">Obligatoire</span>' : '<span class="th-badge opt">Optionnel</span>';
+      body += '<div class="report-tier-head" onclick="toggleReport(this)"><span class="caret">▶</span><span class="th-title">Tier ' + esc(String(t.tierNum)) + ' — ' + esc(t.tierTitle || '') + ' (' + esc(t.className || '') + ')</span>' + mandBadge + '</div>';
+      body += '<div class="report-tier-body">';
+      var evals = t.evalResults || [];
+      if (evals.length > 0) {
+        body += '<div class="report-exo-label">Exercices tentés (' + evals.length + ')</div>';
+        for (var r of evals) {
+          var stCls = r.status === 'success' ? 'success' : (r.status === 'bypassed' ? 'bypass' : 'fail');
+          var stTxt = r.status === 'success' ? '✔ Validé' : (r.status === 'bypassed' ? '⊘ Bypassé' : '✘ Échec');
+          body += '<div class="report-exo">';
+          body += '<div class="report-exo-head"><span class="exo-id">' + esc(r.id) + '</span>' + (r.taskType ? '<span class="badge">' + esc(r.taskType) + '</span>' : '') + '<span class="exo-status ' + stCls + '">' + stTxt + '</span><span class="exo-pts">' + r.points + '/' + r.maxPoints + ' pts' + (r.helpUsed ? ' · aide' : '') + (r.retried ? ' · rattrapage' : '') + '</span></div>';
+          if (r.status === 'bypassed') { body += '<div class="report-empty">Exercice bypassé (non exécuté).</div>'; body += '</div>'; continue; }
+          if (r.code && String(r.code).trim()) {
+            body += '<div class="report-exo-label">Code proposé</div>';
+            body += '<pre class="report-code">' + esc(String(r.code).trim()) + '</pre>';
+          } else {
+            body += '<div class="report-empty">Aucun code exploitable produit.</div>';
+          }
+          if (r.failureExplanation) {
+            body += '<div class="report-exo-label">Explication de l\'échec (par l\'élève)</div>';
+            body += '<div class="report-expl">' + esc(r.failureExplanation) + '</div>';
+          }
+          if (r.teacherCorrection) {
+            body += '<div class="report-exo-label">🎓 Correction du professeur IA</div>';
+            body += '<div class="report-teacher">' + esc(r.teacherCorrection) + '</div>';
+          }
+          body += '</div>';
+        }
+      } else {
+        body += '<div class="report-empty">Aucun exercice enregistré pour ce tier.</div>';
+      }
+      if (t.rawResponse && String(t.rawResponse).trim()) {
+        body += '<div class="report-exo-label">💭 Réponse brute complète du modèle (raisonnement + code)</div>';
+        body += '<pre class="report-raw">' + esc(String(t.rawResponse).trim()) + '</pre>';
+      }
+      body += '</div></div>';
+    }
+    body += '</div></div>';
+  }
+  if (!hasAnyTier) {
+    body += '<div class="report-empty">Aucun rapport intégral disponible pour ce modèle.</div>';
+  }
+  body += '</div>';
+
   body += '<div class="meta-line">';
+  body += 'Dernière mise à jour : ' + esc(m.submittedAt || '—') + ' · ';
   body += 'Nom court : <code>' + esc(m.shortName) + '</code>';
   if (m.pseudo) body += ' · Soumis par ' + esc(m.pseudo);
   if (m.contributors > 1) body += ' · Testé par ' + m.contributors + ' personnes';
@@ -731,23 +1279,163 @@ function openModal(idx) {
   document.getElementById('modal').classList.add('show');
   document.body.style.overflow = 'hidden';
 }
+
+function statBox(lbl, val) {
+  return '<div class="full-stat"><div class="lbl">' + lbl + '</div><div class="val">' + val + '</div></div>';
+}
+function statBoxBar(lbl, val, color, pct) {
+  return '<div class="full-stat"><div class="lbl">' + lbl + '</div><div class="val" style="color:' + color + '">' + val + '</div><div class="bar"><div style="width:' + Math.max(2,pct) + '%;background:' + color + '"></div></div></div>';
+}
+function argsCol(cls, title, items) {
+  var h = '<div class="args-block ' + cls + '"><div class="args-title">' + title + '</div>';
+  if (items.length > 0) { h += '<ul class="args-list">'; for (var it of items) h += '<li>' + esc(it) + '</li>'; h += '</ul>'; }
+  else h += '<div class="args-empty">Aucun</div>';
+  h += '</div>';
+  return h;
+}
 function closeModal() {
   document.getElementById('modal').classList.remove('show');
   document.body.style.overflow = '';
 }
-function statBox(lbl, val) {
-  return '<div class="full-stat"><div class="lbl">' + lbl + '</div><div class="val">' + val + '</div></div>';
+function toggleHistory(el) {
+  var mainRow = el.closest('tr.ecole-main');
+  if (!mainRow) return;
+  var histRow = mainRow.nextElementSibling;
+  if (!histRow || !histRow.classList.contains('hist-row')) return;
+  var shown = histRow.style.display !== 'none';
+  histRow.style.display = shown ? 'none' : 'table-row';
+  var match = el.textContent.match(/(\d+)/);
+  var n = match ? match[1] : '';
+  el.setAttribute('data-n', n);
+  el.textContent = (shown ? '▸' : '▾') + ' ' + n + ' tentatives';
+}
+function toggleReport(el) {
+  var body = el.nextElementSibling;
+  if (!body) return;
+  var isOpen = body.classList.toggle('open');
+  el.classList.toggle('open', isOpen);
 }
 document.getElementById('modal').addEventListener('click', function(e) {
   if (e.target === this) closeModal();
 });
-document.addEventListener('keydown', function(e) {
-  if (e.key === 'Escape') closeModal();
+document.addEventListener('keydown', function(e) { if (e.key === 'Escape') closeModal(); });
+
+document.getElementById('catSelect').addEventListener('change', renderCards);
+document.getElementById('sizeSelect').addEventListener('change', renderCards);
+document.getElementById('search').addEventListener('input', renderCards);
+var _healthSel = document.getElementById('healthSelect');
+if (_healthSel) _healthSel.addEventListener('change', renderCards);
+var _ecoleSel = document.getElementById('ecoleSelect');
+if (_ecoleSel) _ecoleSel.addEventListener('change', renderCards);
+
+document.addEventListener('click', function(e) {
+  var openMenu = document.querySelector('.kebab-menu.show');
+  if (!openMenu) return;
+  var btn = document.querySelector('.kebab.active');
+  if (btn && (e.target === btn || btn.contains(e.target))) return;
+  openMenu.classList.remove('show');
+  if (btn) btn.classList.remove('active');
+  document.querySelectorAll('.card.menu-open').forEach(function(c) { c.classList.remove('menu-open'); });
 });
 
-// --- Exports ---
+function toggleKebab(btn, idx) {
+  var menu = document.getElementById('kebabMenu' + idx);
+  if (!menu) return;
+  var isOpen = menu.classList.contains('show');
+  document.querySelectorAll('.kebab-menu.show').forEach(function(m) { m.classList.remove('show'); });
+  document.querySelectorAll('.kebab.active').forEach(function(b) { b.classList.remove('active'); });
+  document.querySelectorAll('.card.menu-open').forEach(function(c) { c.classList.remove('menu-open'); });
+  if (!isOpen) {
+    menu.classList.add('show');
+    btn.classList.add('active');
+    var card = btn.closest('.card');
+    if (card) card.classList.add('menu-open');
+  }
+}
+
+function showToast(msg, ok) {
+  var t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast show ' + (ok ? 'ok' : 'err');
+  setTimeout(function(){ t.className = 'toast ' + (ok ? 'ok' : 'err'); }, 2500);
+}
+
+function copyModelName(idx) {
+  var name = MODELS[idx].model;
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(name).then(function() { showToast('Nom copié : ' + name, true); }, function() { fallbackCopy(name); });
+  } else { fallbackCopy(name); }
+}
+function fallbackCopy(text) {
+  var ta = document.createElement('textarea');
+  ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+  document.body.appendChild(ta); ta.select();
+  try { document.execCommand('copy'); showToast('Nom copié : ' + text, true); }
+  catch (e) { showToast('Copie impossible', false); }
+  document.body.removeChild(ta);
+}
+
+function exportReport(idx) {
+  var m = MODELS[idx];
+  var md = '# Rapport intégral — ' + m.model + '\\n\\n';
+  md += '**Nom court :** ' + m.shortName + '\\n';
+  md += '- Score global : ' + m.score + '/' + m.max + ' (' + m.pct + '%) — Note ' + m.grade + '\\n';
+  md += '- Quantification : ' + (m.quantization || '—') + '\\n\\n';
+  for (var i = 0; i < m.ecoles.length; i++) {
+    var ec = m.ecoles[i];
+    md += '### École : ' + ec.ecole + '\\n\\n';
+    if (ec.selfProfile && ec.selfProfile.skills) {
+      md += '#### Auto-profilage déclaré\\n';
+      var sp = ec.selfProfile.skills;
+      md += '- javascript_basics : ' + (sp.javascript_basics ? sp.javascript_basics.level : '?') + '/5\\n';
+      md += '- javascript_async : ' + (sp.javascript_async ? sp.javascript_async.level : '?') + '/5\\n';
+      md += '- algorithms_advanced : ' + (sp.algorithms_advanced ? sp.algorithms_advanced.level : '?') + '/5\\n';
+      md += '- code_debugging : ' + (sp.code_debugging ? sp.code_debugging.level : '?') + '/5\\n';
+      if (ec.selfProfile.justification) md += '- Justification : ' + ec.selfProfile.justification + '\\n';
+      md += '\\n';
+    }
+    for (var j = 0; j < (ec.tiers || []).length; j++) {
+      var t = ec.tiers[j];
+      md += '#### Tier ' + t.tierNum + ' — ' + (t.tierTitle || '') + ' (' + (t.className || '') + ')\\n\\n';
+      md += '- Statut : ' + (t.isMandatory ? 'Obligatoire' : 'Optionnel') + '\\n\\n';
+      var evals = t.evalResults || [];
+      if (evals.length > 0) {
+        md += '| Exercice | Type | Points | Max | Statut |\\n|---|---|---:|---:|---|\\n';
+        for (var k = 0; k < evals.length; k++) {
+          var r = evals[k];
+          var st = r.status === 'success' ? '✔ Validé' : (r.status === 'bypassed' ? '⊘ Bypassé' : '✘ Échec');
+          md += '| ' + r.id + ' | ' + (r.taskType || '—') + ' | ' + r.points + ' | ' + r.maxPoints + ' | ' + st + ' |\\n';
+        }
+        md += '\\n';
+        for (var k2 = 0; k2 < evals.length; k2++) {
+          var r2 = evals[k2];
+          if (r2.status === 'bypassed') continue;
+          md += '**Exercice ' + r2.id + '** (' + (r2.status === 'success' ? 'validé' : 'échec') + ')\\n\\n';
+          if (r2.code && String(r2.code).trim()) md += '``' + String.fromCharCode(96) + 'javascript' + String.fromCharCode(92) + 'n' + String(r2.code).trim() + String.fromCharCode(92) + 'n``' + String.fromCharCode(96) + String.fromCharCode(92) + 'n' + String.fromCharCode(92) + 'n';
+          if (r2.failureExplanation) md += '**Explication échec :** ' + r2.failureExplanation + '\\n\\n';
+          if (r2.teacherCorrection) md += '**🎓 Correction professeur :** ' + r2.teacherCorrection + '\\n\\n';
+        }
+      }
+      if (t.rawResponse && String(t.rawResponse).trim()) md += '##### Réponse brute' + String.fromCharCode(92) + 'n' + String.fromCharCode(92) + 'n``' + String.fromCharCode(96) + 'text' + String.fromCharCode(92) + 'n' + String(t.rawResponse).trim() + String.fromCharCode(92) + 'n``' + String.fromCharCode(96) + String.fromCharCode(92) + 'n' + String.fromCharCode(92) + 'n';
+    }
+    md += '---\\n\\n';
+  }
+  var safe = String(m.shortName || 'modele').replace(/[^a-zA-Z0-9._-]/g, '_');
+  var d = new Date();
+  var p = function(n){ return String(n).padStart(2,'0'); };
+  var fn = 'rapport_integral_' + safe + '_' + d.getFullYear() + '-' + p(d.getMonth()+1) + '-' + p(d.getDate()) + '.md';
+  var blob = new Blob([md], { type: 'text/markdown;charset=utf-8' });
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url; a.download = fn;
+  document.body.appendChild(a); a.click();
+  document.body.removeChild(a);
+  setTimeout(function(){ URL.revokeObjectURL(url); }, 1500);
+  showToast('Rapport téléchargé : ' + fn, true);
+}
+
 function downloadTextFile(content, filename, mimeType) {
-  var blob = new Blob(['\ufeff' + content], { type: mimeType || 'text/plain;charset=utf-8' });
+  var blob = new Blob(['\\ufeff' + content], { type: mimeType || 'text/plain;charset=utf-8' });
   var url = URL.createObjectURL(blob);
   var a = document.createElement('a');
   a.href = url; a.download = filename;
@@ -757,36 +1445,124 @@ function downloadTextFile(content, filename, mimeType) {
 }
 function csvCell(s) {
   s = String(s == null ? '' : s);
-  if (s.indexOf(',') >= 0 || s.indexOf('"') >= 0 || s.indexOf('\n') >= 0) return '"' + s.replace(/"/g, '""') + '"';
+  if (s.indexOf(',') >= 0 || s.indexOf('"') >= 0 || s.indexOf('\\n') >= 0) return '"' + s.replace(/"/g, '""') + '"';
   return s;
 }
-function mdCell(s) { return String(s == null ? '' : s).replace(/\|/g, '\\|'); }
-function dispPct(p) { return Math.max(0, Math.min(100, p)); }
+function mdCell(s) { return String(s == null ? '' : s).replace(/\|/g, '\\\\|'); }
 
 function exportCsv() {
-  var rows = [['Rang','Modèle','Quantification','Score','Max','%','Note','Santé (PV)','Bonus','Écoles','Vitesse (t/s)','Temps inf.','Lien']];
+  var rows = [['Rang','Modèle','Quantification','Score','Max','%','Note','Obligatoire %','Obligatoire (passé/total)','Santé (PV)','Bonus','Écoles','Vitesse (t/s)','Temps inf.','Temps réel','Lien']];
   for (var i = 0; i < MODELS.length; i++) {
     var m = MODELS[i];
-    rows.push([String(m.rank), csvCell(m.model), csvCell(m.quantization || ''), String(m.score), String(m.max), String(dispPct(m.pct)), m.grade, String(m.globalLifeScore), m.optionalBonus > 0 ? String(m.optionalBonus) : '0', String(m.ecoleCount), m.tokensPerSecond > 0 ? String(m.tokensPerSecond) : '', m.elapsedMs > 0 ? fmtDur(m.elapsedMs) : '', csvCell(m.modelUrl || '')]);
+    rows.push([
+      String(i + 1),
+      csvCell(m.model),
+      csvCell(m.quantization || ''),
+      String(m.score),
+      String(m.max),
+      String(dispPct(m.pct)),
+      m.grade,
+      m.mandatoryTotal > 0 ? String(m.mandatoryPct) : '',
+      m.mandatoryTotal > 0 ? (m.mandatoryPassed + '/' + m.mandatoryTotal) : '',
+      String(m.globalLifeScore),
+      m.optionalBonus > 0 ? String(m.optionalBonus) : '0',
+      String(m.ecoleCount),
+      m.tokensPerSecond > 0 ? String(m.tokensPerSecond) : '',
+      m.elapsedMs > 0 ? fmtDurJS(m.elapsedMs) : '',
+      m.wallMs > 0 ? fmtDurJS(m.wallMs) : '',
+      csvCell(m.modelUrl || '')
+    ]);
   }
-  downloadTextFile(rows.map(function(r){return r.join(',')}).join('\n'), 'classement_communautaire_' + new Date().toISOString().slice(0,10) + '.csv', 'text/csv;charset=utf-8');
+  downloadTextFile(rows.map(function(r){ return r.join(','); }).join('\\n'), 'classement_communautaire_' + new Date().toISOString().slice(0,10) + '.csv', 'text/csv;charset=utf-8');
+  showToast('CSV exporté (' + MODELS.length + ' modèles)', true);
 }
 function exportMd() {
-  var lines = ['# Classement Communautaire BenchGo V3 — ' + new Date().toLocaleDateString('fr-FR'), ''];
-  lines.push('| Rang | Modèle | Quantif. | Score | % | Note | Santé | Bonus | Écoles | Vitesse | Lien |');
-  lines.push('|------|--------|----------|-------|---|------|-------|-------|--------|---------|------|');
+  var lines = [];
+  lines.push('# Classement Communautaire BenchGo V3 — ' + new Date().toLocaleDateString('fr-FR'));
+  lines.push('');
+  lines.push('| Rang | Modèle | Quantif. | Score | % | Note | Oblig. | Santé | Bonus | Écoles | Vitesse | Temps | Lien |');
+  lines.push('|------|--------|----------|-------|---|------|--------|-------|-------|--------|---------|-------|------|');
   for (var i = 0; i < MODELS.length; i++) {
     var m = MODELS[i];
-    var medal = m.rank === 1 ? '🥇' : m.rank === 2 ? '🥈' : m.rank === 3 ? '🥉' : String(m.rank);
-    var vit = m.tokensPerSecond > 0 ? (m.tokensPerSecond + ' t/s') : (m.elapsedMs > 0 ? fmtDur(m.elapsedMs) : '—');
+    var medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : String(i + 1);
+    var vit = m.tokensPerSecond > 0 ? (m.tokensPerSecond + ' t/s') : (m.elapsedMs > 0 ? fmtDurJS(m.elapsedMs) : '—');
+    var temps = m.elapsedMs > 0 ? fmtDurJS(m.elapsedMs) : '—';
+    var oblig = m.mandatoryTotal > 0 ? (m.mandatoryPct + '%') : '—';
     var lien = m.modelUrl ? '[Voir](' + m.modelUrl + ')' : '—';
-    lines.push('| ' + medal + ' | ' + mdCell(m.model) + ' | ' + mdCell(m.quantization || '—') + ' | ' + m.score + '/' + m.max + ' | ' + dispPct(m.pct) + '% | ' + m.grade + ' | ' + m.globalLifeScore + ' PV | ' + (m.optionalBonus > 0 ? '+' + m.optionalBonus : '—') + ' | ' + m.ecoleCount + ' | ' + vit + ' | ' + lien + ' |');
+    lines.push('| ' + medal + ' | ' + mdCell(m.model) + ' | ' + mdCell(m.quantization || '—') + ' | ' + m.score + '/' + m.max + ' | ' + dispPct(m.pct) + '% | ' + m.grade + ' | ' + oblig + ' | ' + m.globalLifeScore + ' PV | ' + (m.optionalBonus > 0 ? '+' + m.optionalBonus : '—') + ' | ' + m.ecoleCount + ' | ' + vit + ' | ' + temps + ' | ' + lien + ' |');
   }
-  downloadTextFile(lines.join('\n'), 'classement_communautaire_' + new Date().toISOString().slice(0,10) + '.md', 'text/markdown;charset=utf-8');
+  downloadTextFile(lines.join('\\n'), 'classement_communautaire_' + new Date().toISOString().slice(0,10) + '.md', 'text/markdown;charset=utf-8');
+  showToast('Markdown exporté (' + MODELS.length + ' modèles)', true);
 }
-document.getElementById('btnExportPdf').addEventListener('click', function() { window.print(); });
+function exportPdf() {
+  showToast("Dialogue d'impression ouvert — choisissez « Enregistrer en PDF »", true);
+  window.print();
+}
+function copyLeaderboard() {
+  var btn = document.getElementById('btnCopyAll');
+  var activeCat = document.getElementById('catSelect').value;
+  var activeSize = document.getElementById('sizeSelect').value;
+  var activeHealth = document.getElementById('healthSelect') ? document.getElementById('healthSelect').value : 'all';
+  var activeEcole = document.getElementById('ecoleSelect') ? document.getElementById('ecoleSelect').value : 'all';
+  var q = document.getElementById('search').value.trim().toLowerCase();
+
+  var lines = [];
+  lines.push('🌐 Classement Communautaire BenchGo V3 — ' + new Date().toLocaleString('fr-FR'));
+  lines.push('Filtre catégorie : ' + (activeCat === 'all' ? 'tous' : activeCat) + ' | Taille : ' + (activeSize === 'all' ? 'toutes' : activeSize) + ' | Santé : ' + (activeHealth === 'all' ? 'toutes' : activeHealth) + ' | École : ' + (activeEcole === 'all' ? 'toutes' : activeEcole) + (q ? ' | Recherche : ' + q : ''));
+  lines.push('');
+  lines.push('Rang | Modèle | Quantif. | Points | % | Note | Oblig. | Santé | Écoles | Temps | Vitesse | Verdict');
+  lines.push('---|---|---|---|---|---|---|---|---|---|---|---');
+  var copied = 0;
+  for (var i = 0; i < MODELS.length; i++) {
+    var m = MODELS[i];
+    if (activeCat !== 'all' && m.cat.key !== activeCat) continue;
+    if (activeSize !== 'all' && m.paramSize.key !== activeSize) continue;
+    if (activeHealth !== 'all') {
+      var isPositif = (m.globalLifeScore || 0) >= 0;
+      if (activeHealth === 'positif' && !isPositif) continue;
+      if (activeHealth === 'negatif' && isPositif) continue;
+    }
+    if (activeEcole !== 'all') {
+      var hasEcole = (m.ecoleNames || []).indexOf(activeEcole) !== -1;
+      if (!hasEcole) continue;
+    }
+    if (q && m.model.toLowerCase().indexOf(q) === -1 && m.shortName.toLowerCase().indexOf(q) === -1) continue;
+    var rank = copied < 3 ? ['🥇','🥈','🥉'][copied] : ('' + (copied + 1));
+    var temps = m.elapsedMs > 0 ? fmtDurJS(m.elapsedMs) : '—';
+    var vit = m.tokensPerSecond > 0 ? (m.tokensPerSecond + ' t/s') : '—';
+    var oblig = m.mandatoryTotal > 0 ? m.mandatoryPct + '%' : '—';
+    lines.push(rank + ' | ' + m.model + ' | ' + (m.quantization || '—') + ' | ' + m.score + '/' + m.max + ' | ' + m.pct + '% | ' + m.grade + ' | ' + oblig + ' | ' + m.globalLifeScore + ' PV | ' + m.ecoleCount + ' | ' + temps + ' | ' + vit + ' | ' + m.verdict.label);
+    copied++;
+  }
+  lines.push('');
+  lines.push('Total : ' + copied + ' modèle(s) — généré par BenchGo V3');
+
+  var text = lines.join('\\n');
+  var finish = function(ok) {
+    if (ok) {
+      showToast('Classement copié (' + copied + ' modèle' + (copied > 1 ? 's' : '') + ')', true);
+      if (btn) { btn.classList.add('done'); btn.textContent = '✓ Copié !'; setTimeout(function(){ btn.classList.remove('done'); btn.textContent = '⧉ Copier le classement'; }, 2000); }
+    } else {
+      showToast('Copie impossible', false);
+    }
+  };
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(function(){ finish(true); }, function(){ fallbackCopy(text); finish(true); });
+  } else {
+    fallbackCopy(text); finish(true);
+  }
+}
+document.getElementById('btnCopyAll').addEventListener('click', copyLeaderboard);
+document.getElementById('btnExportPdf').addEventListener('click', exportPdf);
 document.getElementById('btnExportCsv').addEventListener('click', exportCsv);
 document.getElementById('btnExportMd').addEventListener('click', exportMd);
+
+(function() {
+  var bar = document.getElementById('stickyBar');
+  function onScroll() { if (window.scrollY > 4) bar.classList.add('stuck'); else bar.classList.remove('stuck'); }
+  window.addEventListener('scroll', onScroll, { passive: true });
+  onScroll();
+})();
 
 renderCards();
 </script>

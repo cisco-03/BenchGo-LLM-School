@@ -3220,7 +3220,17 @@ function startServer(port) {
             date: ec.date,
             attemptsCount: ec.attemptsCount,
             globalLifeScore: ec.globalLifeScore,
-            tokensPerSecond: ec.tokensPerSecond
+            tokensPerSecond: ec.tokensPerSecond,
+            attempts: (ec.attempts || []).map(a => ({
+              date: a.date,
+              time: a.time,
+              pct: a.pct,
+              score: a.score,
+              max: a.max,
+              ecole: ec.ecole,
+              globalLifeScore: a.globalLifeScore,
+              tokensPerSecond: a.tokensPerSecond
+            }))
           }))
         }));
         res.writeHead(200, securityHeaders);
@@ -3301,9 +3311,11 @@ function getModelEntryByShortName(shortName) {
 
 // --- Dashboard web (§3 UI/Ludisme) ---
 // Construit une page HTML autonome qui embarque Chart.js (via CDN) et fetch
-// /api/dashboard-data pour visualiser l'historique d'un modèle et la progression
-// d'une école dans le temps. Aucune dépendance npm : Chart.js est chargé depuis
-// le CDN jsdelivr (fallback cdnjs si le premier échoue).
+// /api/dashboard-data pour visualiser la progression des modèles dans le
+// temps + l'historique d'un modèle + la comparaison vitesse/score. Aucune
+// dépendance npm : Chart.js est chargé depuis le CDN jsdelivr (fallback cdnjs
+// si le premier échoue). Un plugin personnalisé dessine une ligne verticale
+// pointillée au survol pour faciliter la lecture du tooltip multi-modèles.
 function buildDashboardHTML() {
   return `<!DOCTYPE html>
 <html lang="fr">
@@ -3317,6 +3329,29 @@ function buildDashboardHTML() {
   if (typeof Chart === 'undefined') {
     document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"><\\/script>');
   }
+  // Plugin : ligne verticale au survol (interaction mode 'index'). Dessine une
+  // ligne pointillee a l'abscice du point survole pour lisser la lecture.
+  var verticalLinePlugin = {
+    id: 'verticalLineHover',
+    afterDraw: function(chart) {
+      if (chart.tooltip && chart.tooltip._active && chart.tooltip._active.length) {
+        var ctx2 = chart.ctx;
+        var x = chart.tooltip._active[0].element.x;
+        var top = chart.chartArea.top;
+        var bottom = chart.chartArea.bottom;
+        ctx2.save();
+        ctx2.beginPath();
+        ctx2.moveTo(x, top);
+        ctx2.lineTo(x, bottom);
+        ctx2.lineWidth = 1;
+        ctx2.strokeStyle = 'rgba(88,166,255,0.5)';
+        ctx2.setLineDash([4, 4]);
+        ctx2.stroke();
+        ctx2.restore();
+      }
+    }
+  };
+  if (typeof Chart !== 'undefined') Chart.register(verticalLinePlugin);
 </script>
 <style>
   :root { --bg:#0a0e14; --bg1:#11161d; --bg2:#161b22; --text:#c9d1d9; --accent:#58a6ff; --green:#3fb950; --red:#f85149; --yellow:#d29922; --purple:#bc8cff; }
@@ -3342,12 +3377,9 @@ function buildDashboardHTML() {
 <p style="color:#8b949e">Visualisez l'évolution des modèles et écoles dans le temps. Données issues des carnets de scores locaux.</p>
 <p><a href="/">← Retour au classement</a></p>
 
-<h2>Progression d'une école dans le temps</h2>
-<div class="controls">
-  <label for="ecoleChartSelect">École :</label>
-  <select id="ecoleChartSelect"><option value="">Chargement…</option></select>
-</div>
-<div class="chart-box"><canvas id="ecoleChart"></canvas><div id="ecoleEmpty" class="empty" style="display:none">Aucune donnée pour cette école.</div></div>
+<h2>Progression des modèles dans le temps</h2>
+<p style="color:#8b949e;font-size:0.85rem">Chaque modèle est une ligne. Axe X = date des tests, axe Y = % de réussite. Survolez pour voir le détail du modèle (école, score, santé, vitesse).</p>
+<div class="chart-box"><canvas id="modelProgressChart"></canvas><div id="modelProgressEmpty" class="empty" style="display:none">Aucune donnée historique.</div></div>
 
 <h2>Historique d'un modèle</h2>
 <div class="controls">
@@ -3363,60 +3395,158 @@ function buildDashboardHTML() {
 
 <script>
 var MODELS = [];
-var ecoleChart = null, modelChart = null, scatterChart = null;
+var modelProgressChart = null, modelChart = null, scatterChart = null;
 
 fetch('/api/dashboard-data').then(r => r.json()).then(function(data) {
   document.getElementById('loading').style.display = 'none';
   if (!data.ok || !data.models) { document.getElementById('loading').textContent = 'Erreur : ' + (data.error || 'données indisponibles'); document.getElementById('loading').style.display = 'block'; return; }
   MODELS = data.models;
-  populateEcoleSelect();
+  drawModelProgress();
   populateModelSelect();
   drawScatter();
-  updateEcoleChart();
   updateModelChart();
 }).catch(function(err) {
   document.getElementById('loading').textContent = 'Erreur réseau : ' + err.message;
   document.getElementById('loading').className = 'empty';
 });
 
-function populateEcoleSelect() {
-  var sel = document.getElementById('ecoleChartSelect');
-  var ecoles = {};
-  MODELS.forEach(function(m) { (m.ecoles||[]).forEach(function(e){ ecoles[e.ecole]=true; }); });
-  var keys = Object.keys(ecoles).sort();
-  sel.innerHTML = keys.length ? keys.map(function(e){return '<option value="'+e+'">'+e+'</option>';}).join('') : '<option value="">(aucune école)</option>';
-  sel.addEventListener('change', updateEcoleChart);
+// Palette de couleurs pour les modeles (cycle si > 20 modeles).
+var CHART_COLORS = ['#58a6ff','#3fb950','#f85149','#d29922','#bc8cff','#ff7b72','#79c0ff','#7ee787','#ffa657','#a5d6ff','#ff9bce','#bbf0a3','#fdc5a3','#b3d4ff','#e8c5ff','#a3ffc8','#ffc8a3','#c8a3ff','#a3e8ff','#ffa3c8'];
+function colorFor(i) { return CHART_COLORS[i % CHART_COLORS.length]; }
+
+// Collecte tous les points de tentative de tous les modeles, tries par date.
+// Chaque point = { date, time, pct, model, ecole, score, max, health, tps }.
+function collectAllAttempts() {
+  var points = [];
+  MODELS.forEach(function(m) {
+    (m.ecoles||[]).forEach(function(ec) {
+      (ec.attempts||[]).forEach(function(a) {
+        if (a.date && a.date !== '—') {
+          points.push({
+            date: a.date,
+            time: a.time || '',
+            datetime: a.date + ' ' + (a.time || ''),
+            pct: a.pct,
+            model: m.model || m.shortName,
+            shortName: m.shortName,
+            ecole: ec.ecole,
+            score: a.score,
+            max: a.max,
+            health: a.globalLifeScore,
+            tps: a.tokensPerSecond
+          });
+        }
+      });
+    });
+  });
+  // Tri chronologique.
+  points.sort(function(a,b){ return a.datetime < b.datetime ? -1 : a.datetime > b.datetime ? 1 : 0; });
+  return points;
 }
 
+// Construit un dataset par modele : liste de points {x:date, y:pct} tries par date.
+// Inclut les infos du modele pour le tooltip.
+function buildModelProgressDatasets() {
+  var byModel = {};
+  MODELS.forEach(function(m) {
+    var key = m.shortName || m.model;
+    if (!byModel[key]) byModel[key] = { label: m.model || key, shortName: key, points: [] };
+    (m.ecoles||[]).forEach(function(ec) {
+      (ec.attempts||[]).forEach(function(a) {
+        if (a.date && a.date !== '—') {
+          byModel[key].points.push({ x: a.date, y: a.pct, ecole: ec.ecole, score: a.score, max: a.max, health: a.globalLifeScore, tps: a.tokensPerSecond, time: a.time||'' });
+        }
+      });
+    });
+  });
+  // Trie les points de chaque modele par date.
+  Object.keys(byModel).forEach(function(k) {
+    byModel[k].points.sort(function(a,b){ return a.x < b.x ? -1 : a.x > b.x ? 1 : 0; });
+  });
+  var datasets = [];
+  var i = 0;
+  Object.keys(byModel).forEach(function(k) {
+    var d = byModel[k];
+    if (d.points.length === 0) return;
+    var c = colorFor(i);
+    datasets.push({
+      label: d.label,
+      shortName: d.shortName,
+      data: d.points.map(function(p){ return { x: p.x, y: p.y, ecole: p.ecole, score: p.score, max: p.max, health: p.health, tps: p.tps, time: p.time }; }),
+      borderColor: c,
+      backgroundColor: c + '20',
+      tension: 0.2,
+      pointRadius: 4,
+      pointHoverRadius: 7,
+      fill: false
+    });
+    i++;
+  });
+  return datasets;
+}
+
+function drawModelProgress() {
+  var ctx = document.getElementById('modelProgressChart');
+  var empty = document.getElementById('modelProgressEmpty');
+  if (modelProgressChart) { modelProgressChart.destroy(); modelProgressChart = null; }
+  var datasets = buildModelProgressDatasets();
+  if (datasets.length === 0) { empty.style.display = 'block'; ctx.style.display = 'none'; return; }
+  empty.style.display = 'none'; ctx.style.display = 'block';
+  modelProgressChart = new Chart(ctx, {
+    type: 'line',
+    data: { datasets: datasets },
+    options: {
+      responsive: true,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { display: true, labels: { color: '#c9d1d9', boxWidth: 12, font: { size: 11 } } },
+        tooltip: {
+          enabled: true,
+          backgroundColor: 'rgba(10,14,20,0.95)',
+          borderColor: '#30363d',
+          borderWidth: 1,
+          titleColor: '#58a6ff',
+          bodyColor: '#c9d1d9',
+          padding: 12,
+          callbacks: {
+            title: function(items) { return items[0].parsed.x; },
+            label: function(c) {
+              var p = c.raw;
+              var lines = [c.dataset.label];
+              lines.push('  École: ' + (p.ecole || '—'));
+              lines.push('  Score: ' + (p.score||0) + '/' + (p.max||0) + ' (' + (p.y||0) + '%)');
+              if (p.health != null) lines.push('  Santé: ' + p.health + ' PV');
+              if (p.tps > 0) lines.push('  Vitesse: ' + p.tps + ' t/s');
+              if (p.time) lines.push('  Heure: ' + p.time);
+              return lines;
+            }
+          }
+        }
+      },
+      scales: {
+        x: {
+          type: 'category',
+          title: { display: true, text: 'Date des tests', color: '#8b949e' },
+          ticks: { color: '#8b949e', maxRotation: 45, minRotation: 30 },
+          grid: { color: '#21262d' }
+        },
+        y: {
+          beginAtZero: true, max: 100,
+          title: { display: true, text: 'Réussite (%)', color: '#8b949e' },
+          ticks: { color: '#8b949e' },
+          grid: { color: '#21262d' }
+        }
+      }
+    }
+  });
+}
+
+// Historique d'un modèle : % par école (barres) + santé (ligne).
 function populateModelSelect() {
   var sel = document.getElementById('modelChartSelect');
   sel.innerHTML = MODELS.length ? MODELS.map(function(m){return '<option value="'+m.shortName+'">'+m.model+'</option>';}).join('') : '<option value="">(aucun modèle)</option>';
   sel.addEventListener('change', updateModelChart);
 }
-
-// Progression d'une école dans le temps : % par modèle (dates), trié par date.
-function updateEcoleChart() {
-  var ecole = document.getElementById('ecoleChartSelect').value;
-  var ctx = document.getElementById('ecoleChart');
-  var empty = document.getElementById('ecoleEmpty');
-  if (ecoleChart) { ecoleChart.destroy(); ecoleChart = null; }
-  var rows = [];
-  MODELS.forEach(function(m) {
-    (m.ecoles||[]).forEach(function(e) {
-      if (e.ecole === ecole && e.date) rows.push({ x: e.date, y: e.pct, label: m.model });
-    });
-  });
-  rows.sort(function(a,b){ return a.x < b.x ? -1 : a.x > b.x ? 1 : 0; });
-  if (rows.length === 0) { empty.style.display = 'block'; ctx.style.display = 'none'; return; }
-  empty.style.display = 'none'; ctx.style.display = 'block';
-  ecoleChart = new Chart(ctx, {
-    type: 'line',
-    data: { labels: rows.map(function(r){return r.x;}), datasets: [{ label: ecole+' — % par run', data: rows.map(function(r){return r.y;}), borderColor: '#58a6ff', backgroundColor: 'rgba(88,166,255,0.15)', fill: true, tension: 0.3, pointRadius: 4 }] },
-    options: { responsive: true, plugins: { tooltip: { callbacks: { label: function(c){ return rows[c.dataIndex].label + ': ' + c.parsed.y + '%'; } } } }, scales: { y: { beginAtZero: true, max: 100, ticks: { color: '#8b949e' }, grid: { color: '#21262d' } }, x: { ticks: { color: '#8b949e' }, grid: { color: '#21262d' } } } }
-  });
-}
-
-// Historique d'un modèle : % par école (barres) + santé (ligne).
 function updateModelChart() {
   var sn = document.getElementById('modelChartSelect').value;
   var ctx = document.getElementById('modelChart');

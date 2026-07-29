@@ -333,9 +333,106 @@ function computeLedgerMetrics(ledger) {
   };
 }
 
+// Detecte si un modele est un fichier MTP (Multi-Token Prediction). Les fichiers
+// MTP sont des modules complementaires destines a etre charges AVEC un modele
+// principal (via --speculative-draft-mtp) pour accelerer l'inference. Ils ne
+// doivent JAMAIS etre testes seuls : ils n'ont pas de capacite de generation
+// autonome. On les detecte par le nom de fichier (basename du path) qui
+// contient "mtp", ou par le displayName qui contient le mot "mtp".
+//
+// Exemples concrets (2026-07) :
+//   - Mia-AiLab/Gemmable-4-12B-MTP-GGUF/gemmable-4-12b-Q4_K_M-mtp.gguf  (MTP)
+//   - unsloth/gemma-4-26B-A4B-it-GGUF/mtp-gemma-4-26B-A4B-it-Q8_0.gguf  (MTP)
+//   - TapTheDevvv/Qwythos-9B-Claude-Mythos-5-1M-GGUF/...-MTP-Q6_K.gguf  (MTP)
+function isMtpModel(m) {
+  if (!m) return false;
+  // Critere 1 : le nom de fichier (basename du path) contient "mtp".
+  const p = m.path || '';
+  const basename = p.split('/').pop() || '';
+  if (/mtp/i.test(basename)) return true;
+  // Critere 2 : le displayName contient le mot "mtp" (mot entier).
+  if (m.displayName && /\bmtp\b/i.test(m.displayName)) return true;
+  return false;
+}
+
+// Normalise un nom de fichier MTP pour le comparer au nom du modele principal :
+// retire tout segment "mtp" (prefixe, suffixe, milieu) et les separateurs
+// resultant. Ex : "gmmable-4-12b-Q4_K_M-mtp.gguf" -> "gmmable-4-12b-q4_k_m"
+function stripMtpFromName(s) {
+  let v = String(s).toLowerCase().replace(/\.gguf$/i, '').replace(/-gguf$/i, '');
+  // Retire "mtp" ou il apparait (debut, fin, milieu) entoure de separateurs.
+  v = v.replace(/^mtp[-_]/, '').replace(/[-_]mtp$/, '').replace(/[-_]mtp[-_]/, '-');
+  return v.replace(/[-_]+/g, '-').replace(/^-|-$/g, '');
+}
+
+// Associe chaque modele principal a son eventuel fichier MTP. Strategie :
+//   1. Regroupe les modeles par dossier parent (segment avant le dernier / du path).
+//   2. Dans un meme dossier, si on trouve un MTP + un modele principal, on les
+//      associe. Un dossier peut contenir plusieurs MTP (quantizations differentes)
+//      mais on prend le premier qui n'est pas deja associe.
+//   3. Fallback : si aucun MTP dans le meme dossier, on normalise le nom du
+//      modele principal et on cherche un MTP dont le nom normalise correspond
+//      (apres retrait du segment "mtp").
+//
+// Renvoie une Map: modelKey du modele principal -> modelKey du MTP associe.
+function buildMtpAssociations(allModels) {
+  const mtpModels = allModels.filter(isMtpModel);
+  const mainModels = allModels.filter(m => !isMtpModel(m));
+  if (mtpModels.length === 0) return new Map();
+
+  const assoc = new Map();
+  const usedMtp = new Set();
+
+  // 1) Association par dossier parent commun.
+  const byDir = {};
+  for (const m of allModels) {
+    const dir = (m.path || '').split('/').slice(0, -1).join('/');
+    if (!dir) continue;
+    if (!byDir[dir]) byDir[dir] = [];
+    byDir[dir].push(m);
+  }
+  for (const dir of Object.keys(byDir)) {
+    const group = byDir[dir];
+    const mtpsInDir = group.filter(isMtpModel);
+    const mainsInDir = group.filter(m => !isMtpModel(m));
+    if (mtpsInDir.length === 0 || mainsInDir.length === 0) continue;
+    // Associe chaque modele principal du dossier au premier MTP non utilise.
+    for (const main of mainsInDir) {
+      if (assoc.has(main.modelKey)) continue;
+      const mtp = mtpsInDir.find(m => !usedMtp.has(m.modelKey));
+      if (mtp) {
+        assoc.set(main.modelKey, mtp.modelKey);
+        usedMtp.add(mtp.modelKey);
+      }
+    }
+  }
+
+  // 2) Fallback par nom normalise.
+  for (const main of mainModels) {
+    if (assoc.has(main.modelKey)) continue;
+    const base = (main.path || '').split('/').pop() || main.modelKey;
+    const normMain = stripMtpFromName(base);
+    for (const mtp of mtpModels) {
+      if (usedMtp.has(mtp.modelKey)) continue;
+      const mtpBase = (mtp.path || '').split('/').pop() || mtp.modelKey;
+      const normMtp = stripMtpFromName(mtpBase);
+      if (normMain === normMtp || normMain.includes(normMtp) || normMtp.includes(normMain)) {
+        assoc.set(main.modelKey, mtp.modelKey);
+        usedMtp.add(mtp.modelKey);
+        break;
+      }
+    }
+  }
+
+  return assoc;
+}
+
 // Liste les modeles LLM telecharges via lms ls --json --llm. Chaque modele est
 // enrichi d'un statut de test (deja teste / partiel / jamais teste) calcule en
-// croisant son modelKey avec les carnets de scores existants.
+// croisant son modelKey avec les carnets de scores existants. Les fichiers MTP
+// (Multi-Token Prediction) sont filtres : ils ne sont pas des modeles testables
+// seuls, mais sont associes a leur modele principal pour le chargement avec
+// --speculative-draft-mtp (acceleration d'inference).
 function listLlmModels() {
   const r = runLms(['ls', '--json', '--llm'], { timeoutMs: 30000 });
   if (r.status !== 0 || !r.stdout) {
@@ -344,6 +441,8 @@ function listLlmModels() {
   try {
     const arr = JSON.parse(r.stdout);
     if (!Array.isArray(arr)) return { ok: false, models: [], error: 'Reponse JSON inattendue' };
+    // Construit les associations MTP avant de filtrer les fichiers MTP.
+    const mtpAssociations = buildMtpAssociations(arr);
     const ledgers = loadAllLedgers();
     const allSchoolKeys = SCHOOLS.filter(s => s.cli !== null).map(s => s.key);
     // Renvoie les cles d'ecoles "accessibles" a un modele, c'est-a-dire toutes
@@ -359,7 +458,9 @@ function listLlmModels() {
       if (idx < 0) return allSchoolKeys.slice();
       return allSchoolKeys.slice(0, idx + 1);
     }
-    const models = arr.map(m => {
+    // Filtre les fichiers MTP : ils ne sont pas des modeles testables seuls.
+    const testable = arr.filter(m => !isMtpModel(m));
+    const models = testable.map(m => {
       const modelKey = m.modelKey;
       const ledger = matchLedger(modelKey, ledgers);
       const testedSchools = ledgerSchoolKeys(ledger);
@@ -386,6 +487,9 @@ function listLlmModels() {
         size: m.sizeBytes || 0,
         arch: m.architecture || '?',
         status,
+        // Cle du fichier MTP associe (null si aucun). Charge avec le modele
+        // via --speculative-draft-mtp pour accelerer l'inference.
+        mtpModelKey: mtpAssociations.get(modelKey) || null,
         // Metriques agreggees depuis le carnet (meilleure tentative par ecole).
         // Absentes si le modele n'a jamais ete teste (kind === 'never').
         metrics: computeLedgerMetrics(ledger)
@@ -457,31 +561,58 @@ async function selectModelsInteractive(models) {
   console.log(`  ${C.gray}Ordre : modeles testes du plus fort au plus faible, puis jamais testes a la fin.${C.reset}`);
   console.log(`  ${C.gray}Astuce : le dernier des testes est le plus faible — un bon candidat au retrait.${C.reset}\n`);
 
-  const idxW = 4, nameW = 30, paramW = 5, quantW = 7, sizeW = 8, pubW = 14, statusW = 13;
-  const pctW = 5, tpsW = 8, attW = 5, trendW = 4, timeW = 8, missW = 22;
-  const header = `  ${' '.padEnd(idxW)}${'Modèle'.padEnd(nameW)}${'Param'.padStart(paramW)} ${'Quant'.padEnd(quantW)} ${'Taille'.padStart(sizeW)}  ${'Editeur'.padEnd(pubW)} ${'Statut'.padEnd(statusW)} ${'Pct'.padStart(pctW)} ${'Vit.'.padStart(tpsW)} ${'Tent.'.padStart(attW)} ${'Tnd'.padStart(trendW)} ${'Temps'.padStart(timeW)}  ${'Ecoles manquantes'}`;
+  // Largeurs de colonnes calculees dynamiquement a partir des donnees reelles.
+  // Chaque largeur = max(longueur du header, longueur de la plus longue valeur).
+  // Les valeurs trop longues sont tronquees avec .slice(0, W) pour garantir
+  // un alignement parfait (style militaire — tout est carre).
+  const colIdx = String(models.length) + '.';
+  const idxW = Math.max(4, colIdx.length + 1);
+  const nameW = Math.max(30, ...models.map(m => (m.displayName || '').length));
+  const paramW = Math.max(5, ...models.map(m => (m.params || '?').length));
+  const quantW = Math.max(7, ...models.map(m => (m.quant || '?').length));
+  const sizeW = Math.max(8, ...models.map(m => fmtBytes(m.size).length));
+  const pubW = Math.max(14, ...models.map(m => (m.publisher || '?').length));
+  const statusW = 13; // COMPLET / PARTIEL / JAMAIS TESTE — fixe
+  const pctW = 5;
+  const tpsW = 8;
+  const attW = 5;
+  const trendW = 4;
+  const timeW = Math.max(8, ...models.map(m => {
+    const mt = m.metrics;
+    return mt && mt.elapsedMs > 0 ? fmtDuration(mt.elapsedMs).length : 0;
+  }));
+  const missW = Math.max(22, ...models.map(m => (missingSchoolsLabel(m.status) || '').length));
+
+  const hdrIdx = ' '.repeat(idxW);
+  const header = `  ${hdrIdx}${'Modèle'.padEnd(nameW)} ${'Param'.padEnd(paramW)} ${'Quant'.padEnd(quantW)} ${'Taille'.padStart(sizeW)}  ${'Editeur'.padEnd(pubW)} ${'Statut'.padEnd(statusW)} ${'Pct'.padStart(pctW)} ${'Vit.'.padStart(tpsW)} ${'Tent.'.padStart(attW)} ${'Tnd'.padStart(trendW)} ${'Temps'.padStart(timeW)}  ${'Ecoles manquantes'}`;
   console.log(`${C.gray}${header}${C.reset}`);
+  const sep = '─'.repeat(idxW + nameW + paramW + quantW + sizeW + pubW + statusW + pctW + tpsW + attW + trendW + timeW + missW + 20);
+  console.log(`${C.gray}  ${sep}${C.reset}`);
   models.forEach((m, i) => {
-    const idx = String(i + 1).padStart(2) + '.';
-    const sz = fmtBytes(m.size).padStart(7);
+    const idx = String(i + 1).padStart(Math.max(2, idxW - 1)) + '.';
+    const sz = fmtBytes(m.size).padStart(sizeW);
     const badge = statusBadge(m.status);
     const statusStr = `${badge.color}${badge.label.padEnd(statusW)}${C.reset}`;
     const missing = missingSchoolsLabel(m.status);
-    const missStr = missing ? `${C.gray}${missing.padEnd(missW)}${C.reset}` : ''.padEnd(missW);
-    const name = (m.displayName || '').padEnd(nameW).slice(0, nameW);
-    const pub = (m.publisher || '?').padEnd(pubW).slice(0, pubW);
-    // Metriques de classement local (absentes si jamais teste).
+    const missStr = missing ? `${C.gray}${missing.padEnd(missW)}${C.reset}` : ' '.repeat(missW);
+    const mtpTag = m.mtpModelKey ? `${C.cyan}[MTP]${C.reset} ` : '';
+    const namePad = nameW - (mtpTag ? 6 : 0);
+    const nameRaw = (m.displayName || '').slice(0, namePad);
+    const name = `${nameRaw.padEnd(namePad)}${mtpTag}`;
+    const pub = (m.publisher || '?').slice(0, pubW).padEnd(pubW);
+    const params = (m.params || '?').slice(0, paramW).padEnd(paramW);
+    const quant = (m.quant || '?').slice(0, quantW).padEnd(quantW);
     const mt = m.metrics;
     const pctStr = mt ? `${String(mt.pct + '%').padStart(pctW)}` : `${C.gray}${'?'.padStart(pctW)}${C.reset}`;
     const tpsStr = mt && mt.tokensPerSecond > 0
-      ? `${C.gray}${(mt.tokensPerSecond + ' t/s').padStart(tpsW)}${C.reset}`
+      ? `${(mt.tokensPerSecond + ' t/s').padStart(tpsW)}`
       : `${C.gray}${'\u2014'.padStart(tpsW)}${C.reset}`;
     const attStr = mt ? `${String(mt.attempts).padStart(attW)}` : `${C.gray}${'?'.padStart(attW)}${C.reset}`;
     const trendStr = mt ? `${trendGlyph(mt.trend).padEnd(trendW)}` : `${C.gray}${'\u2014'.padEnd(trendW)}${C.reset}`;
     const timeStr = mt && mt.elapsedMs > 0
-      ? `${C.gray}${fmtDuration(mt.elapsedMs).padStart(timeW)}${C.reset}`
+      ? `${fmtDuration(mt.elapsedMs).padStart(timeW)}`
       : `${C.gray}${'\u2014'.padStart(timeW)}${C.reset}`;
-    console.log(`  ${C.bold}${idx.padEnd(idxW)}${C.reset} ${name} ${C.gray}${(m.params || '?').padEnd(paramW)} ${(m.quant || '?').padEnd(quantW)} ${sz}  ${pub}${C.reset} ${statusStr} ${pctStr} ${tpsStr} ${attStr} ${trendStr} ${timeStr}  ${missStr}`);
+    console.log(`  ${C.bold}${idx}${C.reset} ${name} ${C.gray}${params} ${quant}${C.reset} ${sz}  ${C.gray}${pub}${C.reset} ${statusStr} ${pctStr} ${tpsStr} ${attStr} ${trendStr} ${timeStr}  ${missStr}`);
   });
   console.log('');
   return new Promise(resolve => {
@@ -582,8 +713,12 @@ async function selectSchoolsInteractive(selectedModels) {
   });
 }
 
-function loadModel(modelKey) {
-  const r = runLms(['load', modelKey], { timeoutMs: 180000 });
+function loadModel(modelKey, mtpModelKey) {
+  const args = ['load', modelKey];
+  if (mtpModelKey) {
+    args.push('--speculative-draft-model', mtpModelKey, '--speculative-draft-mtp');
+  }
+  const r = runLms(args, { timeoutMs: 180000 });
   if (r.status !== 0) {
     console.log(`  ${C.red}lms load echoue : ${r.stderr || r.stdout || 'erreur inconnue'}${C.reset}`);
     return false;
@@ -787,7 +922,10 @@ async function main() {
     unloadAll();
 
     console.log(`  ${C.gray}[${nowClock()}] Chargement du modele ${m.modelKey}...${C.reset}`);
-    if (!loadModel(m.modelKey)) {
+    if (m.mtpModelKey) {
+      console.log(`  ${C.gray}[${nowClock()}] Fichier MTP associe detecte : ${m.mtpModelKey} (speculative decoding MTP active).${C.reset}`);
+    }
+    if (!loadModel(m.modelKey, m.mtpModelKey)) {
       console.log(`  ${C.yellow}Modele ${m.modelKey} non chargeable - ignore.${C.reset}`);
       results.push({ model: m, ok: false, reason: 'load_failed', durationMs: 0 });
       continue;
@@ -851,7 +989,9 @@ module.exports = {
   missingSchoolsLabel,
   schoolForModel,
   schoolLabelForModel,
-  isAutoPerModel
+  isAutoPerModel,
+  isMtpModel,
+  buildMtpAssociations
 };
 
 if (require.main === module) {

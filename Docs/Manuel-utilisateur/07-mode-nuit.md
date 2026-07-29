@@ -250,6 +250,36 @@ Pour **chaque modèle** de la file d'attente, et pour **chaque école** sélecti
 À la fin de chaque modèle, le script affiche un résumé horodaté. À la toute fin, un
 **bilan global** récapitule tous les runs (durée, succès/échecs, chemins des rapports).
 
+### Fichiers MTP (Multi-Token Prediction)
+
+Certains modèles publiés sur Hugging Face incluent un **fichier MTP** (Multi-Token
+Prediction) — un module de spéculation qui accélère l'inférence en prédisant plusieurs
+tokens à la fois. Exemples concrets :
+
+- **Gemmable 4 12B** — le fichier `gemmable-4-12b-Q4_K_M-mtp.gguf` accompagne le
+  modèle principal `gemmable-4-12b-Q4_K_M.gguf` dans le même dossier.
+- **Gemma 4 26B A4B Instruct** — le fichier `mtp-gemma-4-26B-A4B-it-Q8_0.gguf` est
+  le module MTP du modèle principal.
+- **Qwythos 9B Claude Mythos 5 1M** — le fichier `Qwythos-9B-Claude-Mythos-5-1M-MTP-Q6_K.gguf`
+  est le module MTP.
+
+**Comment BenchGo gère les MTP :**
+
+1. **Détection automatique** : `night-batch.js` identifie les fichiers MTP dans la liste
+   des modèles LM Studio (par le nom de fichier contenant `mtp` ou le displayName
+   contenant le mot « Mtp »/« MTP »).
+2. **Filtrage** : les fichiers MTP ne sont **pas** proposés comme modèles testables
+   séparément — ils ne sont que des auxiliaires de spéculation.
+3. **Association** : chaque modèle principal est automatiquement associé à son fichier
+   MTP quand les deux se trouvent dans le même dossier (même dépôt Hugging Face).
+4. **Chargement** : quand un modèle a un MTP associé, BenchGo le charge avec
+   `lms load <modelKey> --speculative-draft-mtp`, ce qui active le décodage spéculatif
+   MTP et accélère l'inférence sans intervention manuelle.
+
+En résumé : si vous voyez `[MTP]` en cyan à côté d'un modèle dans la liste de sélection
+du mode nuit, c'est que son fichier MTP a été détecté et sera utilisé automatiquement
+lors du chargement.
+
 ---
 
 ## 7. Récupérer les résultats le matin

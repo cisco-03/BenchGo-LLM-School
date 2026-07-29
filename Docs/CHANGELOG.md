@@ -1,5 +1,34 @@
 # CHANGELOG - Carnet de Notes BenchGo
 
+## 2026-07-29 — feat: détection MTP mode nuit + refonte dashboard progression des modèles
+
+### Contexte
+1. Les fichiers MTP (Multi-Token Prediction) sont des modules complémentaires publiés sur Hugging Face qui accompagnent certains modèles (ex: Gemmable 4 12B, Gemma 4 26B A4B). LM Studio les liste comme des modèles séparés via `lms ls`, mais ils ne sont pas testables seuls — ils doivent être chargés AVEC le modèle principal via `--speculative-draft-mtp` pour accélérer l'inférence. Le mode nuit les proposait à tort comme modèles testables.
+2. Le dashboard affichait « Progression d'une école dans le temps », ce qui n'avait pas de sens : l'utilisateur veut voir la progression des **modèles** dans le temps (une ligne par modèle, axe X = date des tests, axe Y = %), pas d'une école. De plus, le tooltip n'affichait pas de ligne verticale au survol.
+
+### Implémentation
+
+#### 1. Détection et association MTP (`night-batch.js`)
+- Nouvelle fonction `isMtpModel(m)` : détecte les fichiers MTP par le basename du path ou le displayName contenant "mtp" (mot entier).
+- Nouvelle fonction `stripMtpFromName(s)` : normalise un nom de fichier en retirant les segments "mtp" pour comparaison.
+- Nouvelle fonction `buildMtpAssociations(allModels)` : associe chaque modèle principal à son fichier MTP par dossier parent commun (ex: `Mia-AiLab/Gemmable-4-12B-MTP-GGUF/`), avec fallback par nom normalisé si le dossier ne suffit pas.
+- `listLlmModels()` filtre désormais les fichiers MTP de la liste testable (17 → 14 modèles sur l'instance courante) et enrichit chaque modèle principal avec `mtpModelKey` (null si aucun MTP associé).
+- `loadModel(modelKey, mtpModelKey)` charge le modèle principal avec `--speculative-draft-model <mtp>` + `--speculative-draft-mtp` quand un MTP est associé.
+- Table CLI : tag `[MTP]` affiché en cyan après le nom des modèles ayant un MTP associé.
+- Exports : `isMtpModel`, `buildMtpAssociations` ajoutés au `module.exports`.
+
+#### 2. Refonte du dashboard (`leaderboard.js`)
+- API `/api/dashboard-data` : le champ `ecoles[].attempts` désormais inclus (date, time, pct, score, max, ecole, globalLifeScore, tokensPerSecond pour chaque tentative).
+- Graphique « Progression d'une école dans le temps » remplacé par « Progression des modèles dans le temps » : une série/ligne par modèle, axe X = date des tests, axe Y = % de réussite. Interaction `mode: 'index'` pour synchroniser le tooltip.
+- Plugin Chart.js personnalisé `verticalLineHover` : dessine une ligne verticale pointillée à l'abscisse du point survolé, enregistré globalement sur tous les graphiques.
+- Tooltip enrichi : nom du modèle, école, score/max (%), santé (PV), vitesse (t/s), heure du test.
+- Palette de 20 couleurs cyclique pour distinguer les modèles.
+- `populateEcoleSelect` / `updateEcoleChart` supprimés (plus de sélecteur d'école).
+
+### Fichiers modifiés
+- `night-batch.js` — détection MTP, filtrage, association, chargement avec speculative decoding, affichage `[MTP]`, exports.
+- `leaderboard.js` — API dashboard-data étendue, refonte HTML/JS du dashboard, plugin ligne verticale.
+
 ## 2026-07-29 — feat: merge auto PRs communautaires + URL modèle + exports + modale communautaire
 
 ### Contexte
