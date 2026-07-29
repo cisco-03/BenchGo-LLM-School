@@ -1417,14 +1417,14 @@ function exportReport(idx) {
           if (r2.status === 'bypassed') continue;
           md += '**Exercice ' + r2.id + '** (' + (r2.status === 'success' ? 'validé' : 'échec') + ')\\n\\n';
            if (r2.code && String(r2.code).trim()) {
-              md += '\`\`\`javascript\\n' + String(r2.code).trim() + '\\n\`\`\`\\n\\n';
+              md += String.fromCharCode(96,96,96) + 'javascript\\n' + String(r2.code).trim() + '\\n' + String.fromCharCode(96,96,96) + '\\n\\n';
            }
            if (r2.failureExplanation) md += '**Explication échec :** ' + r2.failureExplanation + '\\n\\n';
            if (r2.teacherCorrection) md += '**🎓 Correction professeur :** ' + r2.teacherCorrection + '\\n\\n';
          }
        }
        if (t.rawResponse && String(t.rawResponse).trim()) {
-          md += '##### Réponse brute\\n\\n\`\`\`text\\n' + String(t.rawResponse).trim() + '\\n\`\`\`\\n\\n';
+          md += '##### Réponse brute\\n\\n' + String.fromCharCode(96,96,96) + 'text\\n' + String(t.rawResponse).trim() + '\\n' + String.fromCharCode(96,96,96) + '\\n\\n';
        }
     }
     md += '---\\n\\n';

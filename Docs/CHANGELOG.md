@@ -1,5 +1,21 @@
 # CHANGELOG - Carnet de Notes BenchGo
 
+## 2026-07-29 (3) — fix: classement communautaire vide (backticks JS cassaient renderCards) + bouton local corrigé
+
+### Contexte
+1. Le classement communautaire (GitHub Pages) affichait "Aucun modèle" en navigateur malgré 36 modèles dans le JSON. Cause : la fonction `exportReport` du JS inline contenait des backticks littéraux (`` ``` ``) échappés via `\`\`\`` dans le template literal source → SyntaxError qui empêchait **tout** le script de s'exécuter, y compris `renderCards()`.
+2. Le bouton "Classement communautaire" du leaderboard local utilisait la classe CSS `btn-accent` inexistante (rendu moche) et pointait vers le fichier local `gh-pages-output/community-leaderboard.html` au lieu de la page GitHub Pages.
+
+### Implémentation
+
+#### 1. Backticks littéraux dans `exportReport` (`consolidate-leaderboard.js`)
+- Lignes 1420 et 1427 : `\`\`\`javascript` et `\`\`\`text` → remplacés par `String.fromCharCode(96,96,96)` pour éviter les backticks littéraux dans le JS inline du HTML généré.
+- Vérifié : `node -e "new vm.Script(js)"` → syntaxe OK, 0 backtick littéral, `renderCards()` s'exécute, `emptyMsg.display = "none"`.
+
+#### 2. Bouton "Classement communautaire" du leaderboard local (`leaderboard.js`)
+- Ligne 1231 : classe `btn-accent` (inexistante) → `btn-primary` (cohérent avec les autres boutons).
+- Lignes 2372-2374 : `window.open` pointe désormais vers `https://cisco-03.github.io/BenchGo-LLM-School/community-leaderboard.html` au lieu du fichier local.
+
 ## 2026-07-29 (2) — feat: design unifié classement communautaire + colonnes mode nuit + merge auto + URL modèle
 
 ### Contexte

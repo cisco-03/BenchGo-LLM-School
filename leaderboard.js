@@ -1228,7 +1228,7 @@ function buildLeaderboardHTML(entries) {
         <span class="result-count" id="resultCount"></span>
         <button class="btn btn-primary" id="btnCopyAll" title="Copier tout le classement (texte brut) pour le partager">⧉ Copier le classement</button>
         <button class="btn btn-community" id="btnSubmitCommunity" title="Envoyer vos résultats sur le classement communautaire GitHub">🌐 Envoyer à la communauté</button>
-        <button class="btn btn-accent" id="btnCommunityRanking" title="Ouvrir le classement communautaire en ligne">🌍 Classement communautaire</button>
+        <button class="btn btn-primary" id="btnCommunityRanking" title="Ouvrir le classement communautaire en ligne">🌍 Classement communautaire</button>
         <button class="btn btn-primary" id="btnExportPdf" title="Imprimer / Exporter en PDF (dialogue navigateur)">📄 Exporter PDF</button>
         <button class="btn btn-primary" id="btnExportCsv" title="Exporter le classement en CSV (tableur)">📊 Exporter CSV</button>
         <button class="btn btn-primary" id="btnExportMd" title="Exporter le classement en tableau Markdown">📝 Exporter Markdown</button>
@@ -2370,8 +2370,7 @@ async function doSubmitAll() {
 }
 document.getElementById('btnSubmitCommunity').addEventListener('click', openSubmitModal);
 document.getElementById('btnCommunityRanking').addEventListener('click', function() {
-  var url = window.location.href.includes('/api/') ? '/api/community-ranking' : '../gh-pages-output/community-leaderboard.html';
-  window.open(url, '_blank');
+  window.open('https://cisco-03.github.io/BenchGo-LLM-School/community-leaderboard.html', '_blank');
 });
 var _btnPdf = document.getElementById('btnExportPdf');
 if (_btnPdf) _btnPdf.addEventListener('click', exportLeaderboardPdf);
