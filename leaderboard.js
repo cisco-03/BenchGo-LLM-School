@@ -1295,7 +1295,7 @@ function formatRelativeDate(isoStr) {
   var diffMin = Math.floor(diffMs / 60000);
   var diffH = Math.floor(diffMin / 60);
   var diffD = Math.floor(diffH / 24);
-  if (diffMin < 1) return 'à l\'instant';
+  if (diffMin < 1) return "à l'instant";
   if (diffMin < 60) return 'il y a ' + diffMin + ' min';
   if (diffH < 24) return 'il y a ' + diffH + ' h';
   if (diffD === 1) return 'hier';
