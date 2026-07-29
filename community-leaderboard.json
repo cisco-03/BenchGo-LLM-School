@@ -441,6 +441,26 @@
       ]
     },
     {
+      "model": "qwen3.6-14b-a3b-fablevibes",
+      "shortName": "qwen3.6-14b-a3b-fablevibes",
+      "quantization": null,
+      "score": 1764,
+      "max": 3057,
+      "pct": 58,
+      "globalLifeScore": 2072,
+      "optionalBonus": 308,
+      "tokens": 14955,
+      "elapsedMs": 916325,
+      "tokensPerSecond": 16.32,
+      "ecoleCount": 1,
+      "pseudo": "FlexoDiv",
+      "submittedAt": "2026-07-29T06:37:11.201Z",
+      "contributors": 1,
+      "allPct": [
+        58
+      ]
+    },
+    {
       "model": "baidu/ernie-4.5-21b-a3b",
       "shortName": "baidu_ernie-4.5-21b-a3b",
       "quantization": null,
@@ -601,6 +621,6 @@
       ]
     }
   ],
-  "generatedAt": "2026-07-29T06:44:07.414Z",
-  "totalSubmissions": 30
+  "generatedAt": "2026-07-29T06:44:20.939Z",
+  "totalSubmissions": 31
 }
