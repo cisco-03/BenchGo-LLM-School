@@ -355,7 +355,71 @@ function isMtpModel(m) {
   return false;
 }
 
-// Normalise un nom de fichier MTP pour le comparer au nom du modele principal :
+// Détecte les modèles NON-LLM : modèles qui ne génèrent pas de texte de façon
+// autonome et ne peuvent donc pas passer les écoles BenchGo (exercices de code,
+// raisonnement, etc.). Sont concernés :
+//   - OCR : reconnaissance de texte dans des images (ex: OvisOCR2, GOT-OCR2).
+//   - Embedding : modèles qui produisent des vecteurs, pas du texte.
+//   - Rerank : modèles de réordonnancement de similarité.
+//   - Vision-only : modèles purement visuels sans capacité de génération texte
+//     (on exclut les VLM type Qwen-VL / LFM-VL qui génèrent du texte — ils
+//     restent testables car ils ont une tête de langage).
+//
+// Stratégie : on regarde le displayName, le modelKey, le publisher, l'arch
+// et le basename du path. On évite les faux positifs : "vl" seul n'est pas
+// suffisant (un VLM texte reste testable) ; on exige un marqueur explicite
+// d'OCR / embedding / rerank / vision-only.
+//
+// Liste noire manuelle : l'utilisateur peut aussi isoler un modèle depuis le
+// CLI interactif (voir selectModelsInteractive). La liste noire persistante
+// est stockée dans .benchgo-blacklist.json à la racine du projet.
+const NON_LLM_PATTERNS = [
+  /\bocr\b/i, /\bocr2\b/i, /got-ocr/i, /ovisocr/i,
+  /\bembed/i, /\bembedding\b/i, /e5-/i, /bge-/i, /gte-/i, /nomic-embed/i, /mxbai/i,
+  /\brerank/i, /\breranking\b/i, /jina-reranker/i, /cohere-rerank/i,
+  /\bvision[-_ ]?only\b/i, /\bimage[-_ ]?cls\b/i, /\bclip\b/i, /\bdino[-_]?v/i,
+  /\bsam\b/i, /florence/i, /\bdetector\b/i, /yolo/i, /grounding/i
+];
+
+function isNonLlmModel(m) {
+  if (!m) return false;
+  const candidates = [
+    m.displayName || '',
+    m.modelKey || '',
+    (m.publisher || '') + '/' + (m.displayName || ''),
+    m.architecture || m.arch || '',
+    (m.path || '').split('/').pop() || ''
+  ];
+  for (const c of candidates) {
+    const s = String(c);
+    for (const re of NON_LLM_PATTERNS) {
+      if (re.test(s)) return true;
+    }
+  }
+  return false;
+}
+
+// Charge la liste noire persistante des modèles isolés manuellement par
+// l'utilisateur depuis le CLI interactif. Retourne un Set de modelKeys.
+function loadBlacklist() {
+  const p = path.join(__dirname, '.benchgo-blacklist.json');
+  try {
+    if (fs.existsSync(p)) {
+      const arr = JSON.parse(fs.readFileSync(p, 'utf8'));
+      if (Array.isArray(arr)) return new Set(arr.map(s => String(s)));
+    }
+  } catch (e) { /* ignore fichier corrompu */ }
+  return new Set();
+}
+
+// Sauvegarde la liste noire persistante (modelKeys isolés manuellement).
+function saveBlacklist(set) {
+  const p = path.join(__dirname, '.benchgo-blacklist.json');
+  try {
+    fs.writeFileSync(p, JSON.stringify([...set], null, 2), 'utf8');
+  } catch (e) { /* ignore erreur disque */ }
+}
+
 // retire tout segment "mtp" (prefixe, suffixe, milieu) et les separateurs
 // resultant. Ex : "gmmable-4-12b-Q4_K_M-mtp.gguf" -> "gmmable-4-12b-q4_k_m"
 function stripMtpFromName(s) {
@@ -460,6 +524,8 @@ function listLlmModels() {
     }
     // Filtre les fichiers MTP : ils ne sont pas des modeles testables seuls.
     const testable = arr.filter(m => !isMtpModel(m));
+    // Charge la liste noire persistante (modèles isolés manuellement).
+    const blacklist = loadBlacklist();
     const models = testable.map(m => {
       const modelKey = m.modelKey;
       const ledger = matchLedger(modelKey, ledgers);
@@ -470,8 +536,14 @@ function listLlmModels() {
       // sont ignorees : elles ne seront jamais demandees a ce modele.
       const relevantTested = testedSchools.filter(k => relevantKeys.includes(k));
       const missingSchools = relevantKeys.filter(k => !relevantTested.includes(k));
+      // Détection des modèles non-LLM (OCR, embedding, rerank, vision-only).
+      // Ils ne peuvent pas passer les écoles BenchGo → statut 'nonllm'.
+      const nonLlm = isNonLlmModel(m);
+      const blacklisted = blacklist.has(modelKey);
       let status;
-      if (!ledger || testedSchools.length === 0) {
+      if (nonLlm || blacklisted) {
+        status = { kind: 'nonllm', tested: [], missing: [], quant: ledger ? ledger.quantization : null, reason: nonLlm ? 'Modèle non-LLM (OCR/embedding/rerank/vision)' : 'Isolé manuellement' };
+      } else if (!ledger || testedSchools.length === 0) {
         status = { kind: 'never', tested: [], missing: relevantKeys.slice(), quant: ledger ? ledger.quantization : null };
       } else if (missingSchools.length === 0) {
         status = { kind: 'complete', tested: relevantTested, missing: [], quant: ledger.quantization };
@@ -487,6 +559,8 @@ function listLlmModels() {
         size: m.sizeBytes || 0,
         arch: m.architecture || '?',
         status,
+        nonLlm,
+        blacklisted,
         // Cle du fichier MTP associe (null si aucun). Charge avec le modele
         // via --speculative-draft-mtp pour accelerer l'inference.
         mtpModelKey: mtpAssociations.get(modelKey) || null,
@@ -500,6 +574,12 @@ function listLlmModels() {
     // de repérer immédiatement le modele le plus faible (dernier des testes)
     // pour le retirer, et de privilegier le test des nouveaux d'abord.
     models.sort((a, b) => {
+      // Les modèles non-LLM (OCR/embedding/rerank/iso) vont tout à la fin.
+      const aNonLlm = a.status.kind === 'nonllm';
+      const bNonLlm = b.status.kind === 'nonllm';
+      if (aNonLlm && !bNonLlm) return 1;
+      if (!aNonLlm && bNonLlm) return -1;
+      if (aNonLlm && bNonLlm) return (a.displayName || '').localeCompare(b.displayName || '');
       const aTested = a.status.kind !== 'never' && a.metrics;
       const bTested = b.status.kind !== 'never' && b.metrics;
       if (aTested && !bTested) return -1;
@@ -520,6 +600,7 @@ function listLlmModels() {
 
 function statusBadge(status) {
   if (!status) return { label: '?', color: C.gray };
+  if (status.kind === 'nonllm')   return { label: 'NON APPLICABLE', color: C.gray };
   if (status.kind === 'never')   return { label: 'JAMAIS TESTE', color: C.yellow };
   if (status.kind === 'partial') return { label: 'PARTIEL',      color: C.magenta };
   return { label: 'COMPLET', color: C.green };
@@ -553,13 +634,47 @@ function trendGlyph(trend) {
   return `${C.gray}\u2014${C.reset}`;
 }
 
+// Recalcule le statut réel d'un modèle depuis son carnet de scores, sans
+// tenir compte du marquage nonllm/blacklist. Utilisé après une désisolation
+// (!!) pour restaurer le statut véritable (never/partial/complete) ou
+// confirmer qu'il reste non-LLM par détection heuristique.
+function recomputeStatus(m) {
+  const nonLlm = isNonLlmModel(m);
+  if (nonLlm) {
+    return { nonLlm, status: { kind: 'nonllm', tested: [], missing: [], quant: null, reason: 'Non-LLM détecté (OCR/embedding/rerank/vision)' } };
+  }
+  const ledgers = loadAllLedgers();
+  const ledger = matchLedger(m.modelKey, ledgers);
+  const testedSchools = ledgerSchoolKeys(ledger);
+  const allSchoolKeys = SCHOOLS.filter(s => s.cli !== null).map(s => s.key);
+  const school = schoolForModel(m);
+  let relevantKeys = allSchoolKeys.slice();
+  if (school) {
+    const idx = allSchoolKeys.indexOf(school.key);
+    if (idx >= 0) relevantKeys = allSchoolKeys.slice(0, idx + 1);
+  }
+  const relevantTested = testedSchools.filter(k => relevantKeys.includes(k));
+  const missingSchools = relevantKeys.filter(k => !relevantTested.includes(k));
+  let status;
+  if (!ledger || testedSchools.length === 0) {
+    status = { kind: 'never', tested: [], missing: relevantKeys.slice(), quant: ledger ? ledger.quantization : null };
+  } else if (missingSchools.length === 0) {
+    status = { kind: 'complete', tested: relevantTested, missing: [], quant: ledger.quantization };
+  } else {
+    status = { kind: 'partial', tested: relevantTested, missing: missingSchools, quant: ledger.quantization };
+  }
+  return { nonLlm, status };
+}
+
 // Selection interactive des modeles.
 async function selectModelsInteractive(models) {
   console.log(`\n  ${C.bold}${C.cyan}=== MODELES LLM TELECHARGES ===${C.reset}`);
   console.log(`  ${C.gray}Selectionnez les modeles a tester cette nuit.${C.reset}`);
   console.log(`  ${C.gray}Syntaxe : numeros separes par les virgules (ex: 1,3,5) ou "all".${C.reset}`);
-  console.log(`  ${C.gray}Ordre : modeles testes du plus fort au plus faible, puis jamais testes a la fin.${C.reset}`);
-  console.log(`  ${C.gray}Astuce : le dernier des testes est le plus faible — un bon candidat au retrait.${C.reset}\n`);
+  console.log(`  ${C.gray}Ordre : modeles testes du plus fort au plus faible, puis jamais testes, puis non-LLM a la fin.${C.reset}`);
+  console.log(`  ${C.gray}Astuce : le dernier des testes est le plus faible — un bon candidat au retrait.${C.reset}`);
+  console.log(`  ${C.gray}Isoler un modele non-LLM : !<num> (ex: !7) — le marque NON APPLICABLE et l'exclut.${C.reset}`);
+  console.log(`  ${C.gray}Désisoler : !!<num> — retire un modele de la liste noire manuelle.${C.reset}\n`);
 
   // Largeurs de colonnes calculees dynamiquement a partir des donnees reelles.
   // Chaque largeur = max(longueur du header, longueur de la plus longue valeur).
@@ -572,7 +687,7 @@ async function selectModelsInteractive(models) {
   const quantW = Math.max(7, ...models.map(m => (m.quant || '?').length));
   const sizeW = Math.max(8, ...models.map(m => fmtBytes(m.size).length));
   const pubW = Math.max(14, ...models.map(m => (m.publisher || '?').length));
-  const statusW = 13; // COMPLET / PARTIEL / JAMAIS TESTE — fixe
+  const statusW = 15; // COMPLET / PARTIEL / JAMAIS TESTE / NON APPLICABLE — fixe
   const pctW = 5;
   const tpsW = 8;
   const attW = 5;
@@ -594,7 +709,11 @@ async function selectModelsInteractive(models) {
     const badge = statusBadge(m.status);
     const statusStr = `${badge.color}${badge.label.padEnd(statusW)}${C.reset}`;
     const missing = missingSchoolsLabel(m.status);
-    const missStr = missing ? `${C.gray}${missing.padEnd(missW)}${C.reset}` : ' '.repeat(missW);
+    const missStr = missing
+      ? `${C.gray}${missing.padEnd(missW)}${C.reset}`
+      : (m.status.kind === 'nonllm' && m.status.reason)
+        ? `${C.gray}${m.status.reason.slice(0, missW).padEnd(missW)}${C.reset}`
+        : ' '.repeat(missW);
     const mtpTag = m.mtpModelKey ? `${C.cyan}[MTP]${C.reset} ` : '';
     const namePad = nameW - (mtpTag ? 6 : 0);
     const nameRaw = (m.displayName || '').slice(0, namePad);
@@ -621,9 +740,54 @@ async function selectModelsInteractive(models) {
       rl.close();
       const raw = (answer || '').trim().toLowerCase();
       if (raw === 'all' || raw === '*') { resolve(models); return; }
+      // Commandes d'isolation : !<num> isole (liste noire), !!<num> désisole.
+      const isolateMatch = raw.match(/^!(\d+)$/);
+      const unisolateMatch = raw.match(/^!!(\d+)$/);
+      if (isolateMatch) {
+        const n = parseInt(isolateMatch[1], 10);
+        if (n >= 1 && n <= models.length) {
+          const target = models[n - 1];
+          const bl = loadBlacklist();
+          bl.add(target.modelKey);
+          saveBlacklist(bl);
+          target.status = { kind: 'nonllm', tested: [], missing: [], quant: target.status.quant, reason: 'Isolé manuellement' };
+          target.blacklisted = true;
+          console.log(`  ${C.yellow}${target.displayName} → isolé (NON APPLICABLE). Ne sera plus testé.${C.reset}`);
+        } else {
+          console.log(`  ${C.red}Numéro invalide.${C.reset}`);
+        }
+        // Relance l'affichage + le prompt (async) sans bloquer.
+        resolve(selectModelsInteractive(models));
+        return;
+      }
+      if (unisolateMatch) {
+        const n = parseInt(unisolateMatch[1], 10);
+        if (n >= 1 && n <= models.length) {
+          const target = models[n - 1];
+          const bl = loadBlacklist();
+          bl.delete(target.modelKey);
+          saveBlacklist(bl);
+          // Recalcule le statut réel depuis le carnet (perte du marquage nonllm manuel).
+          const re = recomputeStatus(target);
+          target.status = re.status;
+          target.blacklisted = false;
+          target.nonLlm = re.nonLlm;
+          console.log(`  ${C.green}${target.displayName} → désisolé.${C.reset}`);
+        } else {
+          console.log(`  ${C.red}Numéro invalide.${C.reset}`);
+        }
+        resolve(selectModelsInteractive(models));
+        return;
+      }
       const indices = raw.split(/[\s,;]+/).map(s => parseInt(s, 10)).filter(n => Number.isInteger(n) && n >= 1 && n <= models.length);
       const uniq = [...new Set(indices.map(n => n - 1))];
-      resolve(uniq.map(i => models[i]));
+      // Exclut automatiquement les modèles non-LLM de la sélection de test.
+      const testable = uniq.map(i => models[i]).filter(m => m.status.kind !== 'nonllm');
+      if (testable.length < uniq.length) {
+        const excluded = uniq.length - testable.length;
+        console.log(`  ${C.yellow}${excluded} modèle(s) non-LLM exclus automatiquement de la sélection.${C.reset}`);
+      }
+      resolve(testable);
     });
   });
 }
@@ -821,6 +985,12 @@ async function main() {
       if (serverHandle.startedByUs) stopServer();
       process.exit(1);
     }
+    // Exclut les modèles non-LLM de la sélection explicite par --models.
+    const before = selected.length;
+    selected = selected.filter(m => m.status.kind !== 'nonllm');
+    if (selected.length < before) {
+      console.log(`  ${C.yellow}${before - selected.length} modèle(s) non-LLM exclus automatiquement.${C.reset}`);
+    }
     console.log(`  ${C.gray}Selection via --models : ${selected.length} modele(s).${C.reset}`);
   } else {
     if (!process.stdin.isTTY || !process.stdout.isTTY) {
@@ -991,7 +1161,10 @@ module.exports = {
   schoolLabelForModel,
   isAutoPerModel,
   isMtpModel,
-  buildMtpAssociations
+  buildMtpAssociations,
+  isNonLlmModel,
+  loadBlacklist,
+  saveBlacklist
 };
 
 if (require.main === module) {

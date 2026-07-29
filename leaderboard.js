@@ -363,12 +363,18 @@ function buildArguments(entry) {
   return { forces, faiblesses, notes };
 }
 
-// Détermine le rang/verdict du modèle.
-function getVerdict(entry) {
-  const v = entry.mandatoryTotal > 0 ? entry.mandatoryPct : entry.pct;
-  if (v >= 80) return { label: 'RECOMMANDÉ', color: '#28a745', rank: 1 };
-  if (v >= 50) return { label: 'PARTIEL — RÉSERVES', color: '#ffc107', rank: 2 };
-  return { label: 'NON RECOMMANDÉ', color: '#dc3545', rank: 3 };
+// Détermine le verdict du modèle — aligné sur les 5 catégories de getCategory.
+// Utilise le % global (pct), comme getCategory, et non mandatoryPct qui
+// pouvait afficher "RECOMMANDÉ" pour un modèle faible globalement (ex: 32%
+// mais 80% sur l'obligatoire). Le rang n'est connu qu'en contexte trié ; on
+// l'accepte optionnellement pour marquer le podium.
+function getVerdict(entry, rank) {
+  const p = entry.pct;
+  if (typeof rank === 'number' && rank <= 3) return { label: 'TOP DU TOP', color: '#ffd700', rank: 0 };
+  if (p >= 90) return { label: 'RECOMMANDÉ', color: '#28a745', rank: 1 };
+  if (p >= 75) return { label: 'DANS LA MOYENNE', color: '#17a2b8', rank: 2 };
+  if (p >= 50) return { label: 'EN RATTRAPAGE', color: '#ffc107', rank: 3 };
+  return { label: 'ÉCHEC TOTAL', color: '#dc3545', rank: 4 };
 }
 
 // Catégorie de filtrage (plus fine que le verdict) basée sur le % global.
@@ -379,6 +385,7 @@ function getVerdict(entry) {
 //   - En rattrapage : modèles qui doivent repasser les écoles pour gagner
 //                     des points supplémentaires (>= 50%).
 //   - Échec total   : modèles non fiables, à supprimer du classement (< 50%).
+// Seuils identiques à getVerdict (synchroniser les deux si modification).
 function getCategory(entry, rank = null) {
   const p = entry.pct;
   if (rank && rank <= 3) return { key: 'top', label: 'Top du top', icon: '🏆', color: '#ffd700' };
@@ -463,7 +470,7 @@ function buildLeaderboardHTML(entries) {
   // (forces/faiblesses, détail par école, etc. — calculés une seule fois côté serveur).
   const modelsData = entries.map((e, idx) => {
     const rank = idx + 1;
-    const verdict = getVerdict(e);
+    const verdict = getVerdict(e, rank);
     const grade = letterGrade(e.pct);
     const args = buildArguments(e);
     const cat = getCategory(e, rank);
@@ -1390,7 +1397,7 @@ function renderCards() {
     var cardClass = i === 0 ? 'gold' : i === 1 ? 'silver' : i === 2 ? 'bronze' : '';
     var rankDisp = i < 3
       ? '<span class="medal">' + (i === 0 ? '🥇' : i === 1 ? '🥈' : '🥉') + '</span>'
-      : (i + 1);
+      : shown;
     var posArrow = positionArrow(m.positionDelta);
     var pc = pctColor(m.pct);
     var sc = m.globalLifeScore < 0 ? '#f85149' : '#3fb950';
@@ -2495,7 +2502,7 @@ function buildLeaderboardMarkdown(entries) {
 
   for (let i = 0; i < entries.length; i++) {
     const e = entries[i];
-    const verdict = getVerdict(e);
+    const verdict = getVerdict(e, i + 1);
     const grade = letterGrade(e.pct);
     const args = buildArguments(e);
 
@@ -2523,8 +2530,8 @@ function buildLeaderboardMarkdown(entries) {
   }
 
   md += `\n---\n\n## Détail par modèle\n\n`;
-  for (const e of entries) {
-    const verdict = getVerdict(e);
+  entries.forEach((e, idx) => {
+    const verdict = getVerdict(e, idx + 1);
     const grade = letterGrade(e.pct);
     const args = buildArguments(e);
     md += `### ${e.model}\n\n`;
@@ -2549,7 +2556,7 @@ function buildLeaderboardMarkdown(entries) {
       md += `| ${ecole.ecole} | ${ecole.score}/${ecole.max} | ${ecole.pct}% | ${g.grade} | +${ecole.optionalBonus} | ${ecole.globalLifeScore} | ${temps} | ${vit} |\n`;
     }
     md += `\n`;
-  }
+  });
 
   return md;
 }
@@ -2753,37 +2760,64 @@ function printUntestedLmStudioModels() {
 
   const neverTested = result.models.filter(m => m.status.kind === 'never');
   const partial = result.models.filter(m => m.status.kind === 'partial');
+  const nonLlm = result.models.filter(m => m.status.kind === 'nonllm');
   const total = neverTested.length + partial.length;
 
-  if (total === 0) {
+  if (total === 0 && nonLlm.length === 0) {
     console.log(`  \x1b[32m━━━ MODÈLES LM STUDIO — TOUS TESTÉS ━━━\x1b[0m`);
     console.log(`  \x1b[90m${result.models.length} modèle(s) LM Studio détecté(s), tous présents dans le classement.\x1b[0m`);
     return;
   }
 
-  console.log(`  \x1b[33m━━━ MODÈLES LM STUDIO NON TESTÉS (${total}) ━━━\x1b[0m`);
-  console.log(`  \x1b[90m${result.models.length} modèle(s) téléchargé(s) dans LM Studio, ${total} absent(s) du classement.\x1b[0m`);
+  if (total > 0) {
+    console.log(`  \x1b[33m━━━ MODÈLES LM STUDIO NON TESTÉS (${total}) ━━━\x1b[0m`);
+    console.log(`  \x1b[90m${result.models.length} modèle(s) téléchargé(s) dans LM Studio, ${total} absent(s) du classement.\x1b[0m`);
 
-  const headers = ['Modèle', 'Param', 'Quant', 'Statut', 'Écoles manquantes'];
-  const aligns = ['left', 'right', 'left', 'left', 'left'];
-  const rows = [];
+    const headers = ['Modèle', 'Param', 'Quant', 'Statut', 'Écoles manquantes'];
+    const aligns = ['left', 'right', 'left', 'left', 'left'];
+    const rows = [];
 
-  for (const m of neverTested) {
-    const badge = nightBatch.statusBadge(m.status);
-    rows.push([m.displayName || m.modelKey, m.params || '?', m.quant || '?', badge.label, nightBatch.missingSchoolsLabel(m.status) || '—']);
-  }
-  for (const m of partial) {
-    const badge = nightBatch.statusBadge(m.status);
-    rows.push([m.displayName || m.modelKey, m.params || '?', m.quant || '?', badge.label, nightBatch.missingSchoolsLabel(m.status) || '—']);
+    for (const m of neverTested) {
+      const badge = nightBatch.statusBadge(m.status);
+      rows.push([m.displayName || m.modelKey, m.params || '?', m.quant || '?', badge.label, nightBatch.missingSchoolsLabel(m.status) || '—']);
+    }
+    for (const m of partial) {
+      const badge = nightBatch.statusBadge(m.status);
+      rows.push([m.displayName || m.modelKey, m.params || '?', m.quant || '?', badge.label, nightBatch.missingSchoolsLabel(m.status) || '—']);
+    }
+
+    const res = cliTable.table(headers, rows, { colAligns: aligns, separator: '  ' });
+    console.log(`  \x1b[90m    ${res.lines[0]}\x1b[0m`);
+    console.log(`  \x1b[90m    ${res.sepLine}\x1b[0m`);
+    for (let i = 0; i < rows.length; i++) {
+      console.log(`  \x1b[90m${res.lines[i + 2]}\x1b[0m`);
+    }
+    console.log(`  \x1b[90mAstuce : node night-batch.js pour tester ces modèles automatiquement.\x1b[0m`);
   }
 
-  const res = cliTable.table(headers, rows, { colAligns: aligns, separator: '  ' });
-  console.log(`  \x1b[90m    ${res.lines[0]}\x1b[0m`);
-  console.log(`  \x1b[90m    ${res.sepLine}\x1b[0m`);
-  for (let i = 0; i < rows.length; i++) {
-    console.log(`  \x1b[90m${res.lines[i + 2]}\x1b[0m`);
+  // --- Modèles non-LLM (OCR, embedding, rerank, vision-only, isolés) ---
+  // Affichés séparément avec le badge NON APPLICABLE pour indiquer qu'ils ne
+  // peuvent pas passer les écoles BenchGo (pas des LLM textuels).
+  if (nonLlm.length > 0) {
+    console.log('');
+    console.log(`  \x1b[90m━━━ MODÈLES NON APPLICABLES (${nonLlm.length}) ━━━\x1b[0m`);
+    console.log(`  \x1b[90mModèles non-LLM (OCR, embedding, rerank, vision) ou isolés manuellement — non testables par BenchGo.\x1b[0m`);
+    const headers = ['Modèle', 'Param', 'Quant', 'Statut', 'Raison'];
+    const aligns = ['left', 'right', 'left', 'left', 'left'];
+    const rows = [];
+    for (const m of nonLlm) {
+      const badge = nightBatch.statusBadge(m.status);
+      const reason = m.status.reason || (m.nonLlm ? 'Non-LLM détecté' : (m.blacklisted ? 'Isolé manuellement' : '—'));
+      rows.push([m.displayName || m.modelKey, m.params || '?', m.quant || '?', badge.label, reason]);
+    }
+    const res = cliTable.table(headers, rows, { colAligns: aligns, separator: '  ' });
+    console.log(`  \x1b[90m    ${res.lines[0]}\x1b[0m`);
+    console.log(`  \x1b[90m    ${res.sepLine}\x1b[0m`);
+    for (let i = 0; i < rows.length; i++) {
+      console.log(`  \x1b[90m${res.lines[i + 2]}\x1b[0m`);
+    }
+    console.log(`  \x1b[90mAstuce : node night-batch.js --isoler=<numéro> pour isoler/désisoler un modèle depuis le CLI interactif.\x1b[0m`);
   }
-  console.log(`  \x1b[90mAstuce : node night-batch.js pour tester ces modèles automatiquement.\x1b[0m`);
 }
 
 // Génère le classement complet (HTML + Markdown) et le sauvegarde.
@@ -2850,9 +2884,9 @@ function generateLeaderboard() {
   const lbMedals = [];
   for (let i = 0; i < entries.length; i++) {
     const e = entries[i];
-    const verdict = getVerdict(e);
+    const verdict = getVerdict(e, i + 1);
     const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : '  ';
-    const vColor = verdict.rank === 1 ? '\x1b[32m' : verdict.rank === 2 ? '\x1b[33m' : '\x1b[31m';
+    const vColor = verdict.rank === 0 ? '\x1b[93m' : verdict.rank === 1 ? '\x1b[32m' : verdict.rank === 2 ? '\x1b[36m' : verdict.rank === 3 ? '\x1b[33m' : '\x1b[31m';
     const quant = e.quantization ? `\x1b[35m${e.quantization}\x1b[0m` : '\x1b[90m—\x1b[0m';
     const temps = e.elapsedMs > 0 ? `\x1b[90m${formatDuration(e.elapsedMs)}\x1b[0m` : '\x1b[90m—\x1b[0m';
     const tpsC = e.tokensPerSecond >= 50 ? '\x1b[32m' : e.tokensPerSecond >= 25 ? '\x1b[33m' : e.tokensPerSecond > 0 ? '\x1b[31m' : '\x1b[90m';

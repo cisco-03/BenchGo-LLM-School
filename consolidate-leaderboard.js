@@ -326,18 +326,20 @@ function buildConsolidatedHTML(entries) {
     return { forces, faiblesses, notes }
   }
 
-  function getVerdict(entry) {
-    const v = entry.mandatoryTotal > 0 ? entry.mandatoryPct : entry.pct
-    if (v >= 80) return { label: 'RECOMMANDÉ', color: '#28a745', rank: 1 }
-    if (v >= 50) return { label: 'PARTIEL — RÉSERVES', color: '#ffc107', rank: 2 }
-    return { label: 'NON RECOMMANDÉ', color: '#dc3545', rank: 3 }
+  function getVerdict(entry, rank) {
+    const p = entry.pct;
+    if (typeof rank === 'number' && rank <= 3) return { label: 'TOP DU TOP', color: '#ffd700', rank: 0 }
+    if (p >= 90) return { label: 'RECOMMANDÉ', color: '#28a745', rank: 1 }
+    if (p >= 75) return { label: 'DANS LA MOYENNE', color: '#17a2b8', rank: 2 }
+    if (p >= 50) return { label: 'EN RATTRAPAGE', color: '#ffc107', rank: 3 }
+    return { label: 'ÉCHEC TOTAL', color: '#dc3545', rank: 4 }
   }
 
   const modelsJson = safeForScript(JSON.stringify(entries.map((e, idx) => {
     const rank = idx + 1
     const cat = getCategory(e.pct, rank)
     const psize = getParamSize(e.model)
-    const verdict = getVerdict(e)
+    const verdict = getVerdict(e, idx + 1)
     const grade = gradeLetter(e.pct)
     const args = buildArguments(e)
     return {
@@ -1009,7 +1011,7 @@ function renderCards() {
     var cardClass = i === 0 ? 'gold' : i === 1 ? 'silver' : i === 2 ? 'bronze' : '';
     var rankDisp = i < 3
       ? '<span class="medal">' + (i === 0 ? '🥇' : i === 1 ? '🥈' : '🥉') + '</span>'
-      : (i + 1);
+      : shown;
     var pc = pctColor(m.pct);
     var sc = m.globalLifeScore < 0 ? '#f85149' : '#3fb950';
     var gc = gradeColor(m.grade);

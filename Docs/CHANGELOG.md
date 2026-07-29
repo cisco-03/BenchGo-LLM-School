@@ -1,5 +1,59 @@
 # CHANGELOG - Carnet de Notes BenchGo
 
+## 2026-07-29 (5) — fix: numérotation des cartes redémarre à 1 par filtre catégorie
+
+### Contexte
+Dans le classement HTML (local + communautaire), le sélecteur de catégorie filtre les modèles mais la numérotation des cartes gardait l'index global. Ex : en cliquant « Recommandés », la 1re carte affichait « 4 » (rang mondial) au lieu de « 1 » (rang dans le filtre). Idem pour « Dans la moyenne » qui démarrait à 19.
+
+### Implémentation (`leaderboard.js` + `consolidate-leaderboard.js` → `renderCards`)
+- `rankDisp` : remplacement de `(i + 1)` par `shown` (compteur relatif au filtre, incrémenté après chaque carte affichée).
+- Les médailles 🥇🥈🥉 restent liées à l'index global `i` (top 3 mondial) — inchangé.
+- La modale détail conserve le rang mondial réel (`idx + 1`) — inchangé.
+
+#### Vérifications
+- `node --check` : leaderboard.js, consolidate-leaderboard.js → OK.
+- `vm.Script` sur `classement.html` et `community-leaderboard.html` → JS inline OK.
+- HTML généré : `shown` présent, `(i + 1)` absent du rendu de carte.
+
+## 2026-07-29 (4) — fix: verdict CLI aligné sur 5 catégories HTML + détection modèles non-LLM (OvisOCR2)
+
+### Contexte
+1. Le verdict du CLI (`getVerdict` dans `leaderboard.js`) n'avait que 3 niveaux (RECOMMANDÉ ≥80%, PARTIEL ≥50%, NON RECOMMANDÉ) basés sur `mandatoryPct`, alors que les catégories HTML (`getCategory`) en ont 5 basés sur `pct` global. Résultat : un modèle à 32% global mais 80% sur l'obligatoire (supergemma-4-12b-abliterated) s'affichait « RECOMMANDÉ » dans le CLI — incohérent avec le classement HTML qui le mettait en « Échec total ». De plus, les modèles entre 80-90% étaient marqués RECOMMANDÉ alors que la catégorie HTML dit « Dans la moyenne » à partir de 75%.
+2. Le modèle OvisOCR2 (752M, OCR — reconnaissance de texte dans images) apparaissait dans la liste « modèles non testés » du CLI avec 4 écoles manquantes (LIGHT, STANDARD, EXPERT, DOCTORAT). C'est un modèle non-LLM qui ne peut pas passer les écoles BenchGo.
+
+### Implémentation
+
+#### 1. Unification `getVerdict` ↔ `getCategory` (`leaderboard.js` + `consolidate-leaderboard.js`)
+- `getVerdict(entry, rank)` accepte désormais un rang optionnel et utilise `pct` global (plus `mandatoryPct`).
+- 5 niveaux alignés sur `getCategory` : TOP DU TOP (rang 1-3, or), RECOMMANDÉ (≥90%, vert), DANS LA MOYENNE (≥75%, cyan), EN RATTRAPAGE (≥50%, jaune), ÉCHEC TOTAL (<50%, rouge).
+- Couleurs ANSI CLI mises à jour : or (`\x1b[93m`) pour le podium, vert/cyan/jaune/rouge pour les 4 autres.
+- Tous les appels `getVerdict` mis à jour pour passer le rang : `buildLeaderboardHTML` (ligne 466), `buildLeaderboardMarkdown` table + détail (lignes 2505, 2534), CLI `generateLeaderboard` (ligne 2860).
+- Même correction appliquée à `consolidate-leaderboard.js` (getVerdict + appel ligne 342).
+
+#### 2. Détection automatique des modèles non-LLM (`night-batch.js`)
+- Nouvelle fonction `isNonLlmModel(m)` : détecte les OCR (ovisocr, got-ocr), embeddings (e5-, bge-, gte-, nomic-embed), rerank (jina-reranker, cohere-rerank), vision-only (clip, dino-v, sam, yolo, detector) via regex sur displayName, modelKey, publisher, arch, basename du path.
+- Nouveau statut `kind: 'nonllm'` dans `listLlmModels` : les modèles non-LLM ne sont plus comptés comme « jamais testés » ni « partiels ».
+- `statusBadge` : ajout du badge « NON APPLICABLE » (gris).
+- Tri : les modèles non-LLM vont en fin de liste (après les jamais testés).
+
+#### 3. Section « NON APPLICABLES » dans le CLI (`leaderboard.js` → `printUntestedLmStudioModels`)
+- Nouvelle section séparée affichant les modèles non-LLM avec leur raison (OCR/embedding/rerank/vision ou isolé manuellement).
+- La section « non testés » n'inclut plus les non-LLM (OvisOCR2 retiré → 8 au lieu de 9).
+
+#### 4. Liste noire interactive (`night-batch.js` → `selectModelsInteractive`)
+- Syntaxe `!<num>` : isole un modèle (marque NON APPLICABLE, persiste dans `.benchgo-blacklist.json`).
+- Syntaxe `!!<num>` : désisole un modèle (retire de la liste noire, recalcule le statut réel via `recomputeStatus`).
+- Sélection `all`/numéros : exclut automatiquement les non-LLM de la sélection de test.
+- `--models=key` : exclut aussi les non-LLM explicitement.
+- Largeur colonne statut passée de 13 à 15 (pour « NON APPLICABLE »).
+
+#### Vérifications
+- `node --check` : leaderboard.js, consolidate-leaderboard.js, night-batch.js → OK.
+- `node tests/run-tests.js` : 27/27 passés.
+- `node leaderboard.js` : verdict CLI affiche les 5 niveaux correctement (supergemma 32% → ÉCHEC TOTAL).
+- `vm.Script` sur `classement.html` et `gh-pages-output/community-leaderboard.html` → JS inline OK.
+- OvisOCR2 apparaît dans « MODÈLES NON APPLICABLES (1) » avec raison « Modèle non-LLM (OCR/embedding/rerank/vision) ».
+
 ## 2026-07-29 (3) — fix: classement communautaire vide (backticks JS cassaient renderCards) + bouton local corrigé
 
 ### Contexte
