@@ -134,7 +134,7 @@
       "tokensPerSecond": 8.84,
       "ecoleCount": 1,
       "pseudo": "FlexoDiv",
-      "submittedAt": "2026-07-29T06:36:48.449Z",
+      "submittedAt": "2026-07-29T07:17:27.662Z",
       "contributors": 1,
       "allPct": [
         97
@@ -154,7 +154,7 @@
       "tokensPerSecond": 0,
       "ecoleCount": 2,
       "pseudo": "FlexoDiv",
-      "submittedAt": "2026-07-24T16:54:17.577Z",
+      "submittedAt": "2026-07-29T07:17:21.559Z",
       "contributors": 1,
       "allPct": [
         96
@@ -554,7 +554,7 @@
       "tokensPerSecond": 16.32,
       "ecoleCount": 1,
       "pseudo": "FlexoDiv",
-      "submittedAt": "2026-07-29T06:37:11.201Z",
+      "submittedAt": "2026-07-29T07:17:32.536Z",
       "contributors": 1,
       "allPct": [
         58
@@ -721,6 +721,6 @@
       ]
     }
   ],
-  "generatedAt": "2026-07-29T07:17:41.316Z",
+  "generatedAt": "2026-07-29T07:17:56.587Z",
   "totalSubmissions": 36
 }
