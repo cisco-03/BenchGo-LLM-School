@@ -936,7 +936,7 @@ async function proposeCommunitySubmission(shortName, options) {
     console.log('\n  \x1b[1;36m━━━ COMMUNAUTÉ BENCHGO ━━━\x1b[0m');
     console.log('  \x1b[90mEnvoyez vos résultats sur le dépôt communautaire pour alimenter le classement\x1b[0m');
     console.log('  \x1b[90mconsolidé visible par tous. Votre carnet sera soumis via une Pull Request GitHub\x1b[0m');
-    console.log('  \x1b[90mque le propriétaire du dépôt validera. Un token GitHub (PAT, scope repo) est requis.\x1b[0m');
+    console.log('  \x1b[90mqui sera mergée automatiquement (résultats JSON, pas de code à valider).\x1b[0m');
     const wantsSubmit = await askYesNo('  Envoyer vos résultats sur le classement communautaire ?', true);
     if (!wantsSubmit) {
       console.log('  \x1b[90mSoumission ignorée. Vous pouvez le faire plus tard avec : node runner.js --submit\x1b[0m');
@@ -1002,8 +1002,14 @@ async function proposeCommunitySubmission(shortName, options) {
     console.log(`  \x1b[32mPull Request créée : ${result.prUrl}\x1b[0m`);
     console.log(`  \x1b[90mBranche : ${result.branch}\x1b[0m`);
     console.log(`  \x1b[90mFichier : ${result.filePath}\x1b[0m`);
-    console.log('  \x1b[90mLe propriétaire du dépôt validera votre PR pour intégrer vos résultats\x1b[0m');
-    console.log('  \x1b[90mau classement consolidé. Merci pour votre participation !\x1b[0m\n');
+    if (result.merged) {
+      console.log(`  \x1b[32mPR #${result.prNumber} mergée automatiquement — résultats intégrés au classement\x1b[0m`);
+      console.log('  \x1b[90mLe classement communautaire sera reconstruit par la GitHub Action.\x1b[0m');
+    } else {
+      console.log(`  \x1b[33mMerge auto impossible : ${result.mergeMessage || 'raison inconnue'}\x1b[0m`);
+      console.log('  \x1b[90mLe propriétaire du dépôt validera votre PR manuellement.\x1b[0m');
+    }
+    console.log('  \x1b[90mMerci pour votre participation !\x1b[0m\n');
   } catch (e) {
     console.log(`\n  \x1b[31mÉchec de la soumission : ${e.message}\x1b[0m`);
     console.log('  \x1b[33mVérifiez votre token GitHub et vos droits sur le dépôt.\x1b[0m');

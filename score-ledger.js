@@ -87,10 +87,13 @@ function pickBest(attempts) {
 // `quantization` (optionnel) est stockée au niveau du carnet (par modèle) : un même
 // modèle testé avec plusieurs quantifications verra sa dernière quantification connue
 // mise à jour. C'est au niveau du résultat qu'elle est aussi conservée, pour l'historique.
-function saveResult(shortName, modelName, result, quantization) {
+function saveResult(shortName, modelName, result, quantization, publisher) {
   const ledger = loadLedger(shortName);
   ledger.model = modelName;
   ledger.shortName = shortName;
+  if (publisher) {
+    ledger.publisher = publisher;
+  }
   // Horodatage précis (ms) du résultat (§6 Données) : permet l'analyse de
   // convergence temporelle et la comparaison inter-modèles fine. Stocké en plus
   // du date/time (jour/heure) existant pour rétro-compat.

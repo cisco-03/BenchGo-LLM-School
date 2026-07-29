@@ -1,5 +1,64 @@
 # CHANGELOG - Carnet de Notes BenchGo
 
+## 2026-07-29 — feat: merge auto PRs communautaires + URL modèle + exports + modale communautaire
+
+### Contexte
+1. Les PR communautaires devaient être mergées à la main une par une — fastidieux quand il y en a des dizaines. Comme les soumissions ne contiennent que des résultats JSON (pas de code), aucun risque à les merger automatiquement.
+2. L'écart entre le classement local et communautaire provenait de carnets locaux plus récents que les soumissions GitHub. Re-soumission des 36 carnets pour synchroniser.
+3. Suppression du bouton « Exporter PNG » (capture DOM via SVG foreignObject, peu fiable). Conservation du PDF + ajout CSV et Markdown (tableau).
+4. Besoin d'un lien cliquable vers le modèle (Hugging Face, LM Studio...) dans la modale détails — devinette auto + édition manuelle par l'utilisateur.
+5. Le classement communautaire n'avait pas de modale au clic sur un modèle. Ajout d'une modale détails + exports identiques au leaderboard local.
+
+### Implémentation
+
+#### 1. Merge automatique des PRs communautaires (`community-sync.js`)
+- Nouvelle fonction `mergePullRequest(token, prNumber)` qui appelle `PUT /repos/.../pulls/{n}/merge` (merge_method: merge).
+- `submitResults` merge la PR juste après sa création. Si le merge échoue (ex: protections de branche), la PR reste ouverte — pas de crash.
+- Retour enrichi : `{ ok, prUrl, prNumber, merged, mergeMessage, branch, filePath }`.
+- Messages UI mis à jour dans `runner.js` (affichage merge OK/échec) et `leaderboard.js` (modale de soumission).
+- Corps de PR mis à jour : mentionne le merge automatique.
+
+#### 2. URL du modèle dans le carnet (`leaderboard.js`, `score-ledger.js`)
+- Nouvelle fonction `guessModelUrl(modelName, publisher)` : devine l'URL Hugging Face à partir du nom (si `publisher/model`) ou du publisher stocké.
+- `score-ledger.js#saveResult` accepte désormais un paramètre `publisher` stocké dans le carnet.
+- `leaderboard.js` : `modelUrl` ajouté au `modelsData` (carnet > devinette > null).
+- Modale : section « 🔗 Lien du modèle » avec lien cliquable + bouton « ✎ Modifier » / « + Ajouter un lien ».
+- Édition inline : champ URL + boutons Enregistrer / Effacer / Annuler.
+- Persistance double :
+  - Mode serveur (`--serve`) : API `GET/POST /api/model-url?shortName=...` → écrit dans le carnet JSON.
+  - Hors-serveur (ouverture locale du HTML) : localStorage (fallback).
+- CSS : `.model-url-section`, `.model-url-link`, `.model-url-edit`, `.btn-sm`.
+
+#### 3. Exports du leaderboard local (`leaderboard.js`)
+- Suppression de `exportLeaderboardPng` et du bouton « 🖼 Exporter PNG ».
+- Nouveaux boutons : « 📊 Exporter CSV » et « 📝 Exporter Markdown ».
+- `exportLeaderboardCsv` : génère un CSV (rang, modèle, quantif, score, %, note, obligatoire, santé, bonus, écoles, vitesse, temps).
+- `exportLeaderboardMd` : génère un tableau Markdown avec médailles 🥇🥈🥉.
+- Helpers : `csvCell`, `mdCell`, `downloadTextFile` (Blob + BOM UTF-8).
+
+#### 4. Modale + exports sur le classement communautaire (`consolidate-leaderboard.js`)
+- `guessModelUrl` ajouté + `modelUrl`/`publisher` dans l'agrégation et les données sérialisées.
+- Cartes cliquables (`onclick="openModal(idx)"`) → ouverture d'une modale détails.
+- Modale : statistiques (points, %, note, santé, bonus, écoles, vitesse, temps) + lien du modèle + métadonnées (nom court, pseudo, contributeurs).
+- Fermeture : clic sur l'overlay ou touche Échap.
+- Boutons d'export dans la barre sticky : « 📄 PDF » (window.print), « 📊 CSV », « 📝 MD ».
+- CSS complet pour la modale (`.modal-overlay`, `.modal`, `.modal-head`, `.full-stats`, etc.) + media print.
+- Les filtres catégorie/taille et la recherche étaient déjà présents (identiques au leaderboard local).
+
+### Vérification
+- `node --check` sur `community-sync.js`, `runner.js`, `score-ledger.js`, `leaderboard.js`, `consolidate-leaderboard.js` → OK.
+- `node leaderboard.js` → classement régénéré avec nouveaux boutons (CSV, MD) et sans PNG.
+- `node consolidate-leaderboard.js` → HTML communautaire généré avec modale + exports.
+- Re-soumission des 36 carnets : 36/36 PRs créées ET mergées automatiquement (PR #41 à #76).
+- Workflow `consolidate.yml` déclenché automatiquement par les merges.
+
+### Fichiers modifiés
+- `community-sync.js` — `mergePullRequest`, `submitResults` (auto-merge), export, corps de PR.
+- `runner.js` — messages de soumission (merge OK/échec).
+- `score-ledger.js` — `saveResult` (paramètre `publisher`).
+- `leaderboard.js` — `guessModelUrl`, `modelUrl` dans `modelsData`, section URL modale, API `/api/model-url`, suppression PNG, exports CSV/MD, CSS.
+- `consolidate-leaderboard.js` — `guessModelUrl`, `modelUrl`/`publisher`, modale détails, exports CSV/MD/PDF, CSS modale + print.
+
 ## 2026-07-26 — feat: classement local dans night-batch + prompt professeur renforcé
 
 ### Contexte

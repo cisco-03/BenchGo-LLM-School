@@ -63,6 +63,30 @@ function savePositionSnapshot(entries) {
   return snapshot;
 }
 
+// Devine l'URL Hugging Face d'un modèle à partir de son nom.
+// Si le nom contient un "/" (ex: "unsloth/gemma-4-12b-it-qat"), on construit
+// directement l'URL https://huggingface.co/<publisher>/<model>. Sinon, on
+// essaie avec le publisher stocké dans le carnet (s'il existe).
+// @returns {string|null} URL Hugging Face ou null si non déterminable.
+function guessModelUrl(modelName, publisher) {
+  if (!modelName) return null;
+  const name = String(modelName).trim();
+  // Si le nom contient déjà un chemin publisher/model → URL directe
+  if (name.includes('/')) {
+    // Nettoie les éventuels sous-paths GGUF (ex: "yuxinlu1/.../gemma4-v2-q8_0.gguf")
+    const parts = name.split('/');
+    if (parts.length >= 2) {
+      return 'https://huggingface.co/' + parts.slice(0, 2).join('/');
+    }
+  }
+  // Si on a un publisher stocké, on construit publisher/model
+  if (publisher) {
+    const baseName = name.split('/').pop().replace(/\.gguf$/i, '');
+    return 'https://huggingface.co/' + publisher + '/' + baseName;
+  }
+  return null;
+}
+
 // Calcule le delta de position pour chaque entrée en comparant le rang actuel
 // au rang stocké dans le snapshot précédent. Retourne une map { shortName: delta }.
 //   delta > 0 : le modèle a DESCENDU (son rang a augmenté, ex: 3 → 5, delta = +2).
@@ -455,6 +479,7 @@ function buildLeaderboardHTML(entries) {
       shortName: e.shortName,
       model: e.model,
       quantization: e.quantization || null,
+      modelUrl: ledger.modelUrl || guessModelUrl(e.model, ledger.publisher) || null,
       pct: e.pct,
       score: e.score,
       max: e.max,
@@ -971,6 +996,17 @@ function buildLeaderboardHTML(entries) {
   }
   .meta-line code { background: var(--bg-3); padding: 1px 6px; border-radius: 4px; font-family: 'Cascadia Code', 'Consolas', monospace; color: var(--purple); }
 
+  /* Section lien du modèle (modale) */
+  .model-url-section { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-xs); margin-bottom: var(--space-s); }
+  .model-url-display { display: inline-flex; align-items: center; gap: 6px; }
+  .model-url-link {
+    color: var(--accent); text-decoration: none; font-size: var(--fs-small);
+    word-break: break-all; border-bottom: 1px dashed transparent; transition: border-color 0.15s;
+  }
+  .model-url-link:hover { border-bottom-color: var(--accent); }
+  .model-url-edit { display: flex; flex-direction: column; gap: var(--space-xs); }
+  .btn-sm { padding: 4px 12px; font-size: var(--fs-small); border-radius: var(--r-sm); }
+
   /* Rapport intégral (modale) — sections repliables par école/tier */
   .report-block { margin-top: var(--space-s); }
   .report-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-s); margin-bottom: var(--space-s); }
@@ -1192,8 +1228,9 @@ function buildLeaderboardHTML(entries) {
         <span class="result-count" id="resultCount"></span>
         <button class="btn btn-primary" id="btnCopyAll" title="Copier tout le classement (texte brut) pour le partager">⧉ Copier le classement</button>
         <button class="btn btn-community" id="btnSubmitCommunity" title="Envoyer vos résultats sur le classement communautaire GitHub">🌐 Envoyer à la communauté</button>
-        <button class="btn btn-primary" id="btnExportPng" title="Exporter le classement visible en PNG (capture du DOM via SVG foreignObject)">🖼 Exporter PNG</button>
         <button class="btn btn-primary" id="btnExportPdf" title="Imprimer / Exporter en PDF (dialogue navigateur)">📄 Exporter PDF</button>
+        <button class="btn btn-primary" id="btnExportCsv" title="Exporter le classement en CSV (tableur)">📊 Exporter CSV</button>
+        <button class="btn btn-primary" id="btnExportMd" title="Exporter le classement en tableau Markdown">📝 Exporter Markdown</button>
       </div>
     </div>
   </div>
@@ -1495,6 +1532,22 @@ function openModal(idx) {
   }
   body += '</div>';
 
+  // --- Section : lien vers le modèle (Hugging Face, LM Studio, etc.) ---
+  // L'URL est devinée automatiquement (publisher/model) ou saisie manuellement
+  // par l'utilisateur via le bouton "Modifier". Persistance dans le carnet via
+  // l'API serveur /api/model-url (ou localStorage en hors-serveur).
+  var currentUrl = m.modelUrl || _getModelUrlLocal(m.shortName);
+  body += '<h3>🔗 Lien du modèle</h3>';
+  body += '<div class="model-url-section" id="modelUrlSection">';
+  if (currentUrl) {
+    body += '<div class="model-url-display"><a href="' + esc(currentUrl) + '" target="_blank" rel="noopener noreferrer" class="model-url-link">🌐 ' + esc(currentUrl) + '</a></div>';
+    body += '<button class="btn btn-primary btn-sm" onclick="editModelUrl(' + idx + ')" style="margin-left:8px;">✎ Modifier</button>';
+  } else {
+    body += '<p style="color:var(--text-muted);font-size:var(--fs-small);">Aucun lien défini. Cliquez sur « Ajouter » pour renseigner l&#39;URL Hugging Face ou LM Studio du modèle.</p>';
+    body += '<button class="btn btn-primary btn-sm" onclick="editModelUrl(' + idx + ')">+ Ajouter un lien</button>';
+  }
+  body += '</div>';
+
   // --- Section Tendance (progression / régression / redoublement) ---
   // Affichée uniquement si au moins une école a un historique de re-tests.
   if (m.trend) {
@@ -1730,6 +1783,95 @@ function closeModal() {
   document.getElementById('modal').classList.remove('show');
   document.body.style.overflow = '';
 }
+
+// --- Gestion du lien du modèle (URL Hugging Face / LM Studio) ---
+// Persistance double :
+//   - En mode serveur (--serve) : POST /api/model-url → écrit dans le carnet JSON.
+//   - En hors-serveur (ouverture locale du HTML) : localStorage (fallback).
+// L'URL devinée automatiquement (guessModelUrl) est pré-remplie si l'utilisateur
+// n'a rien défini manuellement.
+var MODEL_URL_LS_KEY = 'benchgo_model_urls';
+function _getModelUrlLocal(shortName) {
+  try {
+    var map = JSON.parse(localStorage.getItem(MODEL_URL_LS_KEY) || '{}');
+    return map[shortName] || null;
+  } catch (e) { return null; }
+}
+function _setModelUrlLocal(shortName, url) {
+  try {
+    var map = JSON.parse(localStorage.getItem(MODEL_URL_LS_KEY) || '{}');
+    if (url) map[shortName] = url; else delete map[shortName];
+    localStorage.setItem(MODEL_URL_LS_KEY, JSON.stringify(map));
+  } catch (e) {}
+}
+
+// Ouvre un champ d'édition inline pour l'URL du modèle.
+function editModelUrl(idx) {
+  var m = MODELS[idx];
+  var section = document.getElementById('modelUrlSection');
+  if (!section) return;
+  var currentUrl = m.modelUrl || _getModelUrlLocal(m.shortName) || '';
+  var html = '<div class="model-url-edit">';
+  html += '<input type="url" id="modelUrlInput" class="search" style="width:min(100%,420px)" value="' + esc(currentUrl) + '" placeholder="https://huggingface.co/… ou https://… (URL du modèle)" />';
+  html += '<div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;">';
+  html += '<button class="btn btn-primary btn-sm" onclick="saveModelUrl(' + idx + ')">💾 Enregistrer</button>';
+  if (currentUrl) html += '<button class="btn btn-sm" onclick="saveModelUrl(' + idx + ',true)" style="background:var(--bg-3);color:var(--red);">🗑 Effacer</button>';
+  html += '<button class="btn btn-sm" onclick="cancelEditModelUrl(' + idx + ')" style="background:var(--bg-3);color:var(--text-muted);">Annuler</button>';
+  html += '</div></div>';
+  section.innerHTML = html;
+  var input = document.getElementById('modelUrlInput');
+  if (input) { input.focus(); input.select(); }
+}
+
+// Annule l'édition et restaure l'affichage normal.
+function cancelEditModelUrl(idx) {
+  var m = MODELS[idx];
+  var section = document.getElementById('modelUrlSection');
+  if (!section) return;
+  var url = m.modelUrl || _getModelUrlLocal(m.shortName);
+  var html = '';
+  if (url) {
+    html += '<div class="model-url-display"><a href="' + esc(url) + '" target="_blank" rel="noopener noreferrer" class="model-url-link">🌐 ' + esc(url) + '</a></div>';
+    html += '<button class="btn btn-primary btn-sm" onclick="editModelUrl(' + idx + ')" style="margin-left:8px;">✎ Modifier</button>';
+  } else {
+    html += '<p style="color:var(--text-muted);font-size:var(--fs-small);">Aucun lien défini. Cliquez sur « Ajouter » pour renseigner l&#39;URL Hugging Face ou LM Studio du modèle.</p>';
+    html += '<button class="btn btn-primary btn-sm" onclick="editModelUrl(' + idx + ')">+ Ajouter un lien</button>';
+  }
+  section.innerHTML = html;
+}
+
+// Sauvegarde l'URL du modèle (serveur → carnet JSON, ou localStorage en fallback).
+function saveModelUrl(idx, erase) {
+  var m = MODELS[idx];
+  var input = document.getElementById('modelUrlInput');
+  var url = erase ? '' : (input ? input.value.trim() : '');
+  // Tente d'abord l'API serveur (mode --serve).
+  fetch('/api/model-url?shortName=' + encodeURIComponent(m.shortName), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ modelUrl: url })
+  }).then(function(r) { return r.ok ? r.json() : null; }).then(function(data) {
+    if (data && data.ok) {
+      m.modelUrl = url || null;
+      _setModelUrlLocal(m.shortName, url || null);
+      cancelEditModelUrl(idx);
+      showToast(url ? 'Lien du modèle enregistré (carnet)' : 'Lien du modèle effacé', true);
+    } else {
+      _saveModelUrlFallback(idx, url);
+    }
+  }).catch(function() {
+    _saveModelUrlFallback(idx, url);
+  });
+}
+
+// Fallback hors-serveur : localStorage uniquement (pas d'accès au carnet JSON).
+function _saveModelUrlFallback(idx, url) {
+  var m = MODELS[idx];
+  _setModelUrlLocal(m.shortName, url || null);
+  m.modelUrl = url || null;
+  cancelEditModelUrl(idx);
+  showToast(url ? 'Lien enregistré localement (localStorage — lancez --serve pour persister dans le carnet)' : 'Lien effacé (local)', true);
+}
 function toggleHistory(el) {
   var mainRow = el.closest('tr.ecole-main');
   if (!mainRow) return;
@@ -1827,72 +1969,79 @@ function copyModelName(idx) {
 }
 
 // --- Export PNG du classement (§3 UI/Ludisme) ---
-// Capture le DOM du conteneur #cards via SVG foreignObject (aucune dépendance
-// externe). Sérialise le HTML+CSS inline, l'embarque dans un SVG, dessine le
-// SVG dans un canvas, puis télécharge le canvas en PNG.
-// Limites connues : les polices web et images externes peuvent ne pas rendres
-// (CORS). Le fond sombre est forcé pour un rendu cohérent avec le thème.
-function exportLeaderboardPng() {
-  var node = document.getElementById('cards');
-  if (!node) { showToast('Conteneur #cards introuvable', false); return; }
-  var btn = document.getElementById('btnExportPng');
-  if (btn) { btn.disabled = true; btn.textContent = '⏳ Capture…'; }
-  try {
-    // Clone le noeud pour injecter le CSS inline (foreignObject ne lit pas les
-    // feuilles de style externes). On récupère les styles calculés du noeud
-    // original et on les applique au clone.
-    var clone = node.cloneNode(true);
-    // Récupère la largeur réelle du conteneur.
-    var rect = node.getBoundingClientRect();
-    var width = Math.max(800, Math.ceil(rect.width));
-    var height = Math.max(600, Math.ceil(node.scrollHeight));
-
-    // Sérialise le clone en HTML. On doit échapper les caractères spéciaux XML.
-    var serializer = new XMLSerializer();
-    var html = serializer.serializeToString(clone);
-    // Wrap dans un div avec fond sombre pour cohérence avec le thème.
-    var wrapped = '<div xmlns="http://www.w3.org/1999/xhtml" style="background:#0a0e14;padding:24px;width:' + width + 'px;box-sizing:border-box;font-family:-apple-system,Segoe UI,sans-serif;color:#c9d1d9">' + html + '</div>';
-
-    var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="' + width + '" height="' + height + '"><foreignObject width="100%" height="100%">' + wrapped + '</foreignObject></svg>';
-    var svgBlob = new Blob([svg], { type: 'image/svg+xml;charset=utf-8' });
-    var url = URL.createObjectURL(svgBlob);
-
-    var img = new Image();
-    img.onload = function() {
-      var canvas = document.createElement('canvas');
-      // Échelle 2x pour un rendu net (retina-like).
-      canvas.width = width * 2;
-      canvas.height = height * 2;
-      var ctx = canvas.getContext('2d');
-      ctx.fillStyle = '#0a0e14';
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-      ctx.scale(2, 2);
-      ctx.drawImage(img, 0, 0);
-      URL.revokeObjectURL(url);
-      canvas.toBlob(function(blob) {
-        var dlUrl = URL.createObjectURL(blob);
-        var a = document.createElement('a');
-        a.href = dlUrl;
-        var ts = new Date().toISOString().slice(0, 10);
-        a.download = 'classement_benchgo_' + ts + '.png';
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(dlUrl);
-        if (btn) { btn.disabled = false; btn.textContent = '🖼 Exporter PNG'; }
-        showToast('PNG exporté', true);
-      }, 'image/png');
-    };
-    img.onerror = function() {
-      URL.revokeObjectURL(url);
-      if (btn) { btn.disabled = false; btn.textContent = '🖼 Exporter PNG'; }
-      showToast('Échec capture PNG (CORS/police). Essayez Exporter PDF.', false);
-    };
-    img.src = url;
-  } catch (e) {
-    if (btn) { btn.disabled = false; btn.textContent = '🖼 Exporter PNG'; }
-    showToast('Erreur PNG : ' + e.message, false);
+// --- Export CSV du classement ---
+// Génère un CSV à partir des données MODELS côté client (aucune dépendance
+// externe). Inclut toutes les colonnes visibles : rang, modèle, quantif, %,
+// note, points, obligatoire, santé, bonus, écoles, vitesse, temps.
+function exportLeaderboardCsv() {
+  var rows = [['Rang','Modèle','Quantification','Score','Max','%','Note','Obligatoire %','Obligatoire (passé/total)','Santé (PV)','Bonus','Écoles','Vitesse (t/s)','Temps inf.','Temps réel']];
+  for (var i = 0; i < MODELS.length; i++) {
+    var m = MODELS[i];
+    rows.push([
+      String(i + 1),
+      csvCell(m.model),
+      csvCell(m.quantization || ''),
+      String(m.score),
+      String(m.max),
+      String(dispPct(m.pct)),
+      m.grade,
+      m.mandatoryTotal > 0 ? String(m.mandatoryPct) : '',
+      m.mandatoryTotal > 0 ? (m.mandatoryPassed + '/' + m.mandatoryTotal) : '',
+      String(m.globalLifeScore),
+      m.optionalBonus > 0 ? String(m.optionalBonus) : '0',
+      String(m.ecoleCount),
+      m.tokensPerSecond > 0 ? String(m.tokensPerSecond) : '',
+      m.elapsedMs > 0 ? fmtDurJS(m.elapsedMs) : '',
+      m.wallMs > 0 ? fmtDurJS(m.wallMs) : ''
+    ]);
   }
+  var csv = rows.map(function(r) { return r.join(','); }).join('\n');
+  downloadTextFile(csv, 'classement_benchgo_' + new Date().toISOString().slice(0,10) + '.csv', 'text/csv;charset=utf-8');
+  showToast('CSV exporté (' + MODELS.length + ' modèles)', true);
+}
+
+// --- Export Markdown (tableau) du classement ---
+// Génère un tableau Markdown formaté à partir des données MODELS.
+function exportLeaderboardMd() {
+  var lines = [];
+  lines.push('# Classement BenchGo V3 — ' + new Date().toLocaleDateString('fr-FR'));
+  lines.push('');
+  lines.push('| Rang | Modèle | Quantif. | Score | % | Note | Oblig. | Santé | Bonus | Écoles | Vitesse | Temps |');
+  lines.push('|------|--------|----------|-------|---|------|--------|-------|-------|--------|---------|-------|');
+  for (var i = 0; i < MODELS.length; i++) {
+    var m = MODELS[i];
+    var medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : String(i + 1);
+    var vit = m.tokensPerSecond > 0 ? (m.tokensPerSecond + ' t/s') : (m.elapsedMs > 0 ? fmtDurJS(m.elapsedMs) : '—');
+    var temps = m.elapsedMs > 0 ? fmtDurJS(m.elapsedMs) : '—';
+    var oblig = m.mandatoryTotal > 0 ? (m.mandatoryPct + '%') : '—';
+    lines.push('| ' + medal + ' | ' + mdCell(m.model) + ' | ' + mdCell(m.quantization || '—') + ' | ' + m.score + '/' + m.max + ' | ' + dispPct(m.pct) + '% | ' + m.grade + ' | ' + oblig + ' | ' + m.globalLifeScore + ' PV | ' + (m.optionalBonus > 0 ? '+' + m.optionalBonus : '—') + ' | ' + m.ecoleCount + ' | ' + vit + ' | ' + temps + ' |');
+  }
+  lines.push('');
+  downloadTextFile(lines.join('\n'), 'classement_benchgo_' + new Date().toISOString().slice(0,10) + '.md', 'text/markdown;charset=utf-8');
+  showToast('Markdown exporté (' + MODELS.length + ' modèles)', true);
+}
+
+// Échappe une cellule CSV (guillemets doubles si virgule ou guillemet).
+function csvCell(s) {
+  s = String(s == null ? '' : s);
+  if (s.indexOf(',') >= 0 || s.indexOf('"') >= 0 || s.indexOf('\n') >= 0) {
+    return '"' + s.replace(/"/g, '""') + '"';
+  }
+  return s;
+}
+// Échappe une cellule Markdown (pipe → \|).
+function mdCell(s) {
+  return String(s == null ? '' : s).replace(/\|/g, '\\|');
+}
+// Télécharge un texte en fichier (Blob).
+function downloadTextFile(content, filename, mimeType) {
+  var blob = new Blob(['\ufeff' + content], { type: mimeType || 'text/plain;charset=utf-8' });
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click();
+  document.body.removeChild(a);
+  setTimeout(function() { URL.revokeObjectURL(url); }, 1500);
 }
 
 // --- Export PDF du classement (§3 UI/Ludisme) ---
@@ -2209,7 +2358,7 @@ async function doSubmitAll() {
         html += '<p style="margin: 4px 0;"><a href="' + esc(prUrls[u]) + '" target="_blank" style="color: var(--accent);">' + esc(prUrls[u]) + '</a></p>';
       }
     }
-    html += '<p style="margin-top: 8px; font-size: 13px; color: var(--text-muted);">Le proprietaire du depot validera vos PR pour integrer vos resultats au classement consolide.</p>';
+    html += '<p style="margin-top: 8px; font-size: 13px; color: var(--text-muted);">Les PR sont mergées automatiquement (résultats JSON, pas de code à valider).</p>';
     html += '</div>';
     statusEl.innerHTML = html;
     btn.textContent = 'Termine'; btn.disabled = true;
@@ -2219,10 +2368,12 @@ async function doSubmitAll() {
   }
 }
 document.getElementById('btnSubmitCommunity').addEventListener('click', openSubmitModal);
-var _btnPng = document.getElementById('btnExportPng');
-if (_btnPng) _btnPng.addEventListener('click', exportLeaderboardPng);
 var _btnPdf = document.getElementById('btnExportPdf');
 if (_btnPdf) _btnPdf.addEventListener('click', exportLeaderboardPdf);
+var _btnCsv = document.getElementById('btnExportCsv');
+if (_btnCsv) _btnCsv.addEventListener('click', exportLeaderboardCsv);
+var _btnMd = document.getElementById('btnExportMd');
+if (_btnMd) _btnMd.addEventListener('click', exportLeaderboardMd);
 
 // Barre sticky : ajoute la classe .stuck dès qu'on scrolle pour renforcer le
 // contraste (fond + opaque + ombre) et signaler visuellement le "détachement".
@@ -2911,6 +3062,52 @@ function startServer(port) {
       return;
     }
 
+    // API : lecture / modification de l'URL du modèle (lien Hugging Face, LM Studio...).
+    // GET  /api/model-url?shortName=... → renvoie { ok, modelUrl }
+    // POST /api/model-url?shortName=... (body: { modelUrl }) → sauvegarde dans le carnet.
+    // Permet à l'utilisateur d'ajouter/modifier le lien du modèle depuis la modale.
+    if (url.pathname === '/api/model-url') {
+      const shortName = url.searchParams.get('shortName');
+      if (!shortName) {
+        res.writeHead(400, securityHeaders);
+        res.end(JSON.stringify({ ok: false, error: 'shortName manquant' }));
+        return;
+      }
+      const { loadLedger } = require('./score-ledger');
+      if (req.method === 'GET') {
+        const ledger = loadLedger(shortName);
+        res.writeHead(200, securityHeaders);
+        res.end(JSON.stringify({ ok: true, modelUrl: ledger.modelUrl || guessModelUrl(ledger.model, ledger.publisher) || null }));
+        return;
+      }
+      if (req.method === 'POST') {
+        let body;
+        try { body = await readJsonBody(req); } catch (e) {
+          res.writeHead(400, securityHeaders);
+          res.end(JSON.stringify({ ok: false, error: e.message }));
+          return;
+        }
+        const modelUrl = (body.modelUrl || '').trim();
+        try {
+          const ledger = loadLedger(shortName);
+          if (modelUrl) {
+            ledger.modelUrl = modelUrl;
+          } else {
+            delete ledger.modelUrl;
+          }
+          const { saveLedger } = require('./score-ledger');
+          saveLedger(ledger);
+          logger.info('API: URL du modèle ' + shortName + ' mise à jour — ' + (modelUrl || '(effacée)'));
+          res.writeHead(200, securityHeaders);
+          res.end(JSON.stringify({ ok: true, modelUrl: modelUrl || null }));
+        } catch (e) {
+          res.writeHead(200, securityHeaders);
+          res.end(JSON.stringify({ ok: false, error: e.message }));
+        }
+        return;
+      }
+    }
+
     // API : soumission d'un carnet vers le dépôt communautaire (Pull Request GitHub).
     // Lit le carnet local, le soumet via community-sync.js (crée branche + fichier + PR).
     // Le token et le pseudo sont lus depuis le corps JSON de la requête POST.
@@ -3082,7 +3279,7 @@ function startServer(port) {
     console.log('  \x1b[90mOuvrez le navigateur. Cliquez sur "🗑 Supprimer" pour retirer un modèle.\x1b[0m');
     console.log('  \x1b[90mBouton "🌐 Envoyer à la communauté" pour soumettre vos résultats sur GitHub.\x1b[0m');
     console.log('  \x1b[90mModale → bouton "⬇ Exporter le rapport intégral" pour télécharger le MD.\x1b[0m');
-    console.log('  \x1b[90mBoutons "🖼 Exporter PNG" / "📄 Exporter PDF" : capture ou impression du classement.\x1b[0m');
+    console.log('  \x1b[90mBoutons "📄 Exporter PDF" / "📊 Exporter CSV" / "📝 Exporter Markdown" : export du classement.\x1b[0m');
     console.log(`  \x1b[1;36mDashboard progression/historique : ${url}/dashboard\x1b[0m`);
     console.log('  \x1b[90mCtrl+C pour arrêter le serveur.\x1b[0m\n');
 

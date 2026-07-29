@@ -17,6 +17,25 @@ const OUTPUT_DIR = path.join(__dirname, 'gh-pages-output');
 const OUTPUT_HTML = path.join(OUTPUT_DIR, 'community-leaderboard.html');
 const OUTPUT_JSON = path.join(OUTPUT_DIR, 'community-leaderboard.json');
 
+// Devine l'URL Hugging Face d'un modèle à partir de son nom.
+// Si le nom contient un "/" (ex: "unsloth/gemma-4-12b-it-qat"), on construit
+// directement l'URL. Sinon, on essaie avec le publisher du carnet.
+function guessModelUrl(modelName, publisher) {
+  if (!modelName) return null;
+  const name = String(modelName).trim();
+  if (name.includes('/')) {
+    const parts = name.split('/');
+    if (parts.length >= 2) {
+      return 'https://huggingface.co/' + parts.slice(0, 2).join('/');
+    }
+  }
+  if (publisher) {
+    const baseName = name.split('/').pop().replace(/\.gguf$/i, '');
+    return 'https://huggingface.co/' + publisher + '/' + baseName;
+  }
+  return null;
+}
+
 // Charge toutes les soumissions depuis submissions/<userId>/<model>.json.
 function loadAllSubmissions() {
   const submissions = [];
@@ -88,6 +107,8 @@ function aggregateCarnet(carnet) {
     model: carnet.model || carnet.shortName || 'Inconnu',
     shortName: carnet.shortName || (carnet.model || 'inconnu').toLowerCase().replace(/[^a-z0-9]/g, '-'),
     quantization: carnet.quantization || null,
+    modelUrl: carnet.modelUrl || guessModelUrl(carnet.model, carnet.publisher) || null,
+    publisher: carnet.publisher || null,
     score, max, pct, globalLifeScore, optionalBonus,
     tokens: totalTokens, elapsedMs: totalElapsedMs, tokensPerSecond,
     ecoleCount,
@@ -215,7 +236,8 @@ function buildConsolidatedHTML(entries) {
     const psize = getParamSize(e.model);
     return {
       rank, model: e.model, shortName: e.shortName,
-      quantization: e.quantization, pct: e.pct, score: e.score, max: e.max,
+      quantization: e.quantization, modelUrl: e.modelUrl || null,
+      pct: e.pct, score: e.score, max: e.max,
       grade: gradeLetter(e.pct), globalLifeScore: e.globalLifeScore,
       optionalBonus: e.optionalBonus || 0, ecoleCount: e.ecoleCount,
       elapsedMs: e.elapsedMs || 0, tokens: e.tokens || 0,
@@ -467,6 +489,58 @@ function buildConsolidatedHTML(entries) {
     .card-row { flex-wrap: wrap; }
     .mini-stats { width: 100%; justify-content: space-between; padding-top: var(--space-s); border-top: 1px solid var(--border-soft); }
   }
+
+  /* Boutons d'export */
+  .btn-export {
+    padding: 6px 12px; border: 1px solid var(--border); background: var(--bg-2);
+    color: var(--text-muted); border-radius: var(--r-sm); font-size: var(--fs-small);
+    cursor: pointer; transition: all 0.15s; white-space: nowrap;
+  }
+  .btn-export:hover { border-color: var(--accent); color: var(--text); }
+
+  /* Modale détail */
+  .modal-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.65); backdrop-filter: blur(4px);
+    display: none; align-items: flex-start; justify-content: center; z-index: 1000;
+    padding: var(--space-m); overflow-y: auto;
+  }
+  .modal-overlay.show { display: flex; }
+  .modal {
+    background: var(--bg-1); border: 1px solid var(--border); border-radius: var(--r-lg);
+    max-width: 680px; width: 100%; box-shadow: var(--shadow-elev); margin: auto;
+  }
+  .modal-head { display: flex; align-items: center; gap: var(--space-m); padding: var(--space-m) var(--space-l); border-bottom: 1px solid var(--border-soft); }
+  .modal-head .rank { flex: 0 0 auto; }
+  .modal-head .title { flex: 1 1 auto; min-width: 0; }
+  .modal-head .title h2 { font-size: var(--fs-h2); word-break: break-all; color: var(--accent); }
+  .modal-head .tags { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
+  .modal-head .cat-tag { font-size: var(--fs-tiny); padding: 2px 8px; border-radius: var(--r-pill); background: var(--bg-3); color: var(--text-muted); }
+  .modal-close {
+    flex: 0 0 auto; background: none; border: none; color: var(--text-muted);
+    font-size: 1.6rem; cursor: pointer; line-height: 1; padding: 4px 8px;
+  }
+  .modal-close:hover { color: var(--text); }
+  .modal-body { padding: var(--space-m) var(--space-l); }
+  .modal-body h3 { font-size: var(--fs-h3); margin: var(--space-m) 0 var(--space-xs); color: var(--text); }
+  .modal-body h3:first-child { margin-top: 0; }
+  .full-stats { display: flex; flex-wrap: wrap; gap: var(--space-s); }
+  .full-stat { background: var(--bg-2); border: 1px solid var(--border-soft); border-radius: var(--r-sm); padding: var(--space-xs) var(--space-s); min-width: 80px; }
+  .full-stat .lbl { font-size: var(--fs-tiny); color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; }
+  .full-stat .val { font-size: var(--fs-body); font-weight: 700; margin-top: 2px; }
+  .model-url-section { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-xs); margin-bottom: var(--space-s); }
+  .model-url-link {
+    color: var(--accent); text-decoration: none; font-size: var(--fs-small);
+    word-break: break-all; border-bottom: 1px dashed transparent; transition: border-color 0.15s;
+  }
+  .model-url-link:hover { border-bottom-color: var(--accent); }
+  .meta-line { font-size: var(--fs-tiny); color: var(--text-muted); margin-top: var(--space-m); padding-top: var(--space-s); border-top: 1px solid var(--border-soft); }
+
+  /* Media print : masquer la sticky-bar et la modale pour Exporter PDF */
+  @media print {
+    .sticky-bar, .modal-overlay, .btn-export { display: none !important; }
+    body { padding: 0; background: #fff !important; color: #000 !important; }
+    .card { border: 1px solid #ccc !important; box-shadow: none !important; }
+  }
 </style>
 </head>
 <body>
@@ -499,6 +573,9 @@ function buildConsolidatedHTML(entries) {
       <div class="search-wrap">
         <input type="text" class="search" id="search" placeholder="🔍 Rechercher un modèle…" />
         <span class="result-count" id="resultCount"></span>
+        <button class="btn btn-export" id="btnExportPdf" title="Imprimer / Exporter en PDF">📄 PDF</button>
+        <button class="btn btn-export" id="btnExportCsv" title="Exporter en CSV">📊 CSV</button>
+        <button class="btn btn-export" id="btnExportMd" title="Exporter en tableau Markdown">📝 MD</button>
       </div>
     </div>
   </div>
@@ -511,6 +588,20 @@ function buildConsolidatedHTML(entries) {
     <p>Pour soumettre vos résultats : <code>node runner.js --submit</code> ou bouton "🌐 Envoyer à la communauté" dans le classement local</p>
   </footer>
 </div>
+<div id="modal" class="modal-overlay">
+  <div class="modal">
+    <div class="modal-head">
+      <div class="rank" id="mRank"></div>
+      <div class="title">
+        <h2 id="mTitle"></h2>
+        <div class="tags" id="mTags"></div>
+      </div>
+      <button class="modal-close" onclick="closeModal()" aria-label="Fermer">&times;</button>
+    </div>
+    <div class="modal-body" id="mBody"></div>
+  </div>
+</div>
+
 <script>
 var MODELS = ${modelsJson};
 function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
@@ -539,7 +630,7 @@ function renderCards() {
     var pseudoBadge = m.pseudo ? '<span class="badge pseudo">✍️ ' + esc(m.pseudo) + '</span>' : '';
     var vitesseVal = m.tokensPerSecond > 0 ? (m.tokensPerSecond + ' t/s') : (m.elapsedMs > 0 ? fmtDur(m.elapsedMs) : '—');
     var vitesseLbl = m.tokensPerSecond > 0 ? 'Vitesse' : 'Temps';
-    var html = '<div class="card ' + cardClass + '">' +
+    var html = '<div class="card ' + cardClass + '" onclick="openModal(' + i + ')" style="cursor:pointer">' +
       '<div class="card-row">' +
         '<div class="rank">' + rankDisp + '</div>' +
         '<div class="model-name">' +
@@ -592,6 +683,111 @@ document.getElementById('search').addEventListener('input', function(e) {
   window.addEventListener('scroll', onScroll, { passive: true });
   onScroll();
 })();
+
+// --- Modale détail ---
+function openModal(idx) {
+  var m = MODELS[idx];
+  if (!m) return;
+  document.getElementById('mRank').innerHTML = m.rank <= 3
+    ? '<span class="medal">' + ['🥇','🥈','🥉'][m.rank-1] + '</span>'
+    : m.rank;
+  document.getElementById('mTitle').textContent = m.model;
+  document.getElementById('mTags').innerHTML =
+    '<span class="cat-tag">' + m.cat.icon + ' ' + esc(m.cat.label) + '</span>' +
+    '<span class="cat-tag">' + m.paramSize.icon + ' ' + esc(m.paramSize.label) + '</span>' +
+    (m.quantization ? '<span class="cat-tag">🧩 ' + esc(m.quantization) + '</span>' : '') +
+    (m.contributors > 1 ? '<span class="cat-tag">👥 ' + m.contributors + ' testeurs</span>' : '') +
+    (m.pseudo ? '<span class="cat-tag">✍️ ' + esc(m.pseudo) + '</span>' : '');
+
+  var pc = pctColor(m.pct), gc = gradeColor(m.grade);
+  var sc = m.globalLifeScore < 0 ? '#f85149' : '#3fb950';
+  var tpsC = m.tokensPerSecond >= 50 ? '#3fb950' : m.tokensPerSecond >= 25 ? '#d29922' : m.tokensPerSecond > 0 ? '#f85149' : '#8b949e';
+
+  var body = '';
+  body += '<h3>Statistiques</h3>';
+  body += '<div class="full-stats">';
+  body += statBox('Points', m.score + ' / ' + m.max);
+  body += statBox('% global', '<span style="color:' + pc + '">' + Math.max(0, Math.min(100, m.pct)) + '%</span>');
+  body += statBox('Note', '<span style="color:' + gc + ';font-size:1.4em">' + m.grade + '</span>');
+  body += statBox('Santé', '<span style="color:' + sc + '">' + m.globalLifeScore + ' PV</span>');
+  body += statBox('Bonus', m.optionalBonus > 0 ? '+' + m.optionalBonus : '—');
+  body += statBox('Écoles', m.ecoleCount);
+  if (m.tokensPerSecond > 0) body += statBox('Vitesse', '<span style="color:' + tpsC + '">' + m.tokensPerSecond + ' t/s</span>');
+  if (m.elapsedMs > 0) body += statBox('Temps inf.', fmtDur(m.elapsedMs));
+  body += '</div>';
+
+  if (m.modelUrl) {
+    body += '<h3>🔗 Lien du modèle</h3>';
+    body += '<div class="model-url-section"><a href="' + esc(m.modelUrl) + '" target="_blank" rel="noopener noreferrer" class="model-url-link">🌐 ' + esc(m.modelUrl) + '</a></div>';
+  }
+
+  body += '<div class="meta-line">';
+  body += 'Nom court : <code>' + esc(m.shortName) + '</code>';
+  if (m.pseudo) body += ' · Soumis par ' + esc(m.pseudo);
+  if (m.contributors > 1) body += ' · Testé par ' + m.contributors + ' personnes';
+  body += '</div>';
+
+  document.getElementById('mBody').innerHTML = body;
+  document.getElementById('modal').classList.add('show');
+  document.body.style.overflow = 'hidden';
+}
+function closeModal() {
+  document.getElementById('modal').classList.remove('show');
+  document.body.style.overflow = '';
+}
+function statBox(lbl, val) {
+  return '<div class="full-stat"><div class="lbl">' + lbl + '</div><div class="val">' + val + '</div></div>';
+}
+document.getElementById('modal').addEventListener('click', function(e) {
+  if (e.target === this) closeModal();
+});
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') closeModal();
+});
+
+// --- Exports ---
+function downloadTextFile(content, filename, mimeType) {
+  var blob = new Blob(['\ufeff' + content], { type: mimeType || 'text/plain;charset=utf-8' });
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click();
+  document.body.removeChild(a);
+  setTimeout(function() { URL.revokeObjectURL(url); }, 1500);
+}
+function csvCell(s) {
+  s = String(s == null ? '' : s);
+  if (s.indexOf(',') >= 0 || s.indexOf('"') >= 0 || s.indexOf('\n') >= 0) return '"' + s.replace(/"/g, '""') + '"';
+  return s;
+}
+function mdCell(s) { return String(s == null ? '' : s).replace(/\|/g, '\\|'); }
+function dispPct(p) { return Math.max(0, Math.min(100, p)); }
+
+function exportCsv() {
+  var rows = [['Rang','Modèle','Quantification','Score','Max','%','Note','Santé (PV)','Bonus','Écoles','Vitesse (t/s)','Temps inf.','Lien']];
+  for (var i = 0; i < MODELS.length; i++) {
+    var m = MODELS[i];
+    rows.push([String(m.rank), csvCell(m.model), csvCell(m.quantization || ''), String(m.score), String(m.max), String(dispPct(m.pct)), m.grade, String(m.globalLifeScore), m.optionalBonus > 0 ? String(m.optionalBonus) : '0', String(m.ecoleCount), m.tokensPerSecond > 0 ? String(m.tokensPerSecond) : '', m.elapsedMs > 0 ? fmtDur(m.elapsedMs) : '', csvCell(m.modelUrl || '')]);
+  }
+  downloadTextFile(rows.map(function(r){return r.join(',')}).join('\n'), 'classement_communautaire_' + new Date().toISOString().slice(0,10) + '.csv', 'text/csv;charset=utf-8');
+}
+function exportMd() {
+  var lines = ['# Classement Communautaire BenchGo V3 — ' + new Date().toLocaleDateString('fr-FR'), ''];
+  lines.push('| Rang | Modèle | Quantif. | Score | % | Note | Santé | Bonus | Écoles | Vitesse | Lien |');
+  lines.push('|------|--------|----------|-------|---|------|-------|-------|--------|---------|------|');
+  for (var i = 0; i < MODELS.length; i++) {
+    var m = MODELS[i];
+    var medal = m.rank === 1 ? '🥇' : m.rank === 2 ? '🥈' : m.rank === 3 ? '🥉' : String(m.rank);
+    var vit = m.tokensPerSecond > 0 ? (m.tokensPerSecond + ' t/s') : (m.elapsedMs > 0 ? fmtDur(m.elapsedMs) : '—');
+    var lien = m.modelUrl ? '[Voir](' + m.modelUrl + ')' : '—';
+    lines.push('| ' + medal + ' | ' + mdCell(m.model) + ' | ' + mdCell(m.quantization || '—') + ' | ' + m.score + '/' + m.max + ' | ' + dispPct(m.pct) + '% | ' + m.grade + ' | ' + m.globalLifeScore + ' PV | ' + (m.optionalBonus > 0 ? '+' + m.optionalBonus : '—') + ' | ' + m.ecoleCount + ' | ' + vit + ' | ' + lien + ' |');
+  }
+  downloadTextFile(lines.join('\n'), 'classement_communautaire_' + new Date().toISOString().slice(0,10) + '.md', 'text/markdown;charset=utf-8');
+}
+document.getElementById('btnExportPdf').addEventListener('click', function() { window.print(); });
+document.getElementById('btnExportCsv').addEventListener('click', exportCsv);
+document.getElementById('btnExportMd').addEventListener('click', exportMd);
+
 renderCards();
 </script>
 </body>

@@ -294,6 +294,39 @@ async function findExistingPullRequest(token, headBranch) {
   return null;
 }
 
+// Merge automatique d'une Pull Request communautaire.
+//
+// Les soumissions communautaires ne contiennent que des fichiers JSON de
+// résultats (jamais de code) : il n'y a aucun risque à les merger
+// automatiquement. Cela évite au propriétaire du dépôt d'avoir à valider
+// chaque PR à la main — un travail fastidieux quand il y en a des dizaines.
+//
+// Stratégie : merge commit (préserve l'historique des soumissions).
+//
+// @param {string} token - PAT GitHub (scope repo)
+// @param {number} prNumber - numéro de la PR à merger
+// @returns {Promise<{ok: boolean, merged: boolean, message?: string}>}
+async function mergePullRequest(token, prNumber) {
+  const res = await fetch(`${GITHUB_API}/repos/${COMMUNITY_REPO.owner}/${COMMUNITY_REPO.repo}/pulls/${prNumber}/merge`, {
+    method: 'PUT',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Accept': 'application/vnd.github+json',
+      'User-Agent': 'BenchGo-V3-Community',
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      merge_method: 'merge',
+      commit_title: `[Communauté] Merge auto des résultats #${prNumber}`
+    })
+  });
+  if (!res.ok) {
+    const body = await res.text();
+    return { ok: false, merged: false, message: `HTTP ${res.status} ${body}` };
+  }
+  return { ok: true, merged: true };
+}
+
 // Prépare le payload de soumission à partir d'un carnet de scores.
 // On emballe le carnet avec des métadonnées (version BenchGo, date, userId,
 // pseudo optionnel, hash d'intégrité) pour permettre la validation côté dépôt.
@@ -377,8 +410,8 @@ async function submitResults(shortName, ledger, token, options) {
     `**Hash d'intégrité :** \`${payload.integrityHash}\``,
     '',
     'Ce carnet de scores a été généré par BenchGo V3 et soumis automatiquement',
-    'via `node runner.js --submit`. Le propriétaire du dépôt validera cette PR',
-    'pour intégrer les résultats au classement consolidé.',
+    'via `node runner.js --submit`. Cette PR sera mergée automatiquement (les',
+    'soumissions ne contiennent que des résultats JSON, pas de code à valider).',
     '',
     '---',
     '_Soumission automatique — ne pas éditer manuellement._'
@@ -386,9 +419,28 @@ async function submitResults(shortName, ledger, token, options) {
 
   const pr = await createPullRequest(token, branchName, prTitle, prBody);
 
+  // Étape 5 : merge automatique de la PR.
+  // Les soumissions ne contiennent que des résultats JSON (pas de code), donc
+  // il n'y a aucun risque à les merger automatiquement. Cela évite au
+  // propriétaire du dépôt de valider chaque PR à la main.
+  const prNumber = pr.number;
+  const mergeResult = await mergePullRequest(token, prNumber);
+
+  // Si le merge échoue (ex: protections de branche), on ne fait pas planter
+  // la soumission — la PR reste ouverte et le propriétaire pourra la merger
+  // manuellement. On signale juste le statut dans le retour.
+  if (!mergeResult.merged) {
+    logger.warn('community-sync: merge auto échoué pour PR #' + prNumber + ' — ' + (mergeResult.message || 'raison inconnue'));
+  } else {
+    logger.info('community-sync: PR #' + prNumber + ' mergée automatiquement');
+  }
+
   return {
     ok: true,
     prUrl: pr.html_url,
+    prNumber: prNumber,
+    merged: mergeResult.merged,
+    mergeMessage: mergeResult.merged ? null : (mergeResult.message || 'merge auto indisponible'),
     branch: branchName,
     filePath: filePath
   };
@@ -472,6 +524,7 @@ module.exports = {
   sendPing,
   buildSubmissionPayload,
   submitResults,
+  mergePullRequest,
   validateGithubToken,
   getAlreadySubmittedModels
 };
