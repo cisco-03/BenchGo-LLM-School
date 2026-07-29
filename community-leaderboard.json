@@ -354,7 +354,7 @@
       "tokensPerSecond": 10.71,
       "ecoleCount": 1,
       "pseudo": "FlexoDiv",
-      "submittedAt": "2026-07-29T06:36:58.306Z",
+      "submittedAt": "2026-07-29T07:15:17.389Z",
       "contributors": 1,
       "allPct": [
         90
@@ -694,7 +694,7 @@
       "tokensPerSecond": 25.66,
       "ecoleCount": 1,
       "pseudo": "FlexoDiv",
-      "submittedAt": "2026-07-29T06:37:24.611Z",
+      "submittedAt": "2026-07-29T07:15:11.093Z",
       "contributors": 1,
       "allPct": [
         -41
@@ -721,6 +721,6 @@
       ]
     }
   ],
-  "generatedAt": "2026-07-29T07:15:24.316Z",
+  "generatedAt": "2026-07-29T07:15:40.996Z",
   "totalSubmissions": 36
 }
