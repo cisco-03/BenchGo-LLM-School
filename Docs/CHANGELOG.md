@@ -1,5 +1,68 @@
 # CHANGELOG - Carnet de Notes BenchGo
 
+## 2026-07-29 (2) — feat: design unifié classement communautaire + colonnes mode nuit + merge auto + URL modèle
+
+### Contexte
+1. Le classement communautaire avait un design simplifié (chips au lieu de selects, modale basique, pas de forces/faiblesses ni rapport intégral). L'utilisateur veut exactement le même design que le leaderboard local.
+2. Les colonnes du mode nuit (`night-batch.js --list-only`) étaient mal alignées quand les valeurs dépassaient les largeurs fixes (ex: "128x2.6B", "21B-A3B", "deepreinforce-ai").
+3. Les PR communautaires devaient être mergées à la main une par une.
+4. Besoin d'un lien cliquable vers le modèle (Hugging Face) dans la modale.
+5. Suppression du bouton "Exporter PNG" (peu fiable) + ajout exports CSV et Markdown.
+
+### Implémentation
+
+#### 1. Design unifié du classement communautaire (`consolidate-leaderboard.js`)
+- **HTML/CSS/JS complètement réécrit** pour reproduire fidèlement le design du leaderboard local :
+  - Même CSS (palette GitHub-dark, typographie fluide clamp, cartes avec dégradés, modale 1180px, animations scroll)
+  - Filtres par selects (Catégorie, Taille, Santé, École) au lieu de chips
+  - Boutons : Copier le classement, Exporter PDF, Exporter CSV, Exporter Markdown
+  - Kebab menu (⋮) sur chaque carte avec "Détails" et "Copier le nom"
+  - Modale complète : stats avec barres de progression, forces/faiblesses en 2 colonnes, tableau par école (14 colonnes), rapport intégral repliable (tiers/exercices/code/rawResponse/selfProfile)
+  - Toast notifications
+  - Animations d'entrée au scroll (IntersectionObserver)
+  - Badges communautaires préservés : 👥 contributeurs, ✍️ pseudo
+- **Données enrichies** : `aggregateCarnet` extrait désormais mandatoryPassed/Total, helpCount, retriedCount, wallMs, ecoles détaillées avec tiers/evalResults/selfProfile.
+- **Fonctions ajoutées** : `buildArguments` (forces/faiblesses), `getVerdict` (RECOMMANDÉ/PARTIEL/NON RECOMMANDÉ).
+- Adaptations contexte statique (GitHub Pages) : pas de serveur, pas de suppression, pas d'édition d'URL (affichage seul), pas de bannière update.
+
+#### 2. Colonnes mode nuit alignées (`night-batch.js`)
+- Largeurs de colonnes **calculées dynamiquement** à partir des données réelles (`Math.max(longueur_header, ...longueurs_valeurs)`).
+- Troncature des valeurs trop longues avec `.slice(0, W)` pour garantir un alignement parfait.
+- Ligne de séparation `─` ajoutée sous le header (style militaire).
+- Suppression des largeurs fixes qui causaient le décalage (paramW=5 dépassé par "21B-A3B", pubW=14 dépassé par "deepreinforce-ai", etc.).
+
+#### 3. Merge automatique des PRs communautaires (`community-sync.js`)
+- Nouvelle fonction `mergePullRequest(token, prNumber)` : `PUT /repos/.../pulls/{n}/merge`.
+- `submitResults` merge la PR après création. Échec non-bloquant (PR reste ouverte).
+- 36 carnets re-soumis et mergés automatiquement (PR #41-#76).
+
+#### 4. URL du modèle dans la modale (`leaderboard.js`, `score-ledger.js`)
+- `guessModelUrl(modelName, publisher)` : devine l'URL Hugging Face.
+- Section "🔗 Lien du modèle" dans la modale avec édition manuelle (bouton Modifier/Ajouter/Effacer).
+- Persistance : API serveur `/api/model-url` (carnet JSON) ou localStorage (fallback).
+- `score-ledger.js#saveResult` accepte un paramètre `publisher`.
+
+#### 5. Exports du leaderboard local (`leaderboard.js`)
+- Suppression de `exportLeaderboardPng` et du bouton PNG.
+- Nouveaux boutons : Exporter CSV (`exportLeaderboardCsv`), Exporter Markdown (`exportLeaderboardMd`).
+- Helpers : `csvCell`, `mdCell`, `downloadTextFile`.
+
+### Vérification
+- `node --check` sur tous les fichiers modifiés → OK.
+- `node night-batch.js --list-only` → colonnes parfaitement alignées (testé avec "128x2.6B", "21B-A3B", "deepreinforce-ai", "lmstudio-community").
+- `node consolidate-leaderboard.js` → HTML de 1190 lignes avec tous les éléments (selects, kebab, toast, modale riche, animations).
+- `node leaderboard.js` → classement local régénéré avec nouveaux exports.
+- Workflow `consolidate.yml` déclenché pour publier le nouveau design communautaire.
+
+### Fichiers modifiés
+- `consolidate-leaderboard.js` — `aggregateCarnet` enrichi, `buildArguments`, `getVerdict`, `guessModelUrl`, `buildConsolidatedHTML` réécrit (design unifié).
+- `night-batch.js` — `selectModelsInteractive` (largeurs dynamiques, séparateur).
+- `community-sync.js` — `mergePullRequest`, `submitResults` (auto-merge).
+- `runner.js` — messages de soumission (merge OK/échec).
+- `score-ledger.js` — `saveResult` (paramètre `publisher`).
+- `leaderboard.js` — `guessModelUrl`, `modelUrl` dans `modelsData`, section URL modale, API `/api/model-url`, suppression PNG, exports CSV/MD.
+- `Docs/CHANGELOG.md` — mise à jour.
+
 ## 2026-07-29 — feat: détection MTP mode nuit + refonte dashboard progression des modèles
 
 ### Contexte

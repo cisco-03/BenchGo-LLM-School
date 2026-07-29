@@ -1411,12 +1411,16 @@ function exportReport(idx) {
           var r2 = evals[k2];
           if (r2.status === 'bypassed') continue;
           md += '**Exercice ' + r2.id + '** (' + (r2.status === 'success' ? 'validé' : 'échec') + ')\\n\\n';
-          if (r2.code && String(r2.code).trim()) md += '``' + String.fromCharCode(96) + 'javascript' + String.fromCharCode(92) + 'n' + String(r2.code).trim() + String.fromCharCode(92) + 'n``' + String.fromCharCode(96) + String.fromCharCode(92) + 'n' + String.fromCharCode(92) + 'n';
-          if (r2.failureExplanation) md += '**Explication échec :** ' + r2.failureExplanation + '\\n\\n';
-          if (r2.teacherCorrection) md += '**🎓 Correction professeur :** ' + r2.teacherCorrection + '\\n\\n';
-        }
-      }
-      if (t.rawResponse && String(t.rawResponse).trim()) md += '##### Réponse brute' + String.fromCharCode(92) + 'n' + String.fromCharCode(92) + 'n``' + String.fromCharCode(96) + 'text' + String.fromCharCode(92) + 'n' + String(t.rawResponse).trim() + String.fromCharCode(92) + 'n``' + String.fromCharCode(96) + String.fromCharCode(92) + 'n' + String.fromCharCode(92) + 'n';
+           if (r2.code && String(r2.code).trim()) {
+             md += q2 + q2 + 'javascript' + String.fromCharCode(10) + String(r2.code).trim() + String.fromCharCode(10) + q2 + q2 + String.fromCharCode(10) + String.fromCharCode(10);
+           }
+           if (r2.failureExplanation) md += '**Explication échec :** ' + r2.failureExplanation + '\\n\\n';
+           if (r2.teacherCorrection) md += '**🎓 Correction professeur :** ' + r2.teacherCorrection + '\\n\\n';
+         }
+       }
+       if (t.rawResponse && String(t.rawResponse).trim()) {
+         md += '##### Réponse brute' + String.fromCharCode(10) + String.fromCharCode(10) + q2 + q2 + 'text' + String.fromCharCode(10) + String(t.rawResponse).trim() + String.fromCharCode(10) + q2 + q2 + String.fromCharCode(10) + String.fromCharCode(10);
+       }
     }
     md += '---\\n\\n';
   }
