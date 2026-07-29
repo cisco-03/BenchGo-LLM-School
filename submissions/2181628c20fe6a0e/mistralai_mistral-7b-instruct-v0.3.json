@@ -3,7 +3,7 @@
   "benchgoVersion": "V3",
   "userId": "2181628c20fe6a0e",
   "pseudo": "FlexoDiv",
-  "submittedAt": "2026-07-24T16:54:28.121Z",
+  "submittedAt": "2026-07-29T07:16:59.847Z",
   "integrityHash": "870794bf4f0232ba",
   "carnet": {
     "model": "mistralai/mistral-7b-instruct-v0.3",
