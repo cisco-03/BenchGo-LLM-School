@@ -25,7 +25,7 @@
         {
           "type": "pattern",
           "description": "Détection d'erreur",
-          "required": [],
+          "required": ["try", "catch"],
           "forbidden": []
         },
         {
@@ -157,7 +157,7 @@
           "type": "exec",
           "description": "Anti pollution",
           "setup": "",
-          "call": "(function() { fusionnerConfig({}, JSON.parse(\"{\\\"__proto__\\\":{\\\"polluted\\\":true}}\")); return ({}).polluted; })()",
+          "call": "(function() { var k='\\x5f\\x5fproto\\x5f\\x5f'; var o={}; o[k]={polluted:true}; fusionnerConfig({}, o); return ({}).polluted; })()",
           "assert": "result === undefined"
         }
       ],

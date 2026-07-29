@@ -1,210 +1,130 @@
-# AGENTS.md — Conventions et règles pour les agents travaillant sur BenchGo V3
+# AGENTS.md — BenchGo V3
 
-Ce fichier guide les agents IA (et les développeurs) qui interviennent sur le code de
-BenchGo V3. Il consigne les conventions du projet, les pièges connus et les règles à
-respecter pour ne pas reproduire les erreurs passées.
+OS : Windows, PowerShell 5.1. Projet Node.js 18+ **sans `package.json`** (modules built-ins uniquement : `fs`, `path`, `child_process`, `readline`, `vm`). Pas de `npm install`.
 
 ---
 
-## 1. Environnement d'exécution
+## Commandes essentielles
 
-- **OS** : Windows. Shell système par défaut : PowerShell 5.1.
-- **Node.js** : version 18+ requise (projet sans `package.json`, aucune dépendance npm —
-  Node.js built-ins uniquement).
-- **Lancement** : `node runner.js` (mode interactif) ou `node night-batch.js` (mode nuit).
-- **LM Studio** : la CLI `lms` est livrée avec l'application LM Studio et doit être dans
-  le PATH. Le serveur HTTP tourne sur `http://localhost:1234`.
+| Usage | Commande |
+|---|---|
+| Benchmark interactif | `node runner.js all` |
+| Mode nuit (batch) | `node night-batch.js` |
+| Valider config sans exécuter | `node runner.js all --dry-run` |
+| Tests unitaires | `node tests/run-tests.js` |
+| Classement HTML/MD | `node leaderboard.js` |
+| Serveur classement interactif | `node leaderboard.js --serve` |
+| Aide CLI | `node runner.js --help` |
+| Dernier run & état | `node runner.js status` |
+| Vérifier syntaxe JS | `node --check <fichier>.js` |
+| Vérifier tiers | `node verify_tiers.js` |
 
-### Outils à privilégier selon l'opération
-
-| Opération | Outil à utiliser | Pourquoi |
-|---|---|---|
-| Lire un fichier | `read` | Pas de shell, pas de problème d'encodage |
-| Écrire/créer un fichier | `write` ou `edit` | Pas de shell, encodage UTF-8 sans BOM garanti |
-| Rechercher dans des fichiers | `grep` (outil dédié) | Pas de shell, pas de quoting |
-| Lister des fichiers | `glob` (outil dédié) | Pas de shell |
-| Vérifier la syntaxe JS | `bash` avec `node --check <fichier>` | Commande simple, sûre |
-| Lancer `lms`, `git`, `node` | `bash` | Ces commandes n'ont pas de problème d'accent |
-
-### Pièges PowerShell 5.1 à ÉVITER absolument
-
-L'outil `bash` reste routé sur PowerShell 5.1 sur ce Windows (le profil VS Code Git Bash
-n'affecte que le terminal intégré, pas l'outil de commande). Conséquences :
-
-1. **NE PAS utiliser de here-strings PowerShell** (`@"..."@` ou `@'...'@`) pour écrire des
-   fichiers contenant des accents ou des `${}`. PowerShell 5.1 corrompt l'encodage
-   (mojibake `é` → `Ã©`, BOM UTF-8 involontaire). **Utiliser l'outil `write` à la place.**
-
-2. **NE PAS utiliser `grep`, `head`, `tail`, `cat`, `/dev/null`** dans les commandes bash —
-   PowerShell ne les reconnaît pas. Pour filtrer la sortie, utiliser `Select-String` ou
-   `Select-Object` côté PowerShell, ou mieux : traiter la sortie dans un script Node.
-
-3. **NE PAS utiliser `||` comme séparateur** — PowerShell 5.1 ne le supporte pas. Utiliser
-   `; if ($?) { ... }` à la place, ou `try/catch`.
-
-4. **NE PAS utiliser `&&`** — PowerShell 5.1 ne le supporte pas. Utiliser `; if ($?) { ... }`.
-
-5. **`${` dans les chaînes PowerShell** est interprété comme une variable. Pour écrire du
-   code JS contenant des template literals `${...}`, passer par l'outil `write` (pas de
-   shell) ou par un script Node externe écrit en ASCII pur.
-
-6. **Encodage des fichiers** : toujours UTF-8 **sans BOM**. L'outil `write` garantit ça.
-  `Set-Content -Encoding UTF8` (PowerShell 5.1) ajoute un BOM — à éviter.
+Options fréquentes : `--profile=`, `--provider=`, `--model=`, `--quantization=`, `--force` (non-TTY), `--dry-run`, `--preset=`, `--save-preset=`, `--hybrid`.
 
 ---
 
-## 2. Conventions de code
+## Tests
 
-- **Langue** : le code, les commentaires et les messages CLI sont en **français**.
-- **Commentaires** : NE PAS ajouter de commentaires sauf demande explicite. Les
-  commentaires existants sont détaillés et pédagogiques — les imiter si on en ajoute.
-- **Style** : indentation 2 espaces, pas de `;` en fin d'instruction (style Node.js),
-  guillemets simples pour les chaînes, backticks pour les template literals.
-- **Pas de dépendances externes** : Node.js built-ins uniquement (`fs`, `path`, `child_process`,
-  `readline`, `vm`, etc.). Pas de `package.json`, pas de `npm install`.
-- **Pas d'emojis dans le code** sauf demande explicite (les emojis existants dans le CLI
-  et les rapports sont volontaires : ✔ ✘ ⚠ 👨‍🏫 etc.).
+Tous dans `tests/test-*.js`. Framework maison : chaque fichier exporte `run(c)` + `cases[]`. Lanceur : `node tests/run-tests.js` (code de sortie 0 = tout OK). 5 fichiers de test (parsing, scoring-utils, sentinelles, lru-cache).
 
 ---
 
-## 3. Vérifications obligatoires après modification de code
+## PowerShell 5.1 — pièges
 
-Après TOUTE modification d'un fichier `.js`, lancer **avant de déclarer le travail fini** :
+L'outil `bash` est routé sur PowerShell 5.1. Ça change tout :
 
-```powershell
-node --check <fichier_modifié.js>
-```
-
-Répéter pour chaque fichier modifié. Si une erreur de syntaxe apparaît, la corriger avant
-de continuer. Ne JAMAIS livrer un fichier qui ne passe pas `node --check`.
-
-Pour le runner complet, vérifier en plus que `parseCliArgs()` expose bien les nouveaux
-flags (test rapide) :
-```powershell
-node -e "const {parseCliArgs}=require('./config'); process.argv=['node','runner.js','--force']; console.log(require('./config').parseCliArgs().force)"
-```
+- Interdits : `grep`, `head`, `tail`, `cat`, `/dev/null` (cmdlets POSIX inconnus), `&&`, `||` comme séparateur, here-strings (`@"..."@`).
+- À la place : `; if ($?) { ... }` pour enchaîner, `Select-String` pour filtrer.
+- **`${` dans une chaîne PowerShell** est interprété comme une variable — ne jamais écrire de template literal JS `${}` via le shell. Toujours utiliser l'outil `write`.
+- `Set-Content -Encoding UTF8` ajoute un BOM — toujours UTF-8 **sans BOM** (l'outil `write` le garantit).
 
 ---
 
-## 4. Conventions critiques du projet (mémoire durable)
+## Architecture & modules
 
-Ces règles sont issues de bugs passés et de décisions prises. Les respecter évite les
-régressions.
+Tous les modules sont à la racine (pas de sous-dossiers pour les sources). Les points d'entrée importants :
 
-### LM Studio
-- **`response_format`** : LM Studio n'accepte que `{ type: 'json_schema' }` ou
-  `{ type: 'text' }`. Le type `json_object` (spécifique OpenAI) est rejeté (HTTP 400).
-- **Quantification** : récupérée via `/api/v0/models` (pas via `/v1/models` qui ne donne
-  que l'id). Le flag `--quantization=` permet de forcer la saisie manuelle.
-- **JIT loading** : si activé, `/v1/models` retourne tous les modèles téléchargés et
-  l'inférence charge le modèle à la demande. Sinon, il faut `lms load` explicitement.
+- **`runner.js`** — orchestrateur (2689 lignes). Contient `main()`, `runSchool()`, `runTierAttempt()`, `askYesNo()`.
+- **`config.js`** — profils, parse CLI, timeout, auto-profilage.
+- **`cloud-client.js`** — 6 providers cloud (OpenAI compat + Anthropic natif).
+- **`lm-studio-client.js`** — client local LM Studio (streaming SSE).
+- **`teacher-client.js`** — professeur IA (correction via OpenRouter Free Router).
+- **`score-ledger.js`** — carnets persistants dans `Export-Rapports/.carnet/<shortName>.json`.
+- **`leaderboard.js`** — génération HTML/MD, serveur web (3622 lignes, JS inline côté client).
+- **`tier-loader.js`** — charge les tiers JSON avec fallback : `FRONTIER → DOCTORAT → EXPERT → STANDARD → LIGHT`.
+- **`task-evaluator.js`** — moteur d'évaluation (exec/pattern/custom). Cache LRU intégré.
+- **`secrets.js`** — clés API en mémoire vive (session), jamais sur disque.
+- **`presets.js`** — `.presets.json` pour rejouer une config (ne stocke JAMAIS de clé API).
+- **`api-keys-store.js`** — stockage persistant optionnel dans `.api-keys.json`.
+- **`http-middleware.js`** — timeout + retry backoff + fallback pour appels HTTP.
+- **`health-sentinels.js`** — vérifications sanitaires.
+- **`hybrid-mode.js`** — auto-soumission GitHub avec file d'attente persistante, seuil à 50%.
+- **`consolidate-leaderboard.js`** — script CI GitHub Action, pas de lancement manuel.
+- **`tiers/`** — 18 fichiers `tier{N}_{profile}.json`.
 
-### OpenRouter (professeur IA + profilage externe)
-- **Headers ByteString** : les headers HTTP OpenRouter (`HTTP-Referer`, `X-Title`) doivent
-  être en Latin-1 (ByteString ≤ 255). Un caractère > 255 (ex: em dash `—` U+2014) fait
-  planter `fetch` avec « Cannot convert argument to a ByteString ». Utiliser des tirets
-  ASCII `-` dans les headers. Valable pour TOUS les clients fetch (`teacher-client.js`,
-  `external-profiling.js`, `report-teacher.js`).
-- **Ne jamais hardcoder un slug `:free`** : les modèles gratuits sont dépubliés sans
-  préavis (ex: `meta-llama/llama-3.3-70b-instruct:free` → HTTP 404). Toujours récupérer
-  la liste dynamique via `/api/v1/models` (endpoint public) et rotate sur les modèles
-  gratuits disponibles.
-- **`askTeacherToCorrectStudentAnalysis`** renvoie `{ content, model }` (objet), PAS une
-  string. Tester `.content` et `.length` sur la bonne propriété pour ne pas ignorer la
-  correction (bug historique : `teacherCorrection.length` sur un objet → toujours faux).
-
-### Runner (runner.js)
-- **`forceFlag`** : ajouté au destructuring de `runTierAttempt` (fonction top-level, PAS
-  dans `main`). Doit être passé explicitement aux 2 appels (run principal + rattrapage)
-  depuis `runSchool` (closure sur `main`). Si on l'oublie, `forceFlag` est `undefined`
-  dans `runTierAttempt` et les `askYesNo` ne sont pas neutralisés en mode batch.
-- **Seuil de validation d'un tier** : 70% DU TOTAL POSSIBLE
-  (`validationThreshold = Math.floor(totalPossiblePoints * 0.7)`), PAS 70 points fixes.
-  `totalPossiblePoints` = somme des points des tâches conservées après filtrage.
-- **Rattrapage** : AUTOMATIQUE (plus de question manuelle). Déclenché si l'un de ces 3
-  critères est rempli : (1) tier obligatoire échoué, (2) santé globale < 0 PV,
-  (3) ≥ 40% des exercices échoués. `MAX_RATTRAPAGE_ATTEMPTS = 1`.
-- **Erreurs brutes du sandbox VM** : JAMAIS afficher seules (ex: "Invalid or unexpected
-  token", "X is not defined"). Toujours les accompagner d'une explication pédagogique
-  (`explainTechnicalError()` ou explication exigée du modèle via
-  `askModelForFailureExplanation()`).
-- **`askYesNo` en non-TTY** : retourne `false` (pas de blocage). `--force` court-circuite
-  les 3 confirmations de re-test/pénalité pour le mode nuit.
-
-### Échelle de notes A-F (progress-bar.js `letterGrade`)
-- A ≥ 90, B ≥ 80, C ≥ 70, D ≥ 60, F < 60 (seuils `>=` descendants, A prime sur B).
-
-### Classement (leaderboard.js)
-- **Layout en carte** : stats (modèle, points, obligatoire, santé, bonus...) en ligne,
-  arguments (forces/faiblesses) juste en dessous, PAS dans une colonne séparée.
-- **Fichiers de sortie** : `Export-Rapports/classement.html` et `classement.md` (noms
-  fixes, sans horodatage, écrasés à chaque génération).
-- **JS inline** : ne pas utiliser `esc()` pour injecter des valeurs dans des littéraux JS
-  inline (`onclick` etc.) — `esc()` convertit `'` en `&#39;` (entité HTML invalide en JS),
-  ce qui casse tout le script inline. Échapper manuellement ou utiliser `data-*` + addEventListener.
-- **Ascenseurs** : toujours cachés (CSS `scrollbar-width: none`, `::-webkit-scrollbar`).
-
-### Rapports Markdown
-- **Timestamp local** : le dossier jour et l'horodatage des noms de fichiers utilisent la
-  date/heure locales (pas UTC), pour rester cohérents.
-- **Tableau par exercice** : chaque exercice inclut un tableau
-  `Exercice | Type | Points obtenus | Points max | Statut` + tableau récapitulatif global.
-- **Architecture d'export** : `Export-Rapports/<AAAA-MM-JJ>/<ÉCOLE>/<NIVEAU-OU-CLASSE>/rapport_v3_*.md`.
-- **Section « Validation du professeur IA »** : rédigée par un modèle externe
-  (`report-teacher.js`), ajoutée à la fin du rapport si le professeur est activé.
-
-### Spinner
-- **Pas d'humour** : le Spinner n'utilise plus `WAITING_MESSAGES`. Avant le streaming il
-  affiche uniquement `⠋ <label>...` sans phrase humoristique. Les messages pédagogiques
-  rotatifs (`PROFILING_WAITING_MESSAGES`, `POST_PROFILING_WAITING_MESSAGES`) restent
-  autorisés pendant les temps morts longs (auto-profilage, préparation).
-
-### Articles externes (LinkedIn, Tasks1.md...)
-- **Texte brut, pas de Markdown** : les articles destinés à LinkedIn ou à des plateformes
-  externes doivent être en texte brut sans aucune syntaxe Markdown (pas de `#`, `**`,
-  `---`, `-`), car les symboles se reproduisent tels quels sur ces plateformes.
+Timeouts clés (`config.js`) : `EVAL_TIMEOUT_MS` = 10s (sandbox VM), `API_TIMEOUT_MS` = 1500s (25 min), `PROFILING_TIMEOUT_MS` = 600s (10 min).
 
 ---
 
-## 5. Journal de versions
+## Conventions de code
 
-- **Le SEUL journal de versions de référence est `Docs/CHANGELOG.md`** (à la racine du dépôt).
-  Il DOIT être tenu à jour à chaque modification de code.
-- `Memories-BenchGo/CHANGELOG.md` a été supprimé et ne doit plus être utilisé ni mentionné.
-
----
-
-## 6. Documentation
-
-- **Manuel utilisateur** : `Docs/Manuel-utilisateur/` (01 à 07).
-  - `07-mode-nuit.md` documente le mode batch nocturne (`night-batch.js`).
-- **README racine** : lister les fonctionnalités principales avec un emoji + lien vers la
-  doc détaillée.
-- **README du manuel** : parcourir les chapitres dans l'ordre (1 à 7).
+- Langue : **français** (code, commentaires, messages CLI).
+- Style : indentation 2 espaces, pas de `;`, guillemets simples, backticks pour template literals.
+- Pas d'emojis dans le code. Les emojis existants dans le CLI et les rapports sont volontaires (✔ ✘ ⚠).
+- Pas de commentaires sauf demande explicite. Commentaires existants détaillés et pédagogiques.
+- `Docs/CHANGELOG.md` est le **seul** journal de versions. À mettre à jour à chaque modification.
 
 ---
 
-## 7. Mode nuit (night-batch.js) — rappels spécifiques
+## Gotchas critiques (bugs passés)
 
-- **Ne pas toucher au serveur déjà lancé** : le script démarre le serveur en headless
-  seulement s'il ne répond pas, et l'arrête seulement s'il l'a démarré.
-- **`--force` au runner** : neutralise les 3 `askYesNo` (re-test modèle déjà testé ×2,
-  comptabilisation pénalité → maintenue). NE PAS oublier de passer `forceFlag` à
-  `runTierAttempt` (cf. §4 Runner).
-- **Écoles** : `LIGHT`, `STANDARD`, `EXPERT`, `DOCTORAT`, `auto`. Comparaison insensible à
-  la casse dans `resolveSchoolsFromArg` (`x.key.toUpperCase() === k`).
-- **ModelKeys** : récupérés via `lms ls --json --llm` (champ `modelKey`). Sensibles à la
-  casse, incluent parfois la quantification (`@q4_k_m`).
+### forceFlag
+`forceFlag` est extrait dans `main()` puis passé à `runSchool()` et enfin à `runTierAttempt()`. Si oublié dans un des deux appels depuis `runSchool`, il est `undefined` dans `runTierAttempt` et les `askYesNo` ne sont pas court-circuités en mode batch. Les 3 `askYesNo` concernés sont : re-test (×2) et pénalité.
+
+### Rattrapage automatique
+Déclenché si : (1) tier obligatoire échoué, (2) santé < 0 PV, (3) ≥ 40% des exercices échoués. `MAX_RATTRAPAGE_ATTEMPTS = 1`. Seuil de validation d'un tier : `Math.floor(totalPossiblePoints * 0.7)` (70% du total possible, pas 70 points fixes).
+
+### askYesNo en non-TTY
+Retourne `false` (pas de blocage). Utiliser `--force` pour court-circuiter les confirmations en mode nuit.
+
+### askTeacherToCorrectStudentAnalysis
+Renvoie `{ content, model }` (objet), pas une string. Tester `.content` et `.length` sur `.content`, pas sur l'objet.
+
+### response_format (LM Studio)
+N'accepte que `{ type: 'json_schema' }` ou `{ type: 'text' }`. `json_object` (OpenAI) → HTTP 400.
+
+### Headers ByteString (OpenRouter)
+`HTTP-Referer`, `X-Title` : caractères > 255 (em dash `—` U+2014, accents types) → crash `fetch`. Toujours utiliser des tirets ASCII et caractères Latin-1.
+
+### Modèles gratuits OpenRouter
+Ne jamais hardcoder un slug `:free`. Toujours récupérer la liste dynamique via `/api/v1/models` (endpoint public). Les modèles gratuits sont dépubliés sans préavis (HTTP 404).
+
+### esc() dans le leaderboard
+`esc()` convertit `'` en `&#39;` (entité HTML). Ne pas l'utiliser pour injecter des chaînes dans des attributs `onclick="..."` (JS inline cassé). Utiliser `data-*` + `addEventListener`.
+
+### Erreurs brutes du sandbox VM
+Ne jamais afficher seules ("Invalid token", "X is not defined"). Toujours les accompagner de `explainTechnicalError()` ou d'une explication du modèle.
+
+### Profils non soumis au rattrapage
+Seuls LIGHT et STANDARD sont éligibles. EXPERT, DOCTORAT, FRONTIER ne le sont pas (`isRattrapageEligibleProfile`).
+
+### Échelle letterGrade
+`A ≥ 90, B ≥ 80, C ≥ 70, D ≥ 60, F < 60`. Seuils `>=` descendants (A prime sur B).
+
+### Path des exports
+Rapports : `Export-Rapports/<AAAA-MM-JJ>/<ÉCOLE>/<CLASSE>/rapport_v3_*.md` (timestamp local, pas UTC). `Export-Rapports/.carnet/` : carnets JSON. Classement : `Export-Rapports/classement.html` et `classement.md` (écrasés à chaque run).
+
+### Problème Node.js 24.x
+Bug undici : `TypeError: Cannot assign to read only property 'name' of object 'Error: socket idle timeout'`. Intercepté globalement dans `runner.js` (ligne 11). L'erreur est loggée, le fetch échoue proprement, le runner continue.
+
+### Écoles séquentielles
+Si modèle > 3B paramètres, le runner peut enchaîner LIGHT puis STANDARD dans le même run (même clé, auto-profilage partagé, santé réinitialisée).
 
 ---
 
-## 8. Workflow recommandé pour une tâche de code
+## Vérifications après modification
 
-1. **Lire** le ou les fichiers concernés avec l'outil `read` (pas de shell).
-2. **Modifier** avec `edit` (modification ciblée) ou `write` (réécriture complète).
-3. **Vérifier la syntaxe** : `node --check <fichier>` via l'outil `bash`.
-4. **Tester le comportement** : si possible, lancer un test rapide (ex: dry-run,
-   `parseCliArgs()`, vérification d'un endpoint).
-5. **Mettre à jour `Docs/CHANGELOG.md`** avec contexte + implémentation + fichiers modifiés.
-6. **Mettre à jour la doc utilisateur** si la fonctionnalité est visible par l'utilisateur.
-7. **Ne JAMAIS committer** sans demande explicite de l'utilisateur.
+1. `node --check <fichier_modifié.js>` pour chaque fichier modifié.
+2. `node tests/run-tests.js` pour les tests unitaires.
+3. Vérifier `parseCliArgs()` expose bien les nouveaux flags : `node -e "const {parseCliArgs}=require('./config'); process.argv=['node','runner.js','--force']; console.log(parseCliArgs().force)"`.
+4. Mettre à jour `Docs/CHANGELOG.md`. Ne pas committer sans demande explicite.
