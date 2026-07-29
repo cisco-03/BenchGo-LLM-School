@@ -3,7 +3,7 @@
   "benchgoVersion": "V3",
   "userId": "2181628c20fe6a0e",
   "pseudo": "FlexoDiv",
-  "submittedAt": "2026-07-24T16:54:47.161Z",
+  "submittedAt": "2026-07-29T07:16:54.481Z",
   "integrityHash": "902184e9ccba5944",
   "carnet": {
     "model": "mistralai/ministral-3-14b-reasoning",
