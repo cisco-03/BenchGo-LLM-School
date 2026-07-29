@@ -487,6 +487,7 @@ function buildLeaderboardHTML(entries) {
       model: e.model,
       quantization: e.quantization || null,
       modelUrl: ledger.modelUrl || guessModelUrl(e.model, ledger.publisher) || null,
+      globalRank: rank,
       pct: e.pct,
       score: e.score,
       max: e.max,
@@ -759,6 +760,8 @@ function buildLeaderboardHTML(entries) {
   .btn-primary:hover { background: linear-gradient(135deg, var(--accent-2), var(--accent)); color: #fff; box-shadow: 0 3px 12px rgba(31,111,235,0.4); }
   .btn-primary:active { transform: scale(0.97); }
   .btn-primary.done { background: var(--green); border-color: var(--green); color: #fff; }
+  .btn-primary.active { background: linear-gradient(135deg, var(--accent-2), var(--accent)); color: #fff; box-shadow: 0 3px 12px rgba(31,111,235,0.4); }
+  .date-badge { display: inline-flex; align-items: center; gap: 3px; padding: 2px 7px; border-radius: var(--r-sm); background: rgba(56,139,253,0.12); color: var(--accent-2); font-size: var(--fs-tiny); border: 1px solid rgba(56,139,253,0.25); }
 
   .btn-community {
     padding: 8px 16px; border-color: rgba(210,168,255,0.5);
@@ -1228,6 +1231,8 @@ function buildLeaderboardHTML(entries) {
             ${Object.keys(ecoleCounts).sort().map(ec => `<option value="${esc(ec)}">🏫 ${esc(ec)} (${ecoleCounts[ec]})</option>`).join('')}
           </select>
         </div>
+
+        <button class="btn btn-primary" id="btnRecentSort" title="Trier les modèles par date de dernier test (du plus récent au plus ancien)" style="margin-left: var(--space-xs);">🕒 Récents</button>
       </div>
 
       <div class="search-wrap">
@@ -1272,6 +1277,66 @@ function buildLeaderboardHTML(entries) {
 var MODELS = ${JSON.stringify(modelsData)};
 var LOCAL_SHA = ${JSON.stringify(localSha)};
 var REMOTE_REPO = ${JSON.stringify(updateChecker.COMMUNITY_REPO)};
+
+// --- Tri par date de dernier test (toggle "🕒 Récents") ---
+// MODELS_SORTED_BY_DATE = copie de MODELS triée par lastUpdated décroissant.
+// _originalModels = ordre d'origine (par score). Quand le tri récent est actif,
+// on permute MODELS pour pointer sur l'ordre trié par date, tout en conservant
+// les index via globalRank pour que les opérations (modale, kebab, etc.) restent valides.
+var _originalModels = MODELS.slice();
+var _recentSortActive = false;
+
+function formatRelativeDate(isoStr) {
+  if (!isoStr) return '—';
+  var d = new Date(isoStr);
+  if (isNaN(d.getTime())) return '—';
+  var now = new Date();
+  var diffMs = now - d;
+  var diffMin = Math.floor(diffMs / 60000);
+  var diffH = Math.floor(diffMin / 60);
+  var diffD = Math.floor(diffH / 24);
+  if (diffMin < 1) return 'à l\'instant';
+  if (diffMin < 60) return 'il y a ' + diffMin + ' min';
+  if (diffH < 24) return 'il y a ' + diffH + ' h';
+  if (diffD === 1) return 'hier';
+  if (diffD < 7) return 'il y a ' + diffD + ' j';
+  // Au-delà d'une semaine : date courte JJ/MM
+  var dd = String(d.getDate()).padStart(2, '0');
+  var mm = String(d.getMonth() + 1).padStart(2, '0');
+  return dd + '/' + mm;
+}
+
+function formatDateShort(isoStr) {
+  if (!isoStr) return null;
+  var d = new Date(isoStr);
+  if (isNaN(d.getTime())) return null;
+  var dd = String(d.getDate()).padStart(2, '0');
+  var mm = String(d.getMonth() + 1).padStart(2, '0');
+  var hh = String(d.getHours()).padStart(2, '0');
+  var mi = String(d.getMinutes()).padStart(2, '0');
+  return dd + '/' + mm + ' ' + hh + ':' + mi;
+}
+
+function toggleRecentSort() {
+  _recentSortActive = !_recentSortActive;
+  var btn = document.getElementById('btnRecentSort');
+  if (_recentSortActive) {
+    btn.classList.add('active');
+    btn.textContent = '🕒 Récents ✓';
+    // Trie par lastUpdated décroissant (modèles sans date → à la fin).
+    MODELS.sort(function(a, b) {
+      var da = a.lastUpdated ? new Date(a.lastUpdated).getTime() : 0;
+      var db = b.lastUpdated ? new Date(b.lastUpdated).getTime() : 0;
+      return db - da;
+    });
+  } else {
+    btn.classList.remove('active');
+    btn.textContent = '🕒 Récents';
+    // Restaure l'ordre original (par score).
+    MODELS = _originalModels.slice();
+  }
+  renderCards();
+}
 
 function gradeColor(g) {
   var m = { A:'#3fb950', B:'#58a6ff', C:'#d29922', D:'#bc8cff', F:'#f85149' };
@@ -1394,9 +1459,11 @@ function renderCards() {
     if (q && m.model.toLowerCase().indexOf(q) === -1 && m.shortName.toLowerCase().indexOf(q) === -1) { skippedSearch++; continue; }
     shown++;
 
-    var cardClass = i === 0 ? 'gold' : i === 1 ? 'silver' : i === 2 ? 'bronze' : '';
-    var rankDisp = i < 3
-      ? '<span class="medal">' + (i === 0 ? '🥇' : i === 1 ? '🥈' : '🥉') + '</span>'
+    var globalRank = m.globalRank || (i + 1);
+    // En mode tri récent, les médailles/couleurs restent liées au rang global (score).
+    var cardClass = globalRank === 1 ? 'gold' : globalRank === 2 ? 'silver' : globalRank === 3 ? 'bronze' : '';
+    var rankDisp = globalRank <= 3
+      ? '<span class="medal">' + (globalRank === 1 ? '🥇' : globalRank === 2 ? '🥈' : '🥉') + '</span>'
       : shown;
     var posArrow = positionArrow(m.positionDelta);
     var pc = pctColor(m.pct);
@@ -1423,7 +1490,12 @@ function renderCards() {
     var quantBadge = m.quantization
       ? '<span class="badge quant" title="Quantification du modèle (récupérée via LM Studio /api/v0/models ou saisie manuelle)">🧩 ' + esc(m.quantization) + '</span>'
       : '';
-    // Badge de tendance (progression / régression / redoublement) basé sur
+    // Badge de date de dernier test (toujours visible, surtout utile en mode récent).
+    var relDate = formatRelativeDate(m.lastUpdated);
+    var fullDate = formatDateShort(m.lastUpdated);
+    var dateBadge = fullDate
+      ? ' <span class="date-badge" title="Dernier test : ' + esc(fullDate) + '">🕒 ' + esc(relDate) + '</span>'
+      : '';
     // l'historique des re-tests du carnet. Ne s'affiche que si au moins 2 tentatives.
     var trendBadge = '';
     if (m.trend) {
@@ -1446,7 +1518,7 @@ function renderCards() {
         '<div class="rank">' + rankDisp + '</div>' +
         '<div class="model-name">' +
           '<div class="name-line"><span class="cat-icon">' + m.cat.icon + '</span>' + esc(m.model) + posArrow + '</div>' +
-          '<div class="badges">' + szBadge + ' ' + quantBadge + ' ' + trendBadge + exportedBadge + '</div>' +
+          '<div class="badges">' + szBadge + ' ' + quantBadge + ' ' + trendBadge + exportedBadge + dateBadge + '</div>' +
         '</div>' +
         '<div class="mini-stats">' +
           '<div class="mini-stat"><span class="lbl">%</span><span class="val" style="color:' + pc + '">' + dispPct(m.pct) + '%</span><div class="pct-bar-wrap"><div class="pct-bar-fill" style="width:' + Math.max(2,dispPct(m.pct)) + '%;background:' + pc + '"></div></div></div>' +
@@ -1503,7 +1575,8 @@ function attachScrollAnimations() {
 function openModal(idx) {
   var m = MODELS[idx];
   var posArrowHtml = positionArrow(m.positionDelta);
-  document.getElementById('mRank').innerHTML = (idx < 3 ? '<span class="medal">' + (idx === 0 ? '🥇' : idx === 1 ? '🥈' : '🥉') + '</span>' : (idx + 1)) + posArrowHtml;
+  var gr = m.globalRank || (idx + 1);
+  document.getElementById('mRank').innerHTML = (gr <= 3 ? '<span class="medal">' + (gr === 1 ? '🥇' : gr === 2 ? '🥈' : '🥉') + '</span>' : gr) + posArrowHtml;
   document.getElementById('mTitle').textContent = m.model;
   var vb = document.getElementById('mVerdict');
   vb.textContent = m.verdict.label;
@@ -1911,6 +1984,8 @@ var _healthSel = document.getElementById('healthSelect');
 if (_healthSel) _healthSel.addEventListener('change', renderCards);
 var _ecoleSel = document.getElementById('ecoleSelect');
 if (_ecoleSel) _ecoleSel.addEventListener('change', renderCards);
+var _recentBtn = document.getElementById('btnRecentSort');
+if (_recentBtn) _recentBtn.addEventListener('click', toggleRecentSort);
 
 // Ferme les menus ⋮ ouverts quand on clique ailleurs.
 document.addEventListener('click', function(e) {

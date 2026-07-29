@@ -1,5 +1,25 @@
 # CHANGELOG - Carnet de Notes BenchGo
 
+## 2026-07-29 (6) — feat: bouton « 🕒 Récents » — tri du classement par date de dernier test
+
+### Contexte
+Tri manuel dans LM Studio fastidieux pour retrouver les derniers modèles testés. Le classement local ne proposait que le tri par score. Ajout d'un bouton toggle sur la ligne des filtres pour trier par date de dernier test (`lastUpdated` du carnet), du plus récent au plus ancien.
+
+### Implémentation (`leaderboard.js`)
+- Nouveau bouton `btnRecentSort` sur la 1re ligne de filtres (après École), pas sur la 2e ligne (déjà saturée de boutons).
+- `toggleRecentSort()` : permute `MODELS` entre l'ordre par score (original) et l'ordre par `lastUpdated` décroissant. État conservé dans `_recentSortActive`.
+- `_originalModels` : copie de `MODELS` à l'initialisation (avant tout tri) pour restauration.
+- `globalRank` ajouté à chaque entrée côté serveur (`modelsData`) → médailles 🥇🥈🥉 et couleur de carte (gold/silver/bronze) restent liées au rang mondial par score, pas à la position dans la liste triée par date.
+- `openModal` : affichage du rang corrigé pour utiliser `globalRank` (au lieu de `idx + 1`).
+- Badge `date-badge` (🕒 + date relative « il y a X h ») affiché sur chaque carte, avec tooltip donnant la date complète JJ/MM HH:MM.
+- `formatRelativeDate()` / `formatDateShort()` : helpers de formatage date côté client.
+- CSS : `.btn-primary.active` (état actif) + `.date-badge`.
+
+#### Vérifications
+- `node --check leaderboard.js` → OK.
+- `node tests/run-tests.js` → 27/27 passés.
+- `node leaderboard.js` → HTML généré, bouton + fonctions présents dans `classement.html`.
+
 ## 2026-07-29 (5) — fix: numérotation des cartes redémarre à 1 par filtre catégorie
 
 ### Contexte
