@@ -1,6 +1,26 @@
 {
   "entries": [
     {
+      "model": "unsloth/gemma-4-12b-it-qat",
+      "shortName": "unsloth_gemma-4-12b-it-qat",
+      "quantization": "Q4_K_XL",
+      "score": 5715,
+      "max": 5746,
+      "pct": 99,
+      "globalLifeScore": 6425,
+      "optionalBonus": 710,
+      "tokens": 27965,
+      "elapsedMs": 4073021,
+      "tokensPerSecond": 6.87,
+      "ecoleCount": 2,
+      "pseudo": "FlexoDiv",
+      "submittedAt": "2026-07-29T06:36:44.868Z",
+      "contributors": 1,
+      "allPct": [
+        99
+      ]
+    },
+    {
       "model": "gemma-4-12b-it-qat",
       "shortName": "gemma-4-12b-it-qat",
       "quantization": "Q4_K_XL",
@@ -701,6 +721,6 @@
       ]
     }
   ],
-  "generatedAt": "2026-07-29T06:46:28.420Z",
-  "totalSubmissions": 35
+  "generatedAt": "2026-07-29T06:46:50.899Z",
+  "totalSubmissions": 36
 }
