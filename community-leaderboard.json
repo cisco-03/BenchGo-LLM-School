@@ -241,6 +241,26 @@
       ]
     },
     {
+      "model": "ministral-3-14b-reasoning-2512-uncensored",
+      "shortName": "ministral-3-14b-reasoning-2512-uncensored",
+      "quantization": "Q4_K_M",
+      "score": 5111,
+      "max": 5672,
+      "pct": 90,
+      "globalLifeScore": 6013,
+      "optionalBonus": 691,
+      "tokens": 10926,
+      "elapsedMs": 1793603,
+      "tokensPerSecond": 6.09,
+      "ecoleCount": 2,
+      "pseudo": "FlexoDiv",
+      "submittedAt": "2026-07-29T06:36:54.990Z",
+      "contributors": 1,
+      "allPct": [
+        90
+      ]
+    },
+    {
       "model": "gemma-4-12b-coder-fable5-composer2.5-v1",
       "shortName": "gemma-4-12b-coder-fable5-composer2.5-v1",
       "quantization": "Q4_K_M",
@@ -275,6 +295,26 @@
       "ecoleCount": 1,
       "pseudo": "FlexoDiv",
       "submittedAt": "2026-07-24T16:54:41.187Z",
+      "contributors": 1,
+      "allPct": [
+        90
+      ]
+    },
+    {
+      "model": "deepseek/deepseek-r1-0528-qwen3-8b",
+      "shortName": "deepseek-r1-0528-qwen3-8b",
+      "quantization": null,
+      "score": 2740,
+      "max": 3053,
+      "pct": 90,
+      "globalLifeScore": 3056,
+      "optionalBonus": 316,
+      "tokens": 26624,
+      "elapsedMs": 2486034,
+      "tokensPerSecond": 10.71,
+      "ecoleCount": 1,
+      "pseudo": "FlexoDiv",
+      "submittedAt": "2026-07-29T06:36:58.306Z",
       "contributors": 1,
       "allPct": [
         90
@@ -641,6 +681,6 @@
       ]
     }
   ],
-  "generatedAt": "2026-07-29T06:45:48.812Z",
-  "totalSubmissions": 32
+  "generatedAt": "2026-07-29T06:46:08.770Z",
+  "totalSubmissions": 34
 }
