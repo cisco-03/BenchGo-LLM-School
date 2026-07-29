@@ -3,7 +3,7 @@
   "benchgoVersion": "V3",
   "userId": "2181628c20fe6a0e",
   "pseudo": "FlexoDiv",
-  "submittedAt": "2026-07-24T16:54:07.756Z",
+  "submittedAt": "2026-07-29T07:18:16.104Z",
   "integrityHash": "05bc80edb5971a34",
   "carnet": {
     "model": "yuxinlu1/gemma-4-12b-agentic-fable5-composer2.5-v2-3.5x-tau2-gguf/gemma4-v2-q8_0.gguf",
