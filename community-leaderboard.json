@@ -321,6 +321,26 @@
       ]
     },
     {
+      "model": "google/gemma-4-e4b",
+      "shortName": "google_gemma-4-e4b",
+      "quantization": "Q4_K_M",
+      "score": 2616,
+      "max": 2977,
+      "pct": 88,
+      "globalLifeScore": 2931,
+      "optionalBonus": 315,
+      "tokens": 29843,
+      "elapsedMs": 1735885,
+      "tokensPerSecond": 17.19,
+      "ecoleCount": 1,
+      "pseudo": "FlexoDiv",
+      "submittedAt": "2026-07-29T06:37:01.316Z",
+      "contributors": 1,
+      "allPct": [
+        88
+      ]
+    },
+    {
       "model": "deepseek-r1-distill-qwen-14b@q4_k_s",
       "shortName": "deepseek-r1-distill-qwen-14b@q4_k_s",
       "quantization": null,
@@ -621,6 +641,6 @@
       ]
     }
   ],
-  "generatedAt": "2026-07-29T06:45:36.994Z",
-  "totalSubmissions": 31
+  "generatedAt": "2026-07-29T06:45:48.812Z",
+  "totalSubmissions": 32
 }
