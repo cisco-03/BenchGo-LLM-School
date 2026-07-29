@@ -253,12 +253,12 @@ function buildConsolidatedHTML(entries) {
   // Taille du modèle par nom
   function getParamSize(modelName) {
     const m = (modelName || '').match(/([\d]+[.,]?[\d]*)\s*b/i);
-    if (!m) return { key: 'inconnu', icon: '❓', label: 'Taille inconnue' };
+    if (!m) return { key: 'inconnu', icon: '❓', label: 'Taille inconnue', short: '?' };
     const size = parseFloat(m[1].replace(',', '.'));
-    if (size < 3) return { key: 'petit', icon: '🐱', label: '< 3B' };
-    if (size <= 14) return { key: 'standard', icon: '📦', label: '3B-14B' };
-    if (size <= 30) return { key: 'expert', icon: '🎓', label: '14B-30B' };
-    return { key: 'doctorat', icon: '🧠', label: '> 30B' };
+    if (size < 3) return { key: 'petit', icon: '🐱', label: '< 3B', short: size + 'B' };
+    if (size <= 14) return { key: 'standard', icon: '📦', label: '3B-14B', short: size + 'B' };
+    if (size <= 30) return { key: 'expert', icon: '🎓', label: '14B-30B', short: size + 'B' };
+    return { key: 'doctorat', icon: '🧠', label: '> 30B', short: size + 'B' };
   }
 
   function gradeLetter(pct) {
