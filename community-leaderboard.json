@@ -441,6 +441,26 @@
       ]
     },
     {
+      "model": "baidu/ernie-4.5-21b-a3b",
+      "shortName": "baidu_ernie-4.5-21b-a3b",
+      "quantization": null,
+      "score": 1206,
+      "max": 2250,
+      "pct": 54,
+      "globalLifeScore": 1276,
+      "optionalBonus": 70,
+      "tokens": 10758,
+      "elapsedMs": 632637,
+      "tokensPerSecond": 17.01,
+      "ecoleCount": 1,
+      "pseudo": "FlexoDiv",
+      "submittedAt": "2026-07-29T06:37:14.186Z",
+      "contributors": 1,
+      "allPct": [
+        54
+      ]
+    },
+    {
       "model": "microsoft/phi-4-reasoning-plus",
       "shortName": "microsoft_phi-4-reasoning-plus",
       "quantization": "Q4_K_M",
@@ -581,6 +601,6 @@
       ]
     }
   ],
-  "generatedAt": "2026-07-29T06:43:42.911Z",
-  "totalSubmissions": 29
+  "generatedAt": "2026-07-29T06:44:07.414Z",
+  "totalSubmissions": 30
 }
