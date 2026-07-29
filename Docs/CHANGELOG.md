@@ -16,6 +16,19 @@
 - Ligne 1231 : classe `btn-accent` (inexistante) → `btn-primary` (cohérent avec les autres boutons).
 - Lignes 2372-2374 : `window.open` pointe désormais vers `https://cisco-03.github.io/BenchGo-LLM-School/community-leaderboard.html` au lieu du fichier local.
 
+#### 3. Procédure de déploiement du classement communautaire (GitHub Pages)
+- `node consolidate-leaderboard.js` ne génère que le fichier **local** `gh-pages-output/community-leaderboard.html`. Il n'est PAS déployé en ligne.
+- Pour mettre à jour le classement **en ligne** sur GitHub Pages :
+  1. Pousser les modifications de `consolidate-leaderboard.js` sur `origin/main` du dépôt `cisco-03/BenchGo-LLM-School`.
+  2. Déclencher le workflow : `gh workflow run consolidate.yml -R cisco-03/BenchGo-LLM-School`
+  3. Attendre la fin : `gh run watch -R cisco-03/BenchGo-LLM-School`
+  4. Le workflow régénère le HTML sur la branche `gh-pages` et GitHub Pages le déploie automatiquement.
+  5. Hard refresh (Ctrl+Shift+R) sur https://cisco-03.github.io/BenchGo-LLM-School/community-leaderboard.html
+
+#### 4. Règle technique : backticks dans JS inline
+- Ne JAMAIS mettre de backticks littéraux dans du JS inline généré par un template literal — utiliser `String.fromCharCode(96)` ou une variable.
+- Vérification : extraire le JS du HTML généré et le parser avec `new vm.Script(js)` pour détecter une SyntaxError.
+
 ## 2026-07-29 (2) — feat: design unifié classement communautaire + colonnes mode nuit + merge auto + URL modèle
 
 ### Contexte

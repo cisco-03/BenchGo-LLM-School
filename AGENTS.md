@@ -14,6 +14,7 @@ OS : Windows, PowerShell 5.1. Projet Node.js 18+ **sans `package.json`** (module
 | Tests unitaires | `node tests/run-tests.js` |
 | Classement HTML/MD | `node leaderboard.js` |
 | Serveur classement interactif | `node leaderboard.js --serve` |
+| Classement communautaire en ligne (GitHub Pages) | `gh workflow run consolidate.yml -R cisco-03/BenchGo-LLM-School` puis `gh run watch -R cisco-03/BenchGo-LLM-School` |
 | Aide CLI | `node runner.js --help` |
 | Dernier run & état | `node runner.js status` |
 | Vérifier syntaxe JS | `node --check <fichier>.js` |
@@ -59,7 +60,7 @@ Tous les modules sont à la racine (pas de sous-dossiers pour les sources). Les 
 - **`http-middleware.js`** — timeout + retry backoff + fallback pour appels HTTP.
 - **`health-sentinels.js`** — vérifications sanitaires.
 - **`hybrid-mode.js`** — auto-soumission GitHub avec file d'attente persistante, seuil à 50%.
-- **`consolidate-leaderboard.js`** — script CI GitHub Action, pas de lancement manuel.
+- **`consolidate-leaderboard.js`** — génère le HTML du classement communautaire. Lancé en local pour tester (`node consolidate-leaderboard.js` → `gh-pages-output/`), et en CI via GitHub Actions pour déployer sur `gh-pages`. Le workflow `consolidate.yml` lit les soumissions, régénère le HTML, commit sur `gh-pages`, GitHub Pages déploie.
 - **`tiers/`** — 18 fichiers `tier{N}_{profile}.json`.
 
 Timeouts clés (`config.js`) : `EVAL_TIMEOUT_MS` = 10s (sandbox VM), `API_TIMEOUT_MS` = 1500s (25 min), `PROFILING_TIMEOUT_MS` = 600s (10 min).
@@ -101,6 +102,12 @@ Ne jamais hardcoder un slug `:free`. Toujours récupérer la liste dynamique via
 
 ### esc() dans le leaderboard
 `esc()` convertit `'` en `&#39;` (entité HTML). Ne pas l'utiliser pour injecter des chaînes dans des attributs `onclick="..."` (JS inline cassé). Utiliser `data-*` + `addEventListener`.
+
+### Backticks littéraux dans le JS inline (consolidate-leaderboard.js)
+Ne JAMAIS mettre de backticks littéraux (`` ``` ``) dans du JS inline généré par un template literal — ils créent une `SyntaxError` qui empêche **tout** le script de s'exécuter (y compris `renderCards()`). Symptôme : le classement communautaire affiche "Aucun modèle" malgré des données valides dans le JSON. Utiliser `String.fromCharCode(96,96,96)` à la place. Vérifier avec : `node -e "const vm=require('vm'); const fs=require('fs'); const h=fs.readFileSync('gh-pages-output/community-leaderboard.html','utf8'); const s=h.indexOf('<script>')+8; const e=h.indexOf('</script>'); new vm.Script(h.substring(s,e)); console.log('OK')"`.
+
+### Déploiement du classement communautaire (GitHub Pages)
+`node consolidate-leaderboard.js` ne génère que le fichier **local** `gh-pages-output/`. Pour déployer en ligne : (1) pousser sur `origin/main`, (2) `gh workflow run consolidate.yml -R cisco-03/BenchGo-LLM-School`, (3) `gh run watch -R cisco-03/BenchGo-LLM-School`. Le workflow commit sur la branche `gh-pages` et GitHub Pages déploie. Hard refresh (Ctrl+Shift+R) sur la page en ligne.
 
 ### Erreurs brutes du sandbox VM
 Ne jamais afficher seules ("Invalid token", "X is not defined"). Toujours les accompagner de `explainTechnicalError()` ou d'une explication du modèle.
