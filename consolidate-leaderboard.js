@@ -165,30 +165,66 @@ function aggregateCarnet(carnet) {
   };
 }
 
+// Normalise un nom de modèle pour la clé de dédoublonnage.
+// Retire le préfixe publisher (ex: "unsloth/gemma-4-12b-it-qat" -> "gemma-4-12b-it-qat")
+// et normalise la casse + séparateurs pour que deux soumissions du même modèle
+// sous des publishers différents (unsloth/, lmstudio-community/, etc.) soient
+// reconnues comme un seul modèle.
+function normalizeModelKey(modelName, shortName) {
+  let base = modelName || shortName || 'inconnu';
+  base = String(base).trim().toLowerCase();
+  if (base.includes('/')) {
+    base = base.split('/').pop();
+  }
+  return base.replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
+}
+
 // Dédoublonne les entrées : si plusieurs utilisateurs ont soumis le même modèle,
 // on garde la meilleure soumission (pct le plus élevé). On marque le nombre de
 // contributeurs pour afficher "testé par N personnes".
+// La clé de dédoublonnage est normalisée (sans préfixe publisher) pour éviter
+// les doublons quand le même modèle est soumis sous différents publishers
+// (ex: "unsloth/gemma-4-12b-it-qat" vs "gemma-4-12b-it-qat").
 function deduplicateAndMerge(entries) {
-  const byShortName = {};
+  const byKey = {};
   for (const entry of entries) {
-    const key = entry.shortName;
-    if (!byShortName[key]) {
-      byShortName[key] = { ...entry, contributors: 1, allPct: [entry.pct] };
+    const key = normalizeModelKey(entry.model, entry.shortName);
+    if (!byKey[key]) {
+      byKey[key] = { ...entry, contributors: 1, allPct: [entry.pct] };
     } else {
-      const existing = byShortName[key];
+      const existing = byKey[key];
       existing.contributors++;
       existing.allPct.push(entry.pct);
-      // Garde la meilleure soumission
+      // Garde la meilleure soumission (pct le plus élevé)
       if (entry.pct > existing.pct) {
         const contributors = existing.contributors;
         const allPct = existing.allPct;
         Object.assign(existing, entry);
         existing.contributors = contributors;
         existing.allPct = allPct;
+      } else if (entry.pct === existing.pct) {
+        // En cas d'égalité de pct, on préfère le nom de modèle le plus propre
+        // (sans préfixe publisher) pour l'affichage
+        const existingHasPrefix = (existing.model || '').includes('/');
+        const entryHasPrefix = (entry.model || '').includes('/');
+        if (existingHasPrefix && !entryHasPrefix) {
+          const contributors = existing.contributors;
+          const allPct = existing.allPct;
+          Object.assign(existing, entry);
+          existing.contributors = contributors;
+          existing.allPct = allPct;
+        }
+        // Si les deux ont un préfixe ou aucun, on garde l'existant (premier arrivé)
       }
     }
   }
-  return Object.values(byShortName);
+  // Normalise le shortName de chaque entrée fusionnée pour l'affichage
+  // (retire le préfixe publisher du shortName, ex: "unsloth_gemma-4-12b-it-qat" -> "gemma-4-12b-it-qat")
+  const result = Object.values(byKey);
+  for (const entry of result) {
+    entry.shortName = normalizeModelKey(entry.model, entry.shortName);
+  }
+  return result;
 }
 
 // Génère le HTML du classement consolidé — même style que le leaderboard principal.
