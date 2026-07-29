@@ -1,6 +1,26 @@
 {
   "entries": [
     {
+      "model": "kai-os_grug-12b",
+      "shortName": "kai-os_grug-12b",
+      "quantization": null,
+      "score": 5760,
+      "max": 5826,
+      "pct": 99,
+      "globalLifeScore": 6473,
+      "optionalBonus": 713,
+      "tokens": 25883,
+      "elapsedMs": 4217057,
+      "tokensPerSecond": 6.14,
+      "ecoleCount": 2,
+      "pseudo": "FlexoDiv",
+      "submittedAt": "2026-07-29T07:16:10.485Z",
+      "contributors": 1,
+      "allPct": [
+        99
+      ]
+    },
+    {
       "model": "unsloth/gemma-4-12b-it-qat",
       "shortName": "unsloth_gemma-4-12b-it-qat",
       "quantization": "Q4_K_XL",
@@ -74,7 +94,7 @@
       "tokensPerSecond": 11,
       "ecoleCount": 1,
       "pseudo": "FlexoDiv",
-      "submittedAt": "2026-07-24T16:54:04.603Z",
+      "submittedAt": "2026-07-29T07:15:59.182Z",
       "contributors": 1,
       "allPct": [
         99
@@ -95,26 +115,6 @@
       "ecoleCount": 2,
       "pseudo": "FlexoDiv",
       "submittedAt": "2026-07-24T16:54:07.756Z",
-      "contributors": 1,
-      "allPct": [
-        98
-      ]
-    },
-    {
-      "model": "kai-os_grug-12b",
-      "shortName": "kai-os_grug-12b",
-      "quantization": null,
-      "score": 2973,
-      "max": 3039,
-      "pct": 98,
-      "globalLifeScore": 3311,
-      "optionalBonus": 338,
-      "tokens": 15766,
-      "elapsedMs": 2496396,
-      "tokensPerSecond": 6.32,
-      "ecoleCount": 1,
-      "pseudo": "FlexoDiv",
-      "submittedAt": "2026-07-24T16:54:11.165Z",
       "contributors": 1,
       "allPct": [
         98
@@ -414,7 +414,7 @@
       "tokensPerSecond": 17.19,
       "ecoleCount": 1,
       "pseudo": "FlexoDiv",
-      "submittedAt": "2026-07-29T06:37:01.316Z",
+      "submittedAt": "2026-07-29T07:16:04.721Z",
       "contributors": 1,
       "allPct": [
         88
@@ -674,7 +674,7 @@
       "tokensPerSecond": 10.44,
       "ecoleCount": 1,
       "pseudo": "FlexoDiv",
-      "submittedAt": "2026-07-29T06:37:20.304Z",
+      "submittedAt": "2026-07-29T07:15:52.663Z",
       "contributors": 1,
       "allPct": [
         -39
@@ -721,6 +721,6 @@
       ]
     }
   ],
-  "generatedAt": "2026-07-29T07:16:17.644Z",
+  "generatedAt": "2026-07-29T07:16:31.976Z",
   "totalSubmissions": 36
 }
