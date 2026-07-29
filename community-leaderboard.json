@@ -501,6 +501,26 @@
       ]
     },
     {
+      "model": "catmind-1.2b",
+      "shortName": "catmind-1.2b",
+      "quantization": null,
+      "score": -1058,
+      "max": 2603,
+      "pct": -41,
+      "globalLifeScore": -994,
+      "optionalBonus": 64,
+      "tokens": 12463,
+      "elapsedMs": 485650,
+      "tokensPerSecond": 25.66,
+      "ecoleCount": 1,
+      "pseudo": "FlexoDiv",
+      "submittedAt": "2026-07-29T06:37:24.611Z",
+      "contributors": 1,
+      "allPct": [
+        -41
+      ]
+    },
+    {
       "model": "gemma-3-1b-it",
       "shortName": "gemma-3-1b-it",
       "quantization": null,
@@ -521,6 +541,6 @@
       ]
     }
   ],
-  "generatedAt": "2026-07-26T22:16:54.719Z",
-  "totalSubmissions": 26
+  "generatedAt": "2026-07-29T06:43:02.583Z",
+  "totalSubmissions": 27
 }
