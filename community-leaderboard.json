@@ -521,6 +521,26 @@
       ]
     },
     {
+      "model": "gemma-4-26b-a4b-it-rotorquant",
+      "shortName": "gemma-4-26b-a4b-it-rotorquant",
+      "quantization": null,
+      "score": -854,
+      "max": 2195,
+      "pct": -39,
+      "globalLifeScore": -854,
+      "optionalBonus": 0,
+      "tokens": 60412,
+      "elapsedMs": 5788839,
+      "tokensPerSecond": 10.44,
+      "ecoleCount": 1,
+      "pseudo": "FlexoDiv",
+      "submittedAt": "2026-07-29T06:37:20.304Z",
+      "contributors": 1,
+      "allPct": [
+        -39
+      ]
+    },
+    {
       "model": "catmind-1.2b",
       "shortName": "catmind-1.2b",
       "quantization": null,
@@ -561,6 +581,6 @@
       ]
     }
   ],
-  "generatedAt": "2026-07-29T06:43:25.997Z",
-  "totalSubmissions": 28
+  "generatedAt": "2026-07-29T06:43:42.911Z",
+  "totalSubmissions": 29
 }
