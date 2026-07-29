@@ -114,7 +114,7 @@
       "tokensPerSecond": 8.84,
       "ecoleCount": 1,
       "pseudo": "FlexoDiv",
-      "submittedAt": "2026-07-26T15:15:15.520Z",
+      "submittedAt": "2026-07-29T06:36:48.449Z",
       "contributors": 1,
       "allPct": [
         97
@@ -175,6 +175,26 @@
       "ecoleCount": 1,
       "pseudo": "FlexoDiv",
       "submittedAt": "2026-07-24T16:54:24.875Z",
+      "contributors": 1,
+      "allPct": [
+        94
+      ]
+    },
+    {
+      "model": "lmstudio-community/gemma-4-12b-it-qat",
+      "shortName": "lmstudio-community_gemma-4-12b-it-qat",
+      "quantization": null,
+      "score": 2861,
+      "max": 3049,
+      "pct": 94,
+      "globalLifeScore": 3211,
+      "optionalBonus": 350,
+      "tokens": 24254,
+      "elapsedMs": 3364289,
+      "tokensPerSecond": 7.21,
+      "ecoleCount": 1,
+      "pseudo": "FlexoDiv",
+      "submittedAt": "2026-07-29T06:36:51.767Z",
       "contributors": 1,
       "allPct": [
         94
@@ -681,6 +701,6 @@
       ]
     }
   ],
-  "generatedAt": "2026-07-29T06:46:08.770Z",
-  "totalSubmissions": 34
+  "generatedAt": "2026-07-29T06:46:28.420Z",
+  "totalSubmissions": 35
 }
