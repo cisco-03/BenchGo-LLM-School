@@ -194,7 +194,7 @@
       "tokensPerSecond": 10.81,
       "ecoleCount": 1,
       "pseudo": "FlexoDiv",
-      "submittedAt": "2026-07-24T16:54:24.875Z",
+      "submittedAt": "2026-07-29T07:17:16.111Z",
       "contributors": 1,
       "allPct": [
         94
@@ -441,6 +441,26 @@
       ]
     },
     {
+      "model": "nanbeige_nanbeige4-3b-thinking-2511",
+      "shortName": "nanbeige_nanbeige4-3b-thinking-2511",
+      "quantization": null,
+      "score": 4872,
+      "max": 5658,
+      "pct": 86,
+      "globalLifeScore": 5529,
+      "optionalBonus": 657,
+      "tokens": 173085,
+      "elapsedMs": 8915703,
+      "tokensPerSecond": 19.41,
+      "ecoleCount": 2,
+      "pseudo": "FlexoDiv",
+      "submittedAt": "2026-07-29T07:17:10.828Z",
+      "contributors": 1,
+      "allPct": [
+        86
+      ]
+    },
+    {
       "model": "yuxinlu1/gemma-4-12b-coder-fable5-composer2.5-v1",
       "shortName": "yuxinlu1_gemma-4-12b-coder-fable5-composer2.5-v1",
       "quantization": null,
@@ -495,26 +515,6 @@
       "ecoleCount": 1,
       "pseudo": "FlexoDiv",
       "submittedAt": "2026-07-29T07:15:23.955Z",
-      "contributors": 1,
-      "allPct": [
-        85
-      ]
-    },
-    {
-      "model": "nanbeige_nanbeige4-3b-thinking-2511",
-      "shortName": "nanbeige_nanbeige4-3b-thinking-2511",
-      "quantization": null,
-      "score": 2547,
-      "max": 2989,
-      "pct": 85,
-      "globalLifeScore": 2873,
-      "optionalBonus": 326,
-      "tokens": 71924,
-      "elapsedMs": 3758056,
-      "tokensPerSecond": 19.14,
-      "ecoleCount": 1,
-      "pseudo": "FlexoDiv",
-      "submittedAt": "2026-07-24T16:55:04.347Z",
       "contributors": 1,
       "allPct": [
         85
@@ -721,6 +721,6 @@
       ]
     }
   ],
-  "generatedAt": "2026-07-29T07:17:24.060Z",
+  "generatedAt": "2026-07-29T07:17:41.316Z",
   "totalSubmissions": 36
 }
