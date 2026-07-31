@@ -11,6 +11,7 @@ const cliTable = require('./cli-table');
 const communitySync = require('./community-sync');
 const updateChecker = require('./update-checker');
 const nightBatch = require('./night-batch');
+const dashboard = require('./dashboard');
 
 const LEDGER_DIR = path.join(__dirname, 'Export-Rapports', '.carnet');
 const EXPORT_DIR = path.join(__dirname, 'Export-Rapports');
@@ -3306,59 +3307,15 @@ function startServer(port) {
     }
 
     // --- Dashboard web (§3 UI/Ludisme) ---
-    // /api/dashboard-data : renvoie les données agrégées de tous les modèles
-    // (historique par école, tokens/s, points) pour le rendu Chart.js côté client.
+    // /api/dashboard-data : delegue vers dashboard.js (fichier autonome).
     if (url.pathname === '/api/dashboard-data' && req.method === 'GET') {
-      try {
-        const ledgers = loadAllLedgers();
-        const data = ledgers.map(aggregateLedger).filter(Boolean).map(e => ({
-          shortName: e.shortName,
-          model: e.model,
-          pct: e.pct,
-          score: e.score,
-          max: e.max,
-          globalLifeScore: e.globalLifeScore,
-          optionalBonus: e.optionalBonus,
-          ecoleCount: e.ecoleCount,
-          elapsedMs: e.elapsedMs || 0,
-          tokens: e.tokens || 0,
-          tokensPerSecond: e.tokensPerSecond || 0,
-          quantization: e.quantization || null,
-          lastUpdated: e.lastUpdated,
-          ecoles: (e.ecoles || []).map(ec => ({
-            ecole: ec.ecole,
-            pct: ec.pct,
-            score: ec.score,
-            max: ec.max,
-            date: ec.date,
-            attemptsCount: ec.attemptsCount,
-            globalLifeScore: ec.globalLifeScore,
-            tokensPerSecond: ec.tokensPerSecond,
-            attempts: (ec.attempts || []).map(a => ({
-              date: a.date,
-              time: a.time,
-              pct: a.pct,
-              score: a.score,
-              max: a.max,
-              ecole: ec.ecole,
-              globalLifeScore: a.globalLifeScore,
-              tokensPerSecond: a.tokensPerSecond
-            }))
-          }))
-        }));
-        res.writeHead(200, securityHeaders);
-        res.end(JSON.stringify({ ok: true, models: data }));
-      } catch (e) {
-        res.writeHead(200, securityHeaders);
-        res.end(JSON.stringify({ ok: false, error: e.message }));
-      }
+      dashboard.handleDashboardApi(req, res);
       return;
     }
 
-    // /dashboard : page statique embarquant Chart.js (CDN) qui fetch /api/dashboard-data
-    // et affiche la progression d'une école dans le temps + l'historique d'un modèle.
+    // /dashboard : page HTML autonome (dashboard.js) avec Chart.js + selecteurs multi-graphiques.
     if (url.pathname === '/dashboard') {
-      const dash = buildDashboardHTML();
+      const dash = dashboard.buildDashboardHTML();
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
       res.end(dash, 'utf8');
       return;
@@ -3436,281 +3393,18 @@ function getModelEntryByShortName(shortName) {
   return entry || null;
 }
 
-// --- Dashboard web (§3 UI/Ludisme) ---
-// Construit une page HTML autonome qui embarque Chart.js (via CDN) et fetch
-// /api/dashboard-data pour visualiser la progression des modèles dans le
-// temps + l'historique d'un modèle + la comparaison vitesse/score. Aucune
-// dépendance npm : Chart.js est chargé depuis le CDN jsdelivr (fallback cdnjs
-// si le premier échoue). Un plugin personnalisé dessine une ligne verticale
-// pointillée au survol pour faciliter la lecture du tooltip multi-modèles.
+// Le dashboard web (page HTML + API /api/dashboard-data) est desormais gere par
+// le module autonome dashboard.js (buildDashboardHTML, buildDashboardData,
+// handleDashboardApi). Il embarque Chart.js + selecteurs multi-graphiques
+// (progression temporelle, comparaison, fiche modele, analyse par ecole).
+// Voir dashboard.js pour le code source du dashboard.
+
+// --- (ancien buildDashboardHTML supprime : code deplace vers dashboard.js) ---
+// Fonction vide conservee pour compatibilite retroactive (appel direct externe).
 function buildDashboardHTML() {
-  return `<!DOCTYPE html>
-<html lang="fr">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Dashboard BenchGo V3 — Progression & Historique</title>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-<script>
-  // Fallback CDN si jsdelivr est injoignable (réseau limité).
-  if (typeof Chart === 'undefined') {
-    document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"><\\/script>');
-  }
-  // Plugin : ligne verticale au survol (interaction mode 'index'). Dessine une
-  // ligne pointillee a l'abscice du point survole pour lisser la lecture.
-  var verticalLinePlugin = {
-    id: 'verticalLineHover',
-    afterDraw: function(chart) {
-      if (chart.tooltip && chart.tooltip._active && chart.tooltip._active.length) {
-        var ctx2 = chart.ctx;
-        var x = chart.tooltip._active[0].element.x;
-        var top = chart.chartArea.top;
-        var bottom = chart.chartArea.bottom;
-        ctx2.save();
-        ctx2.beginPath();
-        ctx2.moveTo(x, top);
-        ctx2.lineTo(x, bottom);
-        ctx2.lineWidth = 1;
-        ctx2.strokeStyle = 'rgba(88,166,255,0.5)';
-        ctx2.setLineDash([4, 4]);
-        ctx2.stroke();
-        ctx2.restore();
-      }
-    }
-  };
-  if (typeof Chart !== 'undefined') Chart.register(verticalLinePlugin);
-</script>
-<style>
-  :root { --bg:#0a0e14; --bg1:#11161d; --bg2:#161b22; --text:#c9d1d9; --accent:#58a6ff; --green:#3fb950; --red:#f85149; --yellow:#d29922; --purple:#bc8cff; }
-  * { box-sizing: border-box; }
-  body { background: var(--bg); color: var(--text); font-family: -apple-system, 'Segoe UI', sans-serif; margin: 0; padding: 24px; }
-  h1 { color: var(--accent); border-bottom: 1px solid var(--bg2); padding-bottom: 12px; }
-  h2 { color: var(--text); margin-top: 32px; }
-  .controls { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin: 16px 0; }
-  label { font-size: 0.9rem; color: #8b949e; }
-  select { background: var(--bg2); color: var(--text); border: 1px solid #30363d; border-radius: 6px; padding: 6px 10px; }
-  .charts { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-top: 16px; }
-  .chart-box { background: var(--bg1); border: 1px solid var(--bg2); border-radius: 8px; padding: 16px; min-height: 320px; }
-  canvas { max-height: 300px; }
-  .loading { color: #8b949e; text-align: center; padding: 40px; }
-  .empty { color: var(--red); }
-  a { color: var(--accent); text-decoration: none; }
-  a:hover { text-decoration: underline; }
-  @media (max-width: 900px) { .charts { grid-template-columns: 1fr; } }
-</style>
-</head>
-<body>
-<h1>📊 Dashboard BenchGo V3 — Progression & Historique</h1>
-<p style="color:#8b949e">Visualisez l'évolution des modèles et écoles dans le temps. Données issues des carnets de scores locaux.</p>
-<p><a href="/">← Retour au classement</a></p>
-
-<h2>Progression des modèles dans le temps</h2>
-<p style="color:#8b949e;font-size:0.85rem">Chaque modèle est une ligne. Axe X = date des tests, axe Y = % de réussite. Survolez pour voir le détail du modèle (école, score, santé, vitesse).</p>
-<div class="chart-box"><canvas id="modelProgressChart"></canvas><div id="modelProgressEmpty" class="empty" style="display:none">Aucune donnée historique.</div></div>
-
-<h2>Historique d'un modèle</h2>
-<div class="controls">
-  <label for="modelChartSelect">Modèle :</label>
-  <select id="modelChartSelect"><option value="">Chargement…</option></select>
-</div>
-<div class="chart-box"><canvas id="modelChart"></canvas><div id="modelEmpty" class="empty" style="display:none">Aucune donnée pour ce modèle.</div></div>
-
-<h2>Comparaison vitesse (tokens/s) vs score (%)</h2>
-<div class="chart-box"><canvas id="scatterChart"></canvas></div>
-
-<div id="loading" class="loading">Chargement des données…</div>
-
-<script>
-var MODELS = [];
-var modelProgressChart = null, modelChart = null, scatterChart = null;
-
-fetch('/api/dashboard-data').then(r => r.json()).then(function(data) {
-  document.getElementById('loading').style.display = 'none';
-  if (!data.ok || !data.models) { document.getElementById('loading').textContent = 'Erreur : ' + (data.error || 'données indisponibles'); document.getElementById('loading').style.display = 'block'; return; }
-  MODELS = data.models;
-  drawModelProgress();
-  populateModelSelect();
-  drawScatter();
-  updateModelChart();
-}).catch(function(err) {
-  document.getElementById('loading').textContent = 'Erreur réseau : ' + err.message;
-  document.getElementById('loading').className = 'empty';
-});
-
-// Palette de couleurs pour les modeles (cycle si > 20 modeles).
-var CHART_COLORS = ['#58a6ff','#3fb950','#f85149','#d29922','#bc8cff','#ff7b72','#79c0ff','#7ee787','#ffa657','#a5d6ff','#ff9bce','#bbf0a3','#fdc5a3','#b3d4ff','#e8c5ff','#a3ffc8','#ffc8a3','#c8a3ff','#a3e8ff','#ffa3c8'];
-function colorFor(i) { return CHART_COLORS[i % CHART_COLORS.length]; }
-
-// Collecte tous les points de tentative de tous les modeles, tries par date.
-// Chaque point = { date, time, pct, model, ecole, score, max, health, tps }.
-function collectAllAttempts() {
-  var points = [];
-  MODELS.forEach(function(m) {
-    (m.ecoles||[]).forEach(function(ec) {
-      (ec.attempts||[]).forEach(function(a) {
-        if (a.date && a.date !== '—') {
-          points.push({
-            date: a.date,
-            time: a.time || '',
-            datetime: a.date + ' ' + (a.time || ''),
-            pct: a.pct,
-            model: m.model || m.shortName,
-            shortName: m.shortName,
-            ecole: ec.ecole,
-            score: a.score,
-            max: a.max,
-            health: a.globalLifeScore,
-            tps: a.tokensPerSecond
-          });
-        }
-      });
-    });
-  });
-  // Tri chronologique.
-  points.sort(function(a,b){ return a.datetime < b.datetime ? -1 : a.datetime > b.datetime ? 1 : 0; });
-  return points;
+  return require('./dashboard').buildDashboardHTML();
 }
 
-// Construit un dataset par modele : liste de points {x:date, y:pct} tries par date.
-// Inclut les infos du modele pour le tooltip.
-function buildModelProgressDatasets() {
-  var byModel = {};
-  MODELS.forEach(function(m) {
-    var key = m.shortName || m.model;
-    if (!byModel[key]) byModel[key] = { label: m.model || key, shortName: key, points: [] };
-    (m.ecoles||[]).forEach(function(ec) {
-      (ec.attempts||[]).forEach(function(a) {
-        if (a.date && a.date !== '—') {
-          byModel[key].points.push({ x: a.date, y: a.pct, ecole: ec.ecole, score: a.score, max: a.max, health: a.globalLifeScore, tps: a.tokensPerSecond, time: a.time||'' });
-        }
-      });
-    });
-  });
-  // Trie les points de chaque modele par date.
-  Object.keys(byModel).forEach(function(k) {
-    byModel[k].points.sort(function(a,b){ return a.x < b.x ? -1 : a.x > b.x ? 1 : 0; });
-  });
-  var datasets = [];
-  var i = 0;
-  Object.keys(byModel).forEach(function(k) {
-    var d = byModel[k];
-    if (d.points.length === 0) return;
-    var c = colorFor(i);
-    datasets.push({
-      label: d.label,
-      shortName: d.shortName,
-      data: d.points.map(function(p){ return { x: p.x, y: p.y, ecole: p.ecole, score: p.score, max: p.max, health: p.health, tps: p.tps, time: p.time }; }),
-      borderColor: c,
-      backgroundColor: c + '20',
-      tension: 0.2,
-      pointRadius: 4,
-      pointHoverRadius: 7,
-      fill: false
-    });
-    i++;
-  });
-  return datasets;
-}
-
-function drawModelProgress() {
-  var ctx = document.getElementById('modelProgressChart');
-  var empty = document.getElementById('modelProgressEmpty');
-  if (modelProgressChart) { modelProgressChart.destroy(); modelProgressChart = null; }
-  var datasets = buildModelProgressDatasets();
-  if (datasets.length === 0) { empty.style.display = 'block'; ctx.style.display = 'none'; return; }
-  empty.style.display = 'none'; ctx.style.display = 'block';
-  modelProgressChart = new Chart(ctx, {
-    type: 'line',
-    data: { datasets: datasets },
-    options: {
-      responsive: true,
-      interaction: { mode: 'index', intersect: false },
-      plugins: {
-        legend: { display: true, labels: { color: '#c9d1d9', boxWidth: 12, font: { size: 11 } } },
-        tooltip: {
-          enabled: true,
-          backgroundColor: 'rgba(10,14,20,0.95)',
-          borderColor: '#30363d',
-          borderWidth: 1,
-          titleColor: '#58a6ff',
-          bodyColor: '#c9d1d9',
-          padding: 12,
-          callbacks: {
-            title: function(items) { return items[0].parsed.x; },
-            label: function(c) {
-              var p = c.raw;
-              var lines = [c.dataset.label];
-              lines.push('  École: ' + (p.ecole || '—'));
-              lines.push('  Score: ' + (p.score||0) + '/' + (p.max||0) + ' (' + (p.y||0) + '%)');
-              if (p.health != null) lines.push('  Santé: ' + p.health + ' PV');
-              if (p.tps > 0) lines.push('  Vitesse: ' + p.tps + ' t/s');
-              if (p.time) lines.push('  Heure: ' + p.time);
-              return lines;
-            }
-          }
-        }
-      },
-      scales: {
-        x: {
-          type: 'category',
-          title: { display: true, text: 'Date des tests', color: '#8b949e' },
-          ticks: { color: '#8b949e', maxRotation: 45, minRotation: 30 },
-          grid: { color: '#21262d' }
-        },
-        y: {
-          beginAtZero: true, max: 100,
-          title: { display: true, text: 'Réussite (%)', color: '#8b949e' },
-          ticks: { color: '#8b949e' },
-          grid: { color: '#21262d' }
-        }
-      }
-    }
-  });
-}
-
-// Historique d'un modèle : % par école (barres) + santé (ligne).
-function populateModelSelect() {
-  var sel = document.getElementById('modelChartSelect');
-  sel.innerHTML = MODELS.length ? MODELS.map(function(m){return '<option value="'+m.shortName+'">'+m.model+'</option>';}).join('') : '<option value="">(aucun modèle)</option>';
-  sel.addEventListener('change', updateModelChart);
-}
-function updateModelChart() {
-  var sn = document.getElementById('modelChartSelect').value;
-  var ctx = document.getElementById('modelChart');
-  var empty = document.getElementById('modelEmpty');
-  if (modelChart) { modelChart.destroy(); modelChart = null; }
-  var m = MODELS.find(function(x){return x.shortName === sn;});
-  if (!m || !m.ecoles || m.ecoles.length === 0) { empty.style.display = 'block'; ctx.style.display = 'none'; return; }
-  empty.style.display = 'none'; ctx.style.display = 'block';
-  var labels = m.ecoles.map(function(e){return e.ecole;});
-  var pcts = m.ecoles.map(function(e){return e.pct;});
-  var health = m.ecoles.map(function(e){return e.globalLifeScore;});
-  modelChart = new Chart(ctx, {
-    type: 'bar',
-    data: { labels: labels, datasets: [
-      { label: '% réussite', data: pcts, backgroundColor: 'rgba(63,185,80,0.6)', borderColor: '#3fb950', borderWidth: 1, yAxisID: 'y' },
-      { label: 'Santé (PV)', data: health, type: 'line', borderColor: '#d29922', backgroundColor: 'rgba(210,153,34,0.2)', yAxisID: 'y1', tension: 0.2 }
-    ]},
-    options: { responsive: true, scales: { y: { beginAtZero: true, max: 100, position: 'left', ticks: { color: '#8b949e' }, grid: { color: '#21262d' } }, y1: { position: 'right', ticks: { color: '#8b949e' }, grid: { drawOnChartArea: false } }, x: { ticks: { color: '#8b949e' }, grid: { color: '#21262d' } } } }
-  });
-}
-
-// Scatter : vitesse (tokens/s) vs score (%) pour comparer les modèles.
-function drawScatter() {
-  var ctx = document.getElementById('scatterChart');
-  var pts = MODELS.filter(function(m){return m.tokensPerSecond > 0;}).map(function(m){
-    return { x: m.tokensPerSecond, y: m.pct, label: m.model };
-  });
-  scatterChart = new Chart(ctx, {
-    type: 'scatter',
-    data: { datasets: [{ label: 'Modèles (vitesse vs score)', data: pts, backgroundColor: 'rgba(188,140,255,0.7)', pointRadius: 6 }] },
-    options: { responsive: true, plugins: { tooltip: { callbacks: { label: function(c){ return c.raw.label + ': ' + c.raw.x + ' t/s, ' + c.raw.y + '%'; } } } }, scales: { x: { title: { display: true, text: 'Vitesse (tokens/s)', color: '#8b949e' }, ticks: { color: '#8b949e' }, grid: { color: '#21262d' } }, y: { title: { display: true, text: 'Score (%)', color: '#8b949e' }, beginAtZero: true, max: 100, ticks: { color: '#8b949e' }, grid: { color: '#21262d' } } } }
-  });
-}
-</script>
-</body>
-</html>`;
-}
 
 module.exports = {
   loadAllLedgers,

@@ -1,5 +1,86 @@
 # CHANGELOG - Carnet de Notes BenchGo
 
+## 2026-07-31 — refactor: dashboard simplifie en comparateur 4 modeles (dashboard.js)
+
+### Contexte
+L utilisateur a trouve le dashboard a 4 onglets trop charge. Il a demande une version simplifiee : une seule vue fiche modele, avec 4 selecteurs pour comparer jusqu a 4 modeles cote a cote, un graphique unique, et un champion surligne.
+
+### Implémentation
+
+#### Nouvelle version dashboard.js (~560 lignes)
+- **4 combobox recherche+selection** : chaque slot permet de taper pour filtrer les modeles ou cliquer dans la liste deroulante. Le slot 1 est pre-selectionne par defaut. Les slots 2-4 ont une croix pour vider.
+- **Banner Champion** : quand 2+ modeles sont selectionnes, un bandeau centré et mis en valeur (or) indique le champion qui gagne le plus de metriques (score, vitesse, sante, ecoles).
+- **Stats adaptatives par modele** : Score, Vitesse (arrondi), Sante, Ecoles, Bonus. La police et le padding se reduisent selon le nombre de modeles selectionnes (1=grand, 4=petit). Les cases gagnantes par metrique sont surlignees en or.
+- **Un seul graphique** (barres) avec selecteur de metrique :
+  - Score % (par ecole)
+  - Vitesse t/s (par ecole, arrondi)
+  - Sante PV (par ecole)
+  - Score brut (par ecole)
+  - Le graphique filtre les ecoles non faites (null au lieu de 0) et le tooltip n affiche que les valeurs existantes.
+- **Tooltips oxygenes** : style custom avec padding 14px, coin arrondi 10px, separation entre lignes, title en bleu gras.
+- **Legendes en dots** : plugin Chart.js custom (dotLegendPlugin) qui remplace les carres par des cercles colores.
+- **Scroll preserve** : cliquer sur les boutons de metrique ne fait plus remonter la page.
+- **Canvas hauteur fixe** : 380px pour eviter les sauts de page lors du changement de metrique.
+
+#### Nettoyage
+- Retire les onglets Progression temporelle, Comparaison, Analyse par ecole (trop charges).
+- Retire les graphiques Timeline, Speed, Score individuels (remplaces par le graphique unique avec metrique selector).
+- Retire la metrique "Obligatoire" et "Ecoles" du graphique (redundantes).
+
+### Fichiers modifies
+- `dashboard.js` (re-ecriture complete)
+
+### Verifications
+- `node --check dashboard.js` : OK
+- `node tests/run-tests.js` : 27/27 passes
+- Serveur `/dashboard` : HTTP 200, len 27216
+
+### Resultat
+- Dashboard leger, clair, focalise sur la comparaison directe de 2 a 4 modeles.
+- Le champion est visible immediatement. Les tooltips sont lisibles. La police s adapte.
+
+## 2026-07-31 — refactor: dashboard progression/historique extrait dans dashboard.js (fichier autonome, 4 onglets, selecteurs multiples)
+
+### Contexte
+Le dashboard web (route `/dashboard` + API `/api/dashboard-data`) etait inline dans `leaderboard.js` (fonction `buildDashboardHTML`, ~270 lignes). Il n offrait que 3 graphiques basiques (progression lente, historique d un modele, scatter vitesse/score) sans selecteurs avances. Le fichier `leaderboard.js` approchait 3750 lignes. L utilisateur a demande un refactoring complet : effacer l ancien code et creer un dashboard professionnel dans un fichier separe, avec plusieurs selecteurs pour explorer l evolution des modeles dans le temps.
+
+### Implémentation
+
+#### Nouveau fichier `dashboard.js` (autonome, ~860 lignes)
+- `buildDashboardData()` : agrège les carnets via `loadAllLedgers` + `aggregateLedger` (require lazy pour eviter la dependance circulaire leaderboard → dashboard → leaderboard).
+- `handleDashboardApi(req, res)` : handler HTTP pour `/api/dashboard-data`.
+- `buildDashboardHTML()` : genere une page HTML autonome avec Chart.js 4.4.1 (CDN jsdelivr + fallback cdnjs).
+- 4 onglets avec selecteurs multiples :
+  1. **Progression temporelle** : graphique ligne multi-modeles. Selecteurs : metrique Y (% reussite, sante PV, vitesse t/s, score brut, % obligatoire), axe X (date+heure, date jour, numero de test), granularite (par tentative ou meilleur par date), filtre multi-modeles (Ctrl+clic), filtre multi-ecoles. Legende cliquable pour masquer/afficher un modele. Tooltip riche (ecole, score, sante, vitesse).
+  2. **Comparaison de modeles** : 3 graphiques — bubble chart (2 metriques X/Y + taille de bulle optionnelle), radar chart (top 8 modeles, 6 dimensions normalisees : score, obligatoire, sante, vitesse, regularite, autonomie), barres horizontales (classement sur metrique Y). Selecteurs : metrique X, metrique Y, taille des bulles.
+  3. **Fiche modele** : statistiques detaillees (score global, score brut, sante, vitesse, % obligatoire, nb ecoles, tendance, bonus, aides/rattrapages) + 4 graphiques (% par ecole avec sante en ligne, evolution temporelle toutes ecoles, vitesse par tentative, score brut par tentative). Selecteur : modele.
+  4. **Analyse par ecole** : barres horizontales (classement d une ecole donnee) + progression temporelle (un modele par ligne). Selecteurs : ecole, tri (% desc/asc, vitesse, sante, nom).
+- Theme sombre professionnel (variables CSS), layout responsive (grid 2 colonnes → 1 sur mobile), header sticky, barre d onglets, cartes avec bordures arrondies, spinner de chargement, banner d information (nb modeles + nb tentatives).
+
+#### Nettoyage `leaderboard.js`
+- Suppression de l ancien `buildDashboardHTML` inline (~270 lignes de HTML/JS/CSS).
+- Ajout de `const dashboard = require('./dashboard')` au debut.
+- Routes `/api/dashboard-data` et `/dashboard` deleguent vers `dashboard.handleDashboardApi` et `dashboard.buildDashboardHTML`.
+- `buildDashboardHTML` conservee comme wrapper retro-compatible (`require('./dashboard').buildDashboardHTML()`).
+- `module.exports` inchangé (toujours exporte `buildDashboardHTML`).
+- Dependance circulaire evitee : `dashboard.js` utilise `getLedgerFns()` (require lazy au moment de l appel, pas au chargement).
+
+### Fichiers modifies/crees
+- `dashboard.js` (nouveau)
+- `leaderboard.js` (nettoyage -270 lignes, routes deleguees)
+
+### Verifications
+- `node --check dashboard.js` : OK
+- `node --check leaderboard.js` : OK
+- `node tests/run-tests.js` : 27/27 passés
+- Serveur `node leaderboard.js --serve` : `/api/dashboard-data` renvoie 37 modeles (ok=true), `/dashboard` renvoie 200 (39643 chars)
+- Pas de warning de dependance circulaire
+
+### Resultat
+- `leaderboard.js` passe de 3749 a 3443 lignes (-306, -8%).
+- Le dashboard passe de 3 graphiques basiques a 4 onglets avec ~10 graphiques et selecteurs multiples.
+- Code isole dans `dashboard.js` : le fichier leaderboard est plus leger et plus maintenable.
+
 ## 2026-07-31 — fix: mode nuit option 6 enchaîne LIGHT + école détectée pour les modèles > 3B
 
 ### Contexte
