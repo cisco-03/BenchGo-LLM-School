@@ -836,13 +836,29 @@ function schoolLabelForModel(m) {
   return s ? s.label : '— (taille inconnue)';
 }
 
+// Liste des écoles à enchaîner pour un modèle en mode auto-par-modèle (option 6).
+// Pour les modèles > 3B (STANDARD ou supérieur) : Primaire (LIGHT) puis l'école
+// détectée — exactement comme le runner interactif (option B). Pour les modèles
+// < 3B (LIGHT) ou de taille indétectable : école unique (pas de niveau inférieur
+// à Primaire). Renvoie un tableau d'objets SCHOOLS (jamais vide).
+function schoolsForModelPlan(m) {
+  const school = schoolForModel(m) || SCHOOLS.find(s => s.key === 'auto');
+  if (school.key !== 'auto' && school.key !== 'LIGHT') {
+    return [...new Set(['LIGHT', school.key])]
+      .map(k => SCHOOLS.find(s => s.key === k))
+      .filter(Boolean);
+  }
+  return [school];
+}
+
 // Selection interactive des ecoles.
 async function selectSchoolsInteractive(selectedModels) {
   console.log(`\n  ${C.bold}${C.cyan}=== ECOLES A TESTER ===${C.reset}`);
   console.log(`  ${C.gray}Selectionnez les ecoles (niveaux) a faire passer a chaque modele.${C.reset}`);
   console.log(`  ${C.gray}Syntaxe : numeros separes par les virgules (ex: 1,2) ou "all".${C.reset}`);
-  console.log(`  ${C.gray}Option 6 = AUTO PAR MODELE : chaque modele passe uniquement l'ecole${C.reset}`);
+  console.log(`  ${C.gray}Option 6 = AUTO PAR MODELE : chaque modele passe l'ecole${C.reset}`);
   console.log(`  ${C.gray}adaptee a sa taille de parametres (3B->Primaire, 15B->College-Lycee, etc.).${C.reset}`);
+  console.log(`  ${C.gray}Modeles > 3B : enchaîne Primaire (LIGHT) puis l'ecole detectee.${C.reset}`);
   console.log(`  ${C.gray}Ideal quand la file melange des modeles de tailles differentes.${C.reset}\n`);
   SCHOOLS.forEach((s, i) => {
     const idx = String(i + 1).padStart(2);
@@ -854,12 +870,14 @@ async function selectSchoolsInteractive(selectedModels) {
   });
 
   // Aperçu de l'attribution auto-par-modèle (option 6) pour aider l'utilisateur
-  // à anticiper : montre quelle école chaque modèle sélectionné ferait.
+  // à anticiper : montre quelles écoles chaque modèle sélectionné ferait.
+  // Les modèles > 3B enchaînent Primaire (LIGHT) puis l'école détectée.
   if (selectedModels && selectedModels.length > 0) {
     console.log(`\n  ${C.gray}Aperçu option 6 (auto par modèle) :${C.reset}`);
     for (const m of selectedModels) {
-      const lbl = schoolLabelForModel(m);
-      console.log(`  ${C.gray}  ${m.displayName.padEnd(30)} → ${lbl}${C.reset}`);
+      const schoolsList = schoolsForModelPlan(m);
+      const labels = schoolsList.map(s => s.label).join(' → ');
+      console.log(`  ${C.gray}  ${m.displayName.padEnd(30)} → ${labels}${C.reset}`);
     }
     console.log('');
   }
@@ -1033,16 +1051,19 @@ async function main() {
   // Mode auto-par-modele : on calcule l'ecole de chaque modele individuellement.
   // Un modele dont la taille n'est pas detectable est envoye en auto-detection
   // (le runner devinera le profil depuis le nom). On construit un plan
-  // { model, school } par modele pour l'affichage et l'execution.
+  // { model, schools: [...] } par modele pour l'affichage et l'execution.
+  //
+  // IMPORTANT : pour les modeles > 3B (STANDARD ou superieur), on enchaîne
+  // Primaire (LIGHT) PUIS l'ecole detectee — exactement comme le runner
+  // interactif (runner.js option B). Sinon un 12B ne ferait que STANDARD et
+  // LIGHT resterait "manquante" dans le carnet. Les modeles < 3B (LIGHT)
+  // ne font qu'une seule ecole (pas de niveau inferieur a Primaire).
   const autoPerModel = isAutoPerModel(schools);
   let plan;
   if (autoPerModel) {
-    plan = selected.map(m => {
-      const school = schoolForModel(m) || SCHOOLS.find(s => s.key === 'auto');
-      return { model: m, school };
-    });
+    plan = selected.map(m => ({ model: m, schools: schoolsForModelPlan(m) }));
     // Vérifie qu'au moins un modèle a une école détectée (sinon tout est en auto).
-    const detectedCount = plan.filter(p => p.school.key !== 'auto').length;
+    const detectedCount = plan.filter(p => p.schools.some(s => s.key !== 'auto')).length;
     if (detectedCount === 0) {
       console.log(`  ${C.yellow}Aucun modele n'a une taille de parametres detectable.${C.reset}`);
       console.log(`  ${C.gray}Le runner utilisera l'auto-detection pour chacun.${C.reset}`);
@@ -1051,14 +1072,18 @@ async function main() {
     plan = null;
   }
 
-  const totalRuns = autoPerModel ? plan.length : selected.length * schools.length;
+  const totalRuns = autoPerModel
+    ? plan.reduce((sum, p) => sum + p.schools.length, 0)
+    : selected.length * schools.length;
   console.log(`\n  ${C.bold}${C.cyan}=== FILE D'ATTENTE DE NUIT ===${C.reset}`);
   console.log(`  ${C.bold}Modeles :${C.reset} ${selected.length}  |  ${C.bold}Ecoles :${C.reset} ${schools.map(s => s.key).join(', ')}  |  ${C.bold}Runs totaux :${C.reset} ${totalRuns}`);
   if (autoPerModel) {
     console.log(`  ${C.gray}Mode auto-par-modele : chaque modele passe l'ecole adaptee a sa taille.${C.reset}`);
+    console.log(`  ${C.gray}Modeles > 3B : enchaînement Primaire (LIGHT) puis ecole detectee.${C.reset}`);
     console.log(`  ${C.gray}Attribution :${C.reset}`);
     for (const p of plan) {
-      console.log(`  ${C.bold}  ${p.model.displayName.padEnd(28)}${C.reset} ${C.gray}→ ${p.school.label}${C.reset}`);
+      const labels = p.schools.map(s => s.label).join(' → ');
+      console.log(`  ${C.bold}  ${p.model.displayName.padEnd(28)}${C.reset} ${C.gray}→ ${labels}${C.reset}`);
     }
   } else {
     console.log(`  ${C.gray}Ordre : pour chaque modele, on enchaine toutes les ecoles selectionnees.${C.reset}`);
@@ -1079,11 +1104,12 @@ async function main() {
     console.log(`${C.bold}${C.magenta}==================================================${C.reset}`);
 
     // Détermine la liste d'écoles pour CE modèle. En mode auto-par-modèle,
-    // c'est une seule école (calculée depuis la taille du modèle). Sinon,
-    // ce sont toutes les écoles sélectionnées globalement.
+    // c'est la liste d'écoles calculée depuis la taille du modèle (LIGHT +
+    // école détectée pour les > 3B, sinon école unique). Sinon, ce sont
+    // toutes les écoles sélectionnées globalement.
     let modelSchools;
     if (autoPerModel) {
-      modelSchools = [plan[i].school];
+      modelSchools = plan[i].schools;
     } else {
       modelSchools = schools;
     }
@@ -1159,6 +1185,7 @@ module.exports = {
   missingSchoolsLabel,
   schoolForModel,
   schoolLabelForModel,
+  schoolsForModelPlan,
   isAutoPerModel,
   isMtpModel,
   buildMtpAssociations,

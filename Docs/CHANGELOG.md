@@ -1,5 +1,33 @@
 # CHANGELOG - Carnet de Notes BenchGo
 
+## 2026-07-31 — fix: mode nuit option 6 enchaîne LIGHT + école détectée pour les modèles > 3B
+
+### Contexte
+En mode nuit (`night-batch.js`), l'option 6 « Auto par modèle » n'attribuait qu'**une seule école** par modèle (l'école détectée depuis la taille). Un modèle 12B ne faisait que STANDARD, et LIGHT restait « manquante » dans le carnet — le runner ne basculait jamais automatiquement sur Primaire. Le runner interactif proposait bien l'enchaînement LIGHT + école (option B, `runner.js:2448`), mais cette logique était verrouillée derrière `isInteractive` (TTY), donc jamais déclenchée en mode nuit (non-TTY, `--force`).
+
+### Implémentation (`night-batch.js`)
+- Nouvelle fonction `schoolsForModelPlan(m)` : calcule la liste d'écoles à enchaîner pour un modèle en mode auto-par-modèle. Pour les modèles > 3B (STANDARD ou supérieur) : `[LIGHT, <école détectée>]` (déduplication via `Set`). Pour les modèles < 3B (LIGHT) ou de taille indétectable : école unique (pas de niveau inférieur à Primaire).
+- Le plan auto-par-modèle passe de `{ model, school }` (école unique) à `{ model, schools: [...] }` (liste), alimenté par `schoolsForModelPlan`.
+- `totalRuns` : somme des `schools.length` par modèle (au lieu de `plan.length`).
+- Boucle d'exécution : `modelSchools = plan[i].schools` (au lieu de `[plan[i].school]`).
+- Aperçu option 6 (`selectSchoolsInteractive`) : affiche l'enchaînement complet (ex: `Primaire (< 3B) → College-Lycee (3B - 14B)`) au lieu d'une seule école.
+- Texte du menu écoles : précise « Modèles > 3B : enchaîne Primaire (LIGHT) puis l'école détectée ».
+- Export de `schoolsForModelPlan` dans `module.exports`.
+
+### Fichiers modifiés
+- `night-batch.js`
+
+### Résultat
+- Un 12B fait désormais LIGHT puis STANDARD dans la même session de nuit (2 runs au lieu d'1).
+- Les modèles < 3B font toujours une seule école (LIGHT).
+- Les modèles de taille indétectable restent en auto-detection (1 run).
+- Plus aucune école « manquante » pour les modèles > 3B passés en option 6.
+
+#### Vérifications
+- `node --check night-batch.js` → OK.
+- `node tests/run-tests.js` → 27/27 passés.
+- Test fonctionnel `schoolsForModelPlan` : 3B/8B/12B → `LIGHT + STANDARD`, 20B → `LIGHT + EXPERT`, 40B → `LIGHT + DOCTORAT`, taille inconnue → `auto`.
+
 ## 2026-07-29 (6) — feat: bouton « 🕒 Récents » — tri du classement par date de dernier test
 
 ### Contexte
