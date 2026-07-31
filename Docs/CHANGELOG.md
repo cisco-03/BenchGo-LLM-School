@@ -1,5 +1,17 @@
 # CHANGELOG - Carnet de Notes BenchGo
 
+## 2026-07-31 — fix: colonne « Ecoles manquantes » affiche les noms humains (night-batch.js)
+
+### Contexte
+Dans la liste des modeles du mode nuit, la colonne « Ecoles manquantes » affichait les cles internes (LIGHT, STANDARD, EXPERT, DOCTORAT) au lieu des noms d ecoles lisibles (Primaire, College-Lycee, Universite, Doctorat-These). Incoherence avec l apercu de l option 6 qui utilisait deja les noms humains.
+
+### Implémentation
+- Nouvelle fonction `schoolKeyToLabel(key)` qui mappe une cle SCHOOLS vers une abreviation tres compacte (ex: `LIGHT` -> `Prim`, `STANDARD` -> `Coll-Lyc`, `EXPERT` -> `Univ`, `DOCTORAT` -> `Doct`), via la table `SCHOOL_SHORT`. Les noms complets etaient trop longs cumules et faisaient deborder le tableau.
+- `missingSchoolsLabel()` utilise maintenant `schoolKeyToLabel` sur chaque cle manquante.
+
+### Fichiers modifies
+- `night-batch.js` : `missingSchoolsLabel()` + nouvelle fonction `schoolKeyToLabel()`.
+
 ## 2026-07-31 — refactor: dashboard simplifie en comparateur 4 modeles (dashboard.js)
 
 ### Contexte

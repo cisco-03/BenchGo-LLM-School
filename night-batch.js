@@ -606,9 +606,28 @@ function statusBadge(status) {
   return { label: 'COMPLET', color: C.green };
 }
 
+// Renvoie le label lisible ABRÉGÉ d'une cle SCHOOLS pour la colonne
+// « Ecoles manquantes » du tableau. Les noms complets (Primaire, College-Lycee,
+// Universite, Doctorat-These) sont trop longs cumulés et font deborder le
+// terminal. On utilise des abreviations compactes mais reconnaissables.
+// Ex : 'STANDARD' -> 'Coll-Lyc', 'DOCTORAT' -> 'Doctorat'.
+// Fallback sur la cle brute si la cle est inconnue.
+const SCHOOL_SHORT = {
+  LIGHT: 'Prim',
+  STANDARD: 'Coll-Lyc',
+  EXPERT: 'Univ',
+  DOCTORAT: 'Doct',
+  auto: 'Auto',
+  'auto-per-model': 'Auto/mod'
+};
+
+function schoolKeyToLabel(key) {
+  return SCHOOL_SHORT[key] || key;
+}
+
 function missingSchoolsLabel(status) {
   if (!status || !status.missing || status.missing.length === 0) return '';
-  return status.missing.join(',');
+  return status.missing.map(schoolKeyToLabel).join(',');
 }
 
 // Formate une duree en ms vers un affichage compact (ex: 1.2s, 1m05s, 1h02m).
