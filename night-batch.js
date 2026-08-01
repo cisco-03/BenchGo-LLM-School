@@ -65,7 +65,13 @@ const SCHOOLS = [
   // melanger des modeles de tailles differentes dans la meme session de nuit
   // (un 3B fait Primaire, un 15B fait College-Lycee, etc.) sans selectionner
   // manuellement l'ecole de chacun. cli=null : l'ecole est calculee par modele.
-  { key: 'auto-per-model', label: 'Auto par modele (ecole selon la taille)', cli: null }
+  { key: 'auto-per-model', label: 'Auto par modele (ecole selon la taille)', cli: null },
+  // Mode manuel-par-modele : l'utilisateur choisit individuellement l'ecole de
+  // chaque modele, un par un. Permet de melanger des modèles aux besoins
+  // differents dans la meme session (ex: re-tester Kai Os Grug 12B en auto,
+  // mais faire passer Phi 4 uniquement en Primaire). cli=null : les ecoles sont
+  // choisies interactivement pour chaque modele.
+  { key: 'manual-per-model', label: 'Manuel par modele (ecole choisie pour chacun)', cli: null }
 ];
 
 // Détecte si la sélection d'écoles correspond au mode « auto par modèle »
@@ -75,6 +81,17 @@ const SCHOOLS = [
 function isAutoPerModel(schools) {
   if (!schools) return false;
   return schools.some(s => s && s.key === 'auto-per-model');
+}
+
+// Détecte si la sélection d'écoles correspond au mode « manuel par modèle »
+// (option 7, key 'manual-per-model'). Dans ce mode, l'utilisateur choisit
+// individuellement l'école (ou les écoles) de chaque modèle, un par un, au
+// lieu d'appliquer la même liste d'écoles à toute la file. Permet de mélanger
+// des modèles nécessitant des écoles différentes dans la même session (ex:
+// Kai Os Grug 12B en auto, Phi 4 en Primaire uniquement).
+function isManualPerModel(schools) {
+  if (!schools) return false;
+  return schools.some(s => s && s.key === 'manual-per-model');
 }
 
 // --- Couleurs ANSI (constantes pour lisibilite CLI) ---
@@ -1078,7 +1095,9 @@ async function selectSchoolsInteractive(selectedModels) {
   console.log(`  ${C.gray}Option 6 = AUTO PAR MODELE : chaque modele passe l'ecole${C.reset}`);
   console.log(`  ${C.gray}adaptee a sa taille de parametres (3B->Primaire, 15B->College-Lycee, etc.).${C.reset}`);
   console.log(`  ${C.gray}Modeles > 3B : enchaîne Primaire (LIGHT) puis l'ecole detectee.${C.reset}`);
-  console.log(`  ${C.gray}Ideal quand la file melange des modeles de tailles differentes.${C.reset}\n`);
+  console.log(`  ${C.gray}Ideal quand la file melange des modeles de tailles differentes.${C.reset}`);
+  console.log(`  ${C.gray}Option 7 = MANUEL PAR MODELE : choisissez l'ecole de chaque modele${C.reset}`);
+  console.log(`  ${C.gray}individuellement. Permet de melanger auto + manuel dans la meme session.${C.reset}\n`);
   SCHOOLS.forEach((s, i) => {
     const idx = String(i + 1).padStart(2);
     // Pour l'option 'auto', on précise que c'est l'auto-détection classique
@@ -1112,6 +1131,60 @@ async function selectSchoolsInteractive(selectedModels) {
       resolve(uniq.map(i => SCHOOLS[i]));
     });
   });
+}
+
+// Sélection manuelle de l'école pour chaque modèle, un par un.
+// L'utilisateur choisit individuellement quelle(s) école(s) chaque modèle
+// doit passer. Permet de mélanger des modèles aux besoins différents dans la
+// même session (ex: Kai Os Grug 12B en auto selon la taille, Phi 4 en Primaire
+// uniquement pour rattraper son statut partiel).
+//
+// Pour chaque modèle, l'utilisateur tape :
+//   - "auto" → école(s) détectée(s) selon la taille (LIGHT + école détectée)
+//   - numéros séparés par virgules (ex: "1" = Primaire, "1,2" = Primaire + Collège-Lycée)
+//   - "all" → toutes les écoles
+//   - Entrée → auto par modèle (défaut, école selon la taille)
+//
+// Retourne un plan { model, schools: [...] } par modèle, comme le mode auto-par-modèle.
+async function selectSchoolsManualPerModel(selectedModels) {
+  console.log(`\n  ${C.bold}${C.cyan}=== MANUEL PAR MODÈLE ===${C.reset}`);
+  console.log(`  ${C.gray}Choisissez l'ecole de chaque modele individuellement.${C.reset}`);
+  console.log(`  ${C.gray}Options par modele :${C.reset}`);
+  console.log(`  ${C.gray}  1=Primaire  2=College-Lycee  3=Universite  4=These  (ex: "1,2" = Primaire puis College-Lycee)${C.reset}`);
+  console.log(`  ${C.gray}  "auto"=ecole selon la taille  |  "all"=toutes  |  Entree=auto${C.reset}\n`);
+
+  const plan = [];
+  const realSchools = SCHOOLS.filter(s => s.cli !== null);
+  for (const m of selectedModels) {
+    // Affiche l'école détectée par défaut pour aider l'utilisateur.
+    const defaultSchool = schoolForModel(m);
+    const defaultLabel = defaultSchool ? defaultSchool.label : 'taille inconnue';
+    const answer = await new Promise(resolve => {
+      const rl3 = readline.createInterface({ input: process.stdin, output: process.stdout });
+      rl3.question(`  ${C.cyan}${C.bold}${m.displayName}${C.reset}${C.cyan} [${m.params} ${m.quant}] (defaut: ${defaultLabel}) ?${C.reset} `, a => {
+        rl3.close();
+        resolve((a || '').trim().toLowerCase());
+      });
+    });
+    let chosen;
+    if (!answer || answer === 'auto') {
+      // Auto selon la taille (comme l'option 6).
+      chosen = schoolsForModelPlan(m);
+    } else if (answer === 'all' || answer === '*') {
+      chosen = realSchools.slice();
+    } else {
+      const indices = answer.split(/[\s,;]+/).map(s => parseInt(s, 10)).filter(n => Number.isInteger(n) && n >= 1 && n <= realSchools.length);
+      chosen = [...new Set(indices.map(n => realSchools[n - 1]))];
+    }
+    if (chosen.length === 0) {
+      console.log(`  ${C.yellow}Aucune ecole valide pour ${m.displayName} -> auto par defaut.${C.reset}`);
+      chosen = schoolsForModelPlan(m);
+    }
+    const labels = chosen.map(s => s.label).join(' → ');
+    console.log(`  ${C.green}  → ${m.displayName} : ${labels}${C.reset}\n`);
+    plan.push({ model: m, schools: chosen });
+  }
+  return plan;
 }
 
 function loadModel(modelKey, mtpModelKey) {
@@ -1244,6 +1317,7 @@ async function main() {
   }
 
   let schools;
+  let manualPlan = null;
   if (schoolsArg) {
     schools = resolveSchoolsFromArg(schoolsArg);
     if (schools.length === 0) {
@@ -1264,6 +1338,12 @@ async function main() {
         if (serverHandle.startedByUs) stopServer();
         process.exit(0);
       }
+      // Option 7 = manuel par modèle : on demande l'école de chaque modèle
+      // individuellement, puis on construit le plan manuel. schools contient
+      // uniquement le marqueur 'manual-per-model' qui active la branche manuelle.
+      if (isManualPerModel(schools)) {
+        manualPlan = await selectSchoolsManualPerModel(selected);
+      }
     }
   }
 
@@ -1277,9 +1357,18 @@ async function main() {
   // interactif (runner.js option B). Sinon un 12B ne ferait que STANDARD et
   // LIGHT resterait "manquante" dans le carnet. Les modeles < 3B (LIGHT)
   // ne font qu'une seule ecole (pas de niveau inferieur a Primaire).
+  //
+  // Mode manuel-par-modele : l'utilisateur a choisi l'ecole de chaque modele
+  // individuellement (option 7). Le plan est deja construit par
+  // selectSchoolsManualPerModel(). On l'utilise tel quel.
   const autoPerModel = isAutoPerModel(schools);
+  const manualPerModel = isManualPerModel(schools);
   let plan;
-  if (autoPerModel) {
+  if (manualPerModel) {
+    // Le plan est construit par selectSchoolsManualPerModel (saisie individuelle).
+    // schools contient uniquement le marqueur 'manual-per-model'.
+    plan = manualPlan;
+  } else if (autoPerModel) {
     plan = selected.map(m => ({ model: m, schools: schoolsForModelPlan(m) }));
     // Vérifie qu'au moins un modèle a une école détectée (sinon tout est en auto).
     const detectedCount = plan.filter(p => p.schools.some(s => s.key !== 'auto')).length;
@@ -1326,12 +1415,19 @@ async function main() {
     }
   }
 
-  const totalRuns = autoPerModel
+  const totalRuns = (autoPerModel || manualPerModel)
     ? plan.reduce((sum, p) => sum + p.schools.length, 0)
     : selected.length * schools.length;
   console.log(`\n  ${C.bold}${C.cyan}=== FILE D'ATTENTE DE NUIT ===${C.reset}`);
   console.log(`  ${C.bold}Modeles :${C.reset} ${selected.length}  |  ${C.bold}Ecoles :${C.reset} ${schools.map(s => s.key).join(', ')}  |  ${C.bold}Runs totaux :${C.reset} ${totalRuns}`);
-  if (autoPerModel) {
+  if (manualPerModel) {
+    console.log(`  ${C.gray}Mode manuel-par-modele : ecole choisie individuellement pour chaque modele.${C.reset}`);
+    console.log(`  ${C.gray}Attribution :${C.reset}`);
+    for (const p of plan) {
+      const labels = p.schools.map(s => s.label).join(' → ');
+      console.log(`  ${C.bold}  ${p.model.displayName.padEnd(28)}${C.reset} ${C.gray}→ ${labels}${C.reset}`);
+    }
+  } else if (autoPerModel) {
     console.log(`  ${C.gray}Mode auto-par-modele : chaque modele passe l'ecole adaptee a sa taille.${C.reset}`);
     console.log(`  ${C.gray}Modeles > 3B : enchaînement Primaire (LIGHT) puis ecole detectee.${C.reset}`);
     console.log(`  ${C.gray}Attribution :${C.reset}`);
@@ -1357,12 +1453,12 @@ async function main() {
     console.log(`${C.bold}${C.magenta}  ${m.params} - ${m.quant} - ${fmtBytes(m.size)} - ${m.publisher}${C.reset}`);
     console.log(`${C.bold}${C.magenta}==================================================${C.reset}`);
 
-    // Détermine la liste d'écoles pour CE modèle. En mode auto-par-modèle,
-    // c'est la liste d'écoles calculée depuis la taille du modèle (LIGHT +
-    // école détectée pour les > 3B, sinon école unique). Sinon, ce sont
-    // toutes les écoles sélectionnées globalement.
+    // Détermine la liste d'écoles pour CE modèle. En mode auto-par-modèle ou
+    // manuel-par-modèle, c'est la liste d'écoles du plan (calculée depuis la
+    // taille ou choisie individuellement). Sinon, ce sont toutes les écoles
+    // sélectionnées globalement.
     let modelSchools;
-    if (autoPerModel) {
+    if (autoPerModel || manualPerModel) {
       modelSchools = plan[i].schools;
     } else {
       modelSchools = schools;
@@ -1453,6 +1549,7 @@ module.exports = {
   schoolLabelForModel,
   schoolsForModelPlan,
   isAutoPerModel,
+  isManualPerModel,
   isMtpModel,
   buildMtpAssociations,
   isNonLlmModel,

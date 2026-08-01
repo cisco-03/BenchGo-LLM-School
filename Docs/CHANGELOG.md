@@ -1,5 +1,42 @@
 # CHANGELOG - Carnet de Notes BenchGo
 
+## 2026-08-01 — feat: mode manuel par modèle (option 7) dans le mode nuit
+
+### Contexte
+En mode nuit, l'utilisateur pouvait choisir soit une liste d'écoles commune à
+tous les modèles (options 1-4), soit l'auto par modèle (option 6, école selon
+la taille). Mais il manquait la possibilité de mélanger des modèles aux
+besoins différents dans la même session : par exemple re-tester Kai Os Grug 12B
+en auto (Collège-Lycée selon sa taille) ET faire passer Phi 4 uniquement en
+Primaire pour rattraper son statut partiel. L'option 6 forçait Phi 4 en
+Collège-Lycée, ce qui ne correspondait pas au besoin.
+
+### Implémentation
+- `night-batch.js` : nouvelle option 7 « Manuel par modèle » dans
+  `selectSchoolsInteractive`. Quand elle est choisie, la fonction
+  `selectSchoolsManualPerModel` demande à l'utilisateur l'école de chaque
+  modèle sélectionné, un par un, avec pour chacun :
+  - numéros séparés par virgules (ex: "1" = Primaire, "1,2" = Primaire + Collège-Lycée)
+  - "auto" ou Entrée = école selon la taille (comme l'option 6)
+  - "all" = toutes les écoles
+- Nouvelle fonction `isManualPerModel()` et entrée SCHOOLS
+  `manual-per-model` (cli=null, écoles choisies interactivement).
+- Le plan construit (`{ model, schools: [...] }`) est utilisé tel quel dans la
+  boucle d'exécution, comme le mode auto-par-modèle.
+- Affichage de la file d'attente mis à jour pour montrer l'attribution
+  individuelle de chaque modèle en mode manuel.
+
+### Fichiers modifiés
+- `night-batch.js` : SCHOOLS (option 7), `isManualPerModel()`,
+  `selectSchoolsManualPerModel()`, gestion dans `main()` (plan + affichage +
+  boucle d'exécution), exports.
+- `Docs/CHANGELOG.md` : cette entrée.
+
+### Vérifications
+- `node --check night-batch.js` : OK.
+- `node tests/run-tests.js` : 27/27 passés.
+- `SCHOOLS` affiche bien 7 options, `isManualPerModel` détecte le marqueur.
+
 ## 2026-08-01 — feat: saisie manuelle multi-modèles de la quantification (night-batch)
 
 ### Contexte
