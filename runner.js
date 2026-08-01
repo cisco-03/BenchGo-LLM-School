@@ -32,7 +32,7 @@ const { queryLLM: queryLLMCloud } = require('./cloud-client');
 const { askTeacherToCorrectStudentAnalysis } = require('./teacher-client');
 const { loadTiers } = require('./tier-loader');
 const { evaluateTask } = require('./task-evaluator');
-const { buildTierReport, shortenModelName, buildCalibrationReport } = require('./report-generator');
+const { buildTierReport, shortenModelName, shortNameWithQuant, buildCalibrationReport } = require('./report-generator');
 const { updateTiers } = require('./auto-updater');
 const scoreLedger = require('./score-ledger');
 const { runSelfProfiling, filterTasksByProfile, SKILL_LABELS } = require('./self-profiling');
@@ -1452,6 +1452,37 @@ async function main() {
     logger.info(`Profil forcé par l'utilisateur : ${PROFILES[profileArg] ? PROFILES[profileArg].label : profileArg}`);
   }
 
+  // --- Auto-détection locale (nom du modèle + quantification) ---
+  // En mode LOCAL, même quand --profile= est fourni (cas night-batch.js), on a
+  // besoin de connaître le nom du modèle chargé et sa quantification AVANT la
+  // détection de doublon (plus bas). Sans cela, preKnownModelName reste null et
+  // resolvedQuantization reste null : le shortName du carnet ignore la quantif
+  // et deux quantifications différentes du même modèle écrasent le même carnet.
+  // On interroge /v1/models (nom de base) puis /api/v0/models (quantif riche).
+  if (!isCloudMode && !preKnownModelName) {
+    try {
+      const detectedName = await fetchModelNameFromLMStudio();
+      if (detectedName) {
+        preKnownModelName = detectedName;
+        logger.info(`Modèle local détecté via /v1/models : ${detectedName}`);
+      }
+    } catch (e) {
+      logger.warn(`Détection du modèle local impossible : ${e.message}`);
+    }
+  }
+  if (!isCloudMode && !resolvedQuantization && preKnownModelName) {
+    try {
+      const meta = await fetchModelMetadataFromLMStudio(preKnownModelName);
+      if (meta && meta.quantization) {
+        resolvedQuantization = meta.quantization;
+        logger.info(`Quantification détectée via /api/v0/models : ${resolvedQuantization}${meta.arch ? ' (arch=' + meta.arch + ')' : ''}`);
+        console.log(`  Quantification détectée : \x1b[1;35m${resolvedQuantization}\x1b[0m \x1b[90m(${meta.publisher || '?'} · ${meta.arch || '?'})\x1b[0m`);
+      }
+    } catch (e) {
+      logger.warn(`Quantification non récupérable : ${e.message}`);
+    }
+  }
+
   if (!PROFILES[profileArg]) {
     logger.warn(`Profil inconnu '${profileArg}', remplacement par STANDARD.`);
     profileArg = 'STANDARD';
@@ -1524,7 +1555,7 @@ async function main() {
   // (détection /v1/models). On ne peut pas encore connaître le modelName exact
   // en mode local tant qu'aucun appel n'a été fait, mais preKnownModelName suffit.
   if (preKnownModelName) {
-    const preShortName = shortenModelName(preKnownModelName);
+    const preShortName = shortNameWithQuant(preKnownModelName, resolvedQuantization || null);
     const preLedger = scoreLedger.loadLedger(preShortName);
     const preEcoles = Object.keys(preLedger.ecoles || {});
     if (preEcoles.length > 0) {
@@ -1769,7 +1800,7 @@ async function main() {
   // Vérifie le carnet de scores persistant : si une entrée existe déjà pour ce
   // modèle sur cette école, on alerte l'utilisateur et on lui propose de forcer.
   if (tierArg === "all" && preKnownModelName) {
-    const dupShortName = shortenModelName(preKnownModelName);
+    const dupShortName = shortNameWithQuant(preKnownModelName, resolvedQuantization || null);
     const dupLedger = scoreLedger.loadLedger(dupShortName);
     const rawExisting = dupLedger.ecoles[ecoleLabel];
     const existing = scoreLedger.getEcoleBest(rawExisting);
@@ -2232,7 +2263,7 @@ async function main() {
     globalReport += `\n> ⚠️ **Score obtenu ${parts.join(' et ')}.**\n`;
   }
 
-  const shortName = shortenModelName(modelName);
+  const shortName = shortNameWithQuant(modelName, resolvedQuantization || null);
   const tierTag = (tierArg && tierArg !== "all") ? `_tier${tierArg}` : "";
   const now = new Date();
   const pad = n => String(n).padStart(2, '0');

@@ -1,5 +1,82 @@
 # CHANGELOG - Carnet de Notes BenchGo
 
+## 2026-08-01 — tool: scripts/check-inline-js.js validateur de JS inline
+
+### Contexte
+Bug récurrent : une faute de frappe dans le JS inline du leaderboard (accolade en double laissée par une édition incomplète de `cancelEditModelUrl`) a fait planter **tout** le script côté navigateur → "Aucun modèle" affiché malgré des données valides. Diagnostic manuel laborieux (dichotomie par prefixe). Besoin d'un outil réutilisable pour détecter et localiser ce genre d'erreur instantanément.
+
+### Implémentation
+- Nouveau dossier `scripts/` (outils de diagnostic, à côté de `tests/`).
+- `scripts/check-inline-js.js` : validateur de JS inline pour les fichiers HTML générés par `leaderboard.js` et `consolidate-leaderboard.js`. Détecte :
+  - **Erreurs de syntaxe** (token inattendu, accolade en trop, etc.) via `vm.Script`, avec **localisation exacte** de la ligne fautive depuis le stack trace (`evalmachine.<anonymous>:N`).
+  - **Apostrophes non échappées** dans les attributs `onclick`/`onchange`/... du HTML rendu (hors `<script>`), source récurrente de bugs (cf. AGENTS.md "esc() dans le leaderboard").
+  - Ignore le JS inline qui construit des handlers (ex: `onclick="openModal(' + i + ')"`) — c'est du JS valide, pas du HTML rendu.
+- Sans argument : valide par défaut `Export-Rapports/classement.html` et `gh-pages-output/community-leaderboard.html`.
+- Sortie : code de sortie 0 (OK) / 1 (erreurs), avec contexte de 3 lignes autour de l'erreur.
+
+### Usage
+```
+node scripts/check-inline-js.js                          # valide les fichiers par défaut
+node scripts/check-inline-js.js Export-Rapports/classement.html  # valide un fichier précis
+```
+
+### Résultat obtenu
+- Détecte instantanément le bug `Unexpected token '}'` à la ligne 681 (cf. fix précédent sur `cancelEditModelUrl`).
+- Fichiers propres : "OK - JS inline valide" avec compte des cartes modèles.
+- Tests unitaires : 27 passés, 0 échoués.
+
+## 2026-08-01 — ui: grille 4 colonnes pour les actions de la modale modèle
+
+### Contexte
+Dans la modale de détail d'un modèle (clic sur une ligne du leaderboard), les sections "Lien du modèle" et "Quantification" étaient empilées verticalement. L'utilisateur souhaite une présentation plus compacte et structurée en 3-4 colonnes, avec une brève description sous chaque titre.
+
+### Implémentation
+- `leaderboard.js` :
+  - Nouvelle grille CSS `.modal-actions-grid` (4 colonnes sur desktop, 2 sur tablette, 1 sur mobile) avec des `.action-card`.
+  - Regroupement des sections "Lien du modèle" et "Quantification" dans la grille, chacune avec un titre d'emoji + description.
+  - Colonne 1 : 🔗 Lien du modèle — description + affichage/bouton "Ajouter un lien / Modifier".
+  - Colonne 2 : 🧩 Quantification — description + affichage/bouton "Ajouter / Modifier".
+  - Colonne 3 : 📝 Notes — placeholder "À venir".
+  - Colonne 4 : 🏷 Tags — placeholder "À venir".
+  - Ajustement des styles `.model-url-section` et `.model-quant-section` pour fonctionner en mode colonne (flex-direction column par défaut, `.row` optionnel pour les usages hors grille).
+  - Mise à jour de `cancelEditModelUrl` et `cancelEditModelQuant` pour refléter la nouvelle présentation (suppression du `margin-left:8px` inutile en colonne).
+- Le titre de section regroupant est "Actions & métadonnées".
+
+### Résultat obtenu
+- La modale affiche 4 colonnes d'actions côte à côte sur grand écran, plus compacte.
+- Les boutons "Ajouter un lien" et la quantification sont sur la même ligne visuelle.
+- Placeholders prêts pour les futures colonnes Notes et Tags.
+- Tests unitaires : 27 passés, 0 échoués. `node --check leaderboard.js` OK.
+
+## 2026-08-01 — fix: shortName du carnet intègre la quantification (carnets écrasés entre quantifs)
+
+### Contexte
+Kai Os Grug 12B testé en 4 quantifications (Q4_K_S, Q5_K_L, Q5_K_S, Q6_K_L) n'apparaissait qu'**une seule fois** dans le leaderboard malgré 4 runs distincts. Les carnets de scores s'écrasaient mutuellement : tous écrivaient dans le même fichier `Export-Rapports/.carnet/kai-os_grug-12b.json`.
+
+### Cause racine
+1. `night-batch.js` lance `node runner.js --force --profile=...` **sans `--model=` ni `--quantization=`**.
+2. En mode local, le runner détectait le nom du modèle via `/v1/models` qui renvoie l'ID de base **sans quantification** (`kai-os_grug-12b`).
+3. L'auto-détection de la quantification (`/api/v0/models`) ne se déclenchait **que** quand aucun `--profile=` n'était passé — or night-batch passe toujours `--profile=`. Donc `resolvedQuantization` restait `null`.
+4. `shortenModelName()` produisait `kai-os_grug-12b` (la quantif n'était jamais dans le nom) → `score-ledger.js` écrivait `kai-os_grug-12b.json` pour les 4 runs.
+5. Le leaderboard lit tous les `*.json` du dossier `.carnet` → un seul modèle vu.
+
+### Implémentation
+- **`report-generator.js`** : nouvelle fonction `shortNameWithQuant(rawName, quantization)` qui calcule un shortName intégrant la quantification quand elle est connue (ex: `kai-os_grug-12b` + `Q4_K_S` → `kai-os_grug-12b_q4_k_s`). Sans quantif, comportement identique à `shortenModelName` (rétrocompatible).
+- **`runner.js`** :
+  - Les 3 sites de calcul du `shortName` (sauvegarde carnet, détection de doublon précoce, détection de doublon par école) utilisent `shortNameWithQuant(...)` avec `resolvedQuantization`.
+  - Nouveau bloc d'auto-détection locale (nom via `/v1/models` + quantif via `/api/v0/models`) qui s'exécute en mode local **même quand `--profile=` est fourni**. Avant, cette détection n'avait lieu que dans la branche `!resolvedProfileArgExplicit` (jamais atteinte par night-batch).
+- **`night-batch.js`** :
+  - `runBenchmark` reçoit `--quantization=<quant>` par modèle (ex: `--quantization=Q4_K_S`) pour forcer la bonne quantif même si l'auto-détection `/api/v0/models` échoue.
+  - `matchLedger` amélioré : privilégie le carnet dont la quantif (en suffixe du shortName) correspond à celle du modelKey. Évite les faux positifs où n'importe quelle quantif du même modèle matche. Ajout de `quantFromModelKey()` et `normalizeQuant()`.
+
+### Résultat obtenu
+- Chaque couple (modèle, quantification) a son propre carnet `.json` → une entrée par quantif dans le leaderboard.
+- `matchLedger` associe correctement chaque modelKey `lms ls` à son carnet (Q4_K_S → carnet `q4_k_s`, Q5_K_L → carnet `q5_k_l`).
+- Tests unitaires : 27 passés, 0 échoués. `node --check` OK sur les 3 fichiers.
+
+### Migration
+Le carnet existant `kai-os_grug-12b.json` (données mélangées des 4 quantifs, quantif `null`) reste présent mais ne sera plus alimenté. Les prochains runs créeront `kai-os_grug-12b_q4_k_s.json`, `kai-os_grug-12b_q5_k_l.json`, etc. Pour repartir propre, supprimer l'ancien carnet via la modale du leaderboard (bouton supprimer).
+
 ## 2026-08-01 — feat: tri par tokens + colonne Tokens dans night-batch --list-only
 
 ### Contexte

@@ -1007,8 +1007,44 @@ function buildLeaderboardHTML(entries) {
   }
   .meta-line code { background: var(--bg-3); padding: 1px 6px; border-radius: 4px; font-family: 'Cascadia Code', 'Consolas', monospace; color: var(--purple); }
 
+  /* Grille d'actions dans la modale (lien, quantification, placeholders futurs) */
+  .modal-actions-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: var(--space-m);
+    margin-bottom: var(--space-m);
+  }
+  .action-card {
+    background: var(--bg-3);
+    border: 1px solid var(--border-soft);
+    border-radius: var(--r-sm);
+    padding: var(--space-s);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+    min-width: 0;
+  }
+  .action-card h4 {
+    margin: 0;
+    font-size: var(--fs-base);
+    color: var(--text);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .action-card p {
+    margin: 0;
+    font-size: var(--fs-small);
+    color: var(--text-muted);
+    line-height: 1.4;
+  }
+  .action-card .card-content { min-height: 42px; }
+  @media (max-width: 1100px) { .modal-actions-grid { grid-template-columns: repeat(2, 1fr); } }
+  @media (max-width: 620px) { .modal-actions-grid { grid-template-columns: 1fr; } }
+
   /* Section lien du modèle (modale) */
-  .model-url-section { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-xs); margin-bottom: var(--space-s); }
+  .model-url-section { display: flex; flex-direction: column; gap: var(--space-xs); }
+  .model-url-section.row { display: flex; flex-direction: row; align-items: center; flex-wrap: wrap; gap: var(--space-xs); }
   .model-url-display { display: inline-flex; align-items: center; gap: 6px; }
   .model-url-link {
     color: var(--accent); text-decoration: none; font-size: var(--fs-small);
@@ -1017,7 +1053,8 @@ function buildLeaderboardHTML(entries) {
   .model-url-link:hover { border-bottom-color: var(--accent); }
   .model-url-edit { display: flex; flex-direction: column; gap: var(--space-xs); }
   /* Section quantification manuelle (modale) — même ergonomie que le lien */
-  .model-quant-section { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-xs); margin-bottom: var(--space-s); }
+  .model-quant-section { display: flex; flex-direction: column; gap: var(--space-xs); }
+  .model-quant-section.row { display: flex; flex-direction: row; align-items: center; flex-wrap: wrap; gap: var(--space-xs); }
   .model-quant-display { display: inline-flex; align-items: center; gap: 6px; }
   .model-quant-value { font-weight: 700; color: var(--purple); font-size: var(--fs-small); }
   .model-quant-edit { display: flex; flex-direction: column; gap: var(--space-xs); }
@@ -1619,39 +1656,52 @@ function openModal(idx) {
   }
   body += '</div>';
 
-  // --- Section : lien vers le modèle (Hugging Face, LM Studio, etc.) ---
-  // L'URL est devinée automatiquement (publisher/model) ou saisie manuellement
-  // par l'utilisateur via le bouton "Modifier". Persistance dans le carnet via
-  // l'API serveur /api/model-url (ou localStorage en hors-serveur).
+  // --- Grille d'actions dans la modale (lien, quantification, placeholders futurs) ---
+  // Remplace les sections verticales empilees par 4 colonnes, avec une breve
+  // description en dessous de chaque titre. Les colonnes 3 et 4 sont reservees
+  // pour des fonctionnalites futures (notes, tags).
   var currentUrl = m.modelUrl || _getModelUrlLocal(m.shortName);
-  body += '<h3>🔗 Lien du modèle</h3>';
-  body += '<div class="model-url-section" id="modelUrlSection">';
+  var currentQuant = m.quantization || _getModelQuantLocal(m.shortName);
+  body += '<h3>Actions & métadonnées</h3>';
+  body += '<div class="modal-actions-grid">';
+  // Colonne 1 : Lien du modèle
+  body += '<div class="action-card">';
+  body += '<h4>🔗 Lien du modèle</h4>';
+  body += '<p>Lien Hugging Face ou LM Studio vers le modèle.</p>';
+  body += '<div class="card-content"><div class="model-url-section" id="modelUrlSection">';
   if (currentUrl) {
     body += '<div class="model-url-display"><a href="' + esc(currentUrl) + '" target="_blank" rel="noopener noreferrer" class="model-url-link">🌐 ' + esc(currentUrl) + '</a></div>';
-    body += '<button class="btn btn-primary btn-sm" onclick="editModelUrl(' + idx + ')" style="margin-left:8px;">✎ Modifier</button>';
+    body += '<button class="btn btn-primary btn-sm" onclick="editModelUrl(' + idx + ')">✎ Modifier</button>';
   } else {
     body += '<p style="color:var(--text-muted);font-size:var(--fs-small);">Aucun lien défini. Cliquez sur « Ajouter » pour renseigner l&#39;URL Hugging Face ou LM Studio du modèle.</p>';
     body += '<button class="btn btn-primary btn-sm" onclick="editModelUrl(' + idx + ')">+ Ajouter un lien</button>';
   }
-  body += '</div>';
-
-  // --- Section : quantification manuelle ---
-  // La quantification est cruciale pour différencier un même modèle testé sous
-  // plusieurs variantes (Q4_K_M, Q5_K_L, Q8_0...). Récupérée automatiquement via
-  // LM Studio, elle peut aussi être saisie/corrigée manuellement ici (modèle
-  // absent de LM Studio, valeur manquante, ou correction). Persistance double :
-  //   - mode serveur (--serve) : POST /api/model-quantization → carnet JSON.
-  //   - hors-serveur (HTML local) : localStorage (fallback).
-  var currentQuant = m.quantization || _getModelQuantLocal(m.shortName);
-  body += '<h3>🧩 Quantification</h3>';
-  body += '<div class="model-quant-section" id="modelQuantSection">';
+  body += '</div></div></div>';
+  // Colonne 2 : Quantification
+  body += '<div class="action-card">';
+  body += '<h4>🧩 Quantification</h4>';
+  body += '<p>Variante de compression du GGUF (Q4_K_S, Q5_K_L...).</p>';
+  body += '<div class="card-content"><div class="model-quant-section" id="modelQuantSection">';
   if (currentQuant) {
     body += '<div class="model-quant-display"><span class="model-quant-value">🧩 ' + esc(currentQuant) + '</span></div>';
-    body += '<button class="btn btn-primary btn-sm" onclick="editModelQuant(' + idx + ')" style="margin-left:8px;">✎ Modifier</button>';
+    body += '<button class="btn btn-primary btn-sm" onclick="editModelQuant(' + idx + ')">✎ Modifier</button>';
   } else {
     body += '<p style="color:var(--text-muted);font-size:var(--fs-small);">Aucune quantification renseignée. Cliquez sur « Ajouter » pour la saisir (ex : Q4_K_M, Q5_K_L, Q8_0, F16...).</p>';
     body += '<button class="btn btn-primary btn-sm" onclick="editModelQuant(' + idx + ')">+ Ajouter</button>';
   }
+  body += '</div></div></div>';
+  // Colonne 3 : Notes (placeholder)
+  body += '<div class="action-card">';
+  body += '<h4>📝 Notes</h4>';
+  body += '<p>Annotations personnelles sur le modèle.</p>';
+  body += '<div class="card-content"><span style="color:var(--text-muted);font-size:var(--fs-small);">À venir</span></div>';
+  body += '</div>';
+  // Colonne 4 : Tags (placeholder)
+  body += '<div class="action-card">';
+  body += '<h4>🏷 Tags</h4>';
+  body += '<p>Catégorisation et labels personnalisés.</p>';
+  body += '<div class="card-content"><span style="color:var(--text-muted);font-size:var(--fs-small);">À venir</span></div>';
+  body += '</div>';
   body += '</div>';
 
   // --- Section Tendance (progression / régression / redoublement) ---
@@ -1938,9 +1988,9 @@ function cancelEditModelUrl(idx) {
   var html = '';
   if (url) {
     html += '<div class="model-url-display"><a href="' + esc(url) + '" target="_blank" rel="noopener noreferrer" class="model-url-link">🌐 ' + esc(url) + '</a></div>';
-    html += '<button class="btn btn-primary btn-sm" onclick="editModelUrl(' + idx + ')" style="margin-left:8px;">✎ Modifier</button>';
+    html += '<button class="btn btn-primary btn-sm" onclick="editModelUrl(' + idx + ')">✎ Modifier</button>';
   } else {
-    html += '<p style="color:var(--text-muted);font-size:var(--fs-small);">Aucun lien défini. Cliquez sur « Ajouter » pour renseigner l&#39;URL Hugging Face ou LM Studio du modèle.</p>';
+    html += '<p style="color:var(--text-muted);font-size:var(--fs-small);">Aucun lien défini. Cliquez sur « Ajouter » pour renseigner l\u0026#39;URL Hugging Face ou LM Studio du modèle.</p>';
     html += '<button class="btn btn-primary btn-sm" onclick="editModelUrl(' + idx + ')">+ Ajouter un lien</button>';
   }
   section.innerHTML = html;
@@ -2025,7 +2075,7 @@ function cancelEditModelQuant(idx) {
   var html = '';
   if (quant) {
     html += '<div class="model-quant-display"><span class="model-quant-value">🧩 ' + esc(quant) + '</span></div>';
-    html += '<button class="btn btn-primary btn-sm" onclick="editModelQuant(' + idx + ')" style="margin-left:8px;">✎ Modifier</button>';
+    html += '<button class="btn btn-primary btn-sm" onclick="editModelQuant(' + idx + ')">✎ Modifier</button>';
   } else {
     html += '<p style="color:var(--text-muted);font-size:var(--fs-small);">Aucune quantification renseignée. Cliquez sur « Ajouter » pour la saisir (ex : Q4_K_M, Q5_K_L, Q8_0, F16...).</p>';
     html += '<button class="btn btn-primary btn-sm" onclick="editModelQuant(' + idx + ')">+ Ajouter</button>';

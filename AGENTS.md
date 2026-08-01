@@ -133,5 +133,12 @@ Si modèle > 3B paramètres, le runner peut enchaîner LIGHT puis STANDARD dans 
 
 1. `node --check <fichier_modifié.js>` pour chaque fichier modifié.
 2. `node tests/run-tests.js` pour les tests unitaires.
-3. Vérifier `parseCliArgs()` expose bien les nouveaux flags : `node -e "const {parseCliArgs}=require('./config'); process.argv=['node','runner.js','--force']; console.log(parseCliArgs().force)"`.
-4. Mettre à jour `Docs/CHANGELOG.md`. Ne pas committer sans demande explicite.
+3. **Si `leaderboard.js` ou `consolidate-leaderboard.js` modifié** : `node scripts/check-inline-js.js` pour valider le JS inline généré. Ce script détecte les erreurs de syntaxe (accolade en double, apostrophe mal échappée, etc.) qui font planter tout le script côté navigateur → "Aucun modèle" affiché. Localise la ligne fautive exacte.
+4. Vérifier `parseCliArgs()` expose bien les nouveaux flags : `node -e "const {parseCliArgs}=require('./config'); process.argv=['node','runner.js','--force']; console.log(parseCliArgs().force)"`.
+5. Mettre à jour `Docs/CHANGELOG.md`. Ne pas committer sans demande explicite.
+
+## Outils de diagnostic (`scripts/`)
+
+| Outil | Usage |
+|---|---|
+| `node scripts/check-inline-js.js [fichier.html ...]` | Valide le JS inline des HTML générés par `leaderboard.js` et `consolidate-leaderboard.js`. Sans argument : valide `Export-Rapports/classement.html` et `gh-pages-output/community-leaderboard.html`. Code sortie 0 = OK, 1 = erreurs. |

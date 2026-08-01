@@ -30,6 +30,26 @@ function shortenModelName(rawName) {
   return sanitizeFilename(kept.join('_'));
 }
 
+// Calcule un shortName de carnet qui INTEGRE la quantification quand elle est
+// connue. Sans cela, deux runs d'un meme modele avec des quantifications
+// differentes (ex: kai-os_grug-12b Q4_K_S et Q5_K_L) produisent le meme
+// shortName "kai-os_grug-12b" et ecrasent le meme fichier carnet .json.
+// Avec la quantif, on obtient "kai-os_grug-12b_q4_k_s" et "kai-os_grug-12b_q5_k_l"
+// -> deux carnets distincts, deux entrees dans le leaderboard.
+// @param {string} rawName - nom du modele (modelKey ou id /v1/models)
+// @param {string|null} quantization - quantification (ex: "Q4_K_S") ou null
+// @returns {string} shortName unique par couple (modele, quantification)
+function shortNameWithQuant(rawName, quantization) {
+  const base = shortenModelName(rawName);
+  if (!quantization) return base;
+  const q = String(quantization).trim().toLowerCase()
+    .replace(/[^a-z0-9_]/g, '_')
+    .replace(/_+/g, '_')
+    .replace(/^_|_$/g, '');
+  if (!q) return base;
+  return base + '_' + q;
+}
+
 function buildTierReport(tierData, evalResults, rawResponse, stats = {}) {
   const classNum = (stats && stats.classNum != null) ? stats.classNum : tierData.tier;
   let report = `## Classe ${classNum} — ${tierData.title}\n\n`;
@@ -175,4 +195,4 @@ function buildCalibrationReport(declaredProfile, calibration, filterDecisions, s
   return report;
 }
 
-module.exports = { buildTierReport, sanitizeFilename, shortenModelName, buildCalibrationReport };
+module.exports = { buildTierReport, sanitizeFilename, shortenModelName, shortNameWithQuant, buildCalibrationReport };

@@ -206,22 +206,63 @@ function normalizeForMatch(s) {
   return v;
 }
 
+// Extrait la quantification d'un modelKey lms ls (ex: "kai-os_grug-12b@q4_k_s/...")
+// -> "q4_k_s". Retourne null si aucune quantification detectable.
+function quantFromModelKey(modelKey) {
+  if (!modelKey) return null;
+  const m = String(modelKey).toLowerCase().match(/@([a-z0-9_]+)/);
+  return m ? m[1] : null;
+}
+
+// Normalise une quantification pour comparaison (minuscules, sans separateurs
+// non alphanumeriques). Ex: "Q4_K_S", "q4-k-s" -> "q4ks".
+function normalizeQuant(q) {
+  if (!q) return '';
+  return String(q).toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
 // Tente de faire correspondre un modelKey (lms ls) a un carnet de scores.
 // Strategie : on normalise le modelKey et le champ model du carnet ; si egalite
 // exacte -> match. Sinon, on extrait le dernier segment significatif du modelKey
 // (ex: "mythos-9b-unhinged" depuis "mythos-9b-unhinged@q4_k_m") et on cherche
 // une inclusion dans model ou shortName du carnet (dans les deux sens).
+//
+// IMPORTANT : depuis que le shortName du carnet integre la quantification (ex:
+// "kai-os_grug-12b_q4_k_s"), on doit privilegier le carnet dont la quantif
+// correspond a celle du modelKey. Sans cela, le 3e critere (inclusion du dernier
+// segment) matcherait n'importe quelle quantif du meme modele (faux positif).
 function matchLedger(modelKey, ledgers) {
   if (!modelKey) return null;
   const nk = normalizeForMatch(modelKey);
   if (!nk) return null;
-  // 1) Egalite normalisee stricte sur model.
+  const wantQuant = normalizeQuant(quantFromModelKey(modelKey));
+  // Indique si un carnet porte une quantification dans son shortName et si elle
+  // correspond a celle du modelKey. Les anciens carnets (sans quantif dans le
+  // shortName) sont considerees comme "sans preference".
+  function quantMatches(l) {
+    if (!wantQuant) return true;
+    // Extrait la quantif en fin de shortName AVANT normalisation (les underscores
+    // seraient sinon transformes en tirets et casseraient la detection).
+    // Le shortName a la forme "<base>_<quant_norm>" ou quant_norm = q4_k_s, q5_k_l...
+    const sn = String(l.shortName || '').toLowerCase();
+    const m = sn.match(/_?(q[0-9][a-z0-9_]*)$/);
+    if (!m) return true; // pas de quantif dans le shortName -> ancien format
+    return normalizeQuant(m[1]) === wantQuant;
+  }
+  // 1) Egalite normalisee stricte sur model (avec preference quantif).
+  let fallback = null;
   for (const l of ledgers) {
-    if (normalizeForMatch(l.model) === nk) return l;
+    if (normalizeForMatch(l.model) === nk) {
+      if (quantMatches(l)) return l;
+      if (!fallback) fallback = l;
+    }
   }
   // 2) Egalite normalisee stricte sur shortName.
   for (const l of ledgers) {
-    if (normalizeForMatch(l.shortName) === nk) return l;
+    if (normalizeForMatch(l.shortName) === nk) {
+      if (quantMatches(l)) return l;
+      if (!fallback) fallback = l;
+    }
   }
   // 3) Dernier segment du modelKey inclus dans model/shortName (et reciproque).
   const seg = nk.split('-').filter(Boolean).pop() || nk;
@@ -230,10 +271,13 @@ function matchLedger(modelKey, ledgers) {
       const nm = normalizeForMatch(l.model);
       const ns = normalizeForMatch(l.shortName);
       if ((nm && (nm.includes(seg) || seg.includes(nm))) ||
-          (ns && (ns.includes(seg) || seg.includes(ns)))) return l;
+          (ns && (ns.includes(seg) || seg.includes(ns)))) {
+        if (quantMatches(l)) return l;
+        if (!fallback) fallback = l;
+      }
     }
   }
-  return null;
+  return fallback;
 }
 
 // Renvoie la liste des cles SCHOOLS effectivement testees par un carnet
@@ -1305,11 +1349,19 @@ async function main() {
     console.log(`  ${C.green}Modele charge.${C.reset}`);
 
     let modelOk = true;
+    // Arguments runner supplementaires propres a CE modele : on passe la
+    // quantification explicitement pour que le shortName du carnet l'integre.
+    // Sans cela, deux quantifications du meme modele ecrasent le meme carnet
+    // (ex: kai-os_grug-12b Q4_K_S et Q5_K_L -> meme fichier .json).
+    const modelExtraArgs = extraRunnerArgs.slice();
+    if (m.quant && m.quant !== '?') {
+      modelExtraArgs.push(`--quantization=${m.quant}`);
+    }
     for (let j = 0; j < modelSchools.length; j++) {
       const school = modelSchools[j];
       console.log(`\n  ${C.bold}${C.cyan}=== ECOLE ${j + 1}/${modelSchools.length} - ${school.label} ===${C.reset}`);
 
-      const bench = runBenchmark(m.modelKey, school.cli, extraRunnerArgs);
+      const bench = runBenchmark(m.modelKey, school.cli, modelExtraArgs);
       const mins = (bench.durationMs / 60000).toFixed(1);
       if (!bench.ok) modelOk = false;
       // Enregistre le résultat (succès OU échec) dans l'historique des runs
