@@ -1,5 +1,24 @@
 # CHANGELOG - Carnet de Notes BenchGo
 
+## 2026-08-01 — feat: tri par tokens + colonne Tokens dans night-batch --list-only
+
+### Contexte
+Le rapport sur le temps d'inférence des modèles a mis en évidence que la lenteur est corrélée à la **verbosité** (nombre de tokens produits), pas à la qualité. Un modèle comme Gemmable 4 12B produit 55.6k tokens pour un score de -79 %, consommant 2h24 de GPU à vide. Il manquait un moyen rapide de repérer ces modèles « qui écrivent trop » avant de lancer un mode nuit.
+
+### Implémentation
+- `computeLedgerMetrics()` expose désormais `tokens` (cumul multi-écoles) en plus de `tokensPerSecond` et `elapsedMs`.
+- Nouvelle colonne **Tokens** dans le tableau `selectModelsInteractive()` (entre Vit. et Tent.), format compact via `fmtTokens()` (ex: 34.8k, 1.2M).
+- Nouvelle commande **`tok`** au prompt : tape `tok` + Entrée pour basculer le tri par volume de tokens produits (décroissant). Les modèles sans métriques vont à la fin. Taper `tok` à nouveau revient au tri par score (défaut).
+- En mode tri par tokens, les valeurs > 50k sont surlignées en **jaune** pour alerter sur la verbosité excessive.
+- Variable d'état `_sortByTokens` (toggle) ; aide intégrée dans l'en-tête du tableau.
+
+### Fichiers modifiés
+- `night-batch.js` : `fmtTokens()`, `computeLedgerMetrics()` (exposition `tokens`), colonne Tokens dans le tableau, commande `tok`, `_sortByTokens`.
+
+### Résultat obtenu
+- `node night-batch.js --list-only` → tape `tok` : Gemmable 4 12B remonte en #1 (55.6k tokens, -79 %, jaune), immédiatement identifiable comme modèle à exclure du batch.
+- Tests unitaires : 27 passés, 0 échoués.
+
 ## 2026-08-01 — feat: quantification manuelle + distinction modèles en échec
 
 ### Contexte

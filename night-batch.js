@@ -328,7 +328,7 @@ function computeLedgerMetrics(ledger) {
   }
   return {
     score, max, pct, globalLifeScore,
-    tokensPerSecond, elapsedMs: totalElapsedMs,
+    tokensPerSecond, elapsedMs: totalElapsedMs, tokens: totalTokens,
     attempts: maxAttempts, trend
   };
 }
@@ -733,6 +733,16 @@ function fmtDuration(ms) {
   return h + 'h' + String(min).padStart(2, '0') + 'm';
 }
 
+// Formate un nombre de tokens en affichage compact (ex: 1234 -> 1.2k, 1234567 -> 1.2M).
+// Utilisé dans la colonne Tokens du tableau --list-only pour repérer les modèles
+// verbeux (qui produisent beaucoup de tokens et consomment donc beaucoup de temps).
+function fmtTokens(n) {
+  if (!n || n <= 0) return '\u2014';
+  if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M';
+  if (n >= 1000) return (n / 1000).toFixed(1) + 'k';
+  return String(n);
+}
+
 // Renvoie le glyphe + couleur ANSI d'une tendance (up/down/stable/null).
 function trendGlyph(trend) {
   if (trend === 'up') return `${C.green}\u25B2${C.reset}`;
@@ -791,6 +801,12 @@ function recomputeStatus(m) {
   return { nonLlm, status };
 }
 
+// Etat de tri par tokens (commande "tok" dans selectModelsInteractive).
+// Permet de basculer entre le tri par score (defaut) et le tri par volume de
+// tokens produits (decroissant) pour repérer les modèles verbeux qui consomment
+// trop de temps d inference pour des scores parfois catastrophiques.
+var _sortByTokens = false;
+
 // Selection interactive des modeles.
 async function selectModelsInteractive(models) {
   console.log(`\n  ${C.bold}${C.cyan}=== MODELES LLM TELECHARGES ===${C.reset}`);
@@ -799,7 +815,23 @@ async function selectModelsInteractive(models) {
   console.log(`  ${C.gray}Ordre : modeles testes du plus fort au plus faible, puis jamais testes, puis non-LLM a la fin.${C.reset}`);
   console.log(`  ${C.gray}Astuce : le dernier des testes est le plus faible — un bon candidat au retrait.${C.reset}`);
   console.log(`  ${C.gray}Isoler un modele non-LLM : !<num> (ex: !7) — le marque NON APPLICABLE et l'exclut.${C.reset}`);
-  console.log(`  ${C.gray}Désisoler : !!<num> — retire un modele de la liste noire manuelle.${C.reset}\n`);
+  console.log(`  ${C.gray}Désisoler : !!<num> — retire un modele de la liste noire manuelle.${C.reset}`);
+  console.log(`  ${C.gray}Tri par tokens (verbeux en haut) : tape "tok" puis Entrée — repère les modèles qui écrivent trop.${C.reset}\n`);
+
+  // Tri par tokens produits (décroissant) si demandé. Les modèles jamais testés
+  // (sans metrics) vont à la fin. Permet de repérer les modèles « verbeux » qui
+  // consomment 1h30+ de GPU pour des scores catastrophiques (Gemmable, nanbeige).
+  if (_sortByTokens) {
+    models = models.slice().sort((a, b) => {
+      const ta = (a.metrics && a.metrics.tokens) || 0;
+      const tb = (b.metrics && b.metrics.tokens) || 0;
+      if (tb !== ta) return tb - ta;
+      // Egalité : on garde l'ordre par score (le plus fort d'abord).
+      const pa = (a.metrics && a.metrics.pct) || 0;
+      const pb = (b.metrics && b.metrics.pct) || 0;
+      return pb - pa;
+    });
+  }
 
   // Largeurs de colonnes calculees dynamiquement a partir des donnees reelles.
   // Chaque largeur = max(longueur du header, longueur de la plus longue valeur).
@@ -815,6 +847,7 @@ async function selectModelsInteractive(models) {
   const statusW = 15; // COMPLET / PARTIEL / JAMAIS TESTE / NON APPLICABLE — fixe
   const pctW = 5;
   const tpsW = 8;
+  const tokW = 7;
   const attW = 5;
   const trendW = 4;
   const timeW = Math.max(8, ...models.map(m => {
@@ -824,9 +857,9 @@ async function selectModelsInteractive(models) {
   const missW = Math.max(22, ...models.map(m => (missingSchoolsLabel(m.status) || '').length));
 
   const hdrIdx = ' '.repeat(idxW);
-  const header = `  ${hdrIdx}${'Modèle'.padEnd(nameW)} ${'Param'.padEnd(paramW)} ${'Quant'.padEnd(quantW)} ${'Taille'.padStart(sizeW)}  ${'Editeur'.padEnd(pubW)} ${'Statut'.padEnd(statusW)} ${'Pct'.padStart(pctW)} ${'Vit.'.padStart(tpsW)} ${'Tent.'.padStart(attW)} ${'Tnd'.padStart(trendW)} ${'Temps'.padStart(timeW)}  ${'Ecoles manquantes'}`;
+  const header = `  ${hdrIdx}${'Modèle'.padEnd(nameW)} ${'Param'.padEnd(paramW)} ${'Quant'.padEnd(quantW)} ${'Taille'.padStart(sizeW)}  ${'Editeur'.padEnd(pubW)} ${'Statut'.padEnd(statusW)} ${'Pct'.padStart(pctW)} ${'Vit.'.padStart(tpsW)} ${'Tokens'.padStart(tokW)} ${'Tent.'.padStart(attW)} ${'Tnd'.padStart(trendW)} ${'Temps'.padStart(timeW)}  ${'Ecoles manquantes'}`;
   console.log(`${C.gray}${header}${C.reset}`);
-  const sep = '─'.repeat(idxW + nameW + paramW + quantW + sizeW + pubW + statusW + pctW + tpsW + attW + trendW + timeW + missW + 20);
+  const sep = '─'.repeat(idxW + nameW + paramW + quantW + sizeW + pubW + statusW + pctW + tpsW + tokW + attW + trendW + timeW + missW + 21);
   console.log(`${C.gray}  ${sep}${C.reset}`);
   models.forEach((m, i) => {
     const idx = String(i + 1).padStart(Math.max(2, idxW - 1)) + '.';
@@ -851,12 +884,20 @@ async function selectModelsInteractive(models) {
     const tpsStr = mt && mt.tokensPerSecond > 0
       ? `${(mt.tokensPerSecond + ' t/s').padStart(tpsW)}`
       : `${C.gray}${'\u2014'.padStart(tpsW)}${C.reset}`;
+    // Affichage des tokens produits (cumul multi-ecoles). En mode tri par tokens,
+    // on surligne en jaune les valeurs elevees (>50k) pour alerter sur la verbosite.
+    const tokVal = mt ? (mt.tokens || 0) : 0;
+    const tokStr = tokVal > 0
+      ? (_sortByTokens && tokVal > 50000
+          ? `${C.yellow}${fmtTokens(tokVal).padStart(tokW)}${C.reset}`
+          : fmtTokens(tokVal).padStart(tokW))
+      : `${C.gray}${'\u2014'.padStart(tokW)}${C.reset}`;
     const attStr = mt ? `${String(mt.attempts).padStart(attW)}` : `${C.gray}${'?'.padStart(attW)}${C.reset}`;
     const trendStr = mt ? `${trendGlyph(mt.trend).padEnd(trendW)}` : `${C.gray}${'\u2014'.padEnd(trendW)}${C.reset}`;
     const timeStr = mt && mt.elapsedMs > 0
       ? `${fmtDuration(mt.elapsedMs).padStart(timeW)}`
       : `${C.gray}${'\u2014'.padStart(timeW)}${C.reset}`;
-    console.log(`  ${C.bold}${idx}${C.reset} ${name} ${C.gray}${params} ${quant}${C.reset} ${sz}  ${C.gray}${pub}${C.reset} ${statusStr} ${pctStr} ${tpsStr} ${attStr} ${trendStr} ${timeStr}  ${missStr}`);
+    console.log(`  ${C.bold}${idx}${C.reset} ${name} ${C.gray}${params} ${quant}${C.reset} ${sz}  ${C.gray}${pub}${C.reset} ${statusStr} ${pctStr} ${tpsStr} ${tokStr} ${attStr} ${trendStr} ${timeStr}  ${missStr}`);
   });
   console.log('');
   return new Promise(resolve => {
@@ -865,6 +906,15 @@ async function selectModelsInteractive(models) {
       rl.close();
       const raw = (answer || '').trim().toLowerCase();
       if (raw === 'all' || raw === '*') { resolve(models); return; }
+      // Commande de tri par tokens : "tok" bascule le tri par volume de tokens
+      // produits (décroissant) pour repérer les modèles verbeux. Taper "tok" à
+      // nouveau revient au tri par score (défaut).
+      if (raw === 'tok' || raw === 'tokens') {
+        _sortByTokens = !_sortByTokens;
+        console.log(`  ${C.cyan}Tri par tokens : ${_sortByTokens ? 'ACTIVÉ (verbeux en haut)' : 'désactivé (tri par score)'}${C.reset}`);
+        resolve(selectModelsInteractive(models));
+        return;
+      }
       // Commandes d'isolation : !<num> isole (liste noire), !!<num> désisole.
       const isolateMatch = raw.match(/^!(\d+)$/);
       const unisolateMatch = raw.match(/^!!(\d+)$/);
