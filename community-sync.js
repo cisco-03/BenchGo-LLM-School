@@ -210,6 +210,27 @@ async function createBranch(token, branchName, sha) {
   return true;
 }
 
+// Supprime une branche existante si elle existe (pour les mises à jour de
+// soumissions). Sans cela, createBranch réutilise une branche stale qui
+// pointe vers un vieux commit de main, ce qui peut causer des PR vides ou
+// des conflits de merge.
+async function deleteBranch(token, branchName) {
+  const res = await fetch(`${GITHUB_API}/repos/${COMMUNITY_REPO.owner}/${COMMUNITY_REPO.repo}/git/refs/heads/${encodeURIComponent(branchName)}`, {
+    method: 'DELETE',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Accept': 'application/vnd.github+json',
+      'User-Agent': 'BenchGo-V3-Community'
+    }
+  });
+  // 204 = supprimée, 404 = n'existait pas — les deux sont OK.
+  if (!res.ok && res.status !== 404) {
+    const body = await res.text();
+    logger.warn('deleteBranch: HTTP ' + res.status + ' — ' + body);
+  }
+  return true;
+}
+
 // Crée ou met à jour un fichier sur une branche via l'API Contents.
 async function putFile(token, branch, filePath, contentBase64, message) {
   // Vérifie si le fichier existe déjà (pour récupérer le sha et faire un update).
@@ -390,7 +411,8 @@ async function submitResults(shortName, ledger, token, options) {
   // Étape 1 : SHA de main
   const mainSha = await getMainBranchSha(token);
 
-  // Étape 2 : branche
+  // Étape 2 : supprime l'ancienne branche si elle existe (mise à jour), puis crée la branche.
+  await deleteBranch(token, branchName);
   await createBranch(token, branchName, mainSha);
 
   // Étape 3 : fichier
@@ -508,6 +530,40 @@ async function getAlreadySubmittedModels(token) {
   }
 }
 
+// Récupère le contenu d'une soumission existante sur GitHub (le carnet JSON
+// stocké dans submissions/<userId>/<shortName>.json). Retourne null si le
+// fichier n'existe pas ou est illisible. Utilisé pour comparer avec le carnet
+// local et ne renvoyer que les modèles modifiés (évite de spammer GitHub).
+async function getSubmissionContent(token, shortName) {
+  if (!shortName) return null;
+  const userId = getOrCreateUserId();
+  const safeUserId = String(userId).replace(/[^a-zA-Z0-9._-]/g, '_');
+  const safeShortName = String(shortName).replace(/[^a-zA-Z0-9._-]/g, '_');
+  const filePath = `submissions/${safeUserId}/${safeShortName}.json`;
+  try {
+    const res = await fetch(
+      `${GITHUB_API}/repos/${COMMUNITY_REPO.owner}/${COMMUNITY_REPO.repo}/contents/${encodeURIComponent(filePath)}?ref=main`,
+      {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/vnd.github+json',
+          'User-Agent': 'BenchGo-V3-Community'
+        }
+      }
+    );
+    if (res.status === 404) return null;
+    if (!res.ok) { logger.warn('getSubmissionContent: HTTP ' + res.status); return null; }
+    const data = await res.json();
+    if (!data.content) return null;
+    const content = Buffer.from(data.content, 'base64').toString('utf8');
+    const parsed = JSON.parse(content);
+    return parsed.carnet || parsed || null;
+  } catch (e) {
+    logger.warn('getSubmissionContent: ' + e.message);
+    return null;
+  }
+}
+
 module.exports = {
   COMMUNITY_REPO,
   PROFILE_FILE,
@@ -526,5 +582,6 @@ module.exports = {
   submitResults,
   mergePullRequest,
   validateGithubToken,
-  getAlreadySubmittedModels
+  getAlreadySubmittedModels,
+  getSubmissionContent
 };

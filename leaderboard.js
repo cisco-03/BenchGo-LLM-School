@@ -2888,8 +2888,8 @@ async function doSubmitAll() {
     });
     var valData = await valRes.json();
     if (!valData.valid) { statusEl.innerHTML = '<p style="color: var(--red);">Token invalide : ' + esc(valData.error || 'verifiez les permissions') + '</p>'; btn.disabled = false; btn.textContent = 'Reessayer'; return; }
-    statusEl.innerHTML = '<p style="color: var(--green);">Token valide (' + esc(valData.login || '') + '). Recuperation des modeles deja soumis...</p>';
-    // Recupere la liste des modeles deja soumis sur GitHub pour ne renvoyer que les nouveaux.
+    statusEl.innerHTML = '<p style="color: var(--green);">Token valide (' + esc(valData.login || '') + '). Comparaison des carnets locaux avec GitHub...</p>';
+    // Étape 1 : récupère la liste des modèles déjà soumis (pour distinguer nouveaux vs mises à jour).
     var subRes = await fetch('/api/already-submitted', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -2897,27 +2897,44 @@ async function doSubmitAll() {
     });
     var subData = await subRes.json();
     var alreadySubmitted = new Set(subData.ok ? (subData.submitted || []) : []);
+    // Étape 2 : compare chaque carnet local avec sa soumission GitHub.
+    // /api/submit-check renvoie { changed: [...], unchanged: [...], newModels: [...] }.
+    var allShortNames = MODELS.map(function(m) { return m.shortName; });
+    var checkRes = await fetch('/api/submit-check', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token: token, shortNames: allShortNames })
+    });
+    var checkData = await checkRes.json();
+    var changedSet = new Set(checkData.ok ? (checkData.changed || []) : []);
+    var newSet = new Set(checkData.ok ? (checkData.newModels || []) : []);
+    var unchangedCount = checkData.ok ? (checkData.unchanged || []).length : 0;
+    // On n'envoie que les modèles nouveaux ou modifiés.
     var toSubmit = [];
-    var skippedCount = 0;
     for (var i = 0; i < MODELS.length; i++) {
-      if (alreadySubmitted.has(MODELS[i].shortName)) { skippedCount++; continue; }
-      toSubmit.push(MODELS[i]);
+      var sn = MODELS[i].shortName;
+      if (newSet.has(sn) || changedSet.has(sn)) {
+        toSubmit.push(MODELS[i]);
+      }
     }
     if (toSubmit.length === 0) {
       statusEl.innerHTML = '<div style="border: 1px solid var(--border); border-radius: 8px; padding: 12px; background: var(--bg-3);">'
-        + '<p style="color: var(--green); font-weight: 600;">Tous vos modeles sont deja soumis !</p>'
-        + '<p style="margin-top: 8px; font-size: 13px; color: var(--text-muted);">' + skippedCount + ' modele(s) deja present(s) sur le depot communautaire.</p>'
-        + '<p style="margin-top: 4px; font-size: 13px; color: var(--text-muted);">Aucun nouveau modele a envoyer. Testez de nouveaux modeles puis revenez soumettre.</p>'
+        + '<p style="color: var(--green); font-weight: 600;">Tout est à jour !</p>'
+        + '<p style="margin-top: 8px; font-size: 13px; color: var(--text-muted);">' + unchangedCount + ' modèle(s) déjà soumis et identique(s) au carnet local.</p>'
+        + '<p style="margin-top: 4px; font-size: 13px; color: var(--text-muted);">Aucune modification à envoyer. Modifiez un modèle (quantification, note...) ou testez un nouveau modèle, puis revenez soumettre.</p>'
         + '</div>';
-      btn.textContent = 'Termine'; btn.disabled = false;
+      btn.textContent = 'Terminé'; btn.disabled = false;
       btn.onclick = closeSubmitModal;
       return;
     }
-    statusEl.innerHTML = '<p style="color: var(--accent);">' + toSubmit.length + ' nouveau(x) modele(s) a envoyer (' + skippedCount + ' deja soumis(s), ignores). Envoi en cours...</p>';
+    var newCount = toSubmit.filter(function(m) { return newSet.has(m.shortName); }).length;
+    var updateCount = toSubmit.filter(function(m) { return changedSet.has(m.shortName); }).length;
+    statusEl.innerHTML = '<p style="color: var(--accent);">' + toSubmit.length + ' modèle(s) à envoyer (' + newCount + ' nouveau(x), ' + updateCount + ' mise(s) à jour, ' + unchangedCount + ' inchangé(s)). Envoi en cours...</p>';
     var okCount = 0, failCount = 0, prUrls = [];
     for (var j = 0; j < toSubmit.length; j++) {
       var m = toSubmit[j];
-      statusEl.innerHTML = '<p style="color: var(--accent);">Envoi ' + (j + 1) + '/' + toSubmit.length + ' : ' + esc(m.shortName) + '...</p>';
+      var isUpdate = changedSet.has(m.shortName);
+      statusEl.innerHTML = '<p style="color: var(--accent);">Envoi ' + (j + 1) + '/' + toSubmit.length + ' : ' + esc(m.shortName) + (isUpdate ? ' (mise à jour)' : ' (nouveau)') + '...</p>';
       try {
         var res = await fetch('/api/submit?shortName=' + encodeURIComponent(m.shortName), {
           method: 'POST',
@@ -2929,11 +2946,13 @@ async function doSubmitAll() {
         else { failCount++; }
       } catch (e) { failCount++; }
     }
-    if (remember) { /* le serveur a deja memorise le token si demande */ }
+    if (remember) { /* le serveur a déjà mémorisé le token si demandé */ }
     var html = '<div style="border: 1px solid var(--border); border-radius: 8px; padding: 12px; background: var(--bg-3);">';
-    html += '<p style="color: var(--green); font-weight: 600;">' + okCount + ' soumission(s) reussie(s)';
-    if (failCount > 0) html += ', ' + failCount + ' echec(s)';
-    if (skippedCount > 0) html += ', ' + skippedCount + ' deja soumis(s) (ignores)';
+    html += '<p style="color: var(--green); font-weight: 600;">' + okCount + ' soumission(s) réussie(s)';
+    if (failCount > 0) html += ', ' + failCount + ' échec(s)';
+    if (newCount > 0) html += ', ' + newCount + ' nouveau(x)';
+    if (updateCount > 0) html += ', ' + updateCount + ' mise(s) à jour';
+    if (unchangedCount > 0) html += ', ' + unchangedCount + ' inchangé(s) (ignorés)';
     html += '</p>';
     if (prUrls.length > 0) {
       html += '<p style="margin-top: 8px; font-size: 13px; color: var(--text-muted);">Pull Requests creees :</p>';
@@ -3846,6 +3865,65 @@ function startServer(port) {
         const submitted = await communitySync.getAlreadySubmittedModels(token);
         res.writeHead(200, securityHeaders);
         res.end(JSON.stringify({ ok: true, submitted: Array.from(submitted) }));
+      } catch (e) {
+        res.writeHead(200, securityHeaders);
+        res.end(JSON.stringify({ ok: false, error: e.message }));
+      }
+      return;
+    }
+
+    // API : vérifie quels carnets locaux ont été modifiés par rapport à leur
+    // soumission sur GitHub. Reçoit { token, shortNames: [...] } et retourne
+    // { ok, changed: [...], unchanged: [...] }. Permet à doSubmitAll() de ne
+    // renvoyer que les modèles réellement modifiés (quantification, note,
+    // paramSize, score, etc.) au lieu de tout renvoyer à chaque fois.
+    if (url.pathname === '/api/submit-check' && req.method === 'POST') {
+      let body;
+      try { body = await readJsonBody(req); } catch (e) {
+        res.writeHead(400, securityHeaders);
+        res.end(JSON.stringify({ ok: false, error: e.message }));
+        return;
+      }
+      const token = body.token;
+      const shortNames = Array.isArray(body.shortNames) ? body.shortNames : [];
+      if (!token) {
+        res.writeHead(400, securityHeaders);
+        res.end(JSON.stringify({ ok: false, error: 'token manquant' }));
+        return;
+      }
+      try {
+        const { loadLedger } = require('./score-ledger');
+        const changed = [];
+        const unchanged = [];
+        const newModels = [];
+        for (const sn of shortNames) {
+          const remote = await communitySync.getSubmissionContent(token, sn);
+          if (!remote) {
+            newModels.push(sn);
+            continue;
+          }
+          const local = loadLedger(sn);
+          if (!local) { unchanged.push(sn); continue; }
+          // Comparaison des champs pertinents (pas tout le carnet — juste les
+          // champs qui justifient une mise à jour de la soumission).
+          const fields = ['quantization', 'note', 'paramSize', 'modelUrl', 'model', 'shortName'];
+          let isChanged = false;
+          for (const f of fields) {
+            const localVal = local[f] != null ? String(local[f]) : '';
+            const remoteVal = remote[f] != null ? String(remote[f]) : '';
+            if (localVal !== remoteVal) { isChanged = true; break; }
+          }
+          // Comparaison du score (le carnet peut avoir été re-testé).
+          if (!isChanged) {
+            const localScore = local.score != null ? local.score : null;
+            const remoteScore = remote.score != null ? remote.score : null;
+            if (localScore !== remoteScore) isChanged = true;
+          }
+          if (isChanged) changed.push(sn);
+          else unchanged.push(sn);
+        }
+        res.writeHead(200, securityHeaders);
+        res.end(JSON.stringify({ ok: true, changed, unchanged, newModels }));
       } catch (e) {
         res.writeHead(200, securityHeaders);
         res.end(JSON.stringify({ ok: false, error: e.message }));

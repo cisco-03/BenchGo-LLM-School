@@ -1,5 +1,41 @@
 # CHANGELOG - Carnet de Notes BenchGo
 
+## 2026-08-01 — fix: envoi communautaire compare carnet local vs soumission GitHub (n envoie que les modèles modifiés)
+
+### Contexte
+Lorsqu un modèle avait déjà été soumis au classement communautaire via « 🌐 Envoyer à la communauté », toute modification ultérieure faite dans la modale du leaderboard (quantification, note, paramSize) restait bloquée en local. L utilisateur cliquait 4 fois sur « Envoyer à la communauté » sans voir de changement sur https://cisco-03.github.io/BenchGo-LLM-School/community-leaderboard.html.
+
+### Cause racine
+`leaderboard.js` -> `doSubmitAll()` interrogeait `/api/already-submitted` pour connaître les modèles déjà présents sur GitHub, puis **skippait systématiquement** ces modèles (`if (alreadySubmitted.has(...)) continue`). La logique datait de la contrainte « n envoyer que les nouveaux modèles », mais elle empêchait toute mise à jour d une soumission existante (quantification, note, paramSize, re-test avec nouveau score, etc.).
+
+### Implémentation
+
+#### 1. Comparaison des carnets (community-sync.js + leaderboard.js)
+- Nouvelle fonction `getSubmissionContent(token, shortName)` dans `community-sync.js` : lit le fichier `submissions/<userId>/<shortName>.json` sur GitHub via l API Contents, décode le base64 et retourne le `carnet` stocké.
+- Exportée dans le `module.exports` de `community-sync.js`.
+- Nouvelle API serveur `/api/submit-check` (POST, body `{ token, shortNames: [...] }`) dans `leaderboard.js` : pour chaque shortName, récupère la soumission distante, compare avec le carnet local et retourne `{ changed: [...], unchanged: [...], newModels: [...] }`.
+- Champs comparés : `quantization`, `note`, `paramSize`, `modelUrl`, `model`, `shortName`, et `score`. Si l un d eux diffère, le modèle est marqué `changed`.
+
+#### 2. Réécriture de doSubmitAll() (leaderboard.js)
+- Appelle `/api/submit-check` avec tous les shortNames locaux.
+- N envoie plus tout : seuls `newModels` et `changed` sont soumis via `/api/submit`.
+- Les modèles identiques sont affichés comme « inchangés (ignorés) ».
+- Le résumé final distingue : soumissions réussies, échecs, nouveaux, mises à jour, inchangés.
+
+#### 3. Fiabilisation du merge (community-sync.js)
+- Ajout de `deleteBranch(token, branchName)` : supprime l ancienne branche `community/<userId>-<shortName>` avant de la recréer à partir du `main` actuel.
+- Appelée dans `submitResults()` avant `createBranch()`. Cela évite les branches « stale » pointant vers un vieux commit de main, qui pouvaient générer des PR vides ou des conflits de merge.
+
+### Fichiers modifiés
+- `leaderboard.js` : nouvelle API `/api/submit-check`, réécriture de `doSubmitAll()`.
+- `community-sync.js` : `getSubmissionContent()`, `deleteBranch()`, export.
+
+### Vérifications
+- `node --check leaderboard.js` : OK.
+- `node --check community-sync.js` : OK.
+- `node scripts/check-inline-js.js` : OK.
+- Serveur `--serve` relancé avec le nouveau code.
+
 ## 2026-08-01 — feat: modale modèle — sélecteurs bits/variante/paramètres + notes + badges + flèches communautaires
 
 ### Contexte
