@@ -2106,22 +2106,32 @@ function _setModelQuantLocal(shortName, quant) {
 
 // Ouvre un champ d'édition inline pour la quantification du modèle.
 // Deux sélecteurs en cascade (bits → variante) + fallback texte libre repliable.
-var QUANT_BITS = [1, 2, 3, 4, 5, 6, 8, 16];
+var QUANT_BITS = [1, 1.5, 2, 3, 4, 5, 6, 8, 16, 32]
 var QUANT_VARIANTS = {
-  1: ['Q1_K'],
-  2: ['Q2_K', 'Q2_K_S'],
-  3: ['Q3_K', 'Q3_K_S', 'Q3_K_M', 'Q3_K_L'],
-  4: ['Q4_0', 'Q4_1', 'Q4_K', 'Q4_K_S', 'Q4_K_M'],
-  5: ['Q5_0', 'Q5_1', 'Q5_K', 'Q5_K_S', 'Q5_K_M', 'Q5_K_L'],
-  6: ['Q6_K'],
-  8: ['Q8_0'],
-  16: ['F16', 'BF16']
-};
+  '1': ['IQ1_S', 'Q1_K'],
+  '1.5': ['IQ1_M'],
+  '2': ['IQ2_XXS', 'IQ2_XS', 'IQ2_S', 'IQ2_M', 'Q2_K', 'Q2_K_S', 'Q2_K_L'],
+  '3': ['IQ3_XXS', 'IQ3_XS', 'IQ3_S', 'IQ3_M', 'Q3_K_S', 'Q3_K_M', 'Q3_K_L', 'Q3_K_XL'],
+  '4': ['IQ4_XS', 'IQ4_NL', 'Q4_0', 'Q4_1', 'Q4_K_S', 'Q4_K_M', 'Q4_K_L'],
+  '5': ['Q5_0', 'Q5_1', 'Q5_K_S', 'Q5_K_M', 'Q5_K_L'],
+  '6': ['Q6_K', 'Q6_K_L'],
+  '8': ['Q8_0', 'Q8_1', 'Q8_K'],
+  '16': ['F16', 'BF16'],
+  '32': ['F32']
+}
+// Table inverse variante -> bits, construite depuis QUANT_VARIANTS.
+var QUANT_VARIANT_TO_BITS = {}
+for (var _bk in QUANT_VARIANTS) {
+  for (var _vi = 0; _vi < QUANT_VARIANTS[_bk].length; _vi++) {
+    QUANT_VARIANT_TO_BITS[QUANT_VARIANTS[_bk][_vi]] = String(_bk)
+  }
+}
 // Devine le nombre de bits depuis une chaîne de quantification existante.
 function _quantBitsFromString(q) {
-  if (!q) return '';
-  var m = q.match(/(\d+)/);
-  return m ? parseInt(m[1], 10) : '';
+  if (!q) return ''
+  if (QUANT_VARIANT_TO_BITS[q]) return QUANT_VARIANT_TO_BITS[q]
+  var m = q.match(/(\d+(?:\.\d+)?)/)
+  return m ? m[1] : ''
 }
 function editModelQuant(idx) {
   var m = MODELS[idx];
@@ -2136,7 +2146,7 @@ function editModelQuant(idx) {
   html += '<select id="quantBitsSelect" class="search" onchange="onQuantBitsChange(' + idx + ')">';
   html += '<option value="">—</option>';
   for (var b of QUANT_BITS) {
-    html += '<option value="' + b + '"' + (currentBits === b ? ' selected' : '') + '>' + b + ' bits</option>';
+    html += '<option value="' + b + '"' + (currentBits === String(b) ? ' selected' : '') + '>' + b + ' bits</option>'
   }
   html += '</select></label>';
   // Sélecteur de variante (rempli dynamiquement selon les bits)
@@ -2168,15 +2178,15 @@ function onQuantBitsChange(idx) {
   var bitsSel = document.getElementById('quantBitsSelect');
   var varSel = document.getElementById('quantVariantSelect');
   var preview = document.getElementById('quantPreview');
-  var bits = bitsSel ? parseInt(bitsSel.value, 10) : 0;
+  var bits = bitsSel ? String(bitsSel.value) : ''
   if (varSel) {
-    var opts = '<option value="">—</option>';
+    var opts = '<option value="">—</option>'
     if (bits && QUANT_VARIANTS[bits]) {
       for (var v of QUANT_VARIANTS[bits]) {
-        opts += '<option value="' + esc(v) + '">' + esc(v) + '</option>';
+        opts += '<option value="' + esc(v) + '">' + esc(v) + '</option>'
       }
     }
-    varSel.innerHTML = opts;
+    varSel.innerHTML = opts
   }
   if (preview) {
     var val = (varSel && varSel.value) ? varSel.value : '—';

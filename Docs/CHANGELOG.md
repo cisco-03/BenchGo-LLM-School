@@ -1,5 +1,34 @@
 # CHANGELOG - Carnet de Notes BenchGo
 
+## 2026-08-01 — fix: modale quantification — mise à jour complète des variantes GGUF
+
+### Contexte
+Le sélecteur de quantification de la modale modèle ne proposait qu'un sous-ensemble limité de variantes GGUF. Plusieurs familles I-Matrix et variantes K-Quant manquaient, et les formats 1.5-bit, 8-bit alternatifs et F32 n'étaient pas listés.
+
+### Implémentation
+- Mise à jour de `QUANT_BITS` dans `leaderboard.js` : `[1, 1.5, 2, 3, 4, 5, 6, 8, 16, 32]`.
+- Mise à jour de `QUANT_VARIANTS` avec l'ensemble des variantes documentées dans `Memories-BenchGo/Tasks1.md` :
+  - 1-bit : `IQ1_S`
+  - 1.5-bit : `IQ1_M`
+  - 2-bit : `IQ2_XXS`, `IQ2_XS`, `IQ2_S`, `IQ2_M`, `Q2_K`, `Q2_K_S`, `Q2_K_L`
+  - 3-bit : `IQ3_XXS`, `IQ3_XS`, `IQ3_S`, `IQ3_M`, `Q3_K_S`, `Q3_K_M`, `Q3_K_L`, `Q3_K_XL`
+  - 4-bit : `IQ4_XS`, `IQ4_NL`, `Q4_0`, `Q4_1`, `Q4_K_S`, `Q4_K_M`, `Q4_K_L`
+  - 5-bit : `Q5_0`, `Q5_1`, `Q5_K_S`, `Q5_K_M`, `Q5_K_L`
+  - 6-bit : `Q6_K`, `Q6_K_L`
+  - 8-bit : `Q8_0`, `Q8_1`, `Q8_K`
+  - 16-bit : `F16`, `BF16`
+  - 32-bit : `F32`
+- Adaptation de `_quantBitsFromString` pour reconnaître les formats `IQx_y`, les décimaux (`1.5`) et conserver la clé sous forme de chaîne (matching avec `QUANT_VARIANTS`).
+- Adaptation de la comparaison `currentBits === String(b)` dans `editModelQuant` pour supporter les valeurs 1.5.
+
+### Fichiers modifiés
+- `leaderboard.js` : `QUANT_BITS`, `QUANT_VARIANTS`, `_quantBitsFromString`, `editModelQuant`.
+
+### Vérifications
+- `node --check leaderboard.js` : OK.
+- `node scripts/check-inline-js.js` : OK.
+- `node tests/run-tests.js` : 27 passés, 0 échoués.
+
 ## 2026-08-01 — fix: envoi communautaire compare carnet local vs soumission GitHub (n envoie que les modèles modifiés)
 
 ### Contexte
