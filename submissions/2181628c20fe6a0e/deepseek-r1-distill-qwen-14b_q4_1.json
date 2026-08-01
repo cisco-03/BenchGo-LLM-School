@@ -2,8 +2,8 @@
   "schemaVersion": 1,
   "benchgoVersion": "V3",
   "userId": "2181628c20fe6a0e",
-  "pseudo": "FlexoDiv",
-  "submittedAt": "2026-07-29T15:52:55.119Z",
+  "pseudo": null,
+  "submittedAt": "2026-08-01T11:02:22.984Z",
   "integrityHash": "9a6932814dedce86",
   "carnet": {
     "model": "deepseek-r1-distill-qwen-14b@q4_1",
