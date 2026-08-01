@@ -1,5 +1,91 @@
 # CHANGELOG - Carnet de Notes BenchGo
 
+## 2026-08-01 — feat: saisie manuelle multi-modèles de la quantification (night-batch)
+
+### Contexte
+Suite à la saisie manuelle ajoutée dans runner.js (mono-modèle), il manquait
+l'équivalent en mode nuit (night-batch.js) où plusieurs modèles sont testés
+dans la même session. Quand `lms ls --json` ne fournit pas la quantification
+d'un modèle (champ absent), le carnet restait générique et plusieurs quantifs
+d'un même modèle s'écrasaient.
+
+### Implémentation
+- `night-batch.js` : après la sélection des écoles et le calcul du plan, avant
+  l'affichage de la file d'attente, on détecte les modèles sélectionnés dont
+  `m.quant` est `'?'` ou absent. Pour chacun, on demande à l'utilisateur de
+  saisir la quantification (Q4_K_M, Q5_K_S, Q8_0...), un par un.
+- La quantif saisie remplace `m.quant` et est transmise au runner via
+  `--quantization=` (ligne 1393) → `shortNameWithQuant()` → carnet distinct.
+- Entrée = laisser inconnu (carnet générique, comportement historique).
+- En mode non-TTY (sans --models), aucune question : on garde '?'.
+
+### Fichiers modifiés
+- `night-batch.js` : bloc de saisie multi-modèles avant la file d'attente.
+- `Docs/CHANGELOG.md` : cette entrée.
+
+### Vérifications
+- `node --check night-batch.js` : OK.
+- `node tests/run-tests.js` : 27/27 passés.
+
+## 2026-08-01 — feat: saisie manuelle de la quantification dans le CLI
+
+### Contexte
+Quand la quantification n'était pas détectée automatiquement (--quantification
+absent ET /api/v0/models de LM Studio indisponible), le shortName du carnet
+restait générique (ex: `kai-os_grug-12b` au lieu de `kai-os_grug-12b_q4_k_s`).
+Conséquence : plusieurs quantifications d'un même modèle écrasaient le même
+fichier carnet → une seule entrée dans le classement au lieu d'une par quantif.
+
+### Implémentation
+- `runner.js` : après les fallbacks de détection automatique (CLI + /api/v0),
+  si la quantification reste inconnue ET qu'on est en mode local interactif
+  (TTY, sans --force), on demande à l'utilisateur de la saisir manuellement.
+  L'utilisateur peut taper la quantif (Q4_K_M, Q5_K_S, Q8_0...) ou appuyer sur
+  Entrée pour laisser "inconnue" (carnet générique).
+- En mode batch (--force / non-TTY, ex: night-batch.js), aucune question n'est
+  posée : night-batch passe toujours --quantization, donc ce cas n'arrive pas.
+- La quantification saisie alimente `shortNameWithQuant()` → carnet distinct
+  par quantif → une entrée par quantif dans le classement.
+
+### Fichiers modifiés
+- `runner.js` : bloc de saisie manuelle après la détection /api/v0/models.
+- `Docs/CHANGELOG.md` : cette entrée.
+
+### Vérifications
+- `node --check runner.js` : OK.
+- `node tests/run-tests.js` : 27/27 passés.
+
+## 2026-08-01 — fix: seuil STANDARD/EXPERT 14B→15B (Phi 4 mal classé Université)
+
+### Contexte
+Phi 4 (15B) était détecté EXPERT (Université) car 15 > 14, l'ancien seuil haut de
+STANDARD. Conséquence : en mode nuit « auto par modèle » (option 6), Phi 4 enchaînait
+Primaire → Université en sautant Collège-Lycée, et le statut affichait
+« Coll-Lyc,Univ,Doct » en manquant. Un modèle de 15B est un modèle STANDARD, pas
+Université.
+
+### Implémentation
+- Borne supérieure de STANDARD passée de 14B à 15B dans `config.js`
+  (`detectProfileFromModelName`) et `night-batch.js` (`schoolForModel`, fallback
+  paramsString). Borne basse d'EXPERT passe donc à 15B.
+- Libellés des profils mis à jour : « Collège/Lycée (3B – 15B) » et
+  « Université (15B – 30B) » dans `config.js` et `night-batch.js`.
+- Catégorisation de taille cohérente dans `leaderboard.js` (getParamSize,
+  getParamSizeFromValue, _paramSizeFromValue) et `consolidate-leaderboard.js`
+  (getParamSize) : 3B-15B / 15B-30B.
+
+### Fichiers modifiés
+- `config.js` : seuil `detectProfileFromModelName` + libellés PROFILES.
+- `night-batch.js` : seuil `schoolForModel` (fallback paramsString) + libellés SCHOOLS + commentaire des seuils.
+- `leaderboard.js` : 3 fonctions de catégorie de taille (3B–15B / 15B–30B).
+- `consolidate-leaderboard.js` : catégorie de taille (3B–15B / 15B–30B).
+- `Docs/CHANGELOG.md` : cette entrée.
+
+### Vérifications
+- `node --check config.js / night-batch.js / leaderboard.js / consolidate-leaderboard.js` : OK.
+- `node tests/run-tests.js` : 27/27 passés.
+- `night-batch.js` listLlmModels() : Phi 4 → school=STANDARD (était EXPERT).
+
 ## 2026-08-01 — fix: classement communautaire désynchronisé — détection de changement de score
 
 ### Contexte

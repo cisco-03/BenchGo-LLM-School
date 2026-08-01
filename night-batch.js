@@ -56,8 +56,8 @@ for (const k of Object.keys(PROFILES)) {
 // 'auto' = laisser le runner detecter le profil depuis le nom du modele (1 ecole).
 const SCHOOLS = [
   { key: 'LIGHT',    label: 'Primaire (< 3B)',            cli: 'LIGHT' },
-  { key: 'STANDARD', label: 'College-Lycee (3B - 14B)',   cli: 'STANDARD' },
-  { key: 'EXPERT',   label: 'Universite (14B - 30B)',     cli: 'EXPERT' },
+  { key: 'STANDARD', label: 'College-Lycee (3B - 15B)',   cli: 'STANDARD' },
+  { key: 'EXPERT',   label: 'Universite (15B - 30B)',     cli: 'EXPERT' },
   { key: 'DOCTORAT', label: 'These (> 30B)',               cli: 'DOCTORAT' },
   { key: 'auto',     label: 'Auto-detection (1 ecole)',   cli: null },
   // Mode auto-par-modele : chaque modele passe UNIQUEMENT l'ecole adaptee a
@@ -1018,8 +1018,8 @@ async function selectModelsInteractive(models) {
 //
 // Seuils (alignés sur config.js) :
 //   < 3B   → LIGHT    (Primaire)
-//   3-14B  → STANDARD (College-Lycee)
-//   14-30B → EXPERT   (Universite)
+//   3-15B  → STANDARD (College-Lycee)
+//   15-30B → EXPERT   (Universite)
 //   > 30B  → DOCTORAT (These)
 function schoolForModel(m) {
   if (!m) return null;
@@ -1039,7 +1039,7 @@ function schoolForModel(m) {
     if (sizeMatch) {
       const sz = parseFloat(sizeMatch[1].replace(',', '.'));
       if (sz < 3) detected = 'LIGHT';
-      else if (sz <= 14) detected = 'STANDARD';
+      else if (sz <= 15) detected = 'STANDARD';
       else if (sz <= 30) detected = 'EXPERT';
       else detected = 'DOCTORAT';
     }
@@ -1289,6 +1289,41 @@ async function main() {
     }
   } else {
     plan = null;
+  }
+
+  // --- Saisie manuelle des quantifications non détectées ---
+  // lms ls --json fournit normalement la quantification de chaque modèle. Mais
+  // certains modèles n'ont pas de champ quantization (fichiers exotiques, anciens
+  // GGUF...). Sans quantif, le runner crée un carnet générique (sans quantif dans
+  // le shortName) et plusieurs quantifs du même modèle s'écrasent → une seule
+  // entrée dans le classement.
+  // On demande donc à l'utilisateur de saisir la quantif pour chaque modèle
+  // concerné, un par un, AVANT de lancer la file d'attente.
+  if (process.stdin.isTTY && process.stdout.isTTY) {
+    const missingQuant = selected.filter(m => !m.quant || m.quant === '?');
+    if (missingQuant.length > 0) {
+      console.log(`\n  ${C.bold}${C.yellow}=== QUANTIFICATION NON DÉTECTÉE ===${C.reset}`);
+      console.log(`  ${C.gray}${missingQuant.length} modèle(s) sans quantification détectée par lms ls.${C.reset}`);
+      console.log(`  ${C.gray}Sans quantif, les carnets ne distinguent pas Q4/Q5/Q6... → écrasement du même carnet.${C.reset}`);
+      console.log(`  ${C.gray}Exemples : Q4_K_M, Q4_K_S, Q5_K_M, Q5_K_S, Q6_K, Q8_0, F16...${C.reset}`);
+      console.log(`  ${C.gray}(Entrée = laisser inconnu — carnet générique)${C.reset}\n`);
+      for (const m of missingQuant) {
+        const qInput = await new Promise(resolve => {
+          const rl2 = readline.createInterface({ input: process.stdin, output: process.stdout });
+          rl2.question(`  ${C.cyan}Quantification de ${C.bold}${m.displayName}${C.reset}${C.cyan} [${m.modelKey}] ?${C.reset} `, answer => {
+            rl2.close();
+            resolve((answer || '').trim());
+          });
+        });
+        if (qInput) {
+          m.quant = qInput;
+          console.log(`  ${C.green}→ ${m.displayName} : ${qInput}${C.reset}`);
+        } else {
+          console.log(`  ${C.gray}→ ${m.displayName} : inconnue (carnet générique)${C.reset}`);
+        }
+      }
+      console.log('');
+    }
   }
 
   const totalRuns = autoPerModel

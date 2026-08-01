@@ -409,8 +409,8 @@ function getParamSize(modelName) {
     return { key: 'inconnu', label: 'Taille inconnue', short: '?B', icon: '❓', paramSize: null, detected: null };
   }
   if (paramSize < 3)   return { key: 'petit',    label: 'Petit (< 3B)',    short: paramSize + 'B', icon: '🐱', paramSize, detected };
-  if (paramSize <= 14) return { key: 'standard', label: 'Standard (3B–14B)', short: paramSize + 'B', icon: '📦', paramSize, detected };
-  if (paramSize <= 30) return { key: 'expert',   label: 'Expert (14B–30B)',  short: paramSize + 'B', icon: '🎓', paramSize, detected };
+  if (paramSize <= 15) return { key: 'standard', label: 'Standard (3B–15B)', short: paramSize + 'B', icon: '📦', paramSize, detected };
+  if (paramSize <= 30) return { key: 'expert',   label: 'Expert (15B–30B)',  short: paramSize + 'B', icon: '🎓', paramSize, detected };
   return                 { key: 'doctorat', label: 'Doctorat (> 30B)',   short: paramSize + 'B', icon: '🧠', paramSize, detected };
 }
 
@@ -422,8 +422,8 @@ function getParamSizeFromValue(val) {
     return { key: 'inconnu', label: 'Taille inconnue', short: '?B', icon: '❓', paramSize: null, detected: 'manual' };
   }
   if (paramSize < 3)   return { key: 'petit',    label: 'Petit (< 3B)',    short: paramSize + 'B', icon: '🐱', paramSize, detected: 'manual' };
-  if (paramSize <= 14) return { key: 'standard', label: 'Standard (3B–14B)', short: paramSize + 'B', icon: '📦', paramSize, detected: 'manual' };
-  if (paramSize <= 30) return { key: 'expert',   label: 'Expert (14B–30B)',  short: paramSize + 'B', icon: '🎓', paramSize, detected: 'manual' };
+  if (paramSize <= 15) return { key: 'standard', label: 'Standard (3B–15B)', short: paramSize + 'B', icon: '📦', paramSize, detected: 'manual' };
+  if (paramSize <= 30) return { key: 'expert',   label: 'Expert (15B–30B)',  short: paramSize + 'B', icon: '🎓', paramSize, detected: 'manual' };
   return                 { key: 'doctorat', label: 'Doctorat (> 30B)',   short: paramSize + 'B', icon: '🧠', paramSize, detected: 'manual' };
 }
 
@@ -2394,8 +2394,8 @@ function _paramSizeFromValue(val) {
   var n = parseFloat(val);
   if (!isFinite(n) || n <= 0) return { key: 'inconnu', label: 'Taille inconnue', short: '?B', icon: '❓', paramSize: null };
   if (n < 3)   return { key: 'petit',    label: 'Petit (< 3B)',    short: n + 'B', icon: '🐱', paramSize: n };
-  if (n <= 14) return { key: 'standard', label: 'Standard (3B–14B)', short: n + 'B', icon: '📦', paramSize: n };
-  if (n <= 30) return { key: 'expert',   label: 'Expert (14B–30B)',  short: n + 'B', icon: '🎓', paramSize: n };
+  if (n <= 15) return { key: 'standard', label: 'Standard (3B–15B)', short: n + 'B', icon: '📦', paramSize: n };
+  if (n <= 30) return { key: 'expert',   label: 'Expert (15B–30B)',  short: n + 'B', icon: '🎓', paramSize: n };
   return             { key: 'doctorat', label: 'Doctorat (> 30B)',   short: n + 'B', icon: '🧠', paramSize: n };
 }
 function editModelParamSize(idx) {

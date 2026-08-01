@@ -257,8 +257,8 @@ function buildConsolidatedHTML(entries) {
     if (!m) return { key: 'inconnu', icon: '❓', label: 'Taille inconnue', short: '?' };
     const size = parseFloat(m[1].replace(',', '.'));
     if (size < 3) return { key: 'petit', icon: '🐱', label: '< 3B', short: size + 'B' };
-    if (size <= 14) return { key: 'standard', icon: '📦', label: '3B-14B', short: size + 'B' };
-    if (size <= 30) return { key: 'expert', icon: '🎓', label: '14B-30B', short: size + 'B' };
+    if (size <= 15) return { key: 'standard', icon: '📦', label: '3B-15B', short: size + 'B' };
+    if (size <= 30) return { key: 'expert', icon: '🎓', label: '15B-30B', short: size + 'B' };
     return { key: 'doctorat', icon: '🧠', label: '> 30B', short: size + 'B' };
   }
 

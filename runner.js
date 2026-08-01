@@ -1483,6 +1483,32 @@ async function main() {
     }
   }
 
+  // --- Saisie manuelle de la quantification (local, interactif) ---
+  // Si la quantification n'a pas été résolue (--quantization absente ET
+  // /api/v0/models indisponible), on demande à l'utilisateur de la saisir
+  // manuellement. Sans cela, le shortName du carnet ignore la quantif et deux
+  // quantifications différentes du même modèle écrasent le même fichier .json
+  // → une seule entrée dans le classement au lieu de plusieurs.
+  // En mode batch (--force / non-TTY), on ne peut pas demander : on laisse
+  // "inconnue" (le carnet générique sera utilisé — comportement historique).
+  if (!isCloudMode && !resolvedQuantization && !forceFlag &&
+      process.stdin.isTTY && process.stdout.isTTY) {
+    console.log(`  \x1b[1;33m━━━ QUANTIFICATION NON DÉTECTÉE ━━━\x1b[0m`);
+    console.log(`  \x1b[33mLa quantification n'a pas pu être détectée automatiquement.\x1b[0m`);
+    console.log(`  \x1b[90m  Sans elle, les carnets de scores ne distinguent pas les quantifications\x1b[0m`);
+    console.log(`  \x1b[90m  d'un même modèle (Q4 vs Q5 vs Q6...) — une seule entrée dans le classement.\x1b[0m`);
+    console.log(`  \x1b[90m  Exemples : Q4_K_M, Q4_K_S, Q5_K_M, Q5_K_S, Q6_K, Q8_0, F16...\x1b[0m`);
+    const qInput = await askFreeText(`  \x1b[1;33mQuantification du modèle (ou Entrée = inconnue) ?\x1b[0m`);
+    if (qInput) {
+      resolvedQuantization = qInput;
+      logger.info(`Quantification saisie manuellement : ${resolvedQuantization}`);
+      console.log(`  \x1b[1;35mQuantification : ${resolvedQuantization}\x1b[0m\n`);
+    } else {
+      console.log(`  \x1b[90mQuantification laissée inconnue — le carnet sera générique (sans distinction de quantif).\x1b[0m\n`);
+      logger.info(`Quantification non saisie — carnet générique (risque d'écrasement entre quantifs).`);
+    }
+  }
+
   if (!PROFILES[profileArg]) {
     logger.warn(`Profil inconnu '${profileArg}', remplacement par STANDARD.`);
     profileArg = 'STANDARD';

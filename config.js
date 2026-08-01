@@ -48,8 +48,8 @@ const TEACHER_CONFIG = {
 
 const PROFILES = {
   LIGHT:    { mandatory: [0, 1],          optional: [2, 3, 4, 5],    label: "LIGHT — Primaire (< 3B paramètres)",                      ecole: "Primaire"    },
-  STANDARD: { mandatory: [0, 1, 2],       optional: [3, 4, 5, 6],    label: "STANDARD — Collège/Lycée (3B – 14B paramètres)",         ecole: "College-Lycee" },
-  EXPERT:   { mandatory: [0, 1, 2, 3],    optional: [6],             label: "EXPERT — Université (14B – 30B paramètres)",               ecole: "Universite"    },
+  STANDARD: { mandatory: [0, 1, 2],       optional: [3, 4, 5, 6],    label: "STANDARD — Collège/Lycée (3B – 15B paramètres)",         ecole: "College-Lycee" },
+  EXPERT:   { mandatory: [0, 1, 2, 3],    optional: [6],             label: "EXPERT — Université (15B – 30B paramètres)",               ecole: "Universite"    },
   DOCTORAT: { mandatory: [0, 1, 2, 3, 6], optional: [],              label: "DOCTORAT — Thèse (> 30B paramètres)",                     ecole: "Doctorat-These" },
   FRONTIER: { mandatory: [0, 1, 2, 3, 4, 6], optional: [],           label: "FRONTIER — Post-Doctorat (modèles cloud frontier)",        ecole: "Post-Doctorat" }
 };
@@ -266,7 +266,7 @@ function detectProfileFromModelName(modelName) {
   let detected = null;
   if (paramSize !== null) {
     if (paramSize < 3)   detected = 'LIGHT';
-    else if (paramSize <= 14) detected = 'STANDARD';
+    else if (paramSize <= 15) detected = 'STANDARD';
     else if (paramSize <= 30) detected = 'EXPERT';
     else detected = 'DOCTORAT';
   }
