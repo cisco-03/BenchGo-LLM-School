@@ -3,7 +3,7 @@
   "benchgoVersion": "V3",
   "userId": "2181628c20fe6a0e",
   "pseudo": null,
-  "submittedAt": "2026-08-01T11:02:22.984Z",
+  "submittedAt": "2026-08-01T11:53:53.228Z",
   "integrityHash": "9a6932814dedce86",
   "carnet": {
     "model": "deepseek-r1-distill-qwen-14b@q4_1",
