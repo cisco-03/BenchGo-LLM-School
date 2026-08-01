@@ -1,5 +1,51 @@
 # CHANGELOG - Carnet de Notes BenchGo
 
+## 2026-08-01 — feat: quantification manuelle + distinction modèles en échec
+
+### Contexte
+Après un mode nuit (Nightbatch), deux incohérences sont remontées :
+1. **Bouton quantification manuel absent de la modale** : la quantification est cruciale pour différencier un même modèle testé sous plusieurs variantes (Q4_K_M, Q5_K_L, Q8_0...). Sa récupération était laborieuse (uniquement via LM Studio). L'utilisateur demande un bouton d'édition manuelle dans la modale du leaderboard.
+2. **Modèles en échec confondus avec « jamais testés »** : Mixtral 7Bx2 MoE (load_failed) et Phi 4 (run KO EXPERT, 226 min) ont bien été tentés cette nuit, mais apparaissaient comme « JAMAIS TESTÉ » / « PARTIEL » dans le leaderboard, qui proposait donc de les retester naïvement. Aucune trace d'échec n'était conservée.
+
+### Implémentation
+
+#### Bouton quantification manuel (leaderboard.js)
+- Nouvelle section « 🧩 Quantification » dans la modale, ergonomie identique au lien du modèle (affichage + bouton ✎ Modifier / + Ajouter).
+- Édition inline : champ texte (placeholder `Q4_K_M, Q5_K_L, Q8_0, F16...`), boutons Enregistrer / Effacer / Annuler.
+- Persistance double : `POST /api/model-quantization?shortName=...` → carnet JSON (mode `--serve`), ou `localStorage` en fallback (HTML local ouvert sans serveur).
+- Nouvelle route serveur `/api/model-quantization` (GET + POST) qui écrit `ledger.quantization` via `score-ledger.js#saveLedger`.
+- CSS dédié (`.model-quant-section`, `.model-quant-display`, `.model-quant-value`, `.model-quant-edit`).
+
+#### Historique des runs (night-batch.js)
+- Nouveau fichier persistant `.benchgo-run-history.json` à la racine : `{ "<modelKey>": { lastAttempt, lastStatus, lastSchool, attempts } }`.
+- `recordRun(modelKey, status, school)` appelé à chaque run (succès `ok`, échec `load_failed` ou `run_ko`) dans la boucle `main()`.
+- `runStatusFromHistory(modelKey)` renvoie le statut d'échec si le dernier run a échoué (null sinon).
+- Nouveau statut `failed` dans `listLlmModels()` : un modèle sans carnet mais avec un échec enregistré → `ÉCHEC` (rouge) au lieu de `JAMAIS TESTÉ`. Les modèles `partial` avec une école échouée portent `failedSchool`.
+- `statusBadge()` gère le badge `ÉCHEC` (rouge).
+- Tri ajusté : testés > échec > jamais testés > non-LLM.
+- `recomputeStatus()` (désisolation) tient aussi compte de l'historique.
+- Exports : `loadRunHistory`, `saveRunHistory`, `recordRun`, `runStatusFromHistory`.
+
+#### Affichage leaderboard (leaderboard.js)
+- `printUntestedLmStudioModels()` filtre désormais `failed` séparément.
+- Les modèles en échec affichent leur raison (`Échec de chargement (load_failed)` / `Échec du run (run KO)`) au lieu des écoles manquantes.
+- Les modèles `partial` avec une école KO affichent `⚠ <école> : échec run`.
+- Message d'aide : « N modèle(s) en échec. Repassez-les après vérification, ou isolez-les (!<num>) s'ils ne sont pas testables. »
+
+#### Pré-remplissage historique
+- `.benchgo-run-history.json` initial créé avec les 2 échecs de la nuit du 2026-08-01 (Mixtral 7Bx2 MoE load_failed, Phi 4 run_ko EXPERT).
+
+### Fichiers modifiés
+- `night-batch.js` : historique des runs, statut `failed`, tri, badge, `recomputeStatus`, exports.
+- `leaderboard.js` : section quantification modale (CSS + HTML + JS), route `/api/model-quantization`, affichage échecs dans `printUntestedLmStudioModels`.
+- `.benchgo-run-history.json` : nouveau fichier persistant.
+
+### Résultat obtenu
+- `node night-batch.js --list-only` affiche Mixtral 7Bx2 MoE en `ÉCHEC` (rouge) au lieu de `JAMAIS TESTE`.
+- `node leaderboard.js` section « MODÈLES LM STUDIO NON TESTÉS » : Mixtral → `ÉCHEC / Échec de chargement (load_failed)`, Phi 4 → `PARTIEL / ⚠ EXPERT : échec run`.
+- La modale du leaderboard propose désormais une section quantification éditable persistée dans le carnet.
+- Tests unitaires : 27 passés, 0 échoués.
+
 ## 2026-07-31 — fix: colonne « Ecoles manquantes » affiche les noms humains (night-batch.js)
 
 ### Contexte

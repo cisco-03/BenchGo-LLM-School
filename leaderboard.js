@@ -1016,6 +1016,11 @@ function buildLeaderboardHTML(entries) {
   }
   .model-url-link:hover { border-bottom-color: var(--accent); }
   .model-url-edit { display: flex; flex-direction: column; gap: var(--space-xs); }
+  /* Section quantification manuelle (modale) — même ergonomie que le lien */
+  .model-quant-section { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-xs); margin-bottom: var(--space-s); }
+  .model-quant-display { display: inline-flex; align-items: center; gap: 6px; }
+  .model-quant-value { font-weight: 700; color: var(--purple); font-size: var(--fs-small); }
+  .model-quant-edit { display: flex; flex-direction: column; gap: var(--space-xs); }
   .btn-sm { padding: 4px 12px; font-size: var(--fs-small); border-radius: var(--r-sm); }
 
   /* Rapport intégral (modale) — sections repliables par école/tier */
@@ -1630,6 +1635,25 @@ function openModal(idx) {
   }
   body += '</div>';
 
+  // --- Section : quantification manuelle ---
+  // La quantification est cruciale pour différencier un même modèle testé sous
+  // plusieurs variantes (Q4_K_M, Q5_K_L, Q8_0...). Récupérée automatiquement via
+  // LM Studio, elle peut aussi être saisie/corrigée manuellement ici (modèle
+  // absent de LM Studio, valeur manquante, ou correction). Persistance double :
+  //   - mode serveur (--serve) : POST /api/model-quantization → carnet JSON.
+  //   - hors-serveur (HTML local) : localStorage (fallback).
+  var currentQuant = m.quantization || _getModelQuantLocal(m.shortName);
+  body += '<h3>🧩 Quantification</h3>';
+  body += '<div class="model-quant-section" id="modelQuantSection">';
+  if (currentQuant) {
+    body += '<div class="model-quant-display"><span class="model-quant-value">🧩 ' + esc(currentQuant) + '</span></div>';
+    body += '<button class="btn btn-primary btn-sm" onclick="editModelQuant(' + idx + ')" style="margin-left:8px;">✎ Modifier</button>';
+  } else {
+    body += '<p style="color:var(--text-muted);font-size:var(--fs-small);">Aucune quantification renseignée. Cliquez sur « Ajouter » pour la saisir (ex : Q4_K_M, Q5_K_L, Q8_0, F16...).</p>';
+    body += '<button class="btn btn-primary btn-sm" onclick="editModelQuant(' + idx + ')">+ Ajouter</button>';
+  }
+  body += '</div>';
+
   // --- Section Tendance (progression / régression / redoublement) ---
   // Affichée uniquement si au moins une école a un historique de re-tests.
   if (m.trend) {
@@ -1953,6 +1977,92 @@ function _saveModelUrlFallback(idx, url) {
   m.modelUrl = url || null;
   cancelEditModelUrl(idx);
   showToast(url ? 'Lien enregistré localement (localStorage — lancez --serve pour persister dans le carnet)' : 'Lien effacé (local)', true);
+}
+
+// --- Gestion de la quantification manuelle (modale) ---
+// Même architecture que le lien du modèle : persistance double (serveur → carnet
+// JSON, ou localStorage en fallback). La quantification est essentielle pour
+// différencier un même modèle testé sous plusieurs variantes de compression.
+var MODEL_QUANT_LS_KEY = 'benchgo_model_quants';
+function _getModelQuantLocal(shortName) {
+  try {
+    var map = JSON.parse(localStorage.getItem(MODEL_QUANT_LS_KEY) || '{}');
+    return map[shortName] || null;
+  } catch (e) { return null; }
+}
+function _setModelQuantLocal(shortName, quant) {
+  try {
+    var map = JSON.parse(localStorage.getItem(MODEL_QUANT_LS_KEY) || '{}');
+    if (quant) map[shortName] = quant; else delete map[shortName];
+    localStorage.setItem(MODEL_QUANT_LS_KEY, JSON.stringify(map));
+  } catch (e) {}
+}
+
+// Ouvre un champ d'édition inline pour la quantification du modèle.
+function editModelQuant(idx) {
+  var m = MODELS[idx];
+  var section = document.getElementById('modelQuantSection');
+  if (!section) return;
+  var current = m.quantization || _getModelQuantLocal(m.shortName) || '';
+  var html = '<div class="model-quant-edit">';
+  html += '<input type="text" id="modelQuantInput" class="search" style="width:min(100%,280px)" value="' + esc(current) + '" placeholder="Q4_K_M, Q5_K_L, Q8_0, F16..." />';
+  html += '<div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;">';
+  html += '<button class="btn btn-primary btn-sm" onclick="saveModelQuant(' + idx + ')">💾 Enregistrer</button>';
+  if (current) html += '<button class="btn btn-sm" onclick="saveModelQuant(' + idx + ',true)" style="background:var(--bg-3);color:var(--red);">🗑 Effacer</button>';
+  html += '<button class="btn btn-sm" onclick="cancelEditModelQuant(' + idx + ')" style="background:var(--bg-3);color:var(--text-muted);">Annuler</button>';
+  html += '</div></div>';
+  section.innerHTML = html;
+  var input = document.getElementById('modelQuantInput');
+  if (input) { input.focus(); input.select(); }
+}
+
+// Annule l'édition et restaure l'affichage normal de la quantification.
+function cancelEditModelQuant(idx) {
+  var m = MODELS[idx];
+  var section = document.getElementById('modelQuantSection');
+  if (!section) return;
+  var quant = m.quantization || _getModelQuantLocal(m.shortName);
+  var html = '';
+  if (quant) {
+    html += '<div class="model-quant-display"><span class="model-quant-value">🧩 ' + esc(quant) + '</span></div>';
+    html += '<button class="btn btn-primary btn-sm" onclick="editModelQuant(' + idx + ')" style="margin-left:8px;">✎ Modifier</button>';
+  } else {
+    html += '<p style="color:var(--text-muted);font-size:var(--fs-small);">Aucune quantification renseignée. Cliquez sur « Ajouter » pour la saisir (ex : Q4_K_M, Q5_K_L, Q8_0, F16...).</p>';
+    html += '<button class="btn btn-primary btn-sm" onclick="editModelQuant(' + idx + ')">+ Ajouter</button>';
+  }
+  section.innerHTML = html;
+}
+
+// Sauvegarde la quantification (serveur → carnet JSON, ou localStorage en fallback).
+function saveModelQuant(idx, erase) {
+  var m = MODELS[idx];
+  var input = document.getElementById('modelQuantInput');
+  var quant = erase ? '' : (input ? input.value.trim() : '');
+  fetch('/api/model-quantization?shortName=' + encodeURIComponent(m.shortName), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ quantization: quant })
+  }).then(function(r) { return r.ok ? r.json() : null; }).then(function(data) {
+    if (data && data.ok) {
+      m.quantization = quant || null;
+      _setModelQuantLocal(m.shortName, quant || null);
+      cancelEditModelQuant(idx);
+      showToast(quant ? 'Quantification enregistrée (carnet)' : 'Quantification effacée', true);
+    } else {
+      _saveModelQuantFallback(idx, quant);
+    }
+  }).catch(function() {
+    _saveModelQuantFallback(idx, quant);
+  });
+}
+
+// Fallback hors-serveur : localStorage uniquement.
+function _saveModelQuantFallback(idx, quant) {
+  var m = MODELS[idx];
+  _setModelQuantLocal(m.shortName, quant || null);
+  m.quantization = quant || null;
+  cancelEditModelQuant(idx);
+  showToast(quant ? 'Quantification enregistrée localement (localStorage — lancez --serve pour persister dans le carnet)' : 'Quantification effacée (local)', true);
 }
 function toggleHistory(el) {
   var mainRow = el.closest('tr.ecole-main');
@@ -2836,8 +2946,9 @@ function printUntestedLmStudioModels() {
 
   const neverTested = result.models.filter(m => m.status.kind === 'never');
   const partial = result.models.filter(m => m.status.kind === 'partial');
+  const failed = result.models.filter(m => m.status.kind === 'failed');
   const nonLlm = result.models.filter(m => m.status.kind === 'nonllm');
-  const total = neverTested.length + partial.length;
+  const total = neverTested.length + partial.length + failed.length;
 
   if (total === 0 && nonLlm.length === 0) {
     console.log(`  \x1b[32m━━━ MODÈLES LM STUDIO — TOUS TESTÉS ━━━\x1b[0m`);
@@ -2857,9 +2968,20 @@ function printUntestedLmStudioModels() {
       const badge = nightBatch.statusBadge(m.status);
       rows.push([m.displayName || m.modelKey, m.params || '?', m.quant || '?', badge.label, nightBatch.missingSchoolsLabel(m.status) || '—']);
     }
+    for (const m of failed) {
+      const badge = nightBatch.statusBadge(m.status);
+      // Affiche la raison d'échec plutôt que les écoles manquantes (on les a tentées).
+      const reason = m.status.reason || 'Échec';
+      rows.push([m.displayName || m.modelKey, m.params || '?', m.quant || '?', badge.label, reason]);
+    }
     for (const m of partial) {
       const badge = nightBatch.statusBadge(m.status);
-      rows.push([m.displayName || m.modelKey, m.params || '?', m.quant || '?', badge.label, nightBatch.missingSchoolsLabel(m.status) || '—']);
+      // Si une école a échoué (run KO), on l'indique explicitement.
+      let missing = nightBatch.missingSchoolsLabel(m.status) || '—';
+      if (m.status.failedSchool) {
+        missing = '⚠ ' + m.status.failedSchool + ' : échec run';
+      }
+      rows.push([m.displayName || m.modelKey, m.params || '?', m.quant || '?', badge.label, missing]);
     }
 
     const res = cliTable.table(headers, rows, { colAligns: aligns, separator: '  ' });
@@ -2867,6 +2989,9 @@ function printUntestedLmStudioModels() {
     console.log(`  \x1b[90m    ${res.sepLine}\x1b[0m`);
     for (let i = 0; i < rows.length; i++) {
       console.log(`  \x1b[90m${res.lines[i + 2]}\x1b[0m`);
+    }
+    if (failed.length > 0) {
+      console.log(`  \x1b[90m${failed.length} modèle(s) en échec (load_failed / run KO). Repassez-les après vérification, ou isolez-les (!<num>) s'ils ne sont pas testables.\x1b[0m`);
     }
     console.log(`  \x1b[90mAstuce : node night-batch.js pour tester ces modèles automatiquement.\x1b[0m`);
   }
@@ -3121,6 +3246,53 @@ function startServer(port) {
       res.writeHead(200, securityHeaders);
       res.end(JSON.stringify(result));
       return;
+    }
+
+    // API : quantification manuelle d'un modèle (saisie depuis la modale).
+    // GET  /api/model-quantization?shortName=... → { ok, quantization }
+    // POST /api/model-quantization?shortName=... (body: { quantization }) → carnet.
+    // Permet de corriger/compléter la quantification quand LM Studio ne la fournit
+    // pas ou quand le modèle a été testé hors LM Studio.
+    if (url.pathname === '/api/model-quantization') {
+      const shortName = url.searchParams.get('shortName');
+      if (!shortName) {
+        res.writeHead(400, securityHeaders);
+        res.end(JSON.stringify({ ok: false, error: 'shortName manquant' }));
+        return;
+      }
+      const { loadLedger } = require('./score-ledger');
+      if (req.method === 'GET') {
+        const ledger = loadLedger(shortName);
+        res.writeHead(200, securityHeaders);
+        res.end(JSON.stringify({ ok: true, quantization: ledger.quantization || null }));
+        return;
+      }
+      if (req.method === 'POST') {
+        let body;
+        try { body = await readJsonBody(req); } catch (e) {
+          res.writeHead(400, securityHeaders);
+          res.end(JSON.stringify({ ok: false, error: e.message }));
+          return;
+        }
+        const quant = (body.quantization || '').trim();
+        try {
+          const ledger = loadLedger(shortName);
+          if (quant) {
+            ledger.quantization = quant;
+          } else {
+            delete ledger.quantization;
+          }
+          const { saveLedger } = require('./score-ledger');
+          saveLedger(ledger);
+          logger.info('API: Quantification de ' + shortName + ' mise à jour — ' + (quant || '(effacée)'));
+          res.writeHead(200, securityHeaders);
+          res.end(JSON.stringify({ ok: true, quantization: quant || null }));
+        } catch (e) {
+          res.writeHead(200, securityHeaders);
+          res.end(JSON.stringify({ ok: false, error: e.message }));
+        }
+        return;
+      }
     }
 
     // API : validation d'un token GitHub (vérifie /user).

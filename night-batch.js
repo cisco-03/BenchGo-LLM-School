@@ -420,6 +420,57 @@ function saveBlacklist(set) {
   } catch (e) { /* ignore erreur disque */ }
 }
 
+// --- Historique des runs (succès ET échecs) ---
+// Permet de distinguer un modèle "jamais testé" d'un modèle "testé mais échec"
+// (load_failed, run KO). Sans cet historique, un modèle dont le chargement ou le
+// run a échoué apparaît comme JAMAIS TESTE alors qu'on l'a bien tenté — d'où le
+// bug constaté (Mixtral 7Bx2 MoE KO load_failed, Phi 4 KO EXPERT 226 min).
+//
+// Fichier : .benchgo-run-history.json à la racine.
+// Structure : { "<modelKey>": { "lastAttempt": "ISO", "lastStatus": "ok"|"load_failed"|"run_ko", "lastSchool": "<key>", "attempts": <nb> } }
+const RUN_HISTORY_FILE = path.join(__dirname, '.benchgo-run-history.json');
+
+function loadRunHistory() {
+  try {
+    if (fs.existsSync(RUN_HISTORY_FILE)) {
+      const data = JSON.parse(fs.readFileSync(RUN_HISTORY_FILE, 'utf8'));
+      if (data && typeof data === 'object') return data;
+    }
+  } catch (e) { /* fichier corrompu : repart de zéro */ }
+  return {};
+}
+
+function saveRunHistory(history) {
+  try {
+    fs.writeFileSync(RUN_HISTORY_FILE, JSON.stringify(history, null, 2), 'utf8');
+  } catch (e) { /* ignore erreur disque */ }
+}
+
+// Enregistre le résultat d'un run dans l'historique. status = 'ok' | 'load_failed' | 'run_ko'.
+// school = clé SCHOOLS ou null (load_failed n'a pas d'école).
+function recordRun(modelKey, status, school) {
+  if (!modelKey) return;
+  const history = loadRunHistory();
+  const entry = history[modelKey] || { attempts: 0 };
+  entry.lastAttempt = new Date().toISOString();
+  entry.lastStatus = status;
+  entry.lastSchool = school || null;
+  entry.attempts = (entry.attempts || 0) + 1;
+  history[modelKey] = entry;
+  saveRunHistory(history);
+}
+
+// Renvoie le statut d'échec d'un modèle depuis l'historique, ou null si jamais
+// tenté ou si le dernier run a réussi. Utilisé pour distinguer ECHEC de JAMAIS TESTE.
+function runStatusFromHistory(modelKey) {
+  if (!modelKey) return null;
+  const history = loadRunHistory();
+  const entry = history[modelKey];
+  if (!entry) return null;
+  if (entry.lastStatus === 'ok') return null; // dernier run OK → pas un échec
+  return entry; // load_failed ou run_ko
+}
+
 // retire tout segment "mtp" (prefixe, suffixe, milieu) et les separateurs
 // resultant. Ex : "gmmable-4-12b-Q4_K_M-mtp.gguf" -> "gmmable-4-12b-q4_k_m"
 function stripMtpFromName(s) {
@@ -526,6 +577,8 @@ function listLlmModels() {
     const testable = arr.filter(m => !isMtpModel(m));
     // Charge la liste noire persistante (modèles isolés manuellement).
     const blacklist = loadBlacklist();
+    // Charge l'historique des runs pour distinguer JAMAIS TESTE d'un échec réel.
+    const runHistory = loadRunHistory();
     const models = testable.map(m => {
       const modelKey = m.modelKey;
       const ledger = matchLedger(modelKey, ledgers);
@@ -540,15 +593,41 @@ function listLlmModels() {
       // Ils ne peuvent pas passer les écoles BenchGo → statut 'nonllm'.
       const nonLlm = isNonLlmModel(m);
       const blacklisted = blacklist.has(modelKey);
+      // Statut d'échec depuis l'historique des runs (load_failed / run_ko).
+      // Permet de distinguer un modèle jamais tenté d'un modèle tenté mais KO.
+      const failedRun = runStatusFromHistory(modelKey);
       let status;
       if (nonLlm || blacklisted) {
         status = { kind: 'nonllm', tested: [], missing: [], quant: ledger ? ledger.quantization : null, reason: nonLlm ? 'Modèle non-LLM (OCR/embedding/rerank/vision)' : 'Isolé manuellement' };
       } else if (!ledger || testedSchools.length === 0) {
-        status = { kind: 'never', tested: [], missing: relevantKeys.slice(), quant: ledger ? ledger.quantization : null };
+        // Pas de carnet : jamais testé avec succès. Mais a-t-on déjà tenté ?
+        if (failedRun) {
+          status = {
+            kind: 'failed', tested: [], missing: relevantKeys.slice(),
+            quant: ledger ? ledger.quantization : null,
+            reason: failedRun.lastStatus === 'load_failed'
+              ? 'Échec de chargement (load_failed)'
+              : 'Échec du run (run KO)',
+            lastAttempt: failedRun.lastAttempt,
+            lastSchool: failedRun.lastSchool,
+            attempts: failedRun.attempts || 1
+          };
+        } else {
+          status = { kind: 'never', tested: [], missing: relevantKeys.slice(), quant: ledger ? ledger.quantization : null };
+        }
       } else if (missingSchools.length === 0) {
         status = { kind: 'complete', tested: relevantTested, missing: [], quant: ledger.quantization };
       } else {
-        status = { kind: 'partial', tested: relevantTested, missing: missingSchools, quant: ledger.quantization };
+        // Partiel : certaines écoles manquent. Si l'une d'elles a échoué
+        // (run KO), on le note pour ne pas proposer bêtement de retester.
+        const failedSchool = failedRun && failedRun.lastStatus === 'run_ko' && failedRun.lastSchool
+          ? failedRun.lastSchool : null;
+        status = {
+          kind: 'partial', tested: relevantTested, missing: missingSchools,
+          quant: ledger.quantization,
+          failedSchool: failedSchool,
+          lastAttempt: failedRun ? failedRun.lastAttempt : null
+        };
       }
       return {
         modelKey,
@@ -570,9 +649,8 @@ function listLlmModels() {
       };
     });
     // Tri : modeles deja testes du plus fort au plus faible (pct, puis score,
-    // puis sante), puis les modeles jamais testes a la fin (par nom). Permet
-    // de repérer immédiatement le modele le plus faible (dernier des testes)
-    // pour le retirer, et de privilegier le test des nouveaux d'abord.
+    // puis sante), puis les modeles en echec (tentés mais KO), puis les modeles
+    // jamais testes a la fin (par nom). Les non-LLM vont tout a la fin.
     models.sort((a, b) => {
       // Les modèles non-LLM (OCR/embedding/rerank/iso) vont tout à la fin.
       const aNonLlm = a.status.kind === 'nonllm';
@@ -580,8 +658,17 @@ function listLlmModels() {
       if (aNonLlm && !bNonLlm) return 1;
       if (!aNonLlm && bNonLlm) return -1;
       if (aNonLlm && bNonLlm) return (a.displayName || '').localeCompare(b.displayName || '');
-      const aTested = a.status.kind !== 'never' && a.metrics;
-      const bTested = b.status.kind !== 'never' && b.metrics;
+      // Ordre de priorité : testés (complete/partial avec metrics) > échec > jamais.
+      const rankKind = k => {
+        if (k === 'complete' || k === 'partial') return 0;
+        if (k === 'failed') return 1;
+        return 2; // never
+      };
+      const ra = rankKind(a.status.kind);
+      const rb = rankKind(b.status.kind);
+      if (ra !== rb) return ra - rb;
+      const aTested = a.metrics;
+      const bTested = b.metrics;
       if (aTested && !bTested) return -1;
       if (!aTested && bTested) return 1;
       if (aTested && bTested) {
@@ -601,6 +688,7 @@ function listLlmModels() {
 function statusBadge(status) {
   if (!status) return { label: '?', color: C.gray };
   if (status.kind === 'nonllm')   return { label: 'NON APPLICABLE', color: C.gray };
+  if (status.kind === 'failed')   return { label: 'ÉCHEC',          color: C.red };
   if (status.kind === 'never')   return { label: 'JAMAIS TESTE', color: C.yellow };
   if (status.kind === 'partial') return { label: 'PARTIEL',      color: C.magenta };
   return { label: 'COMPLET', color: C.green };
@@ -674,13 +762,31 @@ function recomputeStatus(m) {
   }
   const relevantTested = testedSchools.filter(k => relevantKeys.includes(k));
   const missingSchools = relevantKeys.filter(k => !relevantTested.includes(k));
+  const failedRun = runStatusFromHistory(m.modelKey);
   let status;
   if (!ledger || testedSchools.length === 0) {
-    status = { kind: 'never', tested: [], missing: relevantKeys.slice(), quant: ledger ? ledger.quantization : null };
+    if (failedRun) {
+      status = {
+        kind: 'failed', tested: [], missing: relevantKeys.slice(),
+        quant: ledger ? ledger.quantization : null,
+        reason: failedRun.lastStatus === 'load_failed'
+          ? 'Échec de chargement (load_failed)'
+          : 'Échec du run (run KO)',
+        lastAttempt: failedRun.lastAttempt,
+        lastSchool: failedRun.lastSchool,
+        attempts: failedRun.attempts || 1
+      };
+    } else {
+      status = { kind: 'never', tested: [], missing: relevantKeys.slice(), quant: ledger ? ledger.quantization : null };
+    }
   } else if (missingSchools.length === 0) {
     status = { kind: 'complete', tested: relevantTested, missing: [], quant: ledger.quantization };
   } else {
-    status = { kind: 'partial', tested: relevantTested, missing: missingSchools, quant: ledger.quantization };
+    status = {
+      kind: 'partial', tested: relevantTested, missing: missingSchools, quant: ledger.quantization,
+      failedSchool: (failedRun && failedRun.lastStatus === 'run_ko' && failedRun.lastSchool) ? failedRun.lastSchool : null,
+      lastAttempt: failedRun ? failedRun.lastAttempt : null
+    };
   }
   return { nonLlm, status };
 }
@@ -1142,6 +1248,7 @@ async function main() {
     }
     if (!loadModel(m.modelKey, m.mtpModelKey)) {
       console.log(`  ${C.yellow}Modele ${m.modelKey} non chargeable - ignore.${C.reset}`);
+      recordRun(m.modelKey, 'load_failed', null);
       results.push({ model: m, ok: false, reason: 'load_failed', durationMs: 0 });
       continue;
     }
@@ -1155,6 +1262,9 @@ async function main() {
       const bench = runBenchmark(m.modelKey, school.cli, extraRunnerArgs);
       const mins = (bench.durationMs / 60000).toFixed(1);
       if (!bench.ok) modelOk = false;
+      // Enregistre le résultat (succès OU échec) dans l'historique des runs
+      // pour distinguer JAMAIS TESTE d'un échec réel (load_failed / run KO).
+      recordRun(m.modelKey, bench.ok ? 'ok' : 'run_ko', school.key);
       console.log(`\n  ${bench.ok ? C.green : C.red}[${nowClock()}] ${m.displayName} / ${school.label} termine en ${mins} min (status=${bench.status}).${C.reset}`);
       results.push({ model: m, school: school.key, ok: bench.ok, status: bench.status, durationMs: bench.durationMs });
     }
@@ -1210,7 +1320,11 @@ module.exports = {
   buildMtpAssociations,
   isNonLlmModel,
   loadBlacklist,
-  saveBlacklist
+  saveBlacklist,
+  loadRunHistory,
+  saveRunHistory,
+  recordRun,
+  runStatusFromHistory
 };
 
 if (require.main === module) {
