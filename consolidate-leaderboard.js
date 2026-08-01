@@ -152,6 +152,7 @@ function aggregateCarnet(carnet) {
     shortName: carnet.shortName || (carnet.model || 'inconnu').toLowerCase().replace(/[^a-z0-9]/g, '-'),
     quantization: carnet.quantization || null,
     modelUrl: carnet.modelUrl || guessModelUrl(carnet.model, carnet.publisher) || null,
+    note: carnet.note || null,
     publisher: carnet.publisher || null,
     score, max, pct, globalLifeScore, optionalBonus,
     mandatoryPassed, mandatoryTotal, mandatoryPct,
@@ -381,6 +382,7 @@ function buildConsolidatedHTML(entries) {
     return {
       rank, model: e.model, shortName: e.shortName,
       quantization: e.quantization, modelUrl: e.modelUrl || null,
+      note: e.note || null,
       pct: e.pct, score: e.score, max: e.max,
       grade, globalLifeScore: e.globalLifeScore,
       mandatoryPct: e.mandatoryPct, mandatoryPassed: e.mandatoryPassed, mandatoryTotal: e.mandatoryTotal,
@@ -654,6 +656,11 @@ function buildConsolidatedHTML(entries) {
     white-space: nowrap; font-weight: 600;
   }
   .badge.quant { color: var(--purple); border-color: rgba(188,140,255,0.35); background: rgba(188,140,255,0.10); }
+  .badge.note { color: var(--accent); border-color: rgba(88,166,255,0.35); background: rgba(88,166,255,0.10); }
+  .pos-arrow { font-size: var(--fs-tiny); font-weight: 700; margin-left: 6px; vertical-align: middle; }
+  .pos-arrow.pos-up { color: #3fb950; }
+  .pos-arrow.pos-down { color: #f85149; }
+  .pos-arrow.pos-stable { color: #8b949e; }
   .badge.contrib { color: #d2a8ff; border-color: rgba(188,140,255,0.30); background: rgba(188,140,255,0.08); }
   .badge.pseudo { color: var(--green); border-color: rgba(63,185,80,0.30); background: rgba(63,185,80,0.08); }
 
@@ -977,6 +984,44 @@ function buildConsolidatedHTML(entries) {
 <script>
 var MODELS = ${modelsJson};
 
+// --- Suivi de position (flèches ▲▼=) via localStorage ---
+// Le classement communautaire est un site statique (GitHub Pages) : impossible
+// de stocker un snapshot côté serveur. On utilise donc localStorage : au 1er
+// chargement, on enregistre le rang de chaque modèle. Au chargement suivant,
+// on compare les rangs pour afficher si le modèle a monté, descendu ou est
+// resté stable. La première visite n affiche aucune flèche (baseline).
+var COMMUNITY_SNAPSHOT_KEY = 'benchgo_community_positions';
+function _loadCommunitySnapshot() {
+  try { return JSON.parse(localStorage.getItem(COMMUNITY_SNAPSHOT_KEY) || '{}'); }
+  catch (e) { return {}; }
+}
+function _saveCommunitySnapshot(snap) {
+  try { localStorage.setItem(COMMUNITY_SNAPSHOT_KEY, JSON.stringify(snap)); }
+  catch (e) {}
+}
+function _computeCommunityPositionDeltas() {
+  var prev = _loadCommunitySnapshot();
+  var hasPrev = Object.keys(prev).length > 0;
+  var next = {};
+  for (var i = 0; i < MODELS.length; i++) {
+    var sn = MODELS[i].shortName;
+    next[sn] = i + 1;
+    if (hasPrev && prev[sn] != null) {
+      MODELS[i].positionDelta = (i + 1) - prev[sn];
+    } else {
+      MODELS[i].positionDelta = null;
+    }
+  }
+  _saveCommunitySnapshot(next);
+}
+function positionArrow(delta) {
+  if (delta == null) return '';
+  if (delta < 0) return '<span class="pos-arrow pos-up" title="A monté de ' + Math.abs(delta) + ' place(s) depuis la dernière visite">▲' + Math.abs(delta) + '</span>';
+  if (delta > 0) return '<span class="pos-arrow pos-down" title="A descendu de ' + delta + ' place(s) depuis la dernière visite">▼' + delta + '</span>';
+  return '<span class="pos-arrow pos-stable" title="Position stable">=</span>';
+}
+_computeCommunityPositionDeltas();
+
 function gradeColor(g) {
   var m = { A:'#3fb950', B:'#58a6ff', C:'#d29922', D:'#bc8cff', F:'#f85149' };
   return m[g] || '#8b949e';
@@ -1059,15 +1104,17 @@ function renderCards() {
     var vitesseLbl = m.tokensPerSecond > 0 ? 'Vitesse' : 'Temps';
     var szBadge = '<span class="badge" title="' + esc(m.paramSize.label) + '">' + m.paramSize.icon + ' ' + esc(m.paramSize.short) + '</span>';
     var quantBadge = m.quantization ? '<span class="badge quant" title="Quantification">🧩 ' + esc(m.quantization) + '</span>' : '';
+    var noteBadge = m.note ? '<span class="badge note" title="Note personnelle disponible">📝 Note</span>' : '';
     var contribBadge = m.contributors > 1 ? '<span class="badge contrib">👥 ' + m.contributors + ' testeurs</span>' : '';
     var pseudoBadge = m.pseudo ? '<span class="badge pseudo">✍️ ' + esc(m.pseudo) + '</span>' : '';
+    var posArrow = positionArrow(m.positionDelta);
 
     var html = '<div class="card ' + cardClass + '" onclick="openModal(' + i + ')">' +
       '<div class="card-row">' +
         '<div class="rank">' + rankDisp + '</div>' +
         '<div class="model-name">' +
-          '<div class="name-line"><span class="cat-icon">' + m.cat.icon + '</span>' + esc(m.model) + '</div>' +
-          '<div class="badges">' + szBadge + ' ' + quantBadge + ' ' + contribBadge + ' ' + pseudoBadge + '</div>' +
+          '<div class="name-line"><span class="cat-icon">' + m.cat.icon + '</span>' + esc(m.model) + posArrow + '</div>' +
+          '<div class="badges">' + szBadge + ' ' + quantBadge + ' ' + noteBadge + ' ' + contribBadge + ' ' + pseudoBadge + '</div>' +
         '</div>' +
         '<div class="mini-stats">' +
           '<div class="mini-stat"><span class="lbl">%</span><span class="val" style="color:' + pc + '">' + dispPct(m.pct) + '%</span><div class="pct-bar-wrap"><div class="pct-bar-fill" style="width:' + Math.max(2,dispPct(m.pct)) + '%;background:' + pc + '"></div></div></div>' +
@@ -1115,7 +1162,7 @@ function openModal(idx) {
   var m = MODELS[idx];
   if (!m) return;
   document.getElementById('mRank').innerHTML = (idx < 3 ? '<span class="medal">' + (idx === 0 ? '🥇' : idx === 1 ? '🥈' : '🥉') + '</span>' : (idx + 1));
-  document.getElementById('mTitle').textContent = m.model;
+  document.getElementById('mTitle').innerHTML = esc(m.model) + positionArrow(m.positionDelta);
   var vb = document.getElementById('mVerdict');
   vb.textContent = m.verdict.label;
   vb.style.background = m.verdict.color;
@@ -1150,6 +1197,11 @@ function openModal(idx) {
   if (m.modelUrl) {
     body += '<h3>🔗 Lien du modèle</h3>';
     body += '<div class="model-url-section"><a href="' + esc(m.modelUrl) + '" target="_blank" rel="noopener noreferrer" class="model-url-link">🌐 ' + esc(m.modelUrl) + '</a></div>';
+  }
+
+  if (m.note) {
+    body += '<h3>📝 Note personnelle</h3>';
+    body += '<div class="model-note-display" style="max-height:200px;overflow-y:auto;scrollbar-width:none;-ms-overflow-style:none;font-size:var(--fs-small);color:var(--text);white-space:pre-wrap;word-break:break-word;line-height:1.5;">' + esc(m.note) + '</div>';
   }
 
   body += '<h3>Forces & Faiblesses</h3>';

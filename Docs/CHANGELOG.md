@@ -1,5 +1,58 @@
 # CHANGELOG - Carnet de Notes BenchGo
 
+## 2026-08-01 — feat: modale modèle — sélecteurs bits/variante/paramètres + notes + badges + flèches communautaires
+
+### Contexte
+La modale de détail modèle ne montrait qu'un champ texte libre pour la quantification (source d'erreurs de saisie) et n'exposait pas la taille réelle du modèle (ex: phi-4 → 14B non détectable depuis le nom). Les annotations personnelles (notes) et le suivi de progression (flèches de position) manquaient sur le classement communautaire. Les modifications faites via la modale ne se répercutaient pas non plus dans le listing après un simple refresh de la page en mode `--serve`.
+
+### Implémentation
+
+#### 1. Sélecteurs quantification + paramètres dans la modale (`leaderboard.js`)
+- Colonne "Quantification" de la grille `Actions & métadonnées` restructurée en deux sous-sections séparées par un trait fin :
+  - **Paramètres du modèle** : champ numérique en milliards (ex: `14` pour phi-4). Stocké dans le carnet via la nouvelle API `/api/model-paramsize`. La catégorie (petit/standard/expert/doctorat) se recalcule automatiquement à partir de la valeur saisie.
+  - **Quantification** : remplacée par 2 sélecteurs en cascade : Bits (1, 2, 3, 4, 5, 6, 8, 16 — valeurs réelles GGUF) → Variante (filtrée dynamiquement selon les bits : ex. 4 bits → Q4_0, Q4_1, Q4_K, Q4_K_S, Q4_K_M ; 16 bits → F16, BF16). Saisie libre repliable (`<details>`) pour les formats exotiques. Aperçu en temps réel de la valeur finale.
+- `QUANT_BITS` / `QUANT_VARIANTS` + helpers `_quantBitsFromString`, `onQuantBitsChange`, `onQuantVariantChange`, `onQuantCustomInput`.
+- Helpers `_paramSizeFromValue` (côté client) + `getParamSizeFromValue` (côté génération HTML) pour reconstruire l'objet paramSize à partir d'une valeur numérique.
+- Nouvelle fonction `getParamSizeFromValue` utilisée à la génération : si `ledger.paramSize` est défini, il prend le pas sur la détection depuis le nom du modèle.
+- `m.paramSizeManual` exposé côté client pour distinguer valeur manuelle vs auto-détectée.
+
+#### 2. Notes personnelles dans la modale (`leaderboard.js`)
+- Colonne 3 "Note" déverrouillée : textarea sans limite de caractères, scroll invisible (`scrollbar-width: none` + `-webkit-scrollbar { display: none }`), affichage en `white-space: pre-wrap` (conserve les sauts de ligne), max-height 140px avec scroll.
+- Persistance double : API `/api/model-note` (carnet `ledger.note`) + fallback localStorage.
+- Badge "📝 Note" ajouté sur la carte du listing, à côté du badge quantification.
+
+#### 3. Bug "modifications perdues au refresh" (`leaderboard.js`)
+- **Cause racine** : en mode `--serve`, le HTML est généré une seule fois au démarrage puis servi statiquement. Le carnet sur disque est mis à jour, mais le HTML ne l'est pas. Au refresh, le navigateur recharge l'ancien `MODELS` sans les modifications saisies.
+- **Correction** : ajout d'une IIFE `_mergeLocalOverrides()` exécutée avant le premier `renderCards()`. Elle parcourt `MODELS` et écrase `quantization`, `modelUrl`, `note`, `paramSize`/`paramSizeManual` avec les valeurs du localStorage (qui sont écrites à chaque sauvegarde via `_setModelQuantLocal`, `_setModelUrlLocal`, `_setModelNoteLocal`, `_setModelParamSizeLocal`). Le localStorage sert de cache navigateur entre deux régénérations.
+- `renderCards()` est désormais appelé après chaque sauvegarde/effacement de quantification, note et paramètres → la carte du listing se met à jour en temps réel.
+
+#### 4. Bug "statBox Quantif. reste à — après sauvegarde" (`leaderboard.js`)
+- **Cause racine** : `cancelEditModelQuant()` ne rafraîchissait que la carte d'action, pas le `statBox('Quantif.')` en haut de modale.
+- **Correction** : ajout d'un id `quantStatVal` sur la valeur du statBox + fonction `_refreshQuantDisplay(idx)` appelée après chaque sauvegarde/effacement (chemin serveur + fallback).
+
+#### 5. Flèches de position sur le classement communautaire (`consolidate-leaderboard.js`)
+- Système basé sur **localStorage** (clé `benchgo_community_positions`) — le classement communautaire étant un site statique GitHub Pages, pas de snapshot serveur possible en CI.
+- Au 1er chargement : aucune flèche (baseline enregistrée). Au 2e chargement et suivants : ▲ vert (monté), ▼ rouge (descendu), = gris (stable), avec le nombre de places.
+- Affichées à la fois sur la carte du listing (à côté du nom) et dans le titre de la modale.
+- CSS `.pos-arrow` / `.pos-up` / `.pos-down` / `.pos-stable` + `.badge.note` ajoutés.
+
+#### 6. Note + badge note sur le classement communautaire (`consolidate-leaderboard.js`)
+- `carnet.note` lu ligne 155 et exposé au client (ligne 385 dans le JSON injecté).
+- Affichée dans la modale sous une section "📝 Note personnelle" (scroll invisible).
+- Badge "📝 Note" sur la carte du listing.
+
+### Fichiers modifiés
+- `leaderboard.js` : API `/api/model-note` + `/api/model-paramsize`, fonctions `editModelNote`/`saveModelNote`/`_saveModelNoteFallback`, `editModelParamSize`/`saveModelParamSize`/`_saveModelParamSizeFallback`, sélecteurs quantification (QUANT_BITS/QUANT_VARIANTS + helpers), restructuration colonne Quantification en 2 sous-sections, `_mergeLocalOverrides()`, `_refreshQuantDisplay()`, badge note sur les cartes, grille 3 colonnes (Tags supprimé).
+- `consolidate-leaderboard.js` : lecture `carnet.note` + `ledger.paramSize` (note + taille), injection `note`/`positionDelta` dans le JSON client, fonction `positionArrow()` + helpers `_loadCommunitySnapshot` / `_saveCommunitySnapshot` / `_computeCommunityPositionDeltas`, CSS `.pos-arrow` / `.badge.note`, section Note dans la modale communautaire, badge note sur les cartes communautaires.
+- `Docs/CHANGELOG.md` : cette entrée.
+
+### Vérifications
+- `node --check leaderboard.js` : OK.
+- `node --check consolidate-leaderboard.js` : OK.
+- `node leaderboard.js` puis `node consolidate-leaderboard.js` : régénération propre.
+- `node scripts/check-inline-js.js` : "tout est valide" (8 cartes + 4 cartes communautaires).
+- Serveur `--serve` relancé (PID actuel) avec le nouveau code.
+
 ## 2026-08-01 — tool: scripts/check-inline-js.js validateur de JS inline
 
 ### Contexte

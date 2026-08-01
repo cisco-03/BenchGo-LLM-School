@@ -414,6 +414,19 @@ function getParamSize(modelName) {
   return                 { key: 'doctorat', label: 'Doctorat (> 30B)',   short: paramSize + 'B', icon: '🧠', paramSize, detected };
 }
 
+// Construit un objet paramSize à partir d'une valeur numérique explicite
+// (saisie manuelle stockée dans le carnet via ledger.paramSize).
+function getParamSizeFromValue(val) {
+  const paramSize = parseFloat(val);
+  if (!isFinite(paramSize) || paramSize <= 0) {
+    return { key: 'inconnu', label: 'Taille inconnue', short: '?B', icon: '❓', paramSize: null, detected: 'manual' };
+  }
+  if (paramSize < 3)   return { key: 'petit',    label: 'Petit (< 3B)',    short: paramSize + 'B', icon: '🐱', paramSize, detected: 'manual' };
+  if (paramSize <= 14) return { key: 'standard', label: 'Standard (3B–14B)', short: paramSize + 'B', icon: '📦', paramSize, detected: 'manual' };
+  if (paramSize <= 30) return { key: 'expert',   label: 'Expert (14B–30B)',  short: paramSize + 'B', icon: '🎓', paramSize, detected: 'manual' };
+  return                 { key: 'doctorat', label: 'Doctorat (> 30B)',   short: paramSize + 'B', icon: '🧠', paramSize, detected: 'manual' };
+}
+
 function gradeColor(grade) {
   const map = { 'A': '#28a745', 'B': '#17a2b8', 'C': '#ffc107', 'D': '#e83e8c', 'F': '#dc3545' };
   return map[grade] || '#6c757d';
@@ -475,7 +488,7 @@ function buildLeaderboardHTML(entries) {
     const grade = letterGrade(e.pct);
     const args = buildArguments(e);
     const cat = getCategory(e, rank);
-    const psize = getParamSize(e.model);
+    const psizeDetected = getParamSize(e.model);
 
     // Rapport intégral : on charge le carnet original pour accéder aux tiers
     // (réponses brutes + raisonnement + code produit + selfProfile). Ces données
@@ -483,11 +496,18 @@ function buildLeaderboardHTML(entries) {
     // voir le comportement/raisonnement du modèle sans ouvrir le fichier MD.
     const ledger = loadLedgerByName(e.shortName);
 
+    // Si le carnet contient une taille manuelle (ledger.paramSize), on l'utilise
+    // à la place de la détection depuis le nom (ex: phi-4 → 14B non détectable).
+    const psize = (ledger && ledger.paramSize)
+      ? getParamSizeFromValue(ledger.paramSize)
+      : psizeDetected;
+
     return {
       shortName: e.shortName,
       model: e.model,
       quantization: e.quantization || null,
       modelUrl: ledger.modelUrl || guessModelUrl(e.model, ledger.publisher) || null,
+      note: ledger.note || null,
       globalRank: rank,
       pct: e.pct,
       score: e.score,
@@ -512,6 +532,7 @@ function buildLeaderboardHTML(entries) {
       verdict,
       cat,
       paramSize: psize,
+      paramSizeManual: (ledger && ledger.paramSize) ? ledger.paramSize : null,
       args,
       ecoles: e.ecoles.map(ec => {
         // Récupère l'entrée école du carnet pour les tiers + selfProfile.
@@ -844,6 +865,7 @@ function buildLeaderboardHTML(entries) {
     white-space: nowrap; font-weight: 600;
   }
   .badge.quant { color: var(--purple); border-color: rgba(188,140,255,0.35); background: rgba(188,140,255,0.10); }
+  .badge.note { color: var(--accent); border-color: rgba(88,166,255,0.35); background: rgba(88,166,255,0.10); }
   .badge.trend-up   { color: #3fb950; border-color: rgba(63,185,80,0.35); background: rgba(63,185,80,0.10); }
   .badge.trend-down { color: #f85149; border-color: rgba(248,81,73,0.35); background: rgba(248,81,73,0.10); }
   .badge.trend-stable { color: #8b949e; border-color: var(--border); background: var(--bg-3); }
@@ -1058,11 +1080,21 @@ function buildLeaderboardHTML(entries) {
   .model-quant-display { display: inline-flex; align-items: center; gap: 6px; }
   .model-quant-value { font-weight: 700; color: var(--purple); font-size: var(--fs-small); }
   .model-quant-edit { display: flex; flex-direction: column; gap: var(--space-xs); }
+  .model-params-section { display: flex; flex-direction: column; gap: var(--space-xs); }
+  .model-params-display { display: inline-flex; align-items: center; gap: 6px; }
+  .model-params-value { font-weight: 700; color: var(--accent); font-size: var(--fs-small); }
+  .model-params-edit { display: flex; flex-direction: column; gap: var(--space-xs); }
   .quant-field { display: flex; flex-direction: column; gap: 2px; font-size: var(--fs-small); }
   .quant-field span { color: var(--text-muted); font-size: var(--fs-tiny); }
   .quant-field select { width: 100%; }
   .quant-custom summary { cursor: pointer; font-size: var(--fs-tiny); color: var(--text-muted); }
   .quant-custom[open] summary { margin-bottom: 4px; }
+  /* Section note personnelle (modale) — même ergonomie que le lien/quantification */
+  .model-note-section { display: flex; flex-direction: column; gap: var(--space-xs); }
+  .model-note-display { font-size: var(--fs-small); color: var(--text); white-space: pre-wrap; word-break: break-word; max-height: 140px; overflow-y: auto; scrollbar-width: none; -ms-overflow-style: none; line-height: 1.4; }
+  .model-note-display::-webkit-scrollbar { display: none; }
+  .model-note-value { display: block; }
+  .model-note-edit { display: flex; flex-direction: column; gap: var(--space-xs); }
   .btn-sm { padding: 4px 12px; font-size: var(--fs-small); border-radius: var(--r-sm); }
 
   /* Rapport intégral (modale) — sections repliables par école/tier */
@@ -1538,6 +1570,9 @@ function renderCards() {
     var quantBadge = m.quantization
       ? '<span class="badge quant" title="Quantification du modèle (récupérée via LM Studio /api/v0/models ou saisie manuelle)">🧩 ' + esc(m.quantization) + '</span>'
       : '';
+    var noteBadge = m.note
+      ? '<span class="badge note" title="Note personnelle — cliquez pour voir">📝 Note</span>'
+      : '';
     // Badge de date de dernier test (toujours visible, surtout utile en mode récent).
     var relDate = formatRelativeDate(m.lastUpdated);
     var fullDate = formatDateShort(m.lastUpdated);
@@ -1566,7 +1601,7 @@ function renderCards() {
         '<div class="rank">' + rankDisp + '</div>' +
         '<div class="model-name">' +
           '<div class="name-line"><span class="cat-icon">' + m.cat.icon + '</span>' + esc(m.model) + posArrow + '</div>' +
-          '<div class="badges">' + szBadge + ' ' + quantBadge + ' ' + trendBadge + exportedBadge + dateBadge + '</div>' +
+          '<div class="badges">' + szBadge + ' ' + quantBadge + ' ' + noteBadge + ' ' + trendBadge + exportedBadge + dateBadge + '</div>' +
         '</div>' +
         '<div class="mini-stats">' +
           '<div class="mini-stat"><span class="lbl">%</span><span class="val" style="color:' + pc + '">' + dispPct(m.pct) + '%</span><div class="pct-bar-wrap"><div class="pct-bar-fill" style="width:' + Math.max(2,dispPct(m.pct)) + '%;background:' + pc + '"></div></div></div>' +
@@ -1682,11 +1717,25 @@ function openModal(idx) {
     body += '<button class="btn btn-primary btn-sm" onclick="editModelUrl(' + idx + ')">+ Ajouter un lien</button>';
   }
   body += '</div></div></div>';
-  // Colonne 2 : Quantification (sélecteurs bits + variante, fallback texte libre)
+  // Colonne 2 : Quantification (paramètres + sélecteurs bits + variante)
+  var currentParamSize = m.paramSizeManual || _getModelParamSizeLocal(m.shortName);
   body += '<div class="action-card">';
   body += '<h4>🧩 Quantification</h4>';
-  body += '<p>Variante de compression du GGUF (Q4_K_M, Q5_K_L, F16...).</p>';
-  body += '<div class="card-content"><div class="model-quant-section" id="modelQuantSection">';
+  body += '<p>Paramètres du modèle + variante de compression du GGUF.</p>';
+  body += '<div class="card-content">';
+  // Sous-section : nombre de paramètres
+  body += '<div class="model-params-section" id="modelParamSizeSection" style="margin-bottom:var(--space-xs);padding-bottom:var(--space-xs);border-bottom:1px solid var(--border-soft);">';
+  if (currentParamSize) {
+    var psDisp = _paramSizeFromValue(currentParamSize);
+    body += '<div class="model-params-display"><span class="model-params-value">' + psDisp.icon + ' ' + esc(psDisp.short) + '</span></div>';
+    body += '<button class="btn btn-primary btn-sm" onclick="editModelParamSize(' + idx + ')">✎ Modifier</button>';
+  } else {
+    body += '<p style="color:var(--text-muted);font-size:var(--fs-small);">Taille non détectée. Cliquez pour la saisir (en B).</p>';
+    body += '<button class="btn btn-primary btn-sm" onclick="editModelParamSize(' + idx + ')">+ Ajouter</button>';
+  }
+  body += '</div>';
+  // Sous-section : quantification (bits + variante)
+  body += '<div class="model-quant-section" id="modelQuantSection">';
   if (currentQuant) {
     body += '<div class="model-quant-display"><span class="model-quant-value">🧩 ' + esc(currentQuant) + '</span></div>';
     body += '<button class="btn btn-primary btn-sm" onclick="editModelQuant(' + idx + ')">✎ Modifier</button>';
@@ -1695,12 +1744,20 @@ function openModal(idx) {
     body += '<button class="btn btn-primary btn-sm" onclick="editModelQuant(' + idx + ')">+ Ajouter</button>';
   }
   body += '</div></div></div>';
-  // Colonne 3 : Note
+  // Colonne 3 : Note (annotations personnelles persistantes)
+  var currentNote = m.note || _getModelNoteLocal(m.shortName);
   body += '<div class="action-card">';
   body += '<h4>📝 Note</h4>';
   body += '<p>Annotations personnelles sur le modèle.</p>';
-  body += '<div class="card-content"><span style="color:var(--text-muted);font-size:var(--fs-small);">À venir</span></div>';
-  body += '</div>';
+  body += '<div class="card-content"><div class="model-note-section" id="modelNoteSection">';
+  if (currentNote) {
+    body += '<div class="model-note-display"><span class="model-note-value">' + esc(currentNote) + '</span></div>';
+    body += '<button class="btn btn-primary btn-sm" onclick="editModelNote(' + idx + ')">✎ Modifier</button>';
+  } else {
+    body += '<p style="color:var(--text-muted);font-size:var(--fs-small);">Aucune note. Cliquez sur « Ajouter » pour annoter ce modèle.</p>';
+    body += '<button class="btn btn-primary btn-sm" onclick="editModelNote(' + idx + ')">+ Ajouter</button>';
+  }
+  body += '</div></div></div>';
   body += '</div>';
 
   // --- Section Tendance (progression / régression / redoublement) ---
@@ -2184,6 +2241,7 @@ function saveModelQuant(idx, erase) {
       _setModelQuantLocal(m.shortName, quant || null);
       cancelEditModelQuant(idx);
       _refreshQuantDisplay(idx);
+      renderCards();
       showToast(quant ? 'Quantification enregistrée (carnet)' : 'Quantification effacée', true);
     } else {
       _saveModelQuantFallback(idx, quant);
@@ -2211,7 +2269,188 @@ function _saveModelQuantFallback(idx, quant) {
   m.quantization = quant || null;
   cancelEditModelQuant(idx);
   _refreshQuantDisplay(idx);
+  renderCards();
   showToast(quant ? 'Quantification enregistrée localement (localStorage — lancez --serve pour persister dans le carnet)' : 'Quantification effacée (local)', true);
+}
+
+// --- Gestion de la note personnelle (modale) ---
+// Même architecture que le lien et la quantification : persistance double
+// (serveur → carnet JSON, ou localStorage en fallback).
+var MODEL_NOTE_LS_KEY = 'benchgo_model_notes';
+function _getModelNoteLocal(shortName) {
+  try {
+    var map = JSON.parse(localStorage.getItem(MODEL_NOTE_LS_KEY) || '{}');
+    return map[shortName] || null;
+  } catch (e) { return null; }
+}
+function _setModelNoteLocal(shortName, note) {
+  try {
+    var map = JSON.parse(localStorage.getItem(MODEL_NOTE_LS_KEY) || '{}');
+    if (note) map[shortName] = note; else delete map[shortName];
+    localStorage.setItem(MODEL_NOTE_LS_KEY, JSON.stringify(map));
+  } catch (e) {}
+}
+
+// Ouvre un champ d'édition inline (textarea) pour la note du modèle.
+function editModelNote(idx) {
+  var m = MODELS[idx];
+  var section = document.getElementById('modelNoteSection');
+  if (!section) return;
+  var current = m.note || _getModelNoteLocal(m.shortName) || '';
+  var html = '<div class="model-note-edit">';
+  html += '<textarea id="modelNoteInput" class="search" style="width:100%;min-height:80px;resize:vertical;font-family:inherit;" placeholder="Note personnelle sur ce modèle...">' + esc(current) + '</textarea>';
+  html += '<div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;align-items:center;">';
+  html += '<button class="btn btn-primary btn-sm" onclick="saveModelNote(' + idx + ')">💾 Enregistrer</button>';
+  if (current) html += '<button class="btn btn-sm" onclick="saveModelNote(' + idx + ',true)" style="background:var(--bg-3);color:var(--red);">🗑 Effacer</button>';
+  html += '<button class="btn btn-sm" onclick="cancelEditModelNote(' + idx + ')" style="background:var(--bg-3);color:var(--text-muted);">Annuler</button>';
+  html += '</div></div>';
+  section.innerHTML = html;
+  var ta = document.getElementById('modelNoteInput');
+  if (ta) {
+    ta.focus();
+  }
+}
+
+// Annule l'édition et restaure l'affichage normal de la note.
+function cancelEditModelNote(idx) {
+  var m = MODELS[idx];
+  var section = document.getElementById('modelNoteSection');
+  if (!section) return;
+  var note = m.note || _getModelNoteLocal(m.shortName);
+  var html = '';
+  if (note) {
+    html += '<div class="model-note-display"><span class="model-note-value">' + esc(note) + '</span></div>';
+    html += '<button class="btn btn-primary btn-sm" onclick="editModelNote(' + idx + ')">✎ Modifier</button>';
+  } else {
+    html += '<p style="color:var(--text-muted);font-size:var(--fs-small);">Aucune note. Cliquez sur « Ajouter » pour annoter ce modèle.</p>';
+    html += '<button class="btn btn-primary btn-sm" onclick="editModelNote(' + idx + ')">+ Ajouter</button>';
+  }
+  section.innerHTML = html;
+}
+
+// Sauvegarde la note (serveur → carnet JSON, ou localStorage en fallback).
+function saveModelNote(idx, erase) {
+  var m = MODELS[idx];
+  var ta = document.getElementById('modelNoteInput');
+  var note = erase ? '' : (ta ? ta.value.trim() : '');
+  fetch('/api/model-note?shortName=' + encodeURIComponent(m.shortName), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ note: note })
+  }).then(function(r) { return r.ok ? r.json() : null; }).then(function(data) {
+    if (data && data.ok) {
+      m.note = note || null;
+      _setModelNoteLocal(m.shortName, note || null);
+      cancelEditModelNote(idx);
+      renderCards();
+      showToast(note ? 'Note enregistrée (carnet)' : 'Note effacée', true);
+    } else {
+      _saveModelNoteFallback(idx, note);
+    }
+  }).catch(function() {
+    _saveModelNoteFallback(idx, note);
+  });
+}
+
+// Fallback hors-serveur : localStorage uniquement.
+function _saveModelNoteFallback(idx, note) {
+  var m = MODELS[idx];
+  _setModelNoteLocal(m.shortName, note || null);
+  m.note = note || null;
+  cancelEditModelNote(idx);
+  renderCards();
+  showToast(note ? 'Note enregistrée localement (localStorage — lancez --serve pour persister dans le carnet)' : 'Note effacée (local)', true);
+}
+
+// --- Gestion du nombre de paramètres manuel (modale) ---
+// Même architecture : persistance double (serveur → carnet, ou localStorage).
+var MODEL_PARAMSIZE_LS_KEY = 'benchgo_model_paramsizes';
+function _getModelParamSizeLocal(shortName) {
+  try {
+    var map = JSON.parse(localStorage.getItem(MODEL_PARAMSIZE_LS_KEY) || '{}');
+    return map[shortName] || null;
+  } catch (e) { return null; }
+}
+function _setModelParamSizeLocal(shortName, val) {
+  try {
+    var map = JSON.parse(localStorage.getItem(MODEL_PARAMSIZE_LS_KEY) || '{}');
+    if (val) map[shortName] = val; else delete map[shortName];
+    localStorage.setItem(MODEL_PARAMSIZE_LS_KEY, JSON.stringify(map));
+  } catch (e) {}
+}
+// Reconstruit l'objet paramSize côté client à partir d'une valeur numérique.
+function _paramSizeFromValue(val) {
+  var n = parseFloat(val);
+  if (!isFinite(n) || n <= 0) return { key: 'inconnu', label: 'Taille inconnue', short: '?B', icon: '❓', paramSize: null };
+  if (n < 3)   return { key: 'petit',    label: 'Petit (< 3B)',    short: n + 'B', icon: '🐱', paramSize: n };
+  if (n <= 14) return { key: 'standard', label: 'Standard (3B–14B)', short: n + 'B', icon: '📦', paramSize: n };
+  if (n <= 30) return { key: 'expert',   label: 'Expert (14B–30B)',  short: n + 'B', icon: '🎓', paramSize: n };
+  return             { key: 'doctorat', label: 'Doctorat (> 30B)',   short: n + 'B', icon: '🧠', paramSize: n };
+}
+function editModelParamSize(idx) {
+  var m = MODELS[idx];
+  var section = document.getElementById('modelParamSizeSection');
+  if (!section) return;
+  var current = m.paramSizeManual || _getModelParamSizeLocal(m.shortName) || '';
+  var html = '<div class="model-params-edit">';
+  html += '<input type="number" id="modelParamSizeInput" class="search" style="width:min(100%,200px)" value="' + esc(current) + '" placeholder="14" min="0.5" max="500" step="0.5" />';
+  html += '<span style="font-size:var(--fs-small);color:var(--text-muted);">milliards de paramètres (B)</span>';
+  html += '<div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;">';
+  html += '<button class="btn btn-primary btn-sm" onclick="saveModelParamSize(' + idx + ')">💾 Enregistrer</button>';
+  if (current) html += '<button class="btn btn-sm" onclick="saveModelParamSize(' + idx + ',true)" style="background:var(--bg-3);color:var(--red);">🗑 Effacer</button>';
+  html += '<button class="btn btn-sm" onclick="cancelEditModelParamSize(' + idx + ')" style="background:var(--bg-3);color:var(--text-muted);">Annuler</button>';
+  html += '</div></div>';
+  section.innerHTML = html;
+  var input = document.getElementById('modelParamSizeInput');
+  if (input) { input.focus(); input.select(); }
+}
+function cancelEditModelParamSize(idx) {
+  var m = MODELS[idx];
+  var section = document.getElementById('modelParamSizeSection');
+  if (!section) return;
+  var val = m.paramSizeManual || _getModelParamSizeLocal(m.shortName);
+  var html = '';
+  if (val) {
+    var ps = _paramSizeFromValue(val);
+    html += '<div class="model-params-display"><span class="model-params-value">' + ps.icon + ' ' + esc(ps.short) + '</span></div>';
+    html += '<button class="btn btn-primary btn-sm" onclick="editModelParamSize(' + idx + ')">✎ Modifier</button>';
+  } else {
+    html += '<p style="color:var(--text-muted);font-size:var(--fs-small);">Taille non détectée. Cliquez pour la saisir (en milliards de paramètres).</p>';
+    html += '<button class="btn btn-primary btn-sm" onclick="editModelParamSize(' + idx + ')">+ Ajouter</button>';
+  }
+  section.innerHTML = html;
+}
+function saveModelParamSize(idx, erase) {
+  var m = MODELS[idx];
+  var input = document.getElementById('modelParamSizeInput');
+  var val = erase ? '' : (input ? input.value.trim() : '');
+  fetch('/api/model-paramsize?shortName=' + encodeURIComponent(m.shortName), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ paramSize: val })
+  }).then(function(r) { return r.ok ? r.json() : null; }).then(function(data) {
+    if (data && data.ok) {
+      m.paramSizeManual = val || null;
+      _setModelParamSizeLocal(m.shortName, val || null);
+      if (val) m.paramSize = _paramSizeFromValue(val);
+      cancelEditModelParamSize(idx);
+      renderCards();
+      showToast(val ? 'Paramètres enregistrés (carnet)' : 'Paramètres effacés', true);
+    } else {
+      _saveModelParamSizeFallback(idx, val);
+    }
+  }).catch(function() {
+    _saveModelParamSizeFallback(idx, val);
+  });
+}
+function _saveModelParamSizeFallback(idx, val) {
+  var m = MODELS[idx];
+  _setModelParamSizeLocal(m.shortName, val || null);
+  m.paramSizeManual = val || null;
+  if (val) m.paramSize = _paramSizeFromValue(val);
+  cancelEditModelParamSize(idx);
+  renderCards();
+  showToast(val ? 'Paramètres enregistrés localement (localStorage — lancez --serve pour persister dans le carnet)' : 'Paramètres effacés (local)', true);
 }
 function toggleHistory(el) {
   var mainRow = el.closest('tr.ecole-main');
@@ -2734,6 +2973,28 @@ if (_btnMd) _btnMd.addEventListener('click', exportLeaderboardMd);
   }
   window.addEventListener('scroll', onScroll, { passive: true });
   onScroll();
+})();
+
+// Au chargement de la page, on fusionne les valeurs du localStorage
+// (quantification, lien, note) dans le tableau MODELS. Sans cette étape, un
+// simple refresh de la page recharge le HTML statique (généré au démarrage du
+// serveur) qui ne contient pas les modifications saisies via la modale depuis.
+// Le localStorage sert de cache côté navigateur entre deux régénérations.
+(function _mergeLocalOverrides() {
+  for (var i = 0; i < MODELS.length; i++) {
+    var m = MODELS[i];
+    var lsQuant = _getModelQuantLocal(m.shortName);
+    var lsUrl = _getModelUrlLocal(m.shortName);
+    var lsNote = _getModelNoteLocal(m.shortName);
+    var lsParam = _getModelParamSizeLocal(m.shortName);
+    if (lsQuant) m.quantization = lsQuant;
+    if (lsUrl) m.modelUrl = lsUrl;
+    if (lsNote) m.note = lsNote;
+    if (lsParam) {
+      m.paramSizeManual = lsParam;
+      m.paramSize = _paramSizeFromValue(lsParam);
+    }
+  }
 })();
 
 renderCards();
@@ -3438,6 +3699,99 @@ function startServer(port) {
           logger.info('API: Quantification de ' + shortName + ' mise à jour — ' + (quant || '(effacée)'));
           res.writeHead(200, securityHeaders);
           res.end(JSON.stringify({ ok: true, quantization: quant || null }));
+        } catch (e) {
+          res.writeHead(200, securityHeaders);
+          res.end(JSON.stringify({ ok: false, error: e.message }));
+        }
+        return;
+      }
+    }
+
+    // API : note personnelle d'un modèle (saisie depuis la modale).
+    // GET  /api/model-note?shortName=... → { ok, note }
+    // POST /api/model-note?shortName=... (body: { note }) → carnet.
+    // Permet d'ajouter des annotations personnelles persistantes par modèle.
+    if (url.pathname === '/api/model-note') {
+      const shortName = url.searchParams.get('shortName');
+      if (!shortName) {
+        res.writeHead(400, securityHeaders);
+        res.end(JSON.stringify({ ok: false, error: 'shortName manquant' }));
+        return;
+      }
+      const { loadLedger } = require('./score-ledger');
+      if (req.method === 'GET') {
+        const ledger = loadLedger(shortName);
+        res.writeHead(200, securityHeaders);
+        res.end(JSON.stringify({ ok: true, note: ledger.note || null }));
+        return;
+      }
+      if (req.method === 'POST') {
+        let body;
+        try { body = await readJsonBody(req); } catch (e) {
+          res.writeHead(400, securityHeaders);
+          res.end(JSON.stringify({ ok: false, error: e.message }));
+          return;
+        }
+        const note = (body.note || '').trim();
+        try {
+          const ledger = loadLedger(shortName);
+          if (note) {
+            ledger.note = note;
+          } else {
+            delete ledger.note;
+          }
+          const { saveLedger } = require('./score-ledger');
+          saveLedger(ledger);
+          logger.info('API: Note de ' + shortName + ' mise à jour — ' + (note ? '(' + note.length + ' caractères)' : '(effacée)'));
+          res.writeHead(200, securityHeaders);
+          res.end(JSON.stringify({ ok: true, note: note || null }));
+        } catch (e) {
+          res.writeHead(200, securityHeaders);
+          res.end(JSON.stringify({ ok: false, error: e.message }));
+        }
+        return;
+      }
+    }
+
+    // API : nombre de paramètres manuel d'un modèle (saisie depuis la modale).
+    // GET  /api/model-paramsize?shortName=... → { ok, paramSize }
+    // POST /api/model-paramsize?shortName=... (body: { paramSize }) → carnet.
+    // Permet de corriger la taille quand elle n est pas détectable depuis le nom.
+    if (url.pathname === '/api/model-paramsize') {
+      const shortName = url.searchParams.get('shortName');
+      if (!shortName) {
+        res.writeHead(400, securityHeaders);
+        res.end(JSON.stringify({ ok: false, error: 'shortName manquant' }));
+        return;
+      }
+      const { loadLedger } = require('./score-ledger');
+      if (req.method === 'GET') {
+        const ledger = loadLedger(shortName);
+        res.writeHead(200, securityHeaders);
+        res.end(JSON.stringify({ ok: true, paramSize: ledger.paramSize || null }));
+        return;
+      }
+      if (req.method === 'POST') {
+        let body;
+        try { body = await readJsonBody(req); } catch (e) {
+          res.writeHead(400, securityHeaders);
+          res.end(JSON.stringify({ ok: false, error: e.message }));
+          return;
+        }
+        const raw = parseFloat(body.paramSize);
+        const paramSize = isFinite(raw) && raw > 0 ? raw : null;
+        try {
+          const ledger = loadLedger(shortName);
+          if (paramSize) {
+            ledger.paramSize = paramSize;
+          } else {
+            delete ledger.paramSize;
+          }
+          const { saveLedger } = require('./score-ledger');
+          saveLedger(ledger);
+          logger.info('API: Paramètres de ' + shortName + ' mis à jour — ' + (paramSize || '(effacé)'));
+          res.writeHead(200, securityHeaders);
+          res.end(JSON.stringify({ ok: true, paramSize: paramSize || null }));
         } catch (e) {
           res.writeHead(200, securityHeaders);
           res.end(JSON.stringify({ ok: false, error: e.message }));
