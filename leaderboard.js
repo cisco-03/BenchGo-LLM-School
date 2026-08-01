@@ -2106,18 +2106,19 @@ function _setModelQuantLocal(shortName, quant) {
 
 // Ouvre un champ d'édition inline pour la quantification du modèle.
 // Deux sélecteurs en cascade (bits → variante) + fallback texte libre repliable.
-var QUANT_BITS = [1, 1.5, 2, 3, 4, 5, 6, 8, 16, 32]
+var QUANT_BITS = [1, 1.5, 2, 3, 4, 5, 6, 8, 16, 32, 64]
 var QUANT_VARIANTS = {
-  '1': ['IQ1_S', 'Q1_K'],
+  '1': ['IQ1_S'],
   '1.5': ['IQ1_M'],
-  '2': ['IQ2_XXS', 'IQ2_XS', 'IQ2_S', 'IQ2_M', 'Q2_K', 'Q2_K_S', 'Q2_K_L'],
+  '2': ['IQ2_XXS', 'IQ2_XS', 'IQ2_S', 'IQ2_M', 'Q2_K', 'Q2_K_S', 'Q2_K_M', 'Q2_K_L', 'Q2_K_XL'],
   '3': ['IQ3_XXS', 'IQ3_XS', 'IQ3_S', 'IQ3_M', 'Q3_K_S', 'Q3_K_M', 'Q3_K_L', 'Q3_K_XL'],
-  '4': ['IQ4_XS', 'IQ4_NL', 'Q4_0', 'Q4_1', 'Q4_K_S', 'Q4_K_M', 'Q4_K_L'],
+  '4': ['IQ4_XS', 'IQ4_NL', 'Q4_0', 'Q4_1', 'Q4_K_S', 'Q4_K_M', 'Q4_K_L', 'Q4_K_XL', 'Q4_0_4_4', 'Q4_0_4_8', 'Q4_0_8_8'],
   '5': ['Q5_0', 'Q5_1', 'Q5_K_S', 'Q5_K_M', 'Q5_K_L'],
   '6': ['Q6_K', 'Q6_K_L'],
-  '8': ['Q8_0', 'Q8_1', 'Q8_K'],
-  '16': ['F16', 'BF16'],
-  '32': ['F32']
+  '8': ['Q8_0', 'Q8_1', 'Q8_K', 'I8'],
+  '16': ['F16', 'BF16', 'I16'],
+  '32': ['F32', 'I32'],
+  '64': ['F64', 'I64']
 }
 // Table inverse variante -> bits, construite depuis QUANT_VARIANTS.
 var QUANT_VARIANT_TO_BITS = {}
@@ -3903,6 +3904,27 @@ function startServer(port) {
       }
       try {
         const { loadLedger } = require('./score-ledger');
+        // Calcule le score agrégé réel d un carnet en sommant les best.score
+        // de chaque ecole. Le carnet n a pas de champ score racine, donc la
+        // comparaison precedente comparait undefined vs undefined et ne
+        // detectait jamais un changement de score (re-test, rattrapage...).
+        function aggregateScoreFromLedger(ledger) {
+          if (!ledger || !ledger.ecoles) return null;
+          let score = 0, max = 0;
+          let hasAny = false;
+          for (const raw of Object.values(ledger.ecoles)) {
+            const best = (raw && raw.best) ? raw.best
+              : (Array.isArray(raw && raw.attempts) && raw.attempts.length
+                  ? raw.attempts.reduce((b, a) => ((a.pct || 0) >= (b.pct || 0) ? a : b), raw.attempts[0])
+                  : null);
+            if (!best) continue;
+            score += best.score || 0;
+            max += best.max || 0;
+            hasAny = true;
+          }
+          if (!hasAny) return null;
+          return { score, max };
+        }
         const changed = [];
         const unchanged = [];
         const newModels = [];
@@ -3915,7 +3937,7 @@ function startServer(port) {
           const local = loadLedger(sn);
           if (!local) { unchanged.push(sn); continue; }
           // Comparaison des champs pertinents (pas tout le carnet — juste les
-          // champs qui justifient une mise à jour de la soumission).
+          // champs qui justifient une mise a jour de la soumission).
           const fields = ['quantization', 'note', 'paramSize', 'modelUrl', 'model', 'shortName'];
           let isChanged = false;
           for (const f of fields) {
@@ -3923,11 +3945,17 @@ function startServer(port) {
             const remoteVal = remote[f] != null ? String(remote[f]) : '';
             if (localVal !== remoteVal) { isChanged = true; break; }
           }
-          // Comparaison du score (le carnet peut avoir été re-testé).
+          // Comparaison du score agrégé (le carnet peut avoir été re-testé).
+          // On compare score ET max car le total possible peut evoluer si le
+          // modele a ete teste sur plus d ecoles.
           if (!isChanged) {
-            const localScore = local.score != null ? local.score : null;
-            const remoteScore = remote.score != null ? remote.score : null;
-            if (localScore !== remoteScore) isChanged = true;
+            const localAgg = aggregateScoreFromLedger(local);
+            const remoteAgg = aggregateScoreFromLedger(remote);
+            if (!localAgg || !remoteAgg) {
+              if (!!localAgg !== !!remoteAgg) isChanged = true;
+            } else if (localAgg.score !== remoteAgg.score || localAgg.max !== remoteAgg.max) {
+              isChanged = true;
+            }
           }
           if (isChanged) changed.push(sn);
           else unchanged.push(sn);

@@ -1,5 +1,25 @@
 # CHANGELOG - Carnet de Notes BenchGo
 
+## 2026-08-01 — fix: classement communautaire désynchronisé — détection de changement de score
+
+### Contexte
+Le classement communautaire affichait un ordre différent du classement local (kai-os_grug-12b #1 en communautaire alors que gemma-4-12b-it-qat est #1 en local). Cause : la soumission GitHub de gemma était périmée (score 5622) alors que le carnet local avait été re-testé (score 5824), mais le modèle n'était jamais re-soumis.
+
+### Implémentation
+- Correction de `/api/submit-check` dans `leaderboard.js` : la comparaison de score comparait `local.score` vs `remote.score`, mais le carnet n'a pas de champ `score` racine (les scores sont dans `ecoles.*.best.score`), donc les changements de score n'étaient jamais détectés.
+- Nouvelle fonction `aggregateScoreFromLedger()` : somme les `best.score` et `best.max` de chaque école pour obtenir le score agrégé réel, côté local ET remote.
+- Comparaison du couple `{score, max}` : un re-test, un rattrapage ou un test sur plus d'écoles déclenche désormais une re-soumission.
+- Même logique appliquée au cas où un carnet n'a plus aucune école (`null` vs non-`null`).
+
+### Fichiers modifiés
+- `leaderboard.js` : endpoint `/api/submit-check` (comparaison score agrégé réel).
+- `Docs/CHANGELOG.md` : cette entrée.
+
+### Vérifications
+- `node --check leaderboard.js` : OK.
+- `node tests/run-tests.js` : 27/27 passés.
+- `node scripts/check-inline-js.js` : JS inline valide (classement.html + community-leaderboard.html).
+
 ## 2026-08-01 — fix: modale quantification — mise à jour complète des variantes GGUF
 
 ### Contexte
@@ -10,14 +30,15 @@ Le sélecteur de quantification de la modale modèle ne proposait qu'un sous-ens
 - Mise à jour de `QUANT_VARIANTS` avec l'ensemble des variantes documentées dans `Memories-BenchGo/Tasks1.md` :
   - 1-bit : `IQ1_S`
   - 1.5-bit : `IQ1_M`
-  - 2-bit : `IQ2_XXS`, `IQ2_XS`, `IQ2_S`, `IQ2_M`, `Q2_K`, `Q2_K_S`, `Q2_K_L`
+  - 2-bit : `IQ2_XXS`, `IQ2_XS`, `IQ2_S`, `IQ2_M`, `Q2_K`, `Q2_K_S`, `Q2_K_M`, `Q2_K_L`, `Q2_K_XL`
   - 3-bit : `IQ3_XXS`, `IQ3_XS`, `IQ3_S`, `IQ3_M`, `Q3_K_S`, `Q3_K_M`, `Q3_K_L`, `Q3_K_XL`
-  - 4-bit : `IQ4_XS`, `IQ4_NL`, `Q4_0`, `Q4_1`, `Q4_K_S`, `Q4_K_M`, `Q4_K_L`
+  - 4-bit : `IQ4_XS`, `IQ4_NL`, `Q4_0`, `Q4_1`, `Q4_K_S`, `Q4_K_M`, `Q4_K_L`, `Q4_K_XL`, `Q4_0_4_4`, `Q4_0_4_8`, `Q4_0_8_8`
   - 5-bit : `Q5_0`, `Q5_1`, `Q5_K_S`, `Q5_K_M`, `Q5_K_L`
   - 6-bit : `Q6_K`, `Q6_K_L`
-  - 8-bit : `Q8_0`, `Q8_1`, `Q8_K`
-  - 16-bit : `F16`, `BF16`
-  - 32-bit : `F32`
+  - 8-bit : `Q8_0`, `Q8_1`, `Q8_K`, `I8`
+  - 16-bit : `F16`, `BF16`, `I16`
+  - 32-bit : `F32`, `I32`
+  - 64-bit : `F64`, `I64`
 - Adaptation de `_quantBitsFromString` pour reconnaître les formats `IQx_y`, les décimaux (`1.5`) et conserver la clé sous forme de chaîne (matching avec `QUANT_VARIANTS`).
 - Adaptation de la comparaison `currentBits === String(b)` dans `editModelQuant` pour supporter les valeurs 1.5.
 
