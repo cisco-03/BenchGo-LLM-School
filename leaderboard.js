@@ -1010,7 +1010,7 @@ function buildLeaderboardHTML(entries) {
   /* Grille d'actions dans la modale (lien, quantification, placeholders futurs) */
   .modal-actions-grid {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(3, 1fr);
     gap: var(--space-m);
     margin-bottom: var(--space-m);
   }
@@ -1058,6 +1058,11 @@ function buildLeaderboardHTML(entries) {
   .model-quant-display { display: inline-flex; align-items: center; gap: 6px; }
   .model-quant-value { font-weight: 700; color: var(--purple); font-size: var(--fs-small); }
   .model-quant-edit { display: flex; flex-direction: column; gap: var(--space-xs); }
+  .quant-field { display: flex; flex-direction: column; gap: 2px; font-size: var(--fs-small); }
+  .quant-field span { color: var(--text-muted); font-size: var(--fs-tiny); }
+  .quant-field select { width: 100%; }
+  .quant-custom summary { cursor: pointer; font-size: var(--fs-tiny); color: var(--text-muted); }
+  .quant-custom[open] summary { margin-bottom: 4px; }
   .btn-sm { padding: 4px 12px; font-size: var(--fs-small); border-radius: var(--r-sm); }
 
   /* Rapport intégral (modale) — sections repliables par école/tier */
@@ -1643,7 +1648,7 @@ function openModal(idx) {
   body += statBox('Aide prof.', m.helpCount > 0 ? m.helpCount + 'x' : '—');
   body += statBox('Rattrapage', m.retriedCount > 0 ? m.retriedCount + 'x' : '—');
   body += statBox('Écoles', m.ecoleCount);
-  body += statBox('Quantif.', m.quantization ? '<span style="color:#bc8cff">' + esc(m.quantization) + '</span>' : '—');
+  body += statBox('Quantif.', m.quantization ? '<span id="quantStatVal" style="color:#bc8cff">' + esc(m.quantization) + '</span>' : '<span id="quantStatVal">—</span>');
   // --- Chronométrie : durée d'inférence, tokens produits, vitesse moyenne ---
   // Affichés seulement si des données existent (carnets récents post-2026-07-21).
   if (m.elapsedMs > 0 || m.tokens > 0) {
@@ -1677,29 +1682,23 @@ function openModal(idx) {
     body += '<button class="btn btn-primary btn-sm" onclick="editModelUrl(' + idx + ')">+ Ajouter un lien</button>';
   }
   body += '</div></div></div>';
-  // Colonne 2 : Quantification
+  // Colonne 2 : Quantification (sélecteurs bits + variante, fallback texte libre)
   body += '<div class="action-card">';
   body += '<h4>🧩 Quantification</h4>';
-  body += '<p>Variante de compression du GGUF (Q4_K_S, Q5_K_L...).</p>';
+  body += '<p>Variante de compression du GGUF (Q4_K_M, Q5_K_L, F16...).</p>';
   body += '<div class="card-content"><div class="model-quant-section" id="modelQuantSection">';
   if (currentQuant) {
     body += '<div class="model-quant-display"><span class="model-quant-value">🧩 ' + esc(currentQuant) + '</span></div>';
     body += '<button class="btn btn-primary btn-sm" onclick="editModelQuant(' + idx + ')">✎ Modifier</button>';
   } else {
-    body += '<p style="color:var(--text-muted);font-size:var(--fs-small);">Aucune quantification renseignée. Cliquez sur « Ajouter » pour la saisir (ex : Q4_K_M, Q5_K_L, Q8_0, F16...).</p>';
+    body += '<p style="color:var(--text-muted);font-size:var(--fs-small);">Aucune quantification renseignée. Cliquez sur « Ajouter » pour la saisir.</p>';
     body += '<button class="btn btn-primary btn-sm" onclick="editModelQuant(' + idx + ')">+ Ajouter</button>';
   }
   body += '</div></div></div>';
-  // Colonne 3 : Notes (placeholder)
+  // Colonne 3 : Note
   body += '<div class="action-card">';
-  body += '<h4>📝 Notes</h4>';
+  body += '<h4>📝 Note</h4>';
   body += '<p>Annotations personnelles sur le modèle.</p>';
-  body += '<div class="card-content"><span style="color:var(--text-muted);font-size:var(--fs-small);">À venir</span></div>';
-  body += '</div>';
-  // Colonne 4 : Tags (placeholder)
-  body += '<div class="action-card">';
-  body += '<h4>🏷 Tags</h4>';
-  body += '<p>Catégorisation et labels personnalisés.</p>';
   body += '<div class="card-content"><span style="color:var(--text-muted);font-size:var(--fs-small);">À venir</span></div>';
   body += '</div>';
   body += '</div>';
@@ -2049,21 +2048,99 @@ function _setModelQuantLocal(shortName, quant) {
 }
 
 // Ouvre un champ d'édition inline pour la quantification du modèle.
+// Deux sélecteurs en cascade (bits → variante) + fallback texte libre repliable.
+var QUANT_BITS = [1, 2, 3, 4, 5, 6, 8, 16];
+var QUANT_VARIANTS = {
+  1: ['Q1_K'],
+  2: ['Q2_K', 'Q2_K_S'],
+  3: ['Q3_K', 'Q3_K_S', 'Q3_K_M', 'Q3_K_L'],
+  4: ['Q4_0', 'Q4_1', 'Q4_K', 'Q4_K_S', 'Q4_K_M'],
+  5: ['Q5_0', 'Q5_1', 'Q5_K', 'Q5_K_S', 'Q5_K_M', 'Q5_K_L'],
+  6: ['Q6_K'],
+  8: ['Q8_0'],
+  16: ['F16', 'BF16']
+};
+// Devine le nombre de bits depuis une chaîne de quantification existante.
+function _quantBitsFromString(q) {
+  if (!q) return '';
+  var m = q.match(/(\d+)/);
+  return m ? parseInt(m[1], 10) : '';
+}
 function editModelQuant(idx) {
   var m = MODELS[idx];
   var section = document.getElementById('modelQuantSection');
   if (!section) return;
   var current = m.quantization || _getModelQuantLocal(m.shortName) || '';
+  var currentBits = _quantBitsFromString(current);
+  var currentVariant = current || '';
   var html = '<div class="model-quant-edit">';
-  html += '<input type="text" id="modelQuantInput" class="search" style="width:min(100%,280px)" value="' + esc(current) + '" placeholder="Q4_K_M, Q5_K_L, Q8_0, F16..." />';
+  // Sélecteur de bits
+  html += '<label class="quant-field"><span>Bits</span>';
+  html += '<select id="quantBitsSelect" class="search" onchange="onQuantBitsChange(' + idx + ')">';
+  html += '<option value="">—</option>';
+  for (var b of QUANT_BITS) {
+    html += '<option value="' + b + '"' + (currentBits === b ? ' selected' : '') + '>' + b + ' bits</option>';
+  }
+  html += '</select></label>';
+  // Sélecteur de variante (rempli dynamiquement selon les bits)
+  html += '<label class="quant-field"><span>Variante</span>';
+  html += '<select id="quantVariantSelect" class="search" onchange="onQuantVariantChange(' + idx + ')">';
+  html += '<option value="">—</option>';
+  if (currentBits && QUANT_VARIANTS[currentBits]) {
+    for (var v of QUANT_VARIANTS[currentBits]) {
+      html += '<option value="' + esc(v) + '"' + (currentVariant === v ? ' selected' : '') + '>' + esc(v) + '</option>';
+    }
+  }
+  html += '</select></label>';
+  // Fallback texte libre (repliable)
+  html += '<details class="quant-custom"><summary>Saisie libre</summary>';
+  html += '<input type="text" id="modelQuantInput" class="search" style="width:min(100%,280px);margin-top:6px;" value="' + esc(current) + '" placeholder="Format exotique non listé..." oninput="onQuantCustomInput(' + idx + ')" />';
+  html += '</details>';
+  // Aperçu de la valeur finale
+  html += '<div class="quant-preview" id="quantPreview" style="margin-top:6px;font-size:var(--fs-small);color:var(--text-muted);">Valeur : <strong style="color:var(--purple)">' + esc(current || '—') + '</strong></div>';
+  // Boutons
   html += '<div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;">';
   html += '<button class="btn btn-primary btn-sm" onclick="saveModelQuant(' + idx + ')">💾 Enregistrer</button>';
   if (current) html += '<button class="btn btn-sm" onclick="saveModelQuant(' + idx + ',true)" style="background:var(--bg-3);color:var(--red);">🗑 Effacer</button>';
   html += '<button class="btn btn-sm" onclick="cancelEditModelQuant(' + idx + ')" style="background:var(--bg-3);color:var(--text-muted);">Annuler</button>';
   html += '</div></div>';
   section.innerHTML = html;
+}
+// Remplit le sélecteur de variantes quand l'utilisateur change le nombre de bits.
+function onQuantBitsChange(idx) {
+  var bitsSel = document.getElementById('quantBitsSelect');
+  var varSel = document.getElementById('quantVariantSelect');
+  var preview = document.getElementById('quantPreview');
+  var bits = bitsSel ? parseInt(bitsSel.value, 10) : 0;
+  if (varSel) {
+    var opts = '<option value="">—</option>';
+    if (bits && QUANT_VARIANTS[bits]) {
+      for (var v of QUANT_VARIANTS[bits]) {
+        opts += '<option value="' + esc(v) + '">' + esc(v) + '</option>';
+      }
+    }
+    varSel.innerHTML = opts;
+  }
+  if (preview) {
+    var val = (varSel && varSel.value) ? varSel.value : '—';
+    preview.innerHTML = 'Valeur : <strong style="color:var(--purple)">' + esc(val) + '</strong>';
+  }
+}
+// Met à jour l'aperçu quand la variante change.
+function onQuantVariantChange(idx) {
+  var varSel = document.getElementById('quantVariantSelect');
+  var preview = document.getElementById('quantPreview');
   var input = document.getElementById('modelQuantInput');
-  if (input) { input.focus(); input.select(); }
+  var val = varSel ? varSel.value : '';
+  if (input && val) input.value = val;
+  if (preview) preview.innerHTML = 'Valeur : <strong style="color:var(--purple)">' + esc(val || '—') + '</strong>';
+}
+// Met à jour l'aperçu (et désélectionne les sélecteurs) en cas de saisie libre.
+function onQuantCustomInput(idx) {
+  var input = document.getElementById('modelQuantInput');
+  var preview = document.getElementById('quantPreview');
+  var val = input ? input.value.trim() : '';
+  if (preview) preview.innerHTML = 'Valeur : <strong style="color:var(--purple)">' + esc(val || '—') + '</strong>';
 }
 
 // Annule l'édition et restaure l'affichage normal de la quantification.
@@ -2084,10 +2161,19 @@ function cancelEditModelQuant(idx) {
 }
 
 // Sauvegarde la quantification (serveur → carnet JSON, ou localStorage en fallback).
+// La valeur provient du sélecteur de variante, ou à défaut du champ texte libre.
 function saveModelQuant(idx, erase) {
   var m = MODELS[idx];
+  var varSel = document.getElementById('quantVariantSelect');
   var input = document.getElementById('modelQuantInput');
-  var quant = erase ? '' : (input ? input.value.trim() : '');
+  var quant = '';
+  if (!erase) {
+    if (varSel && varSel.value) {
+      quant = varSel.value.trim();
+    } else if (input) {
+      quant = input.value.trim();
+    }
+  }
   fetch('/api/model-quantization?shortName=' + encodeURIComponent(m.shortName), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -2097,6 +2183,7 @@ function saveModelQuant(idx, erase) {
       m.quantization = quant || null;
       _setModelQuantLocal(m.shortName, quant || null);
       cancelEditModelQuant(idx);
+      _refreshQuantDisplay(idx);
       showToast(quant ? 'Quantification enregistrée (carnet)' : 'Quantification effacée', true);
     } else {
       _saveModelQuantFallback(idx, quant);
@@ -2106,12 +2193,24 @@ function saveModelQuant(idx, erase) {
   });
 }
 
+// Rafraîchit toutes les zones d'affichage de la quantification dans la modale
+// (statBox en haut + carte d'action) après une sauvegarde/effacement.
+function _refreshQuantDisplay(idx) {
+  var m = MODELS[idx];
+  var stat = document.getElementById('quantStatVal');
+  if (stat) {
+    stat.innerHTML = m.quantization ? esc(m.quantization) : '—';
+    stat.style.color = m.quantization ? '#bc8cff' : '';
+  }
+}
+
 // Fallback hors-serveur : localStorage uniquement.
 function _saveModelQuantFallback(idx, quant) {
   var m = MODELS[idx];
   _setModelQuantLocal(m.shortName, quant || null);
   m.quantization = quant || null;
   cancelEditModelQuant(idx);
+  _refreshQuantDisplay(idx);
   showToast(quant ? 'Quantification enregistrée localement (localStorage — lancez --serve pour persister dans le carnet)' : 'Quantification effacée (local)', true);
 }
 function toggleHistory(el) {
@@ -2571,7 +2670,8 @@ async function doSubmitAll() {
         + '<p style="margin-top: 8px; font-size: 13px; color: var(--text-muted);">' + skippedCount + ' modele(s) deja present(s) sur le depot communautaire.</p>'
         + '<p style="margin-top: 4px; font-size: 13px; color: var(--text-muted);">Aucun nouveau modele a envoyer. Testez de nouveaux modeles puis revenez soumettre.</p>'
         + '</div>';
-      btn.textContent = 'Aucun nouveau modele'; btn.disabled = true;
+      btn.textContent = 'Termine'; btn.disabled = false;
+      btn.onclick = closeSubmitModal;
       return;
     }
     statusEl.innerHTML = '<p style="color: var(--accent);">' + toSubmit.length + ' nouveau(x) modele(s) a envoyer (' + skippedCount + ' deja soumis(s), ignores). Envoi en cours...</p>';
@@ -2605,7 +2705,8 @@ async function doSubmitAll() {
     html += '<p style="margin-top: 8px; font-size: 13px; color: var(--text-muted);">Les PR sont mergées automatiquement (résultats JSON, pas de code à valider).</p>';
     html += '</div>';
     statusEl.innerHTML = html;
-    btn.textContent = 'Termine'; btn.disabled = true;
+    btn.textContent = 'Termine'; btn.disabled = false;
+    btn.onclick = closeSubmitModal;
   } catch (e) {
     statusEl.innerHTML = '<p style="color: var(--red);">Erreur : ' + esc(e.message) + '</p>';
     btn.disabled = false; btn.textContent = 'Reessayer';
