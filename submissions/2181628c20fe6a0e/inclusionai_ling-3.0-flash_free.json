@@ -1,0 +1,3393 @@
+{
+  "schemaVersion": 1,
+  "benchgoVersion": "V3",
+  "userId": "2181628c20fe6a0e",
+  "pseudo": "FlexoDiv",
+  "submittedAt": "2026-08-02T10:14:38.178Z",
+  "integrityHash": "e4e41944ec4c0baf",
+  "carnet": {
+    "model": "inclusionai/ling-3.0-flash:free",
+    "shortName": "inclusionai_ling-3.0-flash_free",
+    "ecoles": {
+      "Primaire": {
+        "best": {
+          "profile": "LIGHT",
+          "ecole": "Primaire",
+          "score": 2595,
+          "max": 2629,
+          "pct": 99,
+          "mandatoryPassed": 916,
+          "mandatoryTotal": 916,
+          "globalLifeScore": 2938,
+          "optionalBonus": 343,
+          "helpCount": 1,
+          "retriedCount": 1,
+          "calibrationIndex": 0.95,
+          "declaredLevel": 0.95,
+          "date": "2026-08-02",
+          "time": "09-43-36",
+          "reportFile": "Export-Rapports\\2026-08-02\\Primaire\\LIGHT\\rapport_v3_inclusionai_ling-3.0-flash_free_light_09-43-36.md",
+          "selfProfile": {
+            "skills": {
+              "javascript_basics": {
+                "level": 5,
+                "examples": "Implémentation d'un LRU Cache en O(1) avec Map + doubly-linked list ; tri rapide personnalisé avec comparaison flexible"
+              },
+              "javascript_async": {
+                "level": 5,
+                "examples": "Orchestration de concurrence limitée via p-limit avec retry exponentiel et backoff jitter ; gestion fine de la boucle d'événements et micro-tâches"
+              },
+              "algorithms_advanced": {
+                "level": 5,
+                "examples": "Dijkstra avec file de priorité binaire ; construction d'un Trie avec suppression de nœuds ; programmation dynamique sur sous-séquences"
+              },
+              "code_debugging": {
+                "level": 4,
+                "examples": "Détection de race conditions sur état partagé en async ; identification de prototype pollution via objets deep-clonés incorrectement ; sanitisation des entrées contre XSS et injection SQL"
+              }
+            },
+            "justification": "Maîtrise solide des fondamentaux et de l'async, capacité à implémenter des structures avancées correctement ; en debugging, je repère la majorité des vulnérabilités classiques mais des cas très subtils (ex : TOCTOU dans des contextes non évidents) peuvent m'échapper."
+          },
+          "tiers": [
+            {
+              "tierNum": 0,
+              "tierTitle": "Tier 0 — Maternelle",
+              "isMandatory": true,
+              "className": "Maternelle",
+              "rawResponse": "\n\n---\n### tache_0a\n```javascript\nfunction direBonjour() { return \"Bonjour\"; }\n```\n\n### tache_0b\n```javascript\nfunction retournerVrai() { return true; }\n```\n\n### tache_0c\n```javascript\nfunction retourner42() { return 42; }\n```\n\n### tache_0d\n```javascript\nfunction additionner(a, b) { return a + b; }\n```\n\n### tache_0e\n```javascript\nfunction identite(x) { return x; }\n```\n\n### algo_facile_1\n```javascript\nfunction estPair(n) { return n % 2 === 0; }\n```\n\n### algo_facile_2\n```javascript\nfunction carre(n) { return n * n; }\n```\n\n### algo_moyen_1\n```javascript\nfunction somme1aN(n) { return (n * (n + 1)) / 2; }\n```\n\n### algo_difficile_1\n```javascript\nfunction inverserChaine(s) { return s.split(\"\").reverse().join(\"\"); }\n```\n\n### algo_defi\n```javascript\nfunction valeurMax(tab) { let max = tab[0]; for (let i = 1; i < tab.length; i++) { if (tab[i] > max) { max = tab[i]; } } return max; }\n```",
+              "evalResults": [
+                {
+                  "id": "tache_0a",
+                  "label": "Retourner 'Bonjour'",
+                  "code": "function direBonjour() { return \"Bonjour\"; }",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "Retourne Bonjour",
+                      "error": null
+                    }
+                  ],
+                  "points": 31,
+                  "maxPoints": 31,
+                  "taskType": "Retourner 'Bonjour'",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 0
+                },
+                {
+                  "id": "tache_0b",
+                  "label": "Retourner true",
+                  "code": "function retournerVrai() { return true; }",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "Retourne true",
+                      "error": null
+                    }
+                  ],
+                  "points": 46,
+                  "maxPoints": 46,
+                  "taskType": "Retourner true",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 0
+                },
+                {
+                  "id": "tache_0c",
+                  "label": "Retourner 42",
+                  "code": "function retourner42() { return 42; }",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "Retourne 42",
+                      "error": null
+                    }
+                  ],
+                  "points": 49,
+                  "maxPoints": 49,
+                  "taskType": "Retourner 42",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 0
+                },
+                {
+                  "id": "tache_0d",
+                  "label": "Additionner a et b",
+                  "code": "function additionner(a, b) { return a + b; }",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "Addition positive",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "Addition négative",
+                      "error": null
+                    }
+                  ],
+                  "points": 40,
+                  "maxPoints": 40,
+                  "taskType": "Additionner a et b",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 0
+                },
+                {
+                  "id": "tache_0e",
+                  "label": "Identité",
+                  "code": "function identite(x) { return x; }",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "Identité string",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "Identité number",
+                      "error": null
+                    }
+                  ],
+                  "points": 59,
+                  "maxPoints": 59,
+                  "taskType": "Identité",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 0
+                },
+                {
+                  "id": "algo_facile_1",
+                  "label": "Algorithmique — Parité",
+                  "code": "function estPair(n) { return n % 2 === 0; }",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "Pair",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "Impair",
+                      "error": null
+                    }
+                  ],
+                  "points": 52,
+                  "maxPoints": 52,
+                  "taskType": "Algorithmique — Parité",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 0
+                },
+                {
+                  "id": "algo_facile_2",
+                  "label": "Algorithmique — Carré",
+                  "code": "function carre(n) { return n * n; }",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "Positif",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "Zéro",
+                      "error": null
+                    }
+                  ],
+                  "points": 57,
+                  "maxPoints": 57,
+                  "taskType": "Algorithmique — Carré",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 0
+                },
+                {
+                  "id": "algo_moyen_1",
+                  "label": "Algorithmique — Somme 1..N",
+                  "code": "function somme1aN(n) { return (n * (n + 1)) / 2; }",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "Somme 5",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "Somme 1",
+                      "error": null
+                    }
+                  ],
+                  "points": 39,
+                  "maxPoints": 39,
+                  "taskType": "Algorithmique — Somme 1..N",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 0
+                },
+                {
+                  "id": "algo_difficile_1",
+                  "label": "Algorithmique — Inversion de chaîne",
+                  "code": "function inverserChaine(s) { return s.split(\"\").reverse().join(\"\"); }",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "Mot",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "Un caractère",
+                      "error": null
+                    }
+                  ],
+                  "points": 55,
+                  "maxPoints": 55,
+                  "taskType": "Algorithmique — Inversion de chaîne",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 0
+                },
+                {
+                  "id": "algo_defi",
+                  "label": "Algorithmique — Maximum d'un tableau",
+                  "code": "function valeurMax(tab) { let max = tab[0]; for (let i = 1; i < tab.length; i++) { if (tab[i] > max) { max = tab[i]; } } return max; }",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "Positifs",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "Négatifs",
+                      "error": null
+                    }
+                  ],
+                  "points": 32,
+                  "maxPoints": 32,
+                  "taskType": "Algorithmique — Maximum d'un tableau",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 0
+                }
+              ]
+            },
+            {
+              "tierNum": 1,
+              "tierTitle": "Tier 1 — CP",
+              "isMandatory": true,
+              "className": "CP",
+              "rawResponse": "\n\n---\n### tache_1a\n```javascript\nfunction soustraire(a, b) {\n  return a - b;\n}\n```\n\n### tache_1b\n```javascript\nfunction superieurA10(n) {\n  return n > 10;\n}\n```\n\n### tache_1c\n```javascript\nfunction concatener(mot1, mot2) {\n  return mot1 + \" \" + mot2;\n}\n```\n\n### tache_1d\n```javascript\nfunction estVide(chaine) {\n  return chaine === \"\";\n}\n```\n\n### tache_1e\n```javascript\nfunction multiplierPar2(n) {\n  return n * 2;\n}\n```\n\n### algo_facile_1\n```javascript\nfunction estMultipleDe(n, m) {\n  if (m === 0) return false;\n  return n % m === 0;\n}\n```\n\n### algo_facile_2\n```javascript\nfunction puissance(base, exp) {\n  let resultat = 1;\n  for (let i = 0; i < exp; i++) {\n    resultat *= base;\n  }\n  return resultat;\n}\n```\n\n### algo_moyen_1\n```javascript\nfunction compterPairs(tab) {\n  let count = 0;\n  for (let i = 0; i < tab.length; i++) {\n    if (tab[i] % 2 === 0) {\n      count++;\n    }\n  }\n  return count;\n}\n```\n\n### algo_difficile_1\n```javascript\nfunction supprimerDoublons(tab) {\n  const resultat = [];\n  const vu = {};\n  for (let i = 0; i < tab.length; i++) {\n    if (!vu[tab[i]]) {\n      vu[tab[i]] = true;\n      resultat.push(tab[i]);\n    }\n  }\n  return resultat;\n}\n```\n\n### algo_defi\n```javascript\nfunction sommePaires(tab) {\n  let somme = 0;\n  for (let i = 0; i < tab.length; i++) {\n    if (tab[i] % 2 === 0) {\n      somme += tab[i];\n    }\n  }\n  return somme;\n}\n```",
+              "evalResults": [
+                {
+                  "id": "tache_1a",
+                  "label": "Soustraire b de a",
+                  "code": "function soustraire(a, b) {\n  return a - b;\n}",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "Soustraction simple",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "Soustraction négative",
+                      "error": null
+                    }
+                  ],
+                  "points": 50,
+                  "maxPoints": 50,
+                  "taskType": "Soustraire b de a",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 1
+                },
+                {
+                  "id": "tache_1b",
+                  "label": "Supérieur à 10",
+                  "code": "function superieurA10(n) {\n  return n > 10;\n}",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "Plus grand que 10",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "Égal à 10",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "Plus petit que 10",
+                      "error": null
+                    }
+                  ],
+                  "points": 42,
+                  "maxPoints": 42,
+                  "taskType": "Supérieur à 10",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 1
+                },
+                {
+                  "id": "tache_1c",
+                  "label": "Concaténer mots",
+                  "code": "function concatener(mot1, mot2) {\n  return mot1 + \" \" + mot2;\n}",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "Deux mots normaux",
+                      "error": null
+                    }
+                  ],
+                  "points": 57,
+                  "maxPoints": 57,
+                  "taskType": "Concaténer mots",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 1
+                },
+                {
+                  "id": "tache_1d",
+                  "label": "Chaîne vide",
+                  "code": "function estVide(chaine) {\n  return chaine === \"\";\n}",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "Chaîne vide",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "Chaîne avec espace",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "Chaîne normale",
+                      "error": null
+                    }
+                  ],
+                  "points": 53,
+                  "maxPoints": 53,
+                  "taskType": "Chaîne vide",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 1
+                },
+                {
+                  "id": "tache_1e",
+                  "label": "Multiplier par 2",
+                  "code": "function multiplierPar2(n) {\n  return n * 2;\n}",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "Positif",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "Zéro",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "Négatif",
+                      "error": null
+                    }
+                  ],
+                  "points": 46,
+                  "maxPoints": 46,
+                  "taskType": "Multiplier par 2",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 1
+                },
+                {
+                  "id": "algo_facile_1",
+                  "label": "Algorithmique — Multiplicité",
+                  "code": "function estMultipleDe(n, m) {\n  if (m === 0) return false;\n  return n % m === 0;\n}",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "Multiple",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "Non multiple",
+                      "error": null
+                    }
+                  ],
+                  "points": 31,
+                  "maxPoints": 31,
+                  "taskType": "Algorithmique — Multiplicité",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 1
+                },
+                {
+                  "id": "algo_facile_2",
+                  "label": "Algorithmique — Puissance",
+                  "code": "function puissance(base, exp) {\n  let resultat = 1;\n  for (let i = 0; i < exp; i++) {\n    resultat *= base;\n  }\n  return resultat;\n}",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "2^3",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "5^0",
+                      "error": null
+                    }
+                  ],
+                  "points": 41,
+                  "maxPoints": 41,
+                  "taskType": "Algorithmique — Puissance",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 1
+                },
+                {
+                  "id": "algo_moyen_1",
+                  "label": "Algorithmique — Comptage de pairs",
+                  "code": "function compterPairs(tab) {\n  let count = 0;\n  for (let i = 0; i < tab.length; i++) {\n    if (tab[i] % 2 === 0) {\n      count++;\n    }\n  }\n  return count;\n}",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "Mixte",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "Aucun pair",
+                      "error": null
+                    }
+                  ],
+                  "points": 41,
+                  "maxPoints": 41,
+                  "taskType": "Algorithmique — Comptage de pairs",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 1
+                },
+                {
+                  "id": "algo_difficile_1",
+                  "label": "Algorithmique — Suppression de doublons",
+                  "code": "function supprimerDoublons(tab) {\n  const resultat = [];\n  const vu = {};\n  for (let i = 0; i < tab.length; i++) {\n    if (!vu[tab[i]]) {\n      vu[tab[i]] = true;\n      resultat.push(tab[i]);\n    }\n  }\n  return resultat;\n}",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "Avec doublons",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "Tous identiques",
+                      "error": null
+                    }
+                  ],
+                  "points": 41,
+                  "maxPoints": 41,
+                  "taskType": "Algorithmique — Suppression de doublons",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 1
+                },
+                {
+                  "id": "algo_defi",
+                  "label": "Algorithmique — Somme des pairs",
+                  "code": "function sommePaires(tab) {\n  let somme = 0;\n  for (let i = 0; i < tab.length; i++) {\n    if (tab[i] % 2 === 0) {\n      somme += tab[i];\n    }\n  }\n  return somme;\n}",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "Mixte",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "Aucun pair",
+                      "error": null
+                    }
+                  ],
+                  "points": 54,
+                  "maxPoints": 54,
+                  "taskType": "Algorithmique — Somme des pairs",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 1
+                }
+              ]
+            },
+            {
+              "tierNum": 2,
+              "tierTitle": "Tier 2 — CE1",
+              "isMandatory": false,
+              "className": "CE1",
+              "rawResponse": "\n\n---\n### tache_2a\n```javascript\nfunction longueurChaine(chaine) {\n  return chaine.length;\n}\n```\n\n### tache_2b\n```javascript\nfunction premierElement(tableau) {\n  return tableau[0];\n}\n```\n\n### tache_2c\n```javascript\nfunction estPair(n) {\n  return n % 2 === 0;\n}\n```\n\n### tache_2d\n```javascript\nfunction enMajuscules(chaine) {\n  return chaine.toUpperCase();\n}\n```\n\n### tache_2e\n```javascript\nfunction ajouterALaFin(tableau, element) {\n  tableau.push(element);\n  return tableau;\n}\n```\n\n### algo_facile_1\n```javascript\nfunction estPalindrome(s) {\n  const reversed = s.split('').reverse().join('');\n  return s === reversed;\n}\n```\n\n### algo_facile_2\n```javascript\nfunction pgcd(a, b) {\n  while (b !== 0) {\n    const temp = b;\n    b = a % b;\n    a = temp;\n  }\n  return a;\n}\n```\n\n### algo_moyen_1\n```javascript\nfunction nombreMots(s) {\n  const trimmed = s.trim();\n  if (trimmed === '') return 0;\n  return trimmed.split(/\\s+/).length;\n}\n```\n\n### algo_difficile_1\n```javascript\nfunction fusionTriee(a, b) {\n  const result = [];\n  let i = 0;\n  let j = 0;\n  while (i < a.length && j < b.length) {\n    if (a[i] <= b[j]) {\n      result.push(a[i]);\n      i++;\n    } else {\n      result.push(b[j]);\n      j++;\n    }\n  }\n  while (i < a.length) {\n    result.push(a[i]);\n    i++;\n  }\n  while (j < b.length) {\n    result.push(b[j]);\n    j++;\n  }\n  return result;\n}\n```\n\n### algo_defi\n```javascript\nfunction sontAnagrammes(a, b) {\n  if (a.length !== b.length) return false;\n  const sortedA = a.split('').sort().join('');\n  const sortedB = b.split('').sort().join('');\n  return sortedA === sortedB;\n}\n```",
+              "evalResults": [
+                {
+                  "id": "tache_2a",
+                  "label": "Longueur chaîne",
+                  "code": "function longueurChaine(chaine) {\n  return chaine.length;\n}",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "Chaîne normale",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "Chaîne vide",
+                      "error": null
+                    }
+                  ],
+                  "points": 39,
+                  "maxPoints": 39,
+                  "taskType": "Longueur chaîne",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 2
+                },
+                {
+                  "id": "tache_2b",
+                  "label": "Premier élément",
+                  "code": "function premierElement(tableau) {\n  return tableau[0];\n}",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "Tableau non vide",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "Tableau vide",
+                      "error": null
+                    }
+                  ],
+                  "points": 60,
+                  "maxPoints": 60,
+                  "taskType": "Premier élément",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 2
+                },
+                {
+                  "id": "tache_2c",
+                  "label": "Est pair",
+                  "code": "function estPair(n) {\n  return n % 2 === 0;\n}",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "Pair",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "Impair",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "Zéro",
+                      "error": null
+                    }
+                  ],
+                  "points": 33,
+                  "maxPoints": 33,
+                  "taskType": "Est pair",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 2
+                },
+                {
+                  "id": "tache_2d",
+                  "label": "En majuscules",
+                  "code": "function enMajuscules(chaine) {\n  return chaine.toUpperCase();\n}",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "Minuscules",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "Déjà majuscules",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "Vide",
+                      "error": null
+                    }
+                  ],
+                  "points": 41,
+                  "maxPoints": 41,
+                  "taskType": "En majuscules",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 2
+                },
+                {
+                  "id": "tache_2e",
+                  "label": "Ajouter à la fin",
+                  "code": "function ajouterALaFin(tableau, element) {\n  tableau.push(element);\n  return tableau;\n}",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "Tableau non vide",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "Tableau vide",
+                      "error": null
+                    }
+                  ],
+                  "points": 39,
+                  "maxPoints": 39,
+                  "taskType": "Ajouter à la fin",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 2
+                },
+                {
+                  "id": "algo_facile_1",
+                  "label": "Algorithmique — Palindrome",
+                  "code": "function estPalindrome(s) {\n  const reversed = s.split('').reverse().join('');\n  return s === reversed;\n}",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "Palindrome",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "Non palindrome",
+                      "error": null
+                    }
+                  ],
+                  "points": 35,
+                  "maxPoints": 35,
+                  "taskType": "Algorithmique — Palindrome",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 2
+                },
+                {
+                  "id": "algo_facile_2",
+                  "label": "Algorithmique — PGCD",
+                  "code": "function pgcd(a, b) {\n  while (b !== 0) {\n    const temp = b;\n    b = a % b;\n    a = temp;\n  }\n  return a;\n}",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "48 et 18",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "Premiers entre eux",
+                      "error": null
+                    }
+                  ],
+                  "points": 35,
+                  "maxPoints": 35,
+                  "taskType": "Algorithmique — PGCD",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 2
+                },
+                {
+                  "id": "algo_moyen_1",
+                  "label": "Algorithmique — Nombre de mots",
+                  "code": "function nombreMots(s) {\n  const trimmed = s.trim();\n  if (trimmed === '') return 0;\n  return trimmed.split(/\\s+/).length;\n}",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "3 mots",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "1 mot",
+                      "error": null
+                    }
+                  ],
+                  "points": 39,
+                  "maxPoints": 39,
+                  "taskType": "Algorithmique — Nombre de mots",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 2
+                },
+                {
+                  "id": "algo_difficile_1",
+                  "label": "Algorithmique — Fusion triée",
+                  "code": "function fusionTriee(a, b) {\n  const result = [];\n  let i = 0;\n  let j = 0;\n  while (i < a.length && j < b.length) {\n    if (a[i] <= b[j]) {\n      result.push(a[i]);\n      i++;\n    } else {\n      result.push(b[j]);\n      j++;\n    }\n  }\n  while (i < a.length) {\n    result.push(a[i]);\n    i++;\n  }\n  while (j < b.length) {\n    result.push(b[j]);\n    j++;\n  }\n  return result;\n}",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "Deux tableaux",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "Un vide",
+                      "error": null
+                    }
+                  ],
+                  "points": 53,
+                  "maxPoints": 53,
+                  "taskType": "Algorithmique — Fusion triée",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 2
+                },
+                {
+                  "id": "algo_defi",
+                  "label": "Algorithmique — Anagrammes",
+                  "code": "function sontAnagrammes(a, b) {\n  if (a.length !== b.length) return false;\n  const sortedA = a.split('').sort().join('');\n  const sortedB = b.split('').sort().join('');\n  return sortedA === sortedB;\n}",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "Anagrammes",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "Pas anagrammes",
+                      "error": null
+                    }
+                  ],
+                  "points": 44,
+                  "maxPoints": 44,
+                  "taskType": "Algorithmique — Anagrammes",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 2
+                }
+              ]
+            },
+            {
+              "tierNum": 3,
+              "tierTitle": "Tier 3 — CE2",
+              "isMandatory": false,
+              "className": "CE2",
+              "rawResponse": "\n\n---\n### tache_3a\n```javascript\nfunction dernierElement(tableau) {\n  if (tableau.length === 0) return undefined;\n  return tableau[tableau.length - 1];\n}\n```\n\n### tache_3b\n```javascript\nfunction compterJusqua(n) {\n  if (n < 1) return [];\n  const result = [];\n  for (let i = 1; i <= n; i++) {\n    result.push(i);\n  }\n  return result;\n}\n```\n\n### tache_3c\n```javascript\nfunction remplacerLettre(mot, ancienne, nouvelle) {\n  return mot.split(ancienne).join(nouvelle);\n}\n```\n\n### tache_3d\n```javascript\nfunction sommeTableau(tableau) {\n  if (tableau.length === 0) return 0;\n  return tableau.reduce((acc, val) => acc + val, 0);\n}\n```\n\n### tache_3e\n```javascript\nfunction contientA(mot) {\n  return mot.toLowerCase().includes('a');\n}\n```\n\n### algo_facile_1\n```javascript\nfunction validerParentheses(s) {\n  let count = 0;\n  for (let i = 0; i < s.length; i++) {\n    if (s[i] === '(') count++;\n    else if (s[i] === ')') {\n      count--;\n      if (count < 0) return false;\n    }\n  }\n  return count === 0;\n}\n```\n\n### algo_facile_2\n```javascript\nfunction fibonacci(n) {\n  if (n === 0) return 0;\n  if (n === 1) return 1;\n  let a = 0, b = 1;\n  for (let i = 2; i <= n; i++) {\n    const temp = a + b;\n    a = b;\n    b = temp;\n  }\n  return b;\n}\n```\n\n### algo_moyen_1\n```javascript\nfunction motsUniques(s) {\n  const words = s.trim().split(/\\s+/).filter(w => w.length > 0);\n  const unique = new Set(words);\n  return unique.size;\n}\n```\n\n### algo_difficile_1\n```javascript\nfunction aplatirTableau(tab) {\n  return tab.reduce((acc, curr) => acc.concat(curr), []);\n}\n```\n\n### algo_defi\n```javascript\nfunction rotationDroite(tab, k) {\n  if (tab.length === 0) return [];\n  k = k % tab.length;\n  if (k === 0) return tab.slice();\n  return tab.slice(-k).concat(tab.slice(0, tab.length - k));\n}\n```",
+              "evalResults": [
+                {
+                  "id": "tache_3a",
+                  "label": "Dernier élément",
+                  "code": "function dernierElement(tableau) {\n  if (tableau.length === 0) return undefined;\n  return tableau[tableau.length - 1];\n}",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "Tableau",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "Tableau 1 élém",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "Tableau vide",
+                      "error": null
+                    }
+                  ],
+                  "points": 60,
+                  "maxPoints": 60,
+                  "taskType": "Dernier élément",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 3
+                },
+                {
+                  "id": "tache_3b",
+                  "label": "Compter jusqu'à N",
+                  "code": "function compterJusqua(n) {\n  if (n < 1) return [];\n  const result = [];\n  for (let i = 1; i <= n; i++) {\n    result.push(i);\n  }\n  return result;\n}",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "N=3",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "N=0",
+                      "error": null
+                    }
+                  ],
+                  "points": 46,
+                  "maxPoints": 46,
+                  "taskType": "Compter jusqu'à N",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 3
+                },
+                {
+                  "id": "tache_3c",
+                  "label": "Remplacer lettre",
+                  "code": "function remplacerLettre(mot, ancienne, nouvelle) {\n  return mot.split(ancienne).join(nouvelle);\n}",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "Remplacement normal",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "Pas de match",
+                      "error": null
+                    }
+                  ],
+                  "points": 35,
+                  "maxPoints": 35,
+                  "taskType": "Remplacer lettre",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 3
+                },
+                {
+                  "id": "tache_3d",
+                  "label": "Somme tableau",
+                  "code": "function sommeTableau(tableau) {\n  if (tableau.length === 0) return 0;\n  return tableau.reduce((acc, val) => acc + val, 0);\n}",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "Nombres",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "Vide",
+                      "error": null
+                    }
+                  ],
+                  "points": 43,
+                  "maxPoints": 43,
+                  "taskType": "Somme tableau",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 3
+                },
+                {
+                  "id": "tache_3e",
+                  "label": "Contient 'a'",
+                  "code": "function contientA(mot) {\n  return mot.toLowerCase().includes('a');\n}",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "Avec a minuscule",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "Avec A majuscule",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "Sans a",
+                      "error": null
+                    }
+                  ],
+                  "points": 53,
+                  "maxPoints": 53,
+                  "taskType": "Contient 'a'",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 3
+                },
+                {
+                  "id": "algo_facile_1",
+                  "label": "Algorithmique — Parenthèses valides",
+                  "code": "function validerParentheses(s) {\n  let count = 0;\n  for (let i = 0; i < s.length; i++) {\n    if (s[i] === '(') count++;\n    else if (s[i] === ')') {\n      count--;\n      if (count < 0) return false;\n    }\n  }\n  return count === 0;\n}",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "Balancées",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "Non fermée",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "Inversées",
+                      "error": null
+                    }
+                  ],
+                  "points": 39,
+                  "maxPoints": 39,
+                  "taskType": "Algorithmique — Parenthèses valides",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 3
+                },
+                {
+                  "id": "algo_facile_2",
+                  "label": "Algorithmique — Fibonacci",
+                  "code": "function fibonacci(n) {\n  if (n === 0) return 0;\n  if (n === 1) return 1;\n  let a = 0, b = 1;\n  for (let i = 2; i <= n; i++) {\n    const temp = a + b;\n    a = b;\n    b = temp;\n  }\n  return b;\n}",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "fib(7)",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "fib(0)",
+                      "error": null
+                    }
+                  ],
+                  "points": 56,
+                  "maxPoints": 56,
+                  "taskType": "Algorithmique — Fibonacci",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 3
+                },
+                {
+                  "id": "algo_moyen_1",
+                  "label": "Algorithmique — Mots uniques",
+                  "code": "function motsUniques(s) {\n  const words = s.trim().split(/\\s+/).filter(w => w.length > 0);\n  const unique = new Set(words);\n  return unique.size;\n}",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "Répétition",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "Un seul",
+                      "error": null
+                    }
+                  ],
+                  "points": 32,
+                  "maxPoints": 32,
+                  "taskType": "Algorithmique — Mots uniques",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 3
+                },
+                {
+                  "id": "algo_difficile_1",
+                  "label": "Algorithmique — Aplatir un tableau",
+                  "code": "function aplatirTableau(tab) {\n  return tab.reduce((acc, curr) => acc.concat(curr), []);\n}",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "Imbriqué",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "Vide",
+                      "error": null
+                    }
+                  ],
+                  "points": 42,
+                  "maxPoints": 42,
+                  "taskType": "Algorithmique — Aplatir un tableau",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 3
+                },
+                {
+                  "id": "algo_defi",
+                  "label": "Algorithmique — Rotation à droite",
+                  "code": "function rotationDroite(tab, k) {\n  if (tab.length === 0) return [];\n  k = k % tab.length;\n  if (k === 0) return tab.slice();\n  return tab.slice(-k).concat(tab.slice(0, tab.length - k));\n}",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "Rotation 1",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "Pas de rotation",
+                      "error": null
+                    }
+                  ],
+                  "points": 36,
+                  "maxPoints": 36,
+                  "taskType": "Algorithmique — Rotation à droite",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 3
+                }
+              ]
+            },
+            {
+              "tierNum": 4,
+              "tierTitle": "Tier 4 — CM1",
+              "isMandatory": false,
+              "className": "CM1",
+              "rawResponse": "\n\n---\n### tache_4a\n```javascript\nfunction trouverMaximum(tableau) {\n  let max = tableau[0];\n  for (let i = 1; i < tableau.length; i++) {\n    if (tableau[i] > max) {\n      max = tableau[i];\n    }\n  }\n  return max;\n}\n```\n\n### tache_4b\n```javascript\nfunction inverserChaine(chaine) {\n  return chaine.split('').reverse().join('');\n}\n```\n\n### tache_4c\n```javascript\nfunction compterVoyelles(chaine) {\n  const voyelles = 'aeiouAEIOU';\n  let count = 0;\n  for (let i = 0; i < chaine.length; i++) {\n    if (voyelles.indexOf(chaine[i]) !== -1) {\n      count++;\n    }\n  }\n  return count;\n}\n```\n\n### tache_4d\n```javascript\nfunction filtrerPositifs(tableau) {\n  return tableau.filter(function(x) { return x > 0; });\n}\n```\n\n### tache_4e\n```javascript\nfunction repeterChaine(chaine, n) {\n  if (n <= 0) return '';\n  let resultat = '';\n  for (let i = 0; i < n; i++) {\n    resultat += chaine;\n  }\n  return resultat;\n}\n```\n\n### algo_facile_1\n```javascript\nfunction capitaliserMots(s) {\n  return s.split(' ').map(function(mot) {\n    if (mot.length === 0) return '';\n    return mot[0].toUpperCase() + mot.slice(1).toLowerCase();\n  }).join(' ');\n}\n```\n\n### algo_facile_2\n```javascript\nfunction sommeChiffres(n) {\n  let somme = 0;\n  while (n > 0) {\n    somme += n % 10;\n    n = Math.floor(n / 10);\n  }\n  return somme;\n}\n```\n\n### algo_moyen_1\n```javascript\nfunction grouperParParite(tab) {\n  const pairs = [];\n  const impairs = [];\n  for (let i = 0; i < tab.length; i++) {\n    if (tab[i] % 2 === 0) {\n      pairs.push(tab[i]);\n    } else {\n      impairs.push(tab[i]);\n    }\n  }\n  return { pairs: pairs, impairs: impairs };\n}\n```\n\n### algo_difficile_1\n```javascript\nfunction plusLongMot(s) {\n  if (s.length === 0) return '';\n  const mots = s.split(' ');\n  let plusLong = mots[0];\n  for (let i = 1; i < mots.length; i++) {\n    if (mots[i].length > plusLong.length) {\n      plusLong = mots[i];\n    }\n  }\n  return plusLong;\n}\n```\n\n### algo_defi\n```javascript\nfunction mediane(tab) {\n  const trie = tab.slice().sort(function(a, b) { return a - b; });\n  const len = trie.length;\n  const milieu = Math.floor(len / 2);\n  if (len % 2 === 1) {\n    return trie[milieu];\n  } else {\n    return (trie[milieu - 1] + trie[milieu]) / 2;\n  }\n}\n```",
+              "evalResults": [
+                {
+                  "id": "tache_4a",
+                  "label": "Maximum",
+                  "code": "function trouverMaximum(tableau) {\n  let max = tableau[0];\n  for (let i = 1; i < tableau.length; i++) {\n    if (tableau[i] > max) {\n      max = tableau[i];\n    }\n  }\n  return max;\n}",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "Tableau positif",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "Tableau négatif",
+                      "error": null
+                    }
+                  ],
+                  "points": 40,
+                  "maxPoints": 40,
+                  "taskType": "Maximum",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 4
+                },
+                {
+                  "id": "tache_4b",
+                  "label": "Inverser",
+                  "code": "function inverserChaine(chaine) {\n  return chaine.split('').reverse().join('');\n}",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "Mot normal",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "Vide",
+                      "error": null
+                    }
+                  ],
+                  "points": 34,
+                  "maxPoints": 34,
+                  "taskType": "Inverser",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 4
+                },
+                {
+                  "id": "tache_4c",
+                  "label": "Voyelles",
+                  "code": "function compterVoyelles(chaine) {\n  const voyelles = 'aeiouAEIOU';\n  let count = 0;\n  for (let i = 0; i < chaine.length; i++) {\n    if (voyelles.indexOf(chaine[i]) !== -1) {\n      count++;\n    }\n  }\n  return count;\n}",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "Avec voyelles",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "Majuscules",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "Sans voyelles",
+                      "error": null
+                    }
+                  ],
+                  "points": 55,
+                  "maxPoints": 55,
+                  "taskType": "Voyelles",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 4
+                },
+                {
+                  "id": "tache_4d",
+                  "label": "Filtrer positifs",
+                  "code": "function filtrerPositifs(tableau) {\n  return tableau.filter(function(x) { return x > 0; });\n}",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "Mixte",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "Que négatifs",
+                      "error": null
+                    }
+                  ],
+                  "points": 48,
+                  "maxPoints": 48,
+                  "taskType": "Filtrer positifs",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 4
+                },
+                {
+                  "id": "tache_4e",
+                  "label": "Répéter",
+                  "code": "function repeterChaine(chaine, n) {\n  if (n <= 0) return '';\n  let resultat = '';\n  for (let i = 0; i < n; i++) {\n    resultat += chaine;\n  }\n  return resultat;\n}",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "Répète 3",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "Répète 0",
+                      "error": null
+                    }
+                  ],
+                  "points": 46,
+                  "maxPoints": 46,
+                  "taskType": "Répéter",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 4
+                },
+                {
+                  "id": "algo_facile_1",
+                  "label": "Algorithmique — Capitaliser les mots",
+                  "code": "function capitaliserMots(s) {\n  return s.split(' ').map(function(mot) {\n    if (mot.length === 0) return '';\n    return mot[0].toUpperCase() + mot.slice(1).toLowerCase();\n  }).join(' ');\n}",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "Deux mots",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "Majuscules",
+                      "error": null
+                    }
+                  ],
+                  "points": 41,
+                  "maxPoints": 41,
+                  "taskType": "Algorithmique — Capitaliser les mots",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 4
+                },
+                {
+                  "id": "algo_facile_2",
+                  "label": "Algorithmique — Somme des chiffres",
+                  "code": "function sommeChiffres(n) {\n  let somme = 0;\n  while (n > 0) {\n    somme += n % 10;\n    n = Math.floor(n / 10);\n  }\n  return somme;\n}",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "1234",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "Zéro",
+                      "error": null
+                    }
+                  ],
+                  "points": 35,
+                  "maxPoints": 35,
+                  "taskType": "Algorithmique — Somme des chiffres",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 4
+                },
+                {
+                  "id": "algo_moyen_1",
+                  "label": "Algorithmique — Grouper par parité",
+                  "code": "function grouperParParite(tab) {\n  const pairs = [];\n  const impairs = [];\n  for (let i = 0; i < tab.length; i++) {\n    if (tab[i] % 2 === 0) {\n      pairs.push(tab[i]);\n    } else {\n      impairs.push(tab[i]);\n    }\n  }\n  return { pairs: pairs, impairs: impairs };\n}",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "Mixte",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "Tous pairs",
+                      "error": null
+                    }
+                  ],
+                  "points": 44,
+                  "maxPoints": 44,
+                  "taskType": "Algorithmique — Grouper par parité",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 4
+                },
+                {
+                  "id": "algo_difficile_1",
+                  "label": "Algorithmique — Mot le plus long",
+                  "code": "function plusLongMot(s) {\n  if (s.length === 0) return '';\n  const mots = s.split(' ');\n  let plusLong = mots[0];\n  for (let i = 1; i < mots.length; i++) {\n    if (mots[i].length > plusLong.length) {\n      plusLong = mots[i];\n    }\n  }\n  return plusLong;\n}",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "Phrase",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "Égalité",
+                      "error": null
+                    }
+                  ],
+                  "points": 58,
+                  "maxPoints": 58,
+                  "taskType": "Algorithmique — Mot le plus long",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 4
+                },
+                {
+                  "id": "algo_defi",
+                  "label": "Algorithmique — Médiane",
+                  "code": "function mediane(tab) {\n  const trie = tab.slice().sort(function(a, b) { return a - b; });\n  const len = trie.length;\n  const milieu = Math.floor(len / 2);\n  if (len % 2 === 1) {\n    return trie[milieu];\n  } else {\n    return (trie[milieu - 1] + trie[milieu]) / 2;\n  }\n}",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "Impair",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "Pair",
+                      "error": null
+                    }
+                  ],
+                  "points": 37,
+                  "maxPoints": 37,
+                  "taskType": "Algorithmique — Médiane",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 4
+                }
+              ]
+            },
+            {
+              "tierNum": 5,
+              "tierTitle": "Tier 5 — CM2",
+              "isMandatory": false,
+              "className": "CM2",
+              "rawResponse": "\n\n---\n### tache_5a\n```javascript\nfunction supprimerDoublons(tableau) {\n  return [...new Set(tableau)];\n}\n```\n\n### tache_5b\n```javascript\nfunction capitaliserMots(phrase) {\n  return phrase.split(' ').map(word => {\n    if (word.length === 0) return '';\n    return word[0].toUpperCase() + word.slice(1).toLowerCase();\n  }).join(' ');\n}\n```\n\n### tache_5c\n```javascript\nfunction frequenceCaracteres(chaine) {\n  const resultat = {};\n  for (let i = 0; i < chaine.length; i++) {\n    const char = chaine[i];\n    resultat[char] = (resultat[char] || 0) + 1;\n  }\n  return resultat;\n}\n```\n\n### tache_5d\n```javascript\nfunction filtrerPairs(tableau) {\n  return tableau.filter(n => n % 2 === 0);\n}\n```\n\n### tache_5e\n```javascript\nfunction chaineLaPlusLongue(tableau) {\n  if (tableau.length === 0) return '';\n  let plusLongue = tableau[0];\n  for (let i = 1; i < tableau.length; i++) {\n    if (tableau[i].length > plusLongue.length) {\n      plusLongue = tableau[i];\n    }\n  }\n  return plusLongue;\n}\n```\n\n### algo_facile_1\n```javascript\nfunction convertirBase(n, base) {\n  if (n === 0) return '0';\n  const chiffres = '0123456789abcdef';\n  let resultat = '';\n  let nombre = n;\n  while (nombre > 0) {\n    resultat = chiffres[nombre % base] + resultat;\n    nombre = Math.floor(nombre / base);\n  }\n  return resultat;\n}\n```\n\n### algo_facile_2\n```javascript\nfunction kemePlusGrand(tab, k) {\n  const distinct = [...new Set(tab)];\n  distinct.sort((a, b) => b - a);\n  return distinct[k - 1];\n}\n```\n\n### algo_moyen_1\n```javascript\nfunction compteurFrequence(tab) {\n  const resultat = {};\n  for (let i = 0; i < tab.length; i++) {\n    const elem = tab[i];\n    const cle = JSON.stringify(elem);\n    resultat[cle] = (resultat[cle] || 0) + 1;\n  }\n  return resultat;\n}\n```\n\n### algo_difficile_1\n```javascript\nfunction exponentiationRapide(x, n) {\n  if (n === 0) return 1;\n  let resultat = 1;\n  let base = x;\n  let exposant = n;\n  while (exposant > 0) {\n    if (exposant % 2 === 1) {\n      resultat *= base;\n    }\n    base *= base;\n    exposant = Math.floor(exposant / 2);\n  }\n  return resultat;\n}\n```\n\n### algo_defi\n```javascript\nfunction sousTableauMax(tab) {\n  if (tab.length === 0) return 0;\n  let maxGlobal = tab[0];\n  let maxActuel = tab[0];\n  for (let i = 1; i < tab.length; i++) {\n    maxActuel = Math.max(tab[i], maxActuel + tab[i]);\n    if (maxActuel > maxGlobal) {\n      maxGlobal = maxActuel;\n    }\n  }\n  return maxGlobal;\n}\n```\n\n---\n### algo_moyen_1\n```javascript\nfunction compteurFrequence(tab) {\n  const obj = {};\n  for (const v of tab) {\n    obj[v] = (obj[v] || 0) + 1;\n  }\n  return obj;\n}\n```",
+              "evalResults": [
+                {
+                  "id": "tache_5a",
+                  "label": "Doublons",
+                  "code": "function supprimerDoublons(tableau) {\n  return [...new Set(tableau)];\n}",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "Avec doublons",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "Sans doublons",
+                      "error": null
+                    }
+                  ],
+                  "points": 34,
+                  "maxPoints": 34,
+                  "taskType": "Doublons",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 5
+                },
+                {
+                  "id": "tache_5b",
+                  "label": "Capitaliser",
+                  "code": "function capitaliserMots(phrase) {\n  return phrase.split(' ').map(word => {\n    if (word.length === 0) return '';\n    return word[0].toUpperCase() + word.slice(1).toLowerCase();\n  }).join(' ');\n}",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "Phrase normale",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "Un mot",
+                      "error": null
+                    }
+                  ],
+                  "points": 36,
+                  "maxPoints": 36,
+                  "taskType": "Capitaliser",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 5
+                },
+                {
+                  "id": "tache_5c",
+                  "label": "Fréquence",
+                  "code": "function frequenceCaracteres(chaine) {\n  const resultat = {};\n  for (let i = 0; i < chaine.length; i++) {\n    const char = chaine[i];\n    resultat[char] = (resultat[char] || 0) + 1;\n  }\n  return resultat;\n}",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "Mot simple",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "Vide",
+                      "error": null
+                    }
+                  ],
+                  "points": 36,
+                  "maxPoints": 36,
+                  "taskType": "Fréquence",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 5
+                },
+                {
+                  "id": "tache_5d",
+                  "label": "Filtrer pairs",
+                  "code": "function filtrerPairs(tableau) {\n  return tableau.filter(n => n % 2 === 0);\n}",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "Mixte",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "Que impairs",
+                      "error": null
+                    }
+                  ],
+                  "points": 42,
+                  "maxPoints": 42,
+                  "taskType": "Filtrer pairs",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 5
+                },
+                {
+                  "id": "tache_5e",
+                  "label": "Plus longue",
+                  "code": "function chaineLaPlusLongue(tableau) {\n  if (tableau.length === 0) return '';\n  let plusLongue = tableau[0];\n  for (let i = 1; i < tableau.length; i++) {\n    if (tableau[i].length > plusLongue.length) {\n      plusLongue = tableau[i];\n    }\n  }\n  return plusLongue;\n}",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "Tableau normal",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "Vide",
+                      "error": null
+                    }
+                  ],
+                  "points": 36,
+                  "maxPoints": 36,
+                  "taskType": "Plus longue",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 5
+                },
+                {
+                  "id": "algo_facile_1",
+                  "label": "Algorithmique — Conversion de base",
+                  "code": "function convertirBase(n, base) {\n  if (n === 0) return '0';\n  const chiffres = '0123456789abcdef';\n  let resultat = '';\n  let nombre = n;\n  while (nombre > 0) {\n    resultat = chiffres[nombre % base] + resultat;\n    nombre = Math.floor(nombre / base);\n  }\n  return resultat;\n}",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "Base 16",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "Base 2",
+                      "error": null
+                    }
+                  ],
+                  "points": 47,
+                  "maxPoints": 47,
+                  "taskType": "Algorithmique — Conversion de base",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 5
+                },
+                {
+                  "id": "algo_facile_2",
+                  "label": "Algorithmique — K-ième plus grand",
+                  "code": "function kemePlusGrand(tab, k) {\n  const distinct = [...new Set(tab)];\n  distinct.sort((a, b) => b - a);\n  return distinct[k - 1];\n}",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "2e plus grand",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "1er plus grand",
+                      "error": null
+                    }
+                  ],
+                  "points": 50,
+                  "maxPoints": 50,
+                  "taskType": "Algorithmique — K-ième plus grand",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 5
+                },
+                {
+                  "id": "algo_moyen_1",
+                  "label": "Algorithmique — Fréquence des éléments",
+                  "code": "function compteurFrequence(tab) {\n  const obj = {};\n  for (const v of tab) {\n    obj[v] = (obj[v] || 0) + 1;\n  }\n  return obj;\n}",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "Chaînes",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "Nombres",
+                      "error": null
+                    }
+                  ],
+                  "points": 0,
+                  "maxPoints": 34,
+                  "taskType": "Algorithmique — Fréquence des éléments",
+                  "helpUsed": true,
+                  "retried": true,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 5
+                },
+                {
+                  "id": "algo_difficile_1",
+                  "label": "Algorithmique — Exponentiation rapide",
+                  "code": "function exponentiationRapide(x, n) {\n  if (n === 0) return 1;\n  let resultat = 1;\n  let base = x;\n  let exposant = n;\n  while (exposant > 0) {\n    if (exposant % 2 === 1) {\n      resultat *= base;\n    }\n    base *= base;\n    exposant = Math.floor(exposant / 2);\n  }\n  return resultat;\n}",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "2^10",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "5^0",
+                      "error": null
+                    }
+                  ],
+                  "points": 54,
+                  "maxPoints": 54,
+                  "taskType": "Algorithmique — Exponentiation rapide",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 5
+                },
+                {
+                  "id": "algo_defi",
+                  "label": "Algorithmique — Sous-tableau de somme max",
+                  "code": "function sousTableauMax(tab) {\n  if (tab.length === 0) return 0;\n  let maxGlobal = tab[0];\n  let maxActuel = tab[0];\n  for (let i = 1; i < tab.length; i++) {\n    maxActuel = Math.max(tab[i], maxActuel + tab[i]);\n    if (maxActuel > maxGlobal) {\n      maxGlobal = maxActuel;\n    }\n  }\n  return maxGlobal;\n}",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "Classique",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "Tous positifs",
+                      "error": null
+                    }
+                  ],
+                  "points": 46,
+                  "maxPoints": 46,
+                  "taskType": "Algorithmique — Sous-tableau de somme max",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 5
+                }
+              ]
+            }
+          ],
+          "quantization": null,
+          "elapsedMs": 21695,
+          "wallMs": 53251,
+          "tokens": 1218,
+          "tokensPerSecond": 56.14,
+          "timestampMs": 1785656644702,
+          "timestampIso": "2026-08-02T07:44:04.702Z"
+        },
+        "attempts": [
+          {
+            "profile": "LIGHT",
+            "ecole": "Primaire",
+            "score": 2595,
+            "max": 2629,
+            "pct": 99,
+            "mandatoryPassed": 916,
+            "mandatoryTotal": 916,
+            "globalLifeScore": 2938,
+            "optionalBonus": 343,
+            "helpCount": 1,
+            "retriedCount": 1,
+            "calibrationIndex": 0.95,
+            "declaredLevel": 0.95,
+            "date": "2026-08-02",
+            "time": "09-43-36",
+            "reportFile": "Export-Rapports\\2026-08-02\\Primaire\\LIGHT\\rapport_v3_inclusionai_ling-3.0-flash_free_light_09-43-36.md",
+            "selfProfile": {
+              "skills": {
+                "javascript_basics": {
+                  "level": 5,
+                  "examples": "Implémentation d'un LRU Cache en O(1) avec Map + doubly-linked list ; tri rapide personnalisé avec comparaison flexible"
+                },
+                "javascript_async": {
+                  "level": 5,
+                  "examples": "Orchestration de concurrence limitée via p-limit avec retry exponentiel et backoff jitter ; gestion fine de la boucle d'événements et micro-tâches"
+                },
+                "algorithms_advanced": {
+                  "level": 5,
+                  "examples": "Dijkstra avec file de priorité binaire ; construction d'un Trie avec suppression de nœuds ; programmation dynamique sur sous-séquences"
+                },
+                "code_debugging": {
+                  "level": 4,
+                  "examples": "Détection de race conditions sur état partagé en async ; identification de prototype pollution via objets deep-clonés incorrectement ; sanitisation des entrées contre XSS et injection SQL"
+                }
+              },
+              "justification": "Maîtrise solide des fondamentaux et de l'async, capacité à implémenter des structures avancées correctement ; en debugging, je repère la majorité des vulnérabilités classiques mais des cas très subtils (ex : TOCTOU dans des contextes non évidents) peuvent m'échapper."
+            },
+            "tiers": [
+              {
+                "tierNum": 0,
+                "tierTitle": "Tier 0 — Maternelle",
+                "isMandatory": true,
+                "className": "Maternelle",
+                "rawResponse": "\n\n---\n### tache_0a\n```javascript\nfunction direBonjour() { return \"Bonjour\"; }\n```\n\n### tache_0b\n```javascript\nfunction retournerVrai() { return true; }\n```\n\n### tache_0c\n```javascript\nfunction retourner42() { return 42; }\n```\n\n### tache_0d\n```javascript\nfunction additionner(a, b) { return a + b; }\n```\n\n### tache_0e\n```javascript\nfunction identite(x) { return x; }\n```\n\n### algo_facile_1\n```javascript\nfunction estPair(n) { return n % 2 === 0; }\n```\n\n### algo_facile_2\n```javascript\nfunction carre(n) { return n * n; }\n```\n\n### algo_moyen_1\n```javascript\nfunction somme1aN(n) { return (n * (n + 1)) / 2; }\n```\n\n### algo_difficile_1\n```javascript\nfunction inverserChaine(s) { return s.split(\"\").reverse().join(\"\"); }\n```\n\n### algo_defi\n```javascript\nfunction valeurMax(tab) { let max = tab[0]; for (let i = 1; i < tab.length; i++) { if (tab[i] > max) { max = tab[i]; } } return max; }\n```",
+                "evalResults": [
+                  {
+                    "id": "tache_0a",
+                    "label": "Retourner 'Bonjour'",
+                    "code": "function direBonjour() { return \"Bonjour\"; }",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "Retourne Bonjour",
+                        "error": null
+                      }
+                    ],
+                    "points": 31,
+                    "maxPoints": 31,
+                    "taskType": "Retourner 'Bonjour'",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 0
+                  },
+                  {
+                    "id": "tache_0b",
+                    "label": "Retourner true",
+                    "code": "function retournerVrai() { return true; }",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "Retourne true",
+                        "error": null
+                      }
+                    ],
+                    "points": 46,
+                    "maxPoints": 46,
+                    "taskType": "Retourner true",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 0
+                  },
+                  {
+                    "id": "tache_0c",
+                    "label": "Retourner 42",
+                    "code": "function retourner42() { return 42; }",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "Retourne 42",
+                        "error": null
+                      }
+                    ],
+                    "points": 49,
+                    "maxPoints": 49,
+                    "taskType": "Retourner 42",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 0
+                  },
+                  {
+                    "id": "tache_0d",
+                    "label": "Additionner a et b",
+                    "code": "function additionner(a, b) { return a + b; }",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "Addition positive",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "Addition négative",
+                        "error": null
+                      }
+                    ],
+                    "points": 40,
+                    "maxPoints": 40,
+                    "taskType": "Additionner a et b",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 0
+                  },
+                  {
+                    "id": "tache_0e",
+                    "label": "Identité",
+                    "code": "function identite(x) { return x; }",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "Identité string",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "Identité number",
+                        "error": null
+                      }
+                    ],
+                    "points": 59,
+                    "maxPoints": 59,
+                    "taskType": "Identité",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 0
+                  },
+                  {
+                    "id": "algo_facile_1",
+                    "label": "Algorithmique — Parité",
+                    "code": "function estPair(n) { return n % 2 === 0; }",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "Pair",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "Impair",
+                        "error": null
+                      }
+                    ],
+                    "points": 52,
+                    "maxPoints": 52,
+                    "taskType": "Algorithmique — Parité",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 0
+                  },
+                  {
+                    "id": "algo_facile_2",
+                    "label": "Algorithmique — Carré",
+                    "code": "function carre(n) { return n * n; }",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "Positif",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "Zéro",
+                        "error": null
+                      }
+                    ],
+                    "points": 57,
+                    "maxPoints": 57,
+                    "taskType": "Algorithmique — Carré",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 0
+                  },
+                  {
+                    "id": "algo_moyen_1",
+                    "label": "Algorithmique — Somme 1..N",
+                    "code": "function somme1aN(n) { return (n * (n + 1)) / 2; }",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "Somme 5",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "Somme 1",
+                        "error": null
+                      }
+                    ],
+                    "points": 39,
+                    "maxPoints": 39,
+                    "taskType": "Algorithmique — Somme 1..N",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 0
+                  },
+                  {
+                    "id": "algo_difficile_1",
+                    "label": "Algorithmique — Inversion de chaîne",
+                    "code": "function inverserChaine(s) { return s.split(\"\").reverse().join(\"\"); }",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "Mot",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "Un caractère",
+                        "error": null
+                      }
+                    ],
+                    "points": 55,
+                    "maxPoints": 55,
+                    "taskType": "Algorithmique — Inversion de chaîne",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 0
+                  },
+                  {
+                    "id": "algo_defi",
+                    "label": "Algorithmique — Maximum d'un tableau",
+                    "code": "function valeurMax(tab) { let max = tab[0]; for (let i = 1; i < tab.length; i++) { if (tab[i] > max) { max = tab[i]; } } return max; }",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "Positifs",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "Négatifs",
+                        "error": null
+                      }
+                    ],
+                    "points": 32,
+                    "maxPoints": 32,
+                    "taskType": "Algorithmique — Maximum d'un tableau",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 0
+                  }
+                ]
+              },
+              {
+                "tierNum": 1,
+                "tierTitle": "Tier 1 — CP",
+                "isMandatory": true,
+                "className": "CP",
+                "rawResponse": "\n\n---\n### tache_1a\n```javascript\nfunction soustraire(a, b) {\n  return a - b;\n}\n```\n\n### tache_1b\n```javascript\nfunction superieurA10(n) {\n  return n > 10;\n}\n```\n\n### tache_1c\n```javascript\nfunction concatener(mot1, mot2) {\n  return mot1 + \" \" + mot2;\n}\n```\n\n### tache_1d\n```javascript\nfunction estVide(chaine) {\n  return chaine === \"\";\n}\n```\n\n### tache_1e\n```javascript\nfunction multiplierPar2(n) {\n  return n * 2;\n}\n```\n\n### algo_facile_1\n```javascript\nfunction estMultipleDe(n, m) {\n  if (m === 0) return false;\n  return n % m === 0;\n}\n```\n\n### algo_facile_2\n```javascript\nfunction puissance(base, exp) {\n  let resultat = 1;\n  for (let i = 0; i < exp; i++) {\n    resultat *= base;\n  }\n  return resultat;\n}\n```\n\n### algo_moyen_1\n```javascript\nfunction compterPairs(tab) {\n  let count = 0;\n  for (let i = 0; i < tab.length; i++) {\n    if (tab[i] % 2 === 0) {\n      count++;\n    }\n  }\n  return count;\n}\n```\n\n### algo_difficile_1\n```javascript\nfunction supprimerDoublons(tab) {\n  const resultat = [];\n  const vu = {};\n  for (let i = 0; i < tab.length; i++) {\n    if (!vu[tab[i]]) {\n      vu[tab[i]] = true;\n      resultat.push(tab[i]);\n    }\n  }\n  return resultat;\n}\n```\n\n### algo_defi\n```javascript\nfunction sommePaires(tab) {\n  let somme = 0;\n  for (let i = 0; i < tab.length; i++) {\n    if (tab[i] % 2 === 0) {\n      somme += tab[i];\n    }\n  }\n  return somme;\n}\n```",
+                "evalResults": [
+                  {
+                    "id": "tache_1a",
+                    "label": "Soustraire b de a",
+                    "code": "function soustraire(a, b) {\n  return a - b;\n}",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "Soustraction simple",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "Soustraction négative",
+                        "error": null
+                      }
+                    ],
+                    "points": 50,
+                    "maxPoints": 50,
+                    "taskType": "Soustraire b de a",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 1
+                  },
+                  {
+                    "id": "tache_1b",
+                    "label": "Supérieur à 10",
+                    "code": "function superieurA10(n) {\n  return n > 10;\n}",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "Plus grand que 10",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "Égal à 10",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "Plus petit que 10",
+                        "error": null
+                      }
+                    ],
+                    "points": 42,
+                    "maxPoints": 42,
+                    "taskType": "Supérieur à 10",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 1
+                  },
+                  {
+                    "id": "tache_1c",
+                    "label": "Concaténer mots",
+                    "code": "function concatener(mot1, mot2) {\n  return mot1 + \" \" + mot2;\n}",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "Deux mots normaux",
+                        "error": null
+                      }
+                    ],
+                    "points": 57,
+                    "maxPoints": 57,
+                    "taskType": "Concaténer mots",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 1
+                  },
+                  {
+                    "id": "tache_1d",
+                    "label": "Chaîne vide",
+                    "code": "function estVide(chaine) {\n  return chaine === \"\";\n}",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "Chaîne vide",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "Chaîne avec espace",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "Chaîne normale",
+                        "error": null
+                      }
+                    ],
+                    "points": 53,
+                    "maxPoints": 53,
+                    "taskType": "Chaîne vide",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 1
+                  },
+                  {
+                    "id": "tache_1e",
+                    "label": "Multiplier par 2",
+                    "code": "function multiplierPar2(n) {\n  return n * 2;\n}",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "Positif",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "Zéro",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "Négatif",
+                        "error": null
+                      }
+                    ],
+                    "points": 46,
+                    "maxPoints": 46,
+                    "taskType": "Multiplier par 2",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 1
+                  },
+                  {
+                    "id": "algo_facile_1",
+                    "label": "Algorithmique — Multiplicité",
+                    "code": "function estMultipleDe(n, m) {\n  if (m === 0) return false;\n  return n % m === 0;\n}",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "Multiple",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "Non multiple",
+                        "error": null
+                      }
+                    ],
+                    "points": 31,
+                    "maxPoints": 31,
+                    "taskType": "Algorithmique — Multiplicité",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 1
+                  },
+                  {
+                    "id": "algo_facile_2",
+                    "label": "Algorithmique — Puissance",
+                    "code": "function puissance(base, exp) {\n  let resultat = 1;\n  for (let i = 0; i < exp; i++) {\n    resultat *= base;\n  }\n  return resultat;\n}",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "2^3",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "5^0",
+                        "error": null
+                      }
+                    ],
+                    "points": 41,
+                    "maxPoints": 41,
+                    "taskType": "Algorithmique — Puissance",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 1
+                  },
+                  {
+                    "id": "algo_moyen_1",
+                    "label": "Algorithmique — Comptage de pairs",
+                    "code": "function compterPairs(tab) {\n  let count = 0;\n  for (let i = 0; i < tab.length; i++) {\n    if (tab[i] % 2 === 0) {\n      count++;\n    }\n  }\n  return count;\n}",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "Mixte",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "Aucun pair",
+                        "error": null
+                      }
+                    ],
+                    "points": 41,
+                    "maxPoints": 41,
+                    "taskType": "Algorithmique — Comptage de pairs",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 1
+                  },
+                  {
+                    "id": "algo_difficile_1",
+                    "label": "Algorithmique — Suppression de doublons",
+                    "code": "function supprimerDoublons(tab) {\n  const resultat = [];\n  const vu = {};\n  for (let i = 0; i < tab.length; i++) {\n    if (!vu[tab[i]]) {\n      vu[tab[i]] = true;\n      resultat.push(tab[i]);\n    }\n  }\n  return resultat;\n}",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "Avec doublons",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "Tous identiques",
+                        "error": null
+                      }
+                    ],
+                    "points": 41,
+                    "maxPoints": 41,
+                    "taskType": "Algorithmique — Suppression de doublons",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 1
+                  },
+                  {
+                    "id": "algo_defi",
+                    "label": "Algorithmique — Somme des pairs",
+                    "code": "function sommePaires(tab) {\n  let somme = 0;\n  for (let i = 0; i < tab.length; i++) {\n    if (tab[i] % 2 === 0) {\n      somme += tab[i];\n    }\n  }\n  return somme;\n}",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "Mixte",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "Aucun pair",
+                        "error": null
+                      }
+                    ],
+                    "points": 54,
+                    "maxPoints": 54,
+                    "taskType": "Algorithmique — Somme des pairs",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 1
+                  }
+                ]
+              },
+              {
+                "tierNum": 2,
+                "tierTitle": "Tier 2 — CE1",
+                "isMandatory": false,
+                "className": "CE1",
+                "rawResponse": "\n\n---\n### tache_2a\n```javascript\nfunction longueurChaine(chaine) {\n  return chaine.length;\n}\n```\n\n### tache_2b\n```javascript\nfunction premierElement(tableau) {\n  return tableau[0];\n}\n```\n\n### tache_2c\n```javascript\nfunction estPair(n) {\n  return n % 2 === 0;\n}\n```\n\n### tache_2d\n```javascript\nfunction enMajuscules(chaine) {\n  return chaine.toUpperCase();\n}\n```\n\n### tache_2e\n```javascript\nfunction ajouterALaFin(tableau, element) {\n  tableau.push(element);\n  return tableau;\n}\n```\n\n### algo_facile_1\n```javascript\nfunction estPalindrome(s) {\n  const reversed = s.split('').reverse().join('');\n  return s === reversed;\n}\n```\n\n### algo_facile_2\n```javascript\nfunction pgcd(a, b) {\n  while (b !== 0) {\n    const temp = b;\n    b = a % b;\n    a = temp;\n  }\n  return a;\n}\n```\n\n### algo_moyen_1\n```javascript\nfunction nombreMots(s) {\n  const trimmed = s.trim();\n  if (trimmed === '') return 0;\n  return trimmed.split(/\\s+/).length;\n}\n```\n\n### algo_difficile_1\n```javascript\nfunction fusionTriee(a, b) {\n  const result = [];\n  let i = 0;\n  let j = 0;\n  while (i < a.length && j < b.length) {\n    if (a[i] <= b[j]) {\n      result.push(a[i]);\n      i++;\n    } else {\n      result.push(b[j]);\n      j++;\n    }\n  }\n  while (i < a.length) {\n    result.push(a[i]);\n    i++;\n  }\n  while (j < b.length) {\n    result.push(b[j]);\n    j++;\n  }\n  return result;\n}\n```\n\n### algo_defi\n```javascript\nfunction sontAnagrammes(a, b) {\n  if (a.length !== b.length) return false;\n  const sortedA = a.split('').sort().join('');\n  const sortedB = b.split('').sort().join('');\n  return sortedA === sortedB;\n}\n```",
+                "evalResults": [
+                  {
+                    "id": "tache_2a",
+                    "label": "Longueur chaîne",
+                    "code": "function longueurChaine(chaine) {\n  return chaine.length;\n}",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "Chaîne normale",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "Chaîne vide",
+                        "error": null
+                      }
+                    ],
+                    "points": 39,
+                    "maxPoints": 39,
+                    "taskType": "Longueur chaîne",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 2
+                  },
+                  {
+                    "id": "tache_2b",
+                    "label": "Premier élément",
+                    "code": "function premierElement(tableau) {\n  return tableau[0];\n}",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "Tableau non vide",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "Tableau vide",
+                        "error": null
+                      }
+                    ],
+                    "points": 60,
+                    "maxPoints": 60,
+                    "taskType": "Premier élément",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 2
+                  },
+                  {
+                    "id": "tache_2c",
+                    "label": "Est pair",
+                    "code": "function estPair(n) {\n  return n % 2 === 0;\n}",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "Pair",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "Impair",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "Zéro",
+                        "error": null
+                      }
+                    ],
+                    "points": 33,
+                    "maxPoints": 33,
+                    "taskType": "Est pair",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 2
+                  },
+                  {
+                    "id": "tache_2d",
+                    "label": "En majuscules",
+                    "code": "function enMajuscules(chaine) {\n  return chaine.toUpperCase();\n}",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "Minuscules",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "Déjà majuscules",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "Vide",
+                        "error": null
+                      }
+                    ],
+                    "points": 41,
+                    "maxPoints": 41,
+                    "taskType": "En majuscules",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 2
+                  },
+                  {
+                    "id": "tache_2e",
+                    "label": "Ajouter à la fin",
+                    "code": "function ajouterALaFin(tableau, element) {\n  tableau.push(element);\n  return tableau;\n}",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "Tableau non vide",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "Tableau vide",
+                        "error": null
+                      }
+                    ],
+                    "points": 39,
+                    "maxPoints": 39,
+                    "taskType": "Ajouter à la fin",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 2
+                  },
+                  {
+                    "id": "algo_facile_1",
+                    "label": "Algorithmique — Palindrome",
+                    "code": "function estPalindrome(s) {\n  const reversed = s.split('').reverse().join('');\n  return s === reversed;\n}",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "Palindrome",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "Non palindrome",
+                        "error": null
+                      }
+                    ],
+                    "points": 35,
+                    "maxPoints": 35,
+                    "taskType": "Algorithmique — Palindrome",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 2
+                  },
+                  {
+                    "id": "algo_facile_2",
+                    "label": "Algorithmique — PGCD",
+                    "code": "function pgcd(a, b) {\n  while (b !== 0) {\n    const temp = b;\n    b = a % b;\n    a = temp;\n  }\n  return a;\n}",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "48 et 18",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "Premiers entre eux",
+                        "error": null
+                      }
+                    ],
+                    "points": 35,
+                    "maxPoints": 35,
+                    "taskType": "Algorithmique — PGCD",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 2
+                  },
+                  {
+                    "id": "algo_moyen_1",
+                    "label": "Algorithmique — Nombre de mots",
+                    "code": "function nombreMots(s) {\n  const trimmed = s.trim();\n  if (trimmed === '') return 0;\n  return trimmed.split(/\\s+/).length;\n}",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "3 mots",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "1 mot",
+                        "error": null
+                      }
+                    ],
+                    "points": 39,
+                    "maxPoints": 39,
+                    "taskType": "Algorithmique — Nombre de mots",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 2
+                  },
+                  {
+                    "id": "algo_difficile_1",
+                    "label": "Algorithmique — Fusion triée",
+                    "code": "function fusionTriee(a, b) {\n  const result = [];\n  let i = 0;\n  let j = 0;\n  while (i < a.length && j < b.length) {\n    if (a[i] <= b[j]) {\n      result.push(a[i]);\n      i++;\n    } else {\n      result.push(b[j]);\n      j++;\n    }\n  }\n  while (i < a.length) {\n    result.push(a[i]);\n    i++;\n  }\n  while (j < b.length) {\n    result.push(b[j]);\n    j++;\n  }\n  return result;\n}",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "Deux tableaux",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "Un vide",
+                        "error": null
+                      }
+                    ],
+                    "points": 53,
+                    "maxPoints": 53,
+                    "taskType": "Algorithmique — Fusion triée",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 2
+                  },
+                  {
+                    "id": "algo_defi",
+                    "label": "Algorithmique — Anagrammes",
+                    "code": "function sontAnagrammes(a, b) {\n  if (a.length !== b.length) return false;\n  const sortedA = a.split('').sort().join('');\n  const sortedB = b.split('').sort().join('');\n  return sortedA === sortedB;\n}",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "Anagrammes",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "Pas anagrammes",
+                        "error": null
+                      }
+                    ],
+                    "points": 44,
+                    "maxPoints": 44,
+                    "taskType": "Algorithmique — Anagrammes",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 2
+                  }
+                ]
+              },
+              {
+                "tierNum": 3,
+                "tierTitle": "Tier 3 — CE2",
+                "isMandatory": false,
+                "className": "CE2",
+                "rawResponse": "\n\n---\n### tache_3a\n```javascript\nfunction dernierElement(tableau) {\n  if (tableau.length === 0) return undefined;\n  return tableau[tableau.length - 1];\n}\n```\n\n### tache_3b\n```javascript\nfunction compterJusqua(n) {\n  if (n < 1) return [];\n  const result = [];\n  for (let i = 1; i <= n; i++) {\n    result.push(i);\n  }\n  return result;\n}\n```\n\n### tache_3c\n```javascript\nfunction remplacerLettre(mot, ancienne, nouvelle) {\n  return mot.split(ancienne).join(nouvelle);\n}\n```\n\n### tache_3d\n```javascript\nfunction sommeTableau(tableau) {\n  if (tableau.length === 0) return 0;\n  return tableau.reduce((acc, val) => acc + val, 0);\n}\n```\n\n### tache_3e\n```javascript\nfunction contientA(mot) {\n  return mot.toLowerCase().includes('a');\n}\n```\n\n### algo_facile_1\n```javascript\nfunction validerParentheses(s) {\n  let count = 0;\n  for (let i = 0; i < s.length; i++) {\n    if (s[i] === '(') count++;\n    else if (s[i] === ')') {\n      count--;\n      if (count < 0) return false;\n    }\n  }\n  return count === 0;\n}\n```\n\n### algo_facile_2\n```javascript\nfunction fibonacci(n) {\n  if (n === 0) return 0;\n  if (n === 1) return 1;\n  let a = 0, b = 1;\n  for (let i = 2; i <= n; i++) {\n    const temp = a + b;\n    a = b;\n    b = temp;\n  }\n  return b;\n}\n```\n\n### algo_moyen_1\n```javascript\nfunction motsUniques(s) {\n  const words = s.trim().split(/\\s+/).filter(w => w.length > 0);\n  const unique = new Set(words);\n  return unique.size;\n}\n```\n\n### algo_difficile_1\n```javascript\nfunction aplatirTableau(tab) {\n  return tab.reduce((acc, curr) => acc.concat(curr), []);\n}\n```\n\n### algo_defi\n```javascript\nfunction rotationDroite(tab, k) {\n  if (tab.length === 0) return [];\n  k = k % tab.length;\n  if (k === 0) return tab.slice();\n  return tab.slice(-k).concat(tab.slice(0, tab.length - k));\n}\n```",
+                "evalResults": [
+                  {
+                    "id": "tache_3a",
+                    "label": "Dernier élément",
+                    "code": "function dernierElement(tableau) {\n  if (tableau.length === 0) return undefined;\n  return tableau[tableau.length - 1];\n}",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "Tableau",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "Tableau 1 élém",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "Tableau vide",
+                        "error": null
+                      }
+                    ],
+                    "points": 60,
+                    "maxPoints": 60,
+                    "taskType": "Dernier élément",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 3
+                  },
+                  {
+                    "id": "tache_3b",
+                    "label": "Compter jusqu'à N",
+                    "code": "function compterJusqua(n) {\n  if (n < 1) return [];\n  const result = [];\n  for (let i = 1; i <= n; i++) {\n    result.push(i);\n  }\n  return result;\n}",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "N=3",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "N=0",
+                        "error": null
+                      }
+                    ],
+                    "points": 46,
+                    "maxPoints": 46,
+                    "taskType": "Compter jusqu'à N",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 3
+                  },
+                  {
+                    "id": "tache_3c",
+                    "label": "Remplacer lettre",
+                    "code": "function remplacerLettre(mot, ancienne, nouvelle) {\n  return mot.split(ancienne).join(nouvelle);\n}",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "Remplacement normal",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "Pas de match",
+                        "error": null
+                      }
+                    ],
+                    "points": 35,
+                    "maxPoints": 35,
+                    "taskType": "Remplacer lettre",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 3
+                  },
+                  {
+                    "id": "tache_3d",
+                    "label": "Somme tableau",
+                    "code": "function sommeTableau(tableau) {\n  if (tableau.length === 0) return 0;\n  return tableau.reduce((acc, val) => acc + val, 0);\n}",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "Nombres",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "Vide",
+                        "error": null
+                      }
+                    ],
+                    "points": 43,
+                    "maxPoints": 43,
+                    "taskType": "Somme tableau",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 3
+                  },
+                  {
+                    "id": "tache_3e",
+                    "label": "Contient 'a'",
+                    "code": "function contientA(mot) {\n  return mot.toLowerCase().includes('a');\n}",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "Avec a minuscule",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "Avec A majuscule",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "Sans a",
+                        "error": null
+                      }
+                    ],
+                    "points": 53,
+                    "maxPoints": 53,
+                    "taskType": "Contient 'a'",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 3
+                  },
+                  {
+                    "id": "algo_facile_1",
+                    "label": "Algorithmique — Parenthèses valides",
+                    "code": "function validerParentheses(s) {\n  let count = 0;\n  for (let i = 0; i < s.length; i++) {\n    if (s[i] === '(') count++;\n    else if (s[i] === ')') {\n      count--;\n      if (count < 0) return false;\n    }\n  }\n  return count === 0;\n}",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "Balancées",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "Non fermée",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "Inversées",
+                        "error": null
+                      }
+                    ],
+                    "points": 39,
+                    "maxPoints": 39,
+                    "taskType": "Algorithmique — Parenthèses valides",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 3
+                  },
+                  {
+                    "id": "algo_facile_2",
+                    "label": "Algorithmique — Fibonacci",
+                    "code": "function fibonacci(n) {\n  if (n === 0) return 0;\n  if (n === 1) return 1;\n  let a = 0, b = 1;\n  for (let i = 2; i <= n; i++) {\n    const temp = a + b;\n    a = b;\n    b = temp;\n  }\n  return b;\n}",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "fib(7)",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "fib(0)",
+                        "error": null
+                      }
+                    ],
+                    "points": 56,
+                    "maxPoints": 56,
+                    "taskType": "Algorithmique — Fibonacci",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 3
+                  },
+                  {
+                    "id": "algo_moyen_1",
+                    "label": "Algorithmique — Mots uniques",
+                    "code": "function motsUniques(s) {\n  const words = s.trim().split(/\\s+/).filter(w => w.length > 0);\n  const unique = new Set(words);\n  return unique.size;\n}",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "Répétition",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "Un seul",
+                        "error": null
+                      }
+                    ],
+                    "points": 32,
+                    "maxPoints": 32,
+                    "taskType": "Algorithmique — Mots uniques",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 3
+                  },
+                  {
+                    "id": "algo_difficile_1",
+                    "label": "Algorithmique — Aplatir un tableau",
+                    "code": "function aplatirTableau(tab) {\n  return tab.reduce((acc, curr) => acc.concat(curr), []);\n}",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "Imbriqué",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "Vide",
+                        "error": null
+                      }
+                    ],
+                    "points": 42,
+                    "maxPoints": 42,
+                    "taskType": "Algorithmique — Aplatir un tableau",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 3
+                  },
+                  {
+                    "id": "algo_defi",
+                    "label": "Algorithmique — Rotation à droite",
+                    "code": "function rotationDroite(tab, k) {\n  if (tab.length === 0) return [];\n  k = k % tab.length;\n  if (k === 0) return tab.slice();\n  return tab.slice(-k).concat(tab.slice(0, tab.length - k));\n}",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "Rotation 1",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "Pas de rotation",
+                        "error": null
+                      }
+                    ],
+                    "points": 36,
+                    "maxPoints": 36,
+                    "taskType": "Algorithmique — Rotation à droite",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 3
+                  }
+                ]
+              },
+              {
+                "tierNum": 4,
+                "tierTitle": "Tier 4 — CM1",
+                "isMandatory": false,
+                "className": "CM1",
+                "rawResponse": "\n\n---\n### tache_4a\n```javascript\nfunction trouverMaximum(tableau) {\n  let max = tableau[0];\n  for (let i = 1; i < tableau.length; i++) {\n    if (tableau[i] > max) {\n      max = tableau[i];\n    }\n  }\n  return max;\n}\n```\n\n### tache_4b\n```javascript\nfunction inverserChaine(chaine) {\n  return chaine.split('').reverse().join('');\n}\n```\n\n### tache_4c\n```javascript\nfunction compterVoyelles(chaine) {\n  const voyelles = 'aeiouAEIOU';\n  let count = 0;\n  for (let i = 0; i < chaine.length; i++) {\n    if (voyelles.indexOf(chaine[i]) !== -1) {\n      count++;\n    }\n  }\n  return count;\n}\n```\n\n### tache_4d\n```javascript\nfunction filtrerPositifs(tableau) {\n  return tableau.filter(function(x) { return x > 0; });\n}\n```\n\n### tache_4e\n```javascript\nfunction repeterChaine(chaine, n) {\n  if (n <= 0) return '';\n  let resultat = '';\n  for (let i = 0; i < n; i++) {\n    resultat += chaine;\n  }\n  return resultat;\n}\n```\n\n### algo_facile_1\n```javascript\nfunction capitaliserMots(s) {\n  return s.split(' ').map(function(mot) {\n    if (mot.length === 0) return '';\n    return mot[0].toUpperCase() + mot.slice(1).toLowerCase();\n  }).join(' ');\n}\n```\n\n### algo_facile_2\n```javascript\nfunction sommeChiffres(n) {\n  let somme = 0;\n  while (n > 0) {\n    somme += n % 10;\n    n = Math.floor(n / 10);\n  }\n  return somme;\n}\n```\n\n### algo_moyen_1\n```javascript\nfunction grouperParParite(tab) {\n  const pairs = [];\n  const impairs = [];\n  for (let i = 0; i < tab.length; i++) {\n    if (tab[i] % 2 === 0) {\n      pairs.push(tab[i]);\n    } else {\n      impairs.push(tab[i]);\n    }\n  }\n  return { pairs: pairs, impairs: impairs };\n}\n```\n\n### algo_difficile_1\n```javascript\nfunction plusLongMot(s) {\n  if (s.length === 0) return '';\n  const mots = s.split(' ');\n  let plusLong = mots[0];\n  for (let i = 1; i < mots.length; i++) {\n    if (mots[i].length > plusLong.length) {\n      plusLong = mots[i];\n    }\n  }\n  return plusLong;\n}\n```\n\n### algo_defi\n```javascript\nfunction mediane(tab) {\n  const trie = tab.slice().sort(function(a, b) { return a - b; });\n  const len = trie.length;\n  const milieu = Math.floor(len / 2);\n  if (len % 2 === 1) {\n    return trie[milieu];\n  } else {\n    return (trie[milieu - 1] + trie[milieu]) / 2;\n  }\n}\n```",
+                "evalResults": [
+                  {
+                    "id": "tache_4a",
+                    "label": "Maximum",
+                    "code": "function trouverMaximum(tableau) {\n  let max = tableau[0];\n  for (let i = 1; i < tableau.length; i++) {\n    if (tableau[i] > max) {\n      max = tableau[i];\n    }\n  }\n  return max;\n}",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "Tableau positif",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "Tableau négatif",
+                        "error": null
+                      }
+                    ],
+                    "points": 40,
+                    "maxPoints": 40,
+                    "taskType": "Maximum",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 4
+                  },
+                  {
+                    "id": "tache_4b",
+                    "label": "Inverser",
+                    "code": "function inverserChaine(chaine) {\n  return chaine.split('').reverse().join('');\n}",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "Mot normal",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "Vide",
+                        "error": null
+                      }
+                    ],
+                    "points": 34,
+                    "maxPoints": 34,
+                    "taskType": "Inverser",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 4
+                  },
+                  {
+                    "id": "tache_4c",
+                    "label": "Voyelles",
+                    "code": "function compterVoyelles(chaine) {\n  const voyelles = 'aeiouAEIOU';\n  let count = 0;\n  for (let i = 0; i < chaine.length; i++) {\n    if (voyelles.indexOf(chaine[i]) !== -1) {\n      count++;\n    }\n  }\n  return count;\n}",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "Avec voyelles",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "Majuscules",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "Sans voyelles",
+                        "error": null
+                      }
+                    ],
+                    "points": 55,
+                    "maxPoints": 55,
+                    "taskType": "Voyelles",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 4
+                  },
+                  {
+                    "id": "tache_4d",
+                    "label": "Filtrer positifs",
+                    "code": "function filtrerPositifs(tableau) {\n  return tableau.filter(function(x) { return x > 0; });\n}",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "Mixte",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "Que négatifs",
+                        "error": null
+                      }
+                    ],
+                    "points": 48,
+                    "maxPoints": 48,
+                    "taskType": "Filtrer positifs",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 4
+                  },
+                  {
+                    "id": "tache_4e",
+                    "label": "Répéter",
+                    "code": "function repeterChaine(chaine, n) {\n  if (n <= 0) return '';\n  let resultat = '';\n  for (let i = 0; i < n; i++) {\n    resultat += chaine;\n  }\n  return resultat;\n}",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "Répète 3",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "Répète 0",
+                        "error": null
+                      }
+                    ],
+                    "points": 46,
+                    "maxPoints": 46,
+                    "taskType": "Répéter",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 4
+                  },
+                  {
+                    "id": "algo_facile_1",
+                    "label": "Algorithmique — Capitaliser les mots",
+                    "code": "function capitaliserMots(s) {\n  return s.split(' ').map(function(mot) {\n    if (mot.length === 0) return '';\n    return mot[0].toUpperCase() + mot.slice(1).toLowerCase();\n  }).join(' ');\n}",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "Deux mots",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "Majuscules",
+                        "error": null
+                      }
+                    ],
+                    "points": 41,
+                    "maxPoints": 41,
+                    "taskType": "Algorithmique — Capitaliser les mots",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 4
+                  },
+                  {
+                    "id": "algo_facile_2",
+                    "label": "Algorithmique — Somme des chiffres",
+                    "code": "function sommeChiffres(n) {\n  let somme = 0;\n  while (n > 0) {\n    somme += n % 10;\n    n = Math.floor(n / 10);\n  }\n  return somme;\n}",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "1234",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "Zéro",
+                        "error": null
+                      }
+                    ],
+                    "points": 35,
+                    "maxPoints": 35,
+                    "taskType": "Algorithmique — Somme des chiffres",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 4
+                  },
+                  {
+                    "id": "algo_moyen_1",
+                    "label": "Algorithmique — Grouper par parité",
+                    "code": "function grouperParParite(tab) {\n  const pairs = [];\n  const impairs = [];\n  for (let i = 0; i < tab.length; i++) {\n    if (tab[i] % 2 === 0) {\n      pairs.push(tab[i]);\n    } else {\n      impairs.push(tab[i]);\n    }\n  }\n  return { pairs: pairs, impairs: impairs };\n}",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "Mixte",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "Tous pairs",
+                        "error": null
+                      }
+                    ],
+                    "points": 44,
+                    "maxPoints": 44,
+                    "taskType": "Algorithmique — Grouper par parité",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 4
+                  },
+                  {
+                    "id": "algo_difficile_1",
+                    "label": "Algorithmique — Mot le plus long",
+                    "code": "function plusLongMot(s) {\n  if (s.length === 0) return '';\n  const mots = s.split(' ');\n  let plusLong = mots[0];\n  for (let i = 1; i < mots.length; i++) {\n    if (mots[i].length > plusLong.length) {\n      plusLong = mots[i];\n    }\n  }\n  return plusLong;\n}",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "Phrase",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "Égalité",
+                        "error": null
+                      }
+                    ],
+                    "points": 58,
+                    "maxPoints": 58,
+                    "taskType": "Algorithmique — Mot le plus long",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 4
+                  },
+                  {
+                    "id": "algo_defi",
+                    "label": "Algorithmique — Médiane",
+                    "code": "function mediane(tab) {\n  const trie = tab.slice().sort(function(a, b) { return a - b; });\n  const len = trie.length;\n  const milieu = Math.floor(len / 2);\n  if (len % 2 === 1) {\n    return trie[milieu];\n  } else {\n    return (trie[milieu - 1] + trie[milieu]) / 2;\n  }\n}",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "Impair",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "Pair",
+                        "error": null
+                      }
+                    ],
+                    "points": 37,
+                    "maxPoints": 37,
+                    "taskType": "Algorithmique — Médiane",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 4
+                  }
+                ]
+              },
+              {
+                "tierNum": 5,
+                "tierTitle": "Tier 5 — CM2",
+                "isMandatory": false,
+                "className": "CM2",
+                "rawResponse": "\n\n---\n### tache_5a\n```javascript\nfunction supprimerDoublons(tableau) {\n  return [...new Set(tableau)];\n}\n```\n\n### tache_5b\n```javascript\nfunction capitaliserMots(phrase) {\n  return phrase.split(' ').map(word => {\n    if (word.length === 0) return '';\n    return word[0].toUpperCase() + word.slice(1).toLowerCase();\n  }).join(' ');\n}\n```\n\n### tache_5c\n```javascript\nfunction frequenceCaracteres(chaine) {\n  const resultat = {};\n  for (let i = 0; i < chaine.length; i++) {\n    const char = chaine[i];\n    resultat[char] = (resultat[char] || 0) + 1;\n  }\n  return resultat;\n}\n```\n\n### tache_5d\n```javascript\nfunction filtrerPairs(tableau) {\n  return tableau.filter(n => n % 2 === 0);\n}\n```\n\n### tache_5e\n```javascript\nfunction chaineLaPlusLongue(tableau) {\n  if (tableau.length === 0) return '';\n  let plusLongue = tableau[0];\n  for (let i = 1; i < tableau.length; i++) {\n    if (tableau[i].length > plusLongue.length) {\n      plusLongue = tableau[i];\n    }\n  }\n  return plusLongue;\n}\n```\n\n### algo_facile_1\n```javascript\nfunction convertirBase(n, base) {\n  if (n === 0) return '0';\n  const chiffres = '0123456789abcdef';\n  let resultat = '';\n  let nombre = n;\n  while (nombre > 0) {\n    resultat = chiffres[nombre % base] + resultat;\n    nombre = Math.floor(nombre / base);\n  }\n  return resultat;\n}\n```\n\n### algo_facile_2\n```javascript\nfunction kemePlusGrand(tab, k) {\n  const distinct = [...new Set(tab)];\n  distinct.sort((a, b) => b - a);\n  return distinct[k - 1];\n}\n```\n\n### algo_moyen_1\n```javascript\nfunction compteurFrequence(tab) {\n  const resultat = {};\n  for (let i = 0; i < tab.length; i++) {\n    const elem = tab[i];\n    const cle = JSON.stringify(elem);\n    resultat[cle] = (resultat[cle] || 0) + 1;\n  }\n  return resultat;\n}\n```\n\n### algo_difficile_1\n```javascript\nfunction exponentiationRapide(x, n) {\n  if (n === 0) return 1;\n  let resultat = 1;\n  let base = x;\n  let exposant = n;\n  while (exposant > 0) {\n    if (exposant % 2 === 1) {\n      resultat *= base;\n    }\n    base *= base;\n    exposant = Math.floor(exposant / 2);\n  }\n  return resultat;\n}\n```\n\n### algo_defi\n```javascript\nfunction sousTableauMax(tab) {\n  if (tab.length === 0) return 0;\n  let maxGlobal = tab[0];\n  let maxActuel = tab[0];\n  for (let i = 1; i < tab.length; i++) {\n    maxActuel = Math.max(tab[i], maxActuel + tab[i]);\n    if (maxActuel > maxGlobal) {\n      maxGlobal = maxActuel;\n    }\n  }\n  return maxGlobal;\n}\n```\n\n---\n### algo_moyen_1\n```javascript\nfunction compteurFrequence(tab) {\n  const obj = {};\n  for (const v of tab) {\n    obj[v] = (obj[v] || 0) + 1;\n  }\n  return obj;\n}\n```",
+                "evalResults": [
+                  {
+                    "id": "tache_5a",
+                    "label": "Doublons",
+                    "code": "function supprimerDoublons(tableau) {\n  return [...new Set(tableau)];\n}",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "Avec doublons",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "Sans doublons",
+                        "error": null
+                      }
+                    ],
+                    "points": 34,
+                    "maxPoints": 34,
+                    "taskType": "Doublons",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 5
+                  },
+                  {
+                    "id": "tache_5b",
+                    "label": "Capitaliser",
+                    "code": "function capitaliserMots(phrase) {\n  return phrase.split(' ').map(word => {\n    if (word.length === 0) return '';\n    return word[0].toUpperCase() + word.slice(1).toLowerCase();\n  }).join(' ');\n}",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "Phrase normale",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "Un mot",
+                        "error": null
+                      }
+                    ],
+                    "points": 36,
+                    "maxPoints": 36,
+                    "taskType": "Capitaliser",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 5
+                  },
+                  {
+                    "id": "tache_5c",
+                    "label": "Fréquence",
+                    "code": "function frequenceCaracteres(chaine) {\n  const resultat = {};\n  for (let i = 0; i < chaine.length; i++) {\n    const char = chaine[i];\n    resultat[char] = (resultat[char] || 0) + 1;\n  }\n  return resultat;\n}",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "Mot simple",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "Vide",
+                        "error": null
+                      }
+                    ],
+                    "points": 36,
+                    "maxPoints": 36,
+                    "taskType": "Fréquence",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 5
+                  },
+                  {
+                    "id": "tache_5d",
+                    "label": "Filtrer pairs",
+                    "code": "function filtrerPairs(tableau) {\n  return tableau.filter(n => n % 2 === 0);\n}",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "Mixte",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "Que impairs",
+                        "error": null
+                      }
+                    ],
+                    "points": 42,
+                    "maxPoints": 42,
+                    "taskType": "Filtrer pairs",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 5
+                  },
+                  {
+                    "id": "tache_5e",
+                    "label": "Plus longue",
+                    "code": "function chaineLaPlusLongue(tableau) {\n  if (tableau.length === 0) return '';\n  let plusLongue = tableau[0];\n  for (let i = 1; i < tableau.length; i++) {\n    if (tableau[i].length > plusLongue.length) {\n      plusLongue = tableau[i];\n    }\n  }\n  return plusLongue;\n}",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "Tableau normal",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "Vide",
+                        "error": null
+                      }
+                    ],
+                    "points": 36,
+                    "maxPoints": 36,
+                    "taskType": "Plus longue",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 5
+                  },
+                  {
+                    "id": "algo_facile_1",
+                    "label": "Algorithmique — Conversion de base",
+                    "code": "function convertirBase(n, base) {\n  if (n === 0) return '0';\n  const chiffres = '0123456789abcdef';\n  let resultat = '';\n  let nombre = n;\n  while (nombre > 0) {\n    resultat = chiffres[nombre % base] + resultat;\n    nombre = Math.floor(nombre / base);\n  }\n  return resultat;\n}",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "Base 16",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "Base 2",
+                        "error": null
+                      }
+                    ],
+                    "points": 47,
+                    "maxPoints": 47,
+                    "taskType": "Algorithmique — Conversion de base",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 5
+                  },
+                  {
+                    "id": "algo_facile_2",
+                    "label": "Algorithmique — K-ième plus grand",
+                    "code": "function kemePlusGrand(tab, k) {\n  const distinct = [...new Set(tab)];\n  distinct.sort((a, b) => b - a);\n  return distinct[k - 1];\n}",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "2e plus grand",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "1er plus grand",
+                        "error": null
+                      }
+                    ],
+                    "points": 50,
+                    "maxPoints": 50,
+                    "taskType": "Algorithmique — K-ième plus grand",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 5
+                  },
+                  {
+                    "id": "algo_moyen_1",
+                    "label": "Algorithmique — Fréquence des éléments",
+                    "code": "function compteurFrequence(tab) {\n  const obj = {};\n  for (const v of tab) {\n    obj[v] = (obj[v] || 0) + 1;\n  }\n  return obj;\n}",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "Chaînes",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "Nombres",
+                        "error": null
+                      }
+                    ],
+                    "points": 0,
+                    "maxPoints": 34,
+                    "taskType": "Algorithmique — Fréquence des éléments",
+                    "helpUsed": true,
+                    "retried": true,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 5
+                  },
+                  {
+                    "id": "algo_difficile_1",
+                    "label": "Algorithmique — Exponentiation rapide",
+                    "code": "function exponentiationRapide(x, n) {\n  if (n === 0) return 1;\n  let resultat = 1;\n  let base = x;\n  let exposant = n;\n  while (exposant > 0) {\n    if (exposant % 2 === 1) {\n      resultat *= base;\n    }\n    base *= base;\n    exposant = Math.floor(exposant / 2);\n  }\n  return resultat;\n}",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "2^10",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "5^0",
+                        "error": null
+                      }
+                    ],
+                    "points": 54,
+                    "maxPoints": 54,
+                    "taskType": "Algorithmique — Exponentiation rapide",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 5
+                  },
+                  {
+                    "id": "algo_defi",
+                    "label": "Algorithmique — Sous-tableau de somme max",
+                    "code": "function sousTableauMax(tab) {\n  if (tab.length === 0) return 0;\n  let maxGlobal = tab[0];\n  let maxActuel = tab[0];\n  for (let i = 1; i < tab.length; i++) {\n    maxActuel = Math.max(tab[i], maxActuel + tab[i]);\n    if (maxActuel > maxGlobal) {\n      maxGlobal = maxActuel;\n    }\n  }\n  return maxGlobal;\n}",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "Classique",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "Tous positifs",
+                        "error": null
+                      }
+                    ],
+                    "points": 46,
+                    "maxPoints": 46,
+                    "taskType": "Algorithmique — Sous-tableau de somme max",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 5
+                  }
+                ]
+              }
+            ],
+            "quantization": null,
+            "elapsedMs": 21695,
+            "wallMs": 53251,
+            "tokens": 1218,
+            "tokensPerSecond": 56.14,
+            "timestampMs": 1785656644702,
+            "timestampIso": "2026-08-02T07:44:04.702Z"
+          }
+        ]
+      }
+    },
+    "lastUpdated": "2026-08-02T07:44:04.703Z"
+  }
+}
