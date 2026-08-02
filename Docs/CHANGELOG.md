@@ -1,5 +1,61 @@
 # CHANGELOG - Carnet de Notes BenchGo
 
+## 2026-08-02 — feat: séparation Local/Cloud dans le classement + commande --cloud + détection isCloud robuste
+
+### Contexte
+Les modèles frontière cloud (OpenRouter, OpenAI, Anthropic...) testés via
+`frontier-batch.js` apparaissaient dans le classement mais n'étaient JAMAIS
+détectés comme cloud : le filtre "Origine → Cloud" du leaderboard HTML ne
+montrait aucun résultat, et le carnet du professeur restait vide. Cause racine :
+les carnets antérieurs au commit `40e0da9` ne stockent pas `provider`/`isCloud`,
+et la détection fallback (`ecoles.some(e => e.ecole === 'Post-Doctorat')`) ne
+fonctionnait pas car les tests FRONTIER sont interrompus avant d'enregistrer
+l'école "Post-Doctorat" (seule "Primaire" est enregistrée, profil LIGHT).
+Par ailleurs, les modèles cloud étaient mélangés avec les modèles locaux LM
+Studio dans le classement CLI alors qu'ils n'ont rien à voir (pas de
+quantization, latence réseau, infrastructure différente).
+
+### Implémentation
+- **`leaderboard.js`** — `detectIsCloudFromLedger()` : heuristique conservatrice
+  de détection de l'origine pour les anciens carnets. Signaux forts uniquement :
+  (1) slug OpenRouter `:free`, (2) profil `FRONTIER` dans les attempts. En cas de
+  doute, le modèle reste local (rétrocompatible).
+- **`leaderboard.js`** — `aggregateLedger()` : utilisation de l'heuristique en
+  fallback quand `provider`/`isCloud`/école "Post-Doctorat" sont absents.
+- **`leaderboard.js`** — `printLeaderboardSection()` : refactorisation de
+  l'affichage CLI en fonction réutilisable. `generateLeaderboard()` affiche
+  désormais DEUX sections séparées : "🏠 MODÈLES LOCAUX · LM Studio" et
+  "☁️ MODÈLES CLOUD FRONTIÈRE · API", chacune avec son propre rang (1..N).
+- **`leaderboard.js`** — `printCloudLeaderboard()` : classement spécifique aux
+  modèles cloud uniquement, avec colonne Provider et École(s). Déclenché par
+  `node leaderboard.js --cloud`.
+- **`leaderboard.js`** — `markCloudModel()` : migration manuelle d'un carnet
+  vers le statut cloud (`--mark-cloud=<shortName>`). Pour les modèles cloud
+  payants sans slug `:free` et sans tentative FRONTIER aboutie (non détectables
+  automatiquement).
+
+### Fichiers modifiés
+- `leaderboard.js` — `detectIsCloudFromLedger()`, `aggregateLedger()`,
+  `printLeaderboardSection()`, `printCloudLeaderboard()`, `markCloudModel()`,
+  `generateLeaderboard()`, `module.exports`, CLI (`--cloud`, `--mark-cloud=`).
+
+### Résultat obtenu
+- Le modèle `inclusionai/ling-3.0-flash:free` est désormais détecté cloud et
+  apparaît dans le filtre Cloud du leaderboard HTML + section cloud du CLI.
+- `node leaderboard.js --cloud` affiche le classement dédié aux modèles API.
+- `node leaderboard.js` sépare visuellement locaux et cloud (deux sections).
+- `node leaderboard.js --mark-cloud=<shortName>` migre les anciens carnets.
+- Tests unitaires : 27/27 OK. JS inline : valide. `node --check` : OK.
+
+### Validation
+- `node --check leaderboard.js` : OK
+- `node tests/run-tests.js` : 27 passés, 0 échoués
+- `node scripts/check-inline-js.js` : JS inline valide
+- `node leaderboard.js --cloud` : 1 modèle cloud détecté et affiché
+- `node leaderboard.js` : 2 sections séparées (40 local + 1 cloud)
+
+---
+
 ## 2026-08-02 — fix: timeout undici persistant en streaming cloud + carnet-professeur vide pour modèles frontières
 
 ### Contexte

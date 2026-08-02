@@ -297,12 +297,44 @@ function aggregateLedger(ledger) {
     // Permet de séparer les modèles locaux (LM Studio) des modèles cloud
     // (OpenRouter, OpenAI, Groq...) dans le classement. Rétrocompatible :
     // si le carnet n'a pas encore provider/isCloud (anciens carnets), on
-    // déduit depuis l'école "Post-Doctorat" (profil FRONTIER = cloud).
+    // déduit depuis l'école "Post-Doctorat" (profil FRONTIER = cloud) puis
+    // via l'heuristique detectIsCloudFromLedger (slug :free, profil FRONTIER
+    // dans les attempts, format org/model sans quantization).
     provider: ledger.provider || null,
     isCloud: (ledger.isCloud === true)
       || (ledger.provider && ledger.provider !== 'local')
       || ecoles.some(e => e.ecole === 'Post-Doctorat')
+      || (ledger.provider ? false : detectIsCloudFromLedger(ledger))
   };
+}
+
+// Heuristique de detection de l origine (cloud vs local) d un modele, pour
+// les carnets anterieurs au commit 40e0da9 qui ne stockent pas provider/isCloud.
+// On ne peut pas se fier a la presence d un "/" dans le nom (LM Studio nomme
+// aussi les modeles locaux avec "org/name"), ni a l absence de quantization
+// (beaucoup de modeles locaux n ont pas de quantization enregistree). On utilise
+// donc uniquement des signaux FORTS et sans ambiguite :
+//   1. Slug OpenRouter ":free" (marqueur exclusif aux modeles cloud gratuits —
+//      les modeles locaux n utilisent jamais ce suffixe).
+//   2. Presence du profil FRONTIER dans les attempts (seuls les modeles cloud
+//      sont testes en FRONTIER — cf. config.js, profil reserve au cloud).
+// Conservative : en cas de doute, on considere le modele comme local. Les
+// modeles cloud payants sans suffixe :free et sans tentative FRONTIER aboutie
+// restent classes en local jusqu a une migration manuelle (--mark-cloud).
+function detectIsCloudFromLedger(ledger) {
+  const model = (ledger.model || '').trim();
+  if (!model) return false;
+  // Signal 1 : suffixe OpenRouter ":free".
+  if (/:free$/i.test(model)) return true;
+  // Signal 2 : au moins une tentative enregistree avec le profil FRONTIER.
+  const ecoles = Object.values(ledger.ecoles || {});
+  for (const ec of ecoles) {
+    const attempts = (ec && ec.attempts) || [];
+    for (const a of attempts) {
+      if (a && a.profile === 'FRONTIER') return true;
+    }
+  }
+  return false;
 }
 
 // Génère des arguments qualitatifs (forces / faiblesses) selon les métriques.
@@ -3503,6 +3535,196 @@ function printUntestedLmStudioModels() {
   }
 }
 
+// Affiche le classement SPECIFIQUE aux modèles frontière cloud (API distantes :
+// OpenRouter, OpenAI, Anthropic, Groq...). Contrairement au classement général
+// qui mélange tout, cette vue isole les modèles cloud car ils n'ont rien à voir
+// avec les modèles locaux LM Studio (pas de quantization, latence réseau,
+// infrastructure différente, pas de limite de RAM GPU). Utile pour comparer
+// uniquement entre eux les modèles cloud testés via frontier-batch.js.
+//
+// Affichage enrichi : provider (openrouter, openai...), école(s) testée(s),
+// score, vitesse. Les modèles sont triés par % décroissant (comme le classement
+// général) mais le rang est local à cette section cloud.
+function printCloudLeaderboard() {
+  const ledgers = loadAllLedgers();
+  if (ledgers.length === 0) {
+    console.log('\x1b[33mAucun carnet de scores trouvé. Lancez d\'abord un benchmark cloud (node frontier-batch.js).\x1b[0m');
+    return;
+  }
+
+  const entries = ledgers.map(aggregateLedger).filter(Boolean).filter(e => e.isCloud);
+  if (entries.length === 0) {
+    console.log('\x1b[33mAucun modèle cloud frontière trouvé dans les carnets.\x1b[0m');
+    console.log('\x1b[90mPour tester un modèle cloud : node frontier-batch.js --provider=openrouter\x1b[0m');
+    console.log('\x1b[90mSi un carnet cloud n est pas détecté : node leaderboard.js --mark-cloud=<shortName>\x1b[0m');
+    return;
+  }
+
+  // Tri : % décroissant, puis score, puis santé.
+  entries.sort((a, b) => {
+    if (b.pct !== a.pct) return b.pct - a.pct;
+    if (b.score !== a.score) return b.score - a.score;
+    return b.globalLifeScore - a.globalLifeScore;
+  });
+
+  console.log('');
+  console.log('  \x1b[1;36m━━━ CLASSEMENT CLOUD FRONTIÈRE · MODÈLES API ━━━\x1b[0m');
+  console.log(`  \x1b[90m${entries.length} modèle(s) cloud classé(s) — séparé(s) des modèles locaux LM Studio\x1b[0m`);
+
+  const headers = ['Rang', 'Modèle', 'Provider', 'École(s)', 'Vitesse', 'Pct', 'Verdict'];
+  const aligns = ['left', 'left', 'left', 'left', 'right', 'right', 'left'];
+  const rows = [];
+  const medals = [];
+  for (let i = 0; i < entries.length; i++) {
+    const e = entries[i];
+    const verdict = getVerdict(e, i + 1);
+    const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : '  ';
+    const vColor = verdict.rank === 0 ? '\x1b[93m' : verdict.rank === 1 ? '\x1b[32m' : verdict.rank === 2 ? '\x1b[36m' : verdict.rank === 3 ? '\x1b[33m' : '\x1b[31m';
+    const providerLabel = e.provider && e.provider !== 'cloud'
+      ? `\x1b[33m${e.provider}\x1b[0m`
+      : '\x1b[90mcloud\x1b[0m';
+    const ecoleLabel = (e.ecoles || []).map(ec => ec.ecole).join(', ') || '\x1b[90m—\x1b[0m';
+    const tpsC = e.tokensPerSecond >= 50 ? '\x1b[32m' : e.tokensPerSecond >= 25 ? '\x1b[33m' : e.tokensPerSecond > 0 ? '\x1b[31m' : '\x1b[90m';
+    const vit = e.tokensPerSecond > 0 ? `${tpsC}${e.tokensPerSecond + ' t/s'}\x1b[0m` : '\x1b[90m—\x1b[0m';
+    rows.push([
+      (i + 1) + '.',
+      e.model,
+      providerLabel,
+      ecoleLabel,
+      vit,
+      e.pct + '%',
+      `${vColor}${verdict.label}\x1b[0m`,
+    ]);
+    medals.push(medal);
+  }
+
+  const res = cliTable.table(headers, rows, { colAligns: aligns, separator: '  ' });
+  console.log(`  \x1b[90m    ${res.lines[0]}\x1b[0m`);
+  console.log(`  \x1b[90m    ${res.sepLine}\x1b[0m`);
+  for (let i = 0; i < rows.length; i++) {
+    console.log(`  ${medals[i]} ${res.lines[i + 2]}`);
+  }
+  console.log('');
+  console.log('  \x1b[90mAstuce : node frontier-batch.js --provider=openrouter pour tester de nouveaux modèles cloud.\x1b[0m');
+  console.log('  \x1b[90mAstuce : node leaderboard.js (sans --cloud) pour le classement complet (local + cloud séparés).\x1b[0m');
+  console.log('');
+}
+
+// Marque manuellement un carnet comme étant un modèle cloud frontière. Utilisé
+// pour migrer les anciens carnets (antérieurs au commit 40e0da9) qui ne stockent
+// pas provider/isCloud et dont le modèle n'a pas de slug :free détectable
+// automatiquement. Écrit provider='cloud' et isCloud=true dans le carnet JSON.
+//
+// @param {string} shortName - Le shortName du modèle à marquer (ex:
+//        "inclusionai_ling-3.0-flash_free"). Accepte aussi un nom de fichier
+//        carnet (avec ou sans .json).
+// @returns {boolean} true si la migration a réussi.
+function markCloudModel(shortName) {
+  if (!shortName) {
+    console.log('\x1b[31mUsage : node leaderboard.js --mark-cloud=<shortName>\x1b[0m');
+    console.log('\x1b[90mExemple : node leaderboard.js --mark-cloud=inclusionai_ling-3.0-flash_free\x1b[0m');
+    return false;
+  }
+  // Normalise : retire l extension .json si presente.
+  const cleanShort = shortName.replace(/\.json$/i, '');
+  const ledgerPath = path.join(LEDGER_DIR, cleanShort + '.json');
+  if (!fs.existsSync(ledgerPath)) {
+    console.log(`\x1b[31mCarnet introuvable : ${cleanShort}.json (dans ${LEDGER_DIR})\x1b[0m`);
+    // Affiche les carnets disponibles pour aider l utilisateur.
+    const files = fs.existsSync(LEDGER_DIR)
+      ? fs.readdirSync(LEDGER_DIR).filter(f => f.endsWith('.json') && f !== 'classement_snapshot.json')
+      : [];
+    if (files.length > 0) {
+      console.log('\x1b[90mCarnets disponibles :\x1b[0m');
+      for (const f of files) console.log(`  \x1b[90m${f.replace(/\.json$/, '')}\x1b[0m`);
+    }
+    return false;
+  }
+  let ledger;
+  try {
+    ledger = JSON.parse(fs.readFileSync(ledgerPath, 'utf8'));
+  } catch (e) {
+    console.log(`\x1b[31mCarnet illisible : ${e.message}\x1b[0m`);
+    return false;
+  }
+  const wasCloud = ledger.isCloud === true || (ledger.provider && ledger.provider !== 'local');
+  ledger.provider = ledger.provider && ledger.provider !== 'local' ? ledger.provider : 'cloud';
+  ledger.isCloud = true;
+  try {
+    fs.writeFileSync(ledgerPath, JSON.stringify(ledger, null, 2), 'utf8');
+    if (wasCloud) {
+      console.log(`\x1b[33m${cleanShort} était déjà marqué cloud (provider=${ledger.provider}). Confirmé.\x1b[0m`);
+    } else {
+      console.log(`\x1b[32m${cleanShort} marqué comme modèle cloud frontière (provider=${ledger.provider}).\x1b[0m`);
+      console.log('\x1b[90mIl apparaîtra maintenant dans le filtre Cloud du classement et dans --cloud.\x1b[0m');
+    }
+    return true;
+  } catch (e) {
+    console.log(`\x1b[31mErreur écriture carnet : ${e.message}\x1b[0m`);
+    return false;
+  }
+}
+
+// Affiche une section du classement CLI (soit "Modèles locaux", soit "Modèles
+// cloud frontière"). Les deux sections sont totalement séparées car les modèles
+// cloud (OpenRouter, OpenAI...) n'ont rien à voir avec les modèles locaux : pas
+// de quantization, latence réseau, infrastructure différente. Le rang affiché
+// est local à chaque section (1..N), pas global.
+function printLeaderboardSection(title, sectionEntries) {
+  console.log('');
+  if (sectionEntries.length === 0) {
+    console.log(`  \x1b[1;36m━━━ ${title} (0) ━━━\x1b[0m`);
+    console.log(`  \x1b[90m  Aucun modèle dans cette section.\x1b[0m`);
+    return;
+  }
+  console.log(`  \x1b[1;36m━━━ ${title} (${sectionEntries.length}) ━━━\x1b[0m`);
+
+  const lbHeaders = ['Rang', 'Modèle', 'Quant', 'Temps', 'Vitesse', 'Pct', 'Mvt', 'Verdict'];
+  const lbAligns = ['left', 'left', 'left', 'right', 'right', 'right', 'center', 'left'];
+  const lbRows = [];
+  const lbMedals = [];
+  for (let i = 0; i < sectionEntries.length; i++) {
+    const e = sectionEntries[i];
+    const verdict = getVerdict(e, i + 1);
+    const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : '  ';
+    const vColor = verdict.rank === 0 ? '\x1b[93m' : verdict.rank === 1 ? '\x1b[32m' : verdict.rank === 2 ? '\x1b[36m' : verdict.rank === 3 ? '\x1b[33m' : '\x1b[31m';
+    const quant = e.quantization ? `\x1b[35m${e.quantization}\x1b[0m` : '\x1b[90m—\x1b[0m';
+    const temps = e.elapsedMs > 0 ? `\x1b[90m${formatDuration(e.elapsedMs)}\x1b[0m` : '\x1b[90m—\x1b[0m';
+    const tpsC = e.tokensPerSecond >= 50 ? '\x1b[32m' : e.tokensPerSecond >= 25 ? '\x1b[33m' : e.tokensPerSecond > 0 ? '\x1b[31m' : '\x1b[90m';
+    const vit = e.tokensPerSecond > 0 ? `${tpsC}${e.tokensPerSecond + ' t/s'}\x1b[0m` : '\x1b[90m—\x1b[0m';
+    // Flèche de mouvement de position (delta de rang vs snapshot précédent).
+    //   delta < 0 → ▲ vert (monte)  |  delta > 0 → ▼ rouge (descend)  |  0 → = gris  |  null → nouveau
+    let mvt;
+    if (e.positionDelta == null) {
+      mvt = '\x1b[90mNEW\x1b[0m';
+    } else if (e.positionDelta < 0) {
+      mvt = `\x1b[32m▲${Math.abs(e.positionDelta)}\x1b[0m`;
+    } else if (e.positionDelta > 0) {
+      mvt = `\x1b[31m▼${e.positionDelta}\x1b[0m`;
+    } else {
+      mvt = '\x1b[90m=\x1b[0m';
+    }
+    lbRows.push([
+      (i + 1) + '.',
+      e.model,
+      quant,
+      temps,
+      vit,
+      e.pct + '%',
+      mvt,
+      `${vColor}${verdict.label}\x1b[0m`,
+    ]);
+    lbMedals.push(medal);
+  }
+
+  const lbRes = cliTable.table(lbHeaders, lbRows, { colAligns: lbAligns, separator: '  ' });
+  console.log(`  \x1b[90m    ${lbRes.lines[0]}\x1b[0m`);
+  console.log(`  \x1b[90m    ${lbRes.sepLine}\x1b[0m`);
+  for (let i = 0; i < lbRows.length; i++) {
+    console.log(`  ${lbMedals[i]} ${lbRes.lines[i + 2]}`);
+  }
+}
+
 // Génère le classement complet (HTML + Markdown) et le sauvegarde.
 function generateLeaderboard() {
   const ledgers = loadAllLedgers();
@@ -3561,51 +3783,16 @@ function generateLeaderboard() {
   console.log('  \x1b[1;35m━━━ CLASSEMENT BENCHGO V3 ━━━\x1b[0m');
   console.log(`  \x1b[90m${entries.length} modèle(s) classé(s) du meilleur au pire\x1b[0m`);
 
-  const lbHeaders = ['Rang', 'Modèle', 'Quant', 'Temps', 'Vitesse', 'Pct', 'Mvt', 'Verdict'];
-  const lbAligns = ['left', 'left', 'left', 'right', 'right', 'right', 'center', 'left'];
-  const lbRows = [];
-  const lbMedals = [];
-  for (let i = 0; i < entries.length; i++) {
-    const e = entries[i];
-    const verdict = getVerdict(e, i + 1);
-    const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : '  ';
-    const vColor = verdict.rank === 0 ? '\x1b[93m' : verdict.rank === 1 ? '\x1b[32m' : verdict.rank === 2 ? '\x1b[36m' : verdict.rank === 3 ? '\x1b[33m' : '\x1b[31m';
-    const quant = e.quantization ? `\x1b[35m${e.quantization}\x1b[0m` : '\x1b[90m—\x1b[0m';
-    const temps = e.elapsedMs > 0 ? `\x1b[90m${formatDuration(e.elapsedMs)}\x1b[0m` : '\x1b[90m—\x1b[0m';
-    const tpsC = e.tokensPerSecond >= 50 ? '\x1b[32m' : e.tokensPerSecond >= 25 ? '\x1b[33m' : e.tokensPerSecond > 0 ? '\x1b[31m' : '\x1b[90m';
-    const vit = e.tokensPerSecond > 0 ? `${tpsC}${e.tokensPerSecond + ' t/s'}\x1b[0m` : '\x1b[90m—\x1b[0m';
-    // Flèche de mouvement de position (delta de rang vs snapshot précédent).
-    //   delta < 0 → ▲ vert (monte)  |  delta > 0 → ▼ rouge (descend)  |  0 → = gris  |  null → nouveau
-    let mvt;
-    if (e.positionDelta == null) {
-      mvt = '\x1b[90mNEW\x1b[0m';
-    } else if (e.positionDelta < 0) {
-      mvt = `\x1b[32m▲${Math.abs(e.positionDelta)}\x1b[0m`;
-    } else if (e.positionDelta > 0) {
-      mvt = `\x1b[31m▼${e.positionDelta}\x1b[0m`;
-    } else {
-      mvt = '\x1b[90m=\x1b[0m';
-    }
-    lbRows.push([
-      (i + 1) + '.',
-      e.model,
-      quant,
-      temps,
-      vit,
-      e.pct + '%',
-      mvt,
-      `${vColor}${verdict.label}\x1b[0m`,
-    ]);
-    lbMedals.push(medal);
-  }
+  // --- Séparation Local (LM Studio) vs Cloud frontière (API) ---
+  // Les modèles cloud (OpenRouter, OpenAI...) n'ont rien à voir avec les
+  // modèles locaux : infrastructure différente, pas de quantization, pas de
+  // limite de RAM, latence réseau... On les départage donc en deux sections
+  // distinctes dans le CLI pour ne pas mélanger des oranges et des pommes.
+  const localEntries = entries.filter(e => !e.isCloud);
+  const cloudEntries = entries.filter(e => e.isCloud);
 
-  const lbRes = cliTable.table(lbHeaders, lbRows, { colAligns: lbAligns, separator: '  ' });
-  console.log(`  \x1b[90m    ${lbRes.lines[0]}\x1b[0m`);
-  console.log(`  \x1b[90m    ${lbRes.sepLine}\x1b[0m`);
-  for (let i = 0; i < lbRows.length; i++) {
-    console.log(`  ${lbMedals[i]} ${lbRes.lines[i + 2]}`);
-  }
-  console.log('');
+  printLeaderboardSection('🏠 MODÈLES LOCAUX · LM Studio', localEntries);
+  printLeaderboardSection('☁️ MODÈLES CLOUD FRONTIÈRE · API', cloudEntries);
 
   // --- Modèles LM Studio présents mais non testés ---
   // Compare les modelKeys de lms ls avec les carnets de scores existants pour
@@ -4309,14 +4496,35 @@ module.exports = {
   generateLeaderboard,
   deleteLedger,
   startServer,
-  buildDashboardHTML
+  buildDashboardHTML,
+  printCloudLeaderboard,
+  markCloudModel,
+  detectIsCloudFromLedger
 };
 
 if (require.main === module) {
   const args = process.argv.slice(2);
   const serveMode = args.includes('--serve') || args.includes('-s');
+  const cloudMode = args.includes('--cloud');
+  const markCloudArg = args.find(a => a.startsWith('--mark-cloud='));
   const portArg = args.find(a => a.startsWith('--port='));
   const port = portArg ? parseInt(portArg.split('=')[1], 10) : 3939;
+
+  // --mark-cloud=<shortName> : migration manuelle d un carnet vers le statut
+  // cloud frontière. Sort immédiatement après la migration (pas de génération).
+  if (markCloudArg) {
+    const shortName = markCloudArg.slice('--mark-cloud='.length);
+    markCloudModel(shortName);
+    process.exit(0);
+  }
+
+  // --cloud : classement spécifique aux modèles frontière cloud (API). Séparé
+  // du classement général pour ne pas mélanger oranges (cloud) et pommes
+  // (local LM Studio). Sort après affichage (pas de génération HTML).
+  if (cloudMode) {
+    printCloudLeaderboard();
+    process.exit(0);
+  }
 
   if (serveMode) {
     generateLeaderboard();
@@ -4326,8 +4534,10 @@ if (require.main === module) {
     if (!result) {
       console.log('\x1b[33mAucun carnet de scores trouvé. Lancez d\'abord un benchmark (node runner.js all --profile=LIGHT).\x1b[0m');
       console.log('\x1b[90mAstuce : node leaderboard.js --serve pour le mode interactif (boutons supprimer).\x1b[0m');
+      console.log('\x1b[90mAstuce : node leaderboard.js --cloud pour le classement des modèles frontière cloud uniquement.\x1b[0m');
       process.exit(0);
     }
     console.log('\x1b[90mAstuce : node leaderboard.js --serve pour le mode interactif (boutons supprimer dans le navigateur).\x1b[0m');
+    console.log('\x1b[90mAstuce : node leaderboard.js --cloud pour le classement des modèles frontière cloud uniquement.\x1b[0m');
   }
 }

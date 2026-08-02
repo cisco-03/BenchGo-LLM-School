@@ -14,6 +14,8 @@ OS : Windows, PowerShell 5.1. Projet Node.js 18+ **sans `package.json`** (module
 | Valider config sans exécuter | `node runner.js all --dry-run` |
 | Tests unitaires | `node tests/run-tests.js` |
 | Classement HTML/MD | `node leaderboard.js` |
+| Classement modèles cloud uniquement | `node leaderboard.js --cloud` |
+| Marquer un carnet comme cloud | `node leaderboard.js --mark-cloud=<shortName>` |
 | Serveur classement interactif | `node leaderboard.js --serve` |
 | Classement communautaire en ligne (GitHub Pages) | `gh workflow run consolidate.yml -R cisco-03/BenchGo-LLM-School` puis `gh run watch -R cisco-03/BenchGo-LLM-School` |
 | Aide CLI | `node runner.js --help` |
