@@ -29,6 +29,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const crypto = require('crypto');
+const https = require('https');
 const logger = require('./logger');
 
 // Dépôt communautaire — défini en dur car c'est le dépôt public de référence.
@@ -40,27 +41,70 @@ const COMMUNITY_REPO = {
 
 const GITHUB_API = 'https://api.github.com';
 
-// Timeout appliqué à CHAQUE appel fetch vers l'API GitHub (20s). Sans cela,
-// undici (Node.js 24.x) garde des sockets keep-alive idle qui finissent par
-// déclencher le bug "Cannot assign to read only property 'name'" → crash du
-// serveur leaderboard → "Failed to fetch" dans la modale de soumission. Le
-// AbortController ferme proprement la connexion avant qu'undici n'expire tout
-// seul, et le catch renvoie une erreur explicite au lieu de crasher le process.
+// Timeout appliqué à CHAQUE appel vers l'API GitHub (20s). Voir githubFetch.
 const GITHUB_FETCH_TIMEOUT_MS = 20000;
 
-// Wrapper fetch avec timeout pour tous les appels GitHub API.
-// @param {string} url - URL complète vers api.github.com
-// @param {object} [options] - options fetch standards (method, headers, body...)
-// @returns {Promise<Response>} réponse fetch (ou rejette avec une Error timeout)
-async function githubFetch(url, options) {
-  options = options || {};
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), GITHUB_FETCH_TIMEOUT_MS);
-  try {
-    return await fetch(url, Object.assign({}, options, { signal: controller.signal }));
-  } finally {
-    clearTimeout(timer);
+// Wrapper HTTPS pour TOUS les appels vers l'API GitHub.
+//
+// IMPORTANT : on utilise le module `https` natif de Node.js (et NON fetch).
+// Sous Node.js 24.x, fetch est implémenté par undici qui garde des sockets
+// keep-alive idle. Quand une socket idle expire, undici tente d'affecter
+// la propriété `name` d'une Error en lecture seule → TypeError qui fait
+// planter le serveur leaderboard → le navigateur affiche "Failed to fetch"
+// dans la modale "Envoyer à la communauté". Le module https natif n'utilise
+// PAS undici et n'a pas ce bug : chaque requête ouvre sa propre socket qui
+// est détruite à la fin (pas de pool idle).
+//
+// L'objet renvoyé imite l'API Response de fetch (.ok, .status, .json(),
+// .text()) pour que les 11 sites d'appel restent inchangés.
+//
+// @param {string} url - URL complète (ex: https://api.github.com/user)
+// @param {object} [opts] - { method, headers, body }
+// @returns {Promise<object>} réponse compatible fetch Response
+async function githubFetch(url, opts) {
+  opts = opts || {};
+  const parsed = new URL(url);
+  const method = (opts.method || 'GET').toUpperCase();
+  const headers = Object.assign({
+    'User-Agent': 'BenchGo-V3-Community',
+    'Accept': 'application/vnd.github+json'
+  }, opts.headers || {});
+  let bodyData = null;
+  if (opts.body != null) {
+    bodyData = typeof opts.body === 'string' ? opts.body : JSON.stringify(opts.body);
+    headers['Content-Length'] = Buffer.byteLength(bodyData);
+    if (!headers['Content-Type']) headers['Content-Type'] = 'application/json';
   }
+  return new Promise((resolve, reject) => {
+    const req = https.request({
+      hostname: parsed.hostname,
+      port: parsed.port || 443,
+      path: parsed.pathname + parsed.search,
+      method: method,
+      headers: headers
+    }, (res) => {
+      const chunks = [];
+      res.on('data', (c) => chunks.push(c));
+      res.on('end', () => {
+        const buf = Buffer.concat(chunks);
+        const text = buf.toString('utf8');
+        const fakeRes = {
+          status: res.statusCode,
+          ok: res.statusCode >= 200 && res.statusCode < 300,
+          _text: text,
+          text: function () { return Promise.resolve(text); },
+          json: function () { return Promise.resolve(JSON.parse(text)); }
+        };
+        resolve(fakeRes);
+      });
+    });
+    req.on('error', (e) => reject(e));
+    req.setTimeout(GITHUB_FETCH_TIMEOUT_MS, () => {
+      req.destroy(new Error('githubFetch: timeout apres ' + GITHUB_FETCH_TIMEOUT_MS + 'ms'));
+    });
+    if (bodyData != null) req.write(bodyData);
+    req.end();
+  });
 }
 
 // Fichier de profil local (préférences communautaires). Stocké à la racine du

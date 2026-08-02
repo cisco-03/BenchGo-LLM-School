@@ -1,5 +1,104 @@
 # CHANGELOG - Carnet de Notes BenchGo
 
+## 2026-08-02 — fix(v2): "Failed to fetch" — remplacement de fetch par https natif (bypass undici Node.js 24.x)
+
+### Contexte
+La première tentative de correction (handlers `uncaughtException` + `AbortController`
+sur `fetch`) n'a pas suffi : l'erreur `Failed to fetch` réapparaissait toujours
+dans la modale « Envoyer à la communauté ». Cause profonde : sous Node.js 24.x,
+`fetch` est implémenté par **undici** qui maintient un pool de sockets keep-alive.
+Même avec un `AbortController` par requête, undici peut déclencher son timeout
+interne sur une socket idle du pool et lever le `TypeError: Cannot assign to
+read only property 'name'`. Le handler `uncaughtException` empêche le crash du
+process, MAIS la promesse `fetch` reste pendante (elle ne rejette jamais
+proprement) → la requête HTTP vers le navigateur reste ouverte indéfiniment →
+le navigateur finit par couper la connexion → `Failed to fetch`.
+
+### Solution radicale
+Remplacement de **tous** les appels `fetch` vers `api.github.com` par le module
+**`https` natif** de Node.js, qui n'utilise PAS undici. Chaque requête ouvre sa
+propre socket (pas de pool keep-alive idle) → le bug undici ne peut plus se
+déclencher du tout.
+
+- **`community-sync.js`** — Helper `githubFetch(url, opts)` réécrit sur
+  `https.request` avec un objet Response compatible fetch (`.ok`, `.status`,
+  `.json()`, `.text()`). Les 11 sites d'appel (`getMainBranchSha`,
+  `createBranch`, `deleteBranch`, `putFile` ×2, `createPullRequest`,
+  `findExistingPullRequest`, `mergePullRequest`, `validateGithubToken`,
+  `getAlreadySubmittedModels`, `getSubmissionContent`) restent inchangés.
+  Timeout 20s via `req.setTimeout()` qui détruit la socket proprement.
+  Le ping télémétrie (`sendPing`) garde `fetch` car il est hors flux de
+  soumission (arrière-plan au lancement du runner, pas dans le serveur
+  interactif) et a déjà son AbortController 5s.
+- **`leaderboard.js`** — Les handlers `uncaughtException` / `unhandledRejection`
+  (ajoutés lors de la 1re tentative) sont conservés comme filet de sécurité,
+  mais ne devraient plus se déclencher pour les appels GitHub.
+
+### Fichiers modifiés
+- `community-sync.js` (wrapper `githubFetch` réécrit sur `https` natif)
+- `Docs/CHANGELOG.md`
+
+### Résultat obtenu
+- Les appels GitHub API n'utilisent plus undici → le bug de socket idle ne
+  peut plus se déclencher → plus de crash serveur → plus de `Failed to fetch`.
+- Les requêtes rejetent proprement en cas de timeout/erreur réseau (la promesse
+  `githubFetch` rejette avec une Error explicite au lieu de rester pendante).
+- Le flux de soumission complet (validate → already-submitted → submit-check
+  avec 5 modèles → serveur toujours debout) testé avec succès.
+
+### Validation
+- `node --check community-sync.js` + `node --check leaderboard.js` : OK
+- `node tests/run-tests.js` : 27/27 passés
+- Test isolation : `validateGithubToken('fake')` → `{"valid":false,"error":"HTTP 401"}`
+  (interroge réellement api.github.com via https natif)
+- Test live serveur port 3942 : `/api/submit-validate` + `/api/already-submitted`
+  + `/api/submit-check` (5 modèles) → serveur resté debout, aucune erreur
+  undici dans les logs.
+
+## 2026-08-02 — feat: spinner d'attente dans la modale Envoyer à la communauté + regression bouton manquant
+
+### Contexte
+La soumission communautaire (validation token, comparaison de 40+ modèles avec
+GitHub, envoi des PR) peut prendre 1 à 2 minutes. Sans indicateur visuel,
+l'utilisateur voyait un message statique (« Envoi en cours... ») et pensait que
+ça avait planté. Ajout d'un spinner CSS (cercle qui tourne) à chaque étape
+d'attente.
+
+Par ailleurs, l'ajout précédent du lien token avait oublié un `+` de
+concaténation (ligne 2964) → tout le HTML suivant (champ pseudo, checkbox,
+boutons « Verifier et envoyer » + « Annuler ») était coupé du `innerHTML` → le
+bouton disparaissait. Corrigé en remettant le `+`.
+
+### Implémentation
+- **`leaderboard.js`** (CSS) — Ajout de `.submit-spinner` (cercle 16px violet
+  qui tourne via `@keyframes submitSpin`) après `.btn-community:disabled`.
+- **`leaderboard.js`** (`doSubmitAll`) — Helper `setSubmitStatus(message,
+  color, showSpinner)` qui injecte `<span class="submit-spinner"></span>` + le
+  message dans la zone de statut. Appliqué aux 5 étapes d'attente : validation
+  token, token valide, comparaison modèles, envoi en cours, envoi modèle par
+  modèle. Le spinner disparaît automatiquement quand le statut final (résumé
+  HTML) ou l'erreur remplace le contenu.
+- **`leaderboard.js`** — Ajout d'un message « peut prendre 1-2 min » sur
+  l'étape de comparaison pour rassurer l'utilisateur.
+- **`leaderboard.js`** (regression) — Remise du `+` manquant ligne 2964
+  (concaténation du `<p>` d'aide token avec le reste du `innerHTML`).
+
+### Fichiers modifiés
+- `leaderboard.js` (CSS spinner + helper setSubmitStatus + fix `+` manquant)
+- `Docs/CHANGELOG.md`
+
+### Résultat obtenu
+- Un cercle violet tourne à côté du message à chaque étape d'attente →
+  l'utilisateur sait que le traitement est en cours, même si GitHub met du
+  temps à répondre.
+- Le bouton « Verifier et envoyer » est de nouveau présent dans la modale.
+
+### Validation
+- `node --check leaderboard.js` : OK
+- `node scripts/check-inline-js.js` : JS inline valide
+- Test live : serveur port 3941, `/api/submit-validate` répond correctement,
+  spinner + bouton présents dans le HTML généré.
+
 ## 2026-08-02 — fix: "Failed to fetch" dans la modale Envoyer à la communauté (crash serveur undici Node.js 24.x) + lien de création de token GitHub
 
 ### Contexte

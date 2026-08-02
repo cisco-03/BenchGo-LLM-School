@@ -873,6 +873,19 @@ function buildLeaderboardHTML(entries) {
   .btn-community:active { transform: scale(0.97); }
   .btn-community:disabled { opacity: 0.5; cursor: default; }
 
+  .submit-spinner {
+    display: inline-block;
+    width: 16px; height: 16px;
+    margin-right: 8px;
+    border: 2px solid rgba(210,168,255,0.25);
+    border-top-color: #d2a8ff;
+    border-radius: 50%;
+    vertical-align: middle;
+    animation: submitSpin 0.7s linear infinite;
+  }
+  @keyframes submitSpin { to { transform: rotate(360deg); } }
+  .submit-spinner[hidden] { display: none; }
+
   .btn-icon {
     padding: 5px 9px; background: var(--bg-3); border-color: var(--border);
     color: var(--text-muted); font-size: var(--fs-tiny);
@@ -2961,7 +2974,7 @@ function openSubmitModal() {
     + '    <div style="margin-bottom: 16px;">'
     + '      <label style="display: block; margin-bottom: 6px; font-weight: 600;">Token GitHub (PAT, scope repo)</label>'
     + '      <input type="password" id="submitToken" placeholder="ghp_xxxxxxxxxxxx" style="width: 100%; padding: 10px; background: var(--bg-3); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-family: monospace;" />'
-    '      <p style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">'
+    + '      <p style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">'
     + '        Pas encore de token ? '
     + '        <a href="https://github.com/settings/tokens/new?scopes=repo&description=BenchGo-LLM-School" target="_blank" '
     + '           style="color: var(--accent); text-decoration: underline;">Creez-en un ici</a> '
@@ -2999,9 +3012,19 @@ async function doSubmitAll() {
   var remember = document.getElementById('submitRemember').checked;
   var statusEl = document.getElementById('submitStatus');
   var btn = document.getElementById('btnDoSubmit');
+  // Helper : affiche un spinner (cercle qui tourne) + un message dans la zone
+  // de statut. Utilise une icone CSS (.submit-spinner definie plus haut dans
+  // la feuille de style). show=false pour cacher le spinner (message final).
+  // IMPORTANT : pas d apostrophe dans ces chaines (contrainte du projet) —
+  // on reste en guillemets simples pour le HTML, doubles pour les attributs.
+  function setSubmitStatus(message, color, showSpinner) {
+    var sp = showSpinner ? '<span class="submit-spinner"></span>' : '';
+    var col = color || 'var(--accent)';
+    statusEl.innerHTML = '<p style="color: ' + col + '; display: flex; align-items: center; gap: 0;">' + sp + '<span>' + message + '</span></p>';
+  }
   if (!token) { statusEl.innerHTML = '<p style="color: var(--red);">Token GitHub requis.</p>'; return; }
   btn.disabled = true; btn.textContent = 'Verification...';
-  statusEl.innerHTML = '<p style="color: var(--accent);">Validation du token...</p>';
+  setSubmitStatus('Validation du token...', 'var(--accent)', true);
   try {
     var valRes = await fetch('/api/submit-validate', {
       method: 'POST',
@@ -3010,7 +3033,7 @@ async function doSubmitAll() {
     });
     var valData = await valRes.json();
     if (!valData.valid) { statusEl.innerHTML = '<p style="color: var(--red);">Token invalide : ' + esc(valData.error || 'verifiez les permissions') + '</p>'; btn.disabled = false; btn.textContent = 'Reessayer'; return; }
-    statusEl.innerHTML = '<p style="color: var(--green);">Token valide (' + esc(valData.login || '') + '). Comparaison des carnets locaux avec GitHub...</p>';
+    setSubmitStatus('Token valide (' + esc(valData.login || '') + '). Comparaison des carnets locaux avec GitHub...', 'var(--green)', true);
     // Étape 1 : récupère la liste des modèles déjà soumis (pour distinguer nouveaux vs mises à jour).
     var subRes = await fetch('/api/already-submitted', {
       method: 'POST',
@@ -3022,6 +3045,7 @@ async function doSubmitAll() {
     // Étape 2 : compare chaque carnet local avec sa soumission GitHub.
     // /api/submit-check renvoie { changed: [...], unchanged: [...], newModels: [...] }.
     var allShortNames = MODELS.map(function(m) { return m.shortName; });
+    setSubmitStatus('Comparaison de ' + allShortNames.length + ' modele(s) avec GitHub (peut prendre 1-2 min)...', 'var(--accent)', true);
     var checkRes = await fetch('/api/submit-check', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -3051,12 +3075,12 @@ async function doSubmitAll() {
     }
     var newCount = toSubmit.filter(function(m) { return newSet.has(m.shortName); }).length;
     var updateCount = toSubmit.filter(function(m) { return changedSet.has(m.shortName); }).length;
-    statusEl.innerHTML = '<p style="color: var(--accent);">' + toSubmit.length + ' modèle(s) à envoyer (' + newCount + ' nouveau(x), ' + updateCount + ' mise(s) à jour, ' + unchangedCount + ' inchangé(s)). Envoi en cours...</p>';
+    setSubmitStatus(toSubmit.length + ' modele(s) a envoyer (' + newCount + ' nouveau(x), ' + updateCount + ' mise(s) a jour, ' + unchangedCount + ' inchange(s)). Envoi en cours...', 'var(--accent)', true);
     var okCount = 0, failCount = 0, prUrls = [];
     for (var j = 0; j < toSubmit.length; j++) {
       var m = toSubmit[j];
       var isUpdate = changedSet.has(m.shortName);
-      statusEl.innerHTML = '<p style="color: var(--accent);">Envoi ' + (j + 1) + '/' + toSubmit.length + ' : ' + esc(m.shortName) + (isUpdate ? ' (mise à jour)' : ' (nouveau)') + '...</p>';
+      setSubmitStatus('Envoi ' + (j + 1) + '/' + toSubmit.length + ' : ' + esc(m.shortName) + (isUpdate ? ' (mise a jour)' : ' (nouveau)') + '...', 'var(--accent)', true);
       try {
         var res = await fetch('/api/submit?shortName=' + encodeURIComponent(m.shortName), {
           method: 'POST',
