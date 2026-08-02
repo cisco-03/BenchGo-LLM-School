@@ -94,6 +94,26 @@ function providerDisplay(provider, isCloud) {
   return { label: 'Local', icon: '🏠', color: '#3fb950' };
 }
 
+// Heuristique de détection de l'origine (cloud vs local) pour les carnets
+// soumis qui ne stockent pas provider/isCloud. Réplique detectIsCloudFromLedger
+// de leaderboard.js. Signaux forts uniquement :
+//   1. Slug OpenRouter ":free" (exclusif aux modèles cloud gratuits).
+//   2. Présence du profil FRONTIER dans les attempts (réservé au cloud).
+// Conservatrice : en cas de doute, on classe en local.
+function detectIsCloudFromCarnet(carnet) {
+  const model = (carnet.model || '').trim();
+  if (!model) return false;
+  if (/:free$/i.test(model)) return true;
+  const ecoles = Object.values(carnet.ecoles || {});
+  for (const ec of ecoles) {
+    const attempts = (ec && ec.attempts) || [];
+    for (const a of attempts) {
+      if (a && a.profile === 'FRONTIER') return true;
+    }
+  }
+  return false;
+}
+
 // Agrège un carnet en une entrée de classement (meilleure tentative par école).
 function aggregateCarnet(carnet) {
   if (!carnet || !carnet.ecoles) return null;
@@ -173,6 +193,11 @@ function aggregateCarnet(carnet) {
     : 0;
   const mandatoryPct = mandatoryTotal > 0 ? Math.round((mandatoryPassed / mandatoryTotal) * 100) : 0;
 
+  // Détection de l'origine (cloud vs local) : priorité aux champs explicites du
+  // carnet (provider/isCloud). Pour les carnets soumis sans ces champs, on
+  // utilise l'heuristique (slug :free, profil FRONTIER) pour départager.
+  const isCloud = Boolean(carnet.isCloud || (carnet.provider && carnet.provider !== 'local') || detectIsCloudFromCarnet(carnet));
+
   return {
     model: carnet.model || carnet.shortName || 'Inconnu',
     shortName: carnet.shortName || (carnet.model || 'inconnu').toLowerCase().replace(/[^a-z0-9]/g, '-'),
@@ -181,7 +206,7 @@ function aggregateCarnet(carnet) {
     note: carnet.note || null,
     publisher: carnet.publisher || null,
     provider: carnet.provider || null,
-    isCloud: Boolean(carnet.isCloud || (carnet.provider && carnet.provider !== 'local')),
+    isCloud,
     score, max, pct, globalLifeScore, optionalBonus,
     mandatoryPassed, mandatoryTotal, mandatoryPct,
     helpCount, retriedCount,
@@ -331,10 +356,20 @@ function buildConsolidatedHTML(entries) {
   const sizeCounts = { petit: 0, standard: 0, expert: 0, doctorat: 0, inconnu: 0 }
   const healthCounts = { positif: 0, negatif: 0 }
   const ecoleCounts = {}
+  // Filtre Origine : départage les modèles locaux (LM Studio) des modèles cloud
+  // (frontière API : OpenRouter, OpenAI, etc.). Les deux catégories n'ont rien à
+  // voir et ne doivent pas être mélangées dans le classement communautaire.
+  const originCounts = { local: 0, cloud: 0 }
+  const providerCounts = {}
   entries.forEach((e, idx) => {
     catCounts[getCategory(e.pct, idx + 1).key]++
     sizeCounts[getParamSize(e.model).key]++
     if ((e.globalLifeScore || 0) >= 0) healthCounts.positif++; else healthCounts.negatif++
+    if (e.isCloud) originCounts.cloud++; else originCounts.local++
+    if (e.isCloud) {
+      const pk = e.provider || 'cloud'
+      providerCounts[pk] = (providerCounts[pk] || 0) + 1
+    }
     for (const ec of (e.ecoles || [])) {
       ecoleCounts[ec.ecole] = (ecoleCounts[ec.ecole] || 0) + 1
     }
@@ -689,6 +724,7 @@ function buildConsolidatedHTML(entries) {
   .badge.quant { color: var(--purple); border-color: rgba(188,140,255,0.35); background: rgba(188,140,255,0.10); }
   .badge.note { color: var(--accent); border-color: rgba(88,166,255,0.35); background: rgba(88,166,255,0.10); }
   .badge.provider { border-style: dashed; }
+  .badge.local { color: #3fb950; border-color: rgba(63,185,80,0.35); background: rgba(63,185,80,0.10); }
   .pos-arrow { font-size: var(--fs-tiny); font-weight: 700; margin-left: 6px; vertical-align: middle; }
   .pos-arrow.pos-up { color: #3fb950; }
   .pos-arrow.pos-down { color: #f85149; }
@@ -972,6 +1008,19 @@ function buildConsolidatedHTML(entries) {
             ${ecoleOptions}
           </select>
         </div>
+
+        <label class="filter-label" for="originSelect" style="margin-left: var(--space-xs);">Origine</label>
+        <div class="select-wrap">
+          <select class="select" id="originSelect">
+            <option value="all" selected>Toutes origines (${entries.length})</option>
+            <option value="local">🏠 Local · LM Studio (${originCounts.local})</option>
+            <option value="cloud">☁️ Cloud · API (${originCounts.cloud})</option>
+            ${Object.keys(providerCounts).sort().map(pk => {
+              const info = providerDisplay(pk, true);
+              return `<option value="prov:${esc(pk)}">${info.icon} ${esc(info.label)} (${providerCounts[pk]})</option>`;
+            }).join('')}
+          </select>
+        </div>
       </div>
 
       <div class="search-wrap">
@@ -1093,11 +1142,13 @@ function renderCards() {
   var sizeSel = document.getElementById('sizeSelect');
   var healthSel = document.getElementById('healthSelect');
   var ecoleSel = document.getElementById('ecoleSelect');
+  var originSel = document.getElementById('originSelect');
   if (!catSel || !sizeSel) return;
   var activeCat = catSel.value;
   var activeSize = sizeSel.value;
   var activeHealth = healthSel ? healthSel.value : 'all';
   var activeEcole = ecoleSel ? ecoleSel.value : 'all';
+  var activeOrigin = originSel ? originSel.value : 'all';
   var searchEl = document.getElementById('search');
   var q = searchEl ? searchEl.value.trim().toLowerCase() : '';
   var container = document.getElementById('cards');
@@ -1117,6 +1168,14 @@ function renderCards() {
     if (activeEcole !== 'all') {
       var hasEcole = (m.ecoleNames || []).indexOf(activeEcole) !== -1;
       if (!hasEcole) continue;
+    }
+    if (activeOrigin !== 'all') {
+      if (activeOrigin === 'cloud' && !m.isCloud) continue;
+      if (activeOrigin === 'local' && m.isCloud) continue;
+      if (activeOrigin.indexOf('prov:') === 0) {
+        var provFilter = activeOrigin.slice(5);
+        if ((m.provider || (m.isCloud ? 'cloud' : 'local')) !== provFilter) continue;
+      }
     }
     if (q && m.model.toLowerCase().indexOf(q) === -1 && m.shortName.toLowerCase().indexOf(q) === -1) continue;
     shown++;
@@ -1139,9 +1198,16 @@ function renderCards() {
     var noteBadge = m.note ? '<span class="badge note" title="Note personnelle disponible">📝 Note</span>' : '';
     var contribBadge = m.contributors > 1 ? '<span class="badge contrib">👥 ' + m.contributors + ' testeurs</span>' : '';
     var pseudoBadge = m.pseudo ? '<span class="badge pseudo">✍️ ' + esc(m.pseudo) + '</span>' : '';
-    // Badge provider : différencie OpenRouter, OpenAI, Ollama, etc. au lieu
-    // d'un "Cloud" générique. provInfo est précalculé côté serveur.
-    var provBadge = m.provInfo ? '<span class="badge provider" title="Provider : ' + esc(m.provInfo.label) + '" style="color:' + m.provInfo.color + ';border-color:' + m.provInfo.color + '55;background:' + m.provInfo.color + '18">' + m.provInfo.icon + ' ' + esc(m.provInfo.label) + '</span>' : '';
+    // Badge d origine : départage local (LM Studio) vs cloud (frontière API).
+    // Les modèles cloud affichent leur provider spécifique (OpenRouter, OpenAI…)
+    // pour ne pas tout mélanger sous un badge générique.
+    var originBadge = '';
+    if (m.isCloud) {
+      var provTitle = 'Modèle cloud — Provider : ' + esc(m.provInfo.label) + (m.provider ? ' (' + esc(m.provider) + ')' : '');
+      originBadge = '<span class="badge provider" title="' + provTitle + '" style="color:' + m.provInfo.color + ';border-color:' + m.provInfo.color + '55;background:' + m.provInfo.color + '18">' + m.provInfo.icon + ' ' + esc(m.provInfo.label) + '</span>';
+    } else {
+      originBadge = '<span class="badge local" title="Modèle local (LM Studio)">🏠 Local</span>';
+    }
     var posArrow = positionArrow(m.positionDelta);
 
     var html = '<div class="card ' + cardClass + '" onclick="openModal(' + i + ')">' +
@@ -1149,7 +1215,7 @@ function renderCards() {
         '<div class="rank">' + rankDisp + '</div>' +
         '<div class="model-name">' +
           '<div class="name-line"><span class="cat-icon">' + m.cat.icon + '</span>' + esc(m.model) + posArrow + '</div>' +
-          '<div class="badges">' + szBadge + ' ' + provBadge + ' ' + quantBadge + ' ' + noteBadge + ' ' + contribBadge + ' ' + pseudoBadge + '</div>' +
+          '<div class="badges">' + szBadge + ' ' + originBadge + ' ' + quantBadge + ' ' + noteBadge + ' ' + contribBadge + ' ' + pseudoBadge + '</div>' +
         '</div>' +
         '<div class="mini-stats">' +
           '<div class="mini-stat"><span class="lbl">%</span><span class="val" style="color:' + pc + '">' + dispPct(m.pct) + '%</span><div class="pct-bar-wrap"><div class="pct-bar-fill" style="width:' + Math.max(2,dispPct(m.pct)) + '%;background:' + pc + '"></div></div></div>' +
@@ -1457,6 +1523,8 @@ var _healthSel = document.getElementById('healthSelect');
 if (_healthSel) _healthSel.addEventListener('change', renderCards);
 var _ecoleSel = document.getElementById('ecoleSelect');
 if (_ecoleSel) _ecoleSel.addEventListener('change', renderCards);
+var _originSel = document.getElementById('originSelect');
+if (_originSel) _originSel.addEventListener('change', renderCards);
 
 document.addEventListener('click', function(e) {
   var openMenu = document.querySelector('.kebab-menu.show');
@@ -1638,11 +1706,12 @@ function copyLeaderboard() {
   var activeSize = document.getElementById('sizeSelect').value;
   var activeHealth = document.getElementById('healthSelect') ? document.getElementById('healthSelect').value : 'all';
   var activeEcole = document.getElementById('ecoleSelect') ? document.getElementById('ecoleSelect').value : 'all';
+  var activeOrigin = document.getElementById('originSelect') ? document.getElementById('originSelect').value : 'all';
   var q = document.getElementById('search').value.trim().toLowerCase();
 
   var lines = [];
   lines.push('🌐 Classement Communautaire BenchGo V3 — ' + new Date().toLocaleString('fr-FR'));
-  lines.push('Filtre catégorie : ' + (activeCat === 'all' ? 'tous' : activeCat) + ' | Taille : ' + (activeSize === 'all' ? 'toutes' : activeSize) + ' | Santé : ' + (activeHealth === 'all' ? 'toutes' : activeHealth) + ' | École : ' + (activeEcole === 'all' ? 'toutes' : activeEcole) + (q ? ' | Recherche : ' + q : ''));
+  lines.push('Filtre catégorie : ' + (activeCat === 'all' ? 'tous' : activeCat) + ' | Taille : ' + (activeSize === 'all' ? 'toutes' : activeSize) + ' | Santé : ' + (activeHealth === 'all' ? 'toutes' : activeHealth) + ' | École : ' + (activeEcole === 'all' ? 'toutes' : activeEcole) + ' | Origine : ' + (activeOrigin === 'all' ? 'toutes' : activeOrigin) + (q ? ' | Recherche : ' + q : ''));
   lines.push('');
   lines.push('Rang | Modèle | Quantif. | Points | % | Note | Oblig. | Santé | Écoles | Temps | Vitesse | Verdict');
   lines.push('---|---|---|---|---|---|---|---|---|---|---|---');
@@ -1659,6 +1728,14 @@ function copyLeaderboard() {
     if (activeEcole !== 'all') {
       var hasEcole = (m.ecoleNames || []).indexOf(activeEcole) !== -1;
       if (!hasEcole) continue;
+    }
+    if (activeOrigin !== 'all') {
+      if (activeOrigin === 'cloud' && !m.isCloud) continue;
+      if (activeOrigin === 'local' && m.isCloud) continue;
+      if (activeOrigin.indexOf('prov:') === 0) {
+        var provFilter2 = activeOrigin.slice(5);
+        if ((m.provider || (m.isCloud ? 'cloud' : 'local')) !== provFilter2) continue;
+      }
     }
     if (q && m.model.toLowerCase().indexOf(q) === -1 && m.shortName.toLowerCase().indexOf(q) === -1) continue;
     var rank = copied < 3 ? ['🥇','🥈','🥉'][copied] : ('' + (copied + 1));

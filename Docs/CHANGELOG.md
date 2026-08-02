@@ -1,5 +1,69 @@
 # CHANGELOG - Carnet de Notes BenchGo
 
+## 2026-08-02 — fix(v3): modale leaderboard ne persiste pas dans le carnet (saveLedger non exportée)
+
+### Contexte
+Toutes les éditions depuis la modale du leaderboard (taille du modèle,
+quantification, lien du modèle, note personnelle) affichaient bien un toast
+« enregistré » mais n'étaient **jamais** persistées dans le carnet JSON. Au
+redémarrage du serveur (`--serve`), toutes les valeurs saisies disparaissaient.
+
+### Cause racine
+Les 4 endpoints API (`/api/model-paramsize`, `/api/model-quantization`,
+`/api/model-note`, `/api/model-url`) font tous :
+```js
+const { saveLedger } = require('./score-ledger');
+saveLedger(ledger);
+```
+Or `saveLedger` **n'était pas exportée** dans `module.exports` de
+score-ledger.js (oubli). Le require destructuré renvoyait `undefined`, et
+`saveLedger(ledger)` jetait `TypeError: saveLedger is not a function`. Cette
+erreur était attrapée par le `try/catch` qui renvoyait `{ ok: false }`. Le
+frontend basculait alors en fallback localStorage (toast « enregistré
+locaalement »), ce qui donnait l'illusion que ça marchait — sauf que rien
+n'était écrit dans le carnet. À la soumission communautaire, le carnet
+vide de ces champs était envoyé tel quel.
+
+### Solution
+Ajout de `saveLedger` dans `module.exports` de score-ledger.js (1 ligne).
+
+### Impact
+- La taille, la quantification, le lien du modèle et la note saisis dans la
+  modale sont désormais persistés dans le carnet JSON et propagés à la
+  soumission communautaire.
+- Les carnets existants déjà soumis sans ces champs ne sont pas rétro-activés
+  (il faut re-soumettre les modèles concernés).
+
+## 2026-08-02 — feat(v3): filtre Origine (local vs cloud) dans le classement communautaire
+
+### Contexte
+Le classement communautaire (`consolidate-leaderboard.js`) mélangeait les
+modèles locaux (LM Studio) et les modèles frontière cloud (OpenRouter, etc.)
+sans possibilité de les départager, contrairement au leaderboard local qui a
+déjà un sélecteur Origine. Les modèles cloud n'ont rien à voir avec les locaux
+et ne doivent pas être comparés côte à côte.
+
+### Solution
+- Ajout d'une heuristique `detectIsCloudFromCarnet()` (réplique de
+  `detectIsCloudFromLedger` de leaderboard.js) dans consolidate-leaderboard.js :
+  détecte les modèles cloud via le slug OpenRouter `:free` ou le profil
+  `FRONTIER` dans les attempts, pour les carnets soumis qui ne stockent pas
+  `provider`/`isCloud`.
+- Intégration de l'heuristique dans `aggregateCarnet()` : `isCloud` est
+  désormais détecté même sans champs explicites dans le carnet soumis.
+- Ajout du sélecteur « Origine » dans la barre sticky du classement
+  communautaire : Toutes origines / Local (LM Studio) / Cloud (API) + un
+  sous-filtre par provider spécifique (OpenRouter, OpenAI, Ollama…).
+- Ajout du badge d'origine sur les cartes : `🏠 Local` pour les modèles
+  locaux, badge provider coloré pour les modèles cloud.
+- Le filtre Origine est respecté dans `renderCards()` et `copyLeaderboard()`.
+- Ajout du style `.badge.local` dans le CSS.
+
+### Impact
+Le modèle `inclusionai/ling-3.0-flash:free` (testé via OpenRouter) est
+maintenant correctement détecté comme cloud et peut être isolé des modèles
+locaux via le sélecteur Origine.
+
 ## 2026-08-02 — fix(v3): "Failed to fetch" définitif (timeout navigateur) + classement vide (providerDisplay) + logs serveur fixes
 
 ### Contexte

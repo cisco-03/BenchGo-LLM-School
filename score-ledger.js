@@ -444,6 +444,7 @@ function detectUnstableModels() {
 
 module.exports = {
   loadLedger,
+  saveLedger,
   saveResult,
   computeGrandTotal,
   printBilanGlobal,
