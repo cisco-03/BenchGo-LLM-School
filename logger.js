@@ -7,8 +7,34 @@ if (!fs.existsSync(LOG_DIR)) {
   fs.mkdirSync(LOG_DIR, { recursive: true });
 }
 
-const timestampTag = new Date().toISOString().replace(/[:.]/g, '-');
-const logFilePath = path.join(LOG_DIR, `benchgo_${timestampTag}.log`);
+// Par défaut : un fichier de log horodaté par exécution (pour runner.js, les
+// batchs, etc.). Le serveur interactif (leaderboard.js --serve) override ce
+// chemin via setLogFile() pour utiliser un fichier FIXE (logs/serveur.log)
+// remis a zéro a chaque démarrage — evite l'accumulation de dizaines de
+// fichiers timestamp incomprehensibles pour l'utilisateur.
+const DEFAULT_LOG_FILE = path.join(LOG_DIR, `benchgo_${new Date().toISOString().replace(/[:.]/g, '-')}.log`);
+let logFilePath = DEFAULT_LOG_FILE;
+
+// Permet de rediriger tous les logs vers un fichier fixe (nom stable). Utilisé
+// par le serveur interactif (leaderboard.js --serve) pour avoir un seul
+// fichier de log connu, truncat a chaque démarrage.
+function setLogFile(filePath) {
+  logFilePath = filePath;
+}
+
+// Remet a zéro (vide) le fichier de log courant. Appelé au démarrage du serveur
+// pour partir d'un log propre a chaque session.
+function truncateLogFile() {
+  try {
+    fs.writeFileSync(logFilePath, '', 'utf8');
+  } catch (_) {
+    // Disque plein ou lecture seule : on ne fait pas crasher.
+  }
+}
+
+function getFilePath() {
+  return logFilePath;
+}
 
 // On écrit les logs de façon SYNCHRONE (fs.appendFileSync). Au détriment d'une
 // légère perte de perf (les logs sont peu nombreux : ~1-10 lignes par exécution),
@@ -107,6 +133,8 @@ module.exports = {
   runConfig,
   exercise,
   getFilePath,
+  setLogFile,
+  truncateLogFile,
   close,
   closeSync
 };

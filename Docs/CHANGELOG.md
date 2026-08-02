@@ -1,5 +1,86 @@
 # CHANGELOG - Carnet de Notes BenchGo
 
+## 2026-08-02 — fix(v3): "Failed to fetch" définitif (timeout navigateur) + classement vide (providerDisplay) + logs serveur fixes
+
+### Contexte
+1. **"Failed to fetch" dans la modale Envoyer à la communauté** : malgré 3
+   tentatives précédentes (bypass undici, handlers d'exceptions, fetch natif),
+   l'erreur réapparaissait systématiquement. La cause racine était TOTALEMENT
+   différente : `/api/submit-check` faisait une boucle SÉQUENTIELLE d'appels
+   GitHub (1 `getSubmissionContent` par modèle), soit 41 × 5-10s = jusqu'à
+   7+ minutes pour UN seul `fetch()` navigateur. Or Chrome/Edge coupent tout
+   `fetch()` au bout de ~5 min d'inactivité → "Failed to fetch". Les corrections
+   undici ne pouvaient rien y faire car le serveur n'avait pas crashé — c'est le
+   navigateur qui abandonnait.
+2. **Classement vide en local ("Aucun modèle")** : `renderCards()` crashait avec
+   `ReferenceError: providerDisplay is not defined`. La fonction existait dans le
+   source Node.js (ligne 396, pour le CLI) mais n'avait JAMAIS été copiée dans
+   le JS inline du HTML navigateur. Dès que `renderCards` tombait sur la ligne
+   `var provInfo = providerDisplay(m.provider, m.isCloud)`, le script plantait
+   et rien ne s'affichait.
+3. **Système de logs illisible** : un fichier log horodaté par exécution →
+   accumulation de dizaines de fichiers `benchgo_<timestamp>.log`
+   incompréhensibles. L'utilisateur ne savait pas lequel regarder.
+
+### Solution
+
+#### 1. Parallélisation de /api/submit-check (fix "Failed to fetch")
+- **`leaderboard.js`** (`/api/submit-check`) — La boucle séquentielle `for (sn
+  of shortNames)` est remplacée par une parallélisation avec concurrence
+  limitée à 8 (workers qui consomment une file d'attente). Temps total divisé
+  par ~8 → sous le timeout navigateur (~1 min au lieu de 7+ min).
+- **`leaderboard.js`** (`startServer`) — `server.requestTimeout = 0` +
+  `server.headersTimeout = 0` pour empêcher Node 18+ de couper la connexion
+  côté serveur (300s par défaut).
+
+#### 2. Ajout de providerDisplay dans le JS inline (fix classement vide)
+- **`leaderboard.js`** (JS inline, après `var _originalModels`) — Ajout de
+  `PROVIDER_DISPLAY` (dictionnaire des 11 providers avec label/icon/color) et
+  `providerDisplay(provider, isCloud)` repli de la version Node (ligne 396-403)
+  pour le navigateur. Icônes en escapes Unicode (`\u{1F500}`) pour respecter la
+  contrainte `no_apostrophes_in_generated_code`.
+
+#### 3. Système de logs serveur fixes
+- **`logger.js`** — Ajout de `setLogFile(filePath)` et `truncateLogFile()`. Le
+  logger horodaté par défaut reste pour runner.js/batchs, mais le serveur peut
+  maintenant rediriger vers un fichier FIXE.
+- **`leaderboard.js`** (`startServer`) — Redirige tous les logs vers
+  `logs/serveur.log` (fichier unique, remis à zéro à chaque démarrage). Affiche
+  le chemin au démarrage du serveur.
+- **`leaderboard.js`** (handler HTTP) — Logging de TOUTES les requêtes `/api/*`
+  entrantes (méthode + chemin + statut + durée) via `res.on('finish')`. Logging
+  des erreurs des 4 endpoints de soumission (`submit-validate`,
+  `already-submitted`, `submit-check`, `submit`) avec stack trace.
+- **`scripts/show-log.js`** — Réécrit pour lire `logs/serveur.log` (fichier
+  fixe, plus de recherche parmi des dizaines de fichiers). Ajout du mode
+  `--watch` (suivi en direct, comme `tail -f`). Commandes : `--tail N`,
+  `--grep MOTIF`, `--watch`.
+
+### Fichiers modifiés
+- `leaderboard.js` (parallélisation submit-check + requestTimeout + logs HTTP +
+  providerDisplay inline + setLogFile/truncateLogFile)
+- `logger.js` (setLogFile, truncateLogFile, exports)
+- `scripts/show-log.js` (réécriture sur fichier fixe + mode watch)
+- `Docs/CHANGELOG.md`
+
+### Résultat obtenu
+- `/api/submit-check` traité en ~1 min au lieu de 7+ min → plus de "Failed to
+  fetch" (confirmé par test live : `OK — 0 modifie(s), 0 nouveau(x), 41
+  inchange(s)` sans erreur).
+- Le classement local affiche de nouveau les modèles (providerDisplay
+  accessible dans le JS inline).
+- Un seul fichier de log serveur (`logs/serveur.log`), lisible en direct via
+  `node scripts/show-log.js --watch`.
+
+### Validation
+- `node --check leaderboard.js` + `node --check logger.js` + `node --check
+  scripts/show-log.js` : OK
+- `node tests/run-tests.js` : 27/27 passés
+- `node scripts/check-inline-js.js` : JS inline valide (classement.html +
+  community-leaderboard.html)
+- Test live serveur : soumission communautaire réussie sans "Failed to fetch",
+  logs HTTP visibles en direct via `--watch`
+
 ## 2026-08-02 — feat: logs exhaustifs par exercice pour diagnostic contestations + bug tache_2a identifie
 
 ### Contexte

@@ -1514,6 +1514,32 @@ var REMOTE_REPO = ${JSON.stringify(updateChecker.COMMUNITY_REPO)};
 var _originalModels = MODELS.slice();
 var _recentSortActive = false;
 
+// --- Badge provider (origine du modele : Local / Cloud / provider specifique) ---
+// Repli de la version Node (ligne 379-403) pour le JS inline navigateur.
+// Affiche un badge colore selon le provider (OpenRouter, OpenAI, Anthropic...)
+// au lieu d un "Cloud" generique. Aucun apostrophe (contrainte du projet).
+var PROVIDER_DISPLAY = {
+  openrouter: { label: 'OpenRouter', icon: '\u{1F500}', color: '#d29922' },
+  openai:      { label: 'OpenAI',     icon: '\u{1F7E2}', color: '#10a37f' },
+  anthropic:   { label: 'Anthropic', icon: '\u{1F7E3}', color: '#a855f7' },
+  groq:        { label: 'Groq',      icon: '\u26A1',    color: '#f55036' },
+  together:    { label: 'Together',  icon: '\u{1F91D}', color: '#0f6fff' },
+  mistral:     { label: 'Mistral',   icon: '\u{1F32C}', color: '#ff7000' },
+  deepseek:    { label: 'DeepSeek',  icon: '\u{1F40B}', color: '#4d6bfe' },
+  cohere:      { label: 'Cohere',    icon: '\u{1F517}', color: '#39594d' },
+  ollama:      { label: 'Ollama',    icon: '\u{1F999}', color: '#d29922' },
+  lmstudio:    { label: 'LM Studio', icon: '\u{1F3E0}', color: '#3fb950' },
+  custom:      { label: 'Custom',    icon: '\u2699\uFE0F', color: '#8b949e' }
+};
+function providerDisplay(provider, isCloud) {
+  if (provider && PROVIDER_DISPLAY[provider]) return PROVIDER_DISPLAY[provider];
+  if (provider && provider !== 'local') {
+    return { label: provider, icon: '\u2601\uFE0F', color: '#d29922' };
+  }
+  if (isCloud) return { label: 'Cloud', icon: '\u2601\uFE0F', color: '#d29922' };
+  return { label: 'Local', icon: '\u{1F3E0}', color: '#3fb950' };
+}
+
 function formatRelativeDate(isoStr) {
   if (!isoStr) return '—';
   var d = new Date(isoStr);
@@ -4037,6 +4063,17 @@ function startServer(port) {
   port = port || 3939;
   const htmlPath = path.join(EXPORT_DIR, 'classement.html');
 
+  // Redirige TOUS les logs vers un fichier FIXE (logs/serveur.log), remis a
+  // zéro a chaque démarrage. Cela evite l'accumulation de dizaines de fichiers
+  // timestamp incomprehensibles : l'utilisateur sait toujours ou regarder.
+  // Vider avec : node scripts/show-log.js
+  const SERVER_LOG = path.join(__dirname, 'logs', 'serveur.log');
+  logger.setLogFile(SERVER_LOG);
+  logger.truncateLogFile();
+  logger.info('[serveur] Démarrage du classement interactif sur le port ' + port);
+  console.log('  \x1b[90mLogs serveur : ' + SERVER_LOG + '\x1b[0m');
+  console.log('  \x1b[90mPour afficher les logs : node scripts/show-log.js\x1b[0m');
+
   // En-têtes de sécurité appliqués à toutes les réponses API JSON.
   // CORS strict : seul localhost est autorisé (pas de page web externe).
   const securityHeaders = {
@@ -4069,6 +4106,22 @@ function startServer(port) {
 
   const server = http.createServer(async (req, res) => {
     const url = new URL(req.url, 'http://localhost');
+
+    // Log de TOUTES les requêtes API entrantes (méthode + chemin + durée).
+    // Permet de diagnostiquer les soumissions communautaires : si aucune
+    // ligne n'apparaît pendant un clic "Envoyer à la communauté", c'est que
+    // le navigateur n'arrive pas à joindre le serveur (port, origine, etc.).
+    const _reqStart = Date.now();
+    res.on('finish', () => {
+      if (url.pathname.indexOf('/api/') === 0) {
+        logger.info('[HTTP] ' + req.method + ' ' + url.pathname + ' → ' + res.statusCode + ' (' + (Date.now() - _reqStart) + 'ms)');
+      }
+    });
+    res.on('error', (e) => {
+      if (url.pathname.indexOf('/api/') === 0) {
+        logger.error('[HTTP] ' + req.method + ' ' + url.pathname + ' — erreur socket : ' + e.message);
+      }
+    });
 
     // Requête OPTIONS (CORS preflight) : répondre avec les en-têtes CORS
     if (req.method === 'OPTIONS') {
@@ -4260,6 +4313,7 @@ function startServer(port) {
         res.writeHead(200, securityHeaders);
         res.end(JSON.stringify(validation));
       } catch (e) {
+        logger.error('[/api/submit-validate] ' + (e && e.stack || e));
         res.writeHead(200, securityHeaders);
         res.end(JSON.stringify({ ok: false, error: e.message }));
       }
@@ -4287,6 +4341,7 @@ function startServer(port) {
         res.writeHead(200, securityHeaders);
         res.end(JSON.stringify({ ok: true, submitted: Array.from(submitted) }));
       } catch (e) {
+        logger.error('[/api/already-submitted] ' + (e && e.stack || e));
         res.writeHead(200, securityHeaders);
         res.end(JSON.stringify({ ok: false, error: e.message }));
       }
@@ -4338,14 +4393,19 @@ function startServer(port) {
         const changed = [];
         const unchanged = [];
         const newModels = [];
-        for (const sn of shortNames) {
+        // Parallélisation avec concurrence limitée (8) pour éviter que la
+        // réponse HTTP dépasse le timeout réseau du navigateur (Chrome/Edge
+        // coupent les fetch au bout de ~5 min d'inactivité → "Failed to fetch").
+        // Version séquentielle : 41 modèles × 5-10s = jusqu'à 7 min → timeout.
+        // Version parallèle (8) : ~1 min → sous le timeout navigateur.
+        // L'API GitHub accepte bien la concurrence (rate limit 5000 req/h auth).
+        const SUBMIT_CHECK_CONCURRENCY = 8;
+        const checkQueue = shortNames.slice();
+        async function processCheckOne(sn) {
           const remote = await communitySync.getSubmissionContent(token, sn);
-          if (!remote) {
-            newModels.push(sn);
-            continue;
-          }
+          if (!remote) { newModels.push(sn); return; }
           const local = loadLedger(sn);
-          if (!local) { unchanged.push(sn); continue; }
+          if (!local) { unchanged.push(sn); return; }
           // Comparaison des champs pertinents (pas tout le carnet — juste les
           // champs qui justifient une mise a jour de la soumission).
           const fields = ['quantization', 'note', 'paramSize', 'modelUrl', 'model', 'shortName'];
@@ -4370,9 +4430,22 @@ function startServer(port) {
           if (isChanged) changed.push(sn);
           else unchanged.push(sn);
         }
+        const checkWorkers = [];
+        for (let w = 0; w < Math.min(SUBMIT_CHECK_CONCURRENCY, checkQueue.length); w++) {
+          checkWorkers.push((async () => {
+            while (checkQueue.length > 0) {
+              const sn = checkQueue.shift();
+              if (sn === undefined) break;
+              await processCheckOne(sn);
+            }
+          })());
+        }
+        await Promise.all(checkWorkers);
+        logger.info('[/api/submit-check] OK — ' + changed.length + ' modifie(s), ' + newModels.length + ' nouveau(x), ' + unchanged.length + ' inchange(s)');
         res.writeHead(200, securityHeaders);
         res.end(JSON.stringify({ ok: true, changed, unchanged, newModels }));
       } catch (e) {
+        logger.error('[/api/submit-check] ' + (e && e.stack || e));
         res.writeHead(200, securityHeaders);
         res.end(JSON.stringify({ ok: false, error: e.message }));
       }
@@ -4460,9 +4533,11 @@ function startServer(port) {
           pseudo: pseudo || null,
           benchgoVersion: 'V3'
         });
+        logger.info('[/api/submit] OK — ' + shortName + ' — PR #' + result.prNumber + (result.merged ? ' (mergee)' : ' (non mergee)'));
         res.writeHead(200, securityHeaders);
         res.end(JSON.stringify(result));
       } catch (e) {
+        logger.error('[/api/submit] ' + shortName + ' — ' + (e && e.stack || e));
         res.writeHead(200, securityHeaders);
         res.end(JSON.stringify({ ok: false, error: e.message }));
       }
@@ -4579,6 +4654,12 @@ function startServer(port) {
     console.log('  \x1b[90mBoutons "📄 Exporter PDF" / "📊 Exporter CSV" / "📝 Exporter Markdown" : export du classement.\x1b[0m');
     console.log(`  \x1b[1;36mDashboard progression/historique : ${url}/dashboard\x1b[0m`);
     console.log('  \x1b[90mCtrl+C pour arrêter le serveur.\x1b[0m\n');
+
+    // Désactive les timeouts HTTP de Node 18+ qui coupent les longues requêtes
+    // (la soumission communautaire peut prendre plusieurs minutes). Sans cela,
+    // server.requestTimeout (300s par défaut) ferme la connexion → "Failed to fetch".
+    server.requestTimeout = 0;
+    server.headersTimeout = 0;
 
     // Ouvre le navigateur par défaut
     const cmd = process.platform === 'win32' ? `start ${url}`
