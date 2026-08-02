@@ -1,5 +1,37 @@
 # CHANGELOG - Carnet de Notes BenchGo
 
+## 2026-08-02 — fix: timeout undici persistant en streaming cloud + carnet-professeur vide pour modèles frontières
+
+### Contexte
+Après le fix initial de la classe `TimeoutError` dans `http-middleware.js` (qui
+évitait le crash du `Object.assign` sur Error read-only), les timeouts socket
+undici ("socket idle timeout") continuaient de se produire pendant le streaming
+SSE des modèles cloud (OpenRouter). Le handler global `uncaughtException` les
+interceptait, mais le `reader.read()` du stream rejetait aussi → échec du tier,
+et le carnet-professeur n'était jamais écrit pour les modèles frontières car le
+run crashait avant le bloc d'écriture final.
+
+### Implémentation
+Wrapping de la boucle de lecture du stream dans un `try/catch` dans les deux
+fonctions de streaming de `cloud-client.js` :
+- `streamOpenAICompatResponse()` et `streamAnthropicResponse()` : si la
+  déconnexion undici arrive APRÈS avoir reçu du contenu partiel → on conserve le
+  contenu partiel (réponse incomplète mais évaluable, mieux qu'un crash). Si la
+  déconnexion arrive AVANT tout contenu → on propage l'erreur pour retry via
+  `http-middleware.js#withRetry`.
+
+Ainsi, le run ne crash plus et atteint le bloc d'écriture du carnet-professeur.
+
+### Fichiers modifiés
+- `cloud-client.js` — `streamOpenAICompatResponse()` + `streamAnthropicResponse()`
+  : `try/catch` autour de la boucle `reader.read()` + conservation du contenu
+  partiel sur déconnexion undici.
+- `Memories-BenchGo/issues-fixes/2026-08-02-undici-streaming-contenu-partiel.md`
+
+### Vérifications
+- `node --check cloud-client.js` : OK.
+- `node tests/run-tests.js` : 27/27 passés.
+
 ## 2026-08-02 — feat: séparation local / cloud dans le classement (leaderboard)
 
 ### Contexte

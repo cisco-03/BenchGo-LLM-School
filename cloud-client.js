@@ -49,9 +49,18 @@ async function streamOpenAICompatResponse(response, spinner) {
 
   let streamingStarted = false;
 
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
+  // --- Gestion du bug undici Node.js 24.x ---
+  // Pendant le streaming SSE, undici peut fermer la socket (idle timeout)
+  // et lancer une erreur "socket idle timeout" qui n'est PAS propagée dans
+  // la chaîne Promise (uncaughtException). Le handler global de runner.js
+  // l'intercepte et continue, MAIS le reader.read() rejette quand même.
+  // On capture cette erreur ici pour retourner le contenu PARTIEL déjà reçu
+  // plutôt que de perdre toute la réponse. C'est mieux d'avoir une réponse
+  // incomplète (que le moteur peut évaluer) que de crasher le run entier.
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
 
     sseBuffer += decoder.decode(value, { stream: true });
     const lines = sseBuffer.split('\n');
@@ -88,6 +97,18 @@ async function streamOpenAICompatResponse(response, spinner) {
       } catch (_) {}
     }
   }
+  } catch (streamErr) {
+    // Bug undici Node.js 24.x : "socket idle timeout" ou "Cannot assign to
+    // read only property 'name'". On a déjà intercepté l'uncaughtException
+    // au niveau global (runner.js), mais le reader.read() rejette aussi.
+    // On garde le contenu PARTIEL déjà reçu (mieux que rien pour l'évaluation).
+    if (fullContent.trim() || reasoningContent.trim()) {
+      logger.warn('Cloud streaming : déconnexion socket interceptée (bug undici 24.x) — contenu partiel conservé (' + (fullContent.length + reasoningContent.length) + ' chars).');
+    } else {
+      // Aucun contenu reçu avant la déconnexion : on propage pour retry.
+      throw streamErr;
+    }
+  }
 
   if (streamingStarted) spinner.endStreaming();
 
@@ -108,40 +129,49 @@ async function streamAnthropicResponse(response, spinner) {
 
   let streamingStarted = false;
 
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
 
-    sseBuffer += decoder.decode(value, { stream: true });
-    const lines = sseBuffer.split('\n');
-    sseBuffer = lines.pop();
+      sseBuffer += decoder.decode(value, { stream: true });
+      const lines = sseBuffer.split('\n');
+      sseBuffer = lines.pop();
 
-    for (const line of lines) {
-      const trimmed = line.trim();
-      if (!trimmed.startsWith('data: ')) continue;
-      const payload = trimmed.slice(6);
-      if (!payload) continue;
-      try {
-        const chunk = JSON.parse(payload);
-        // Anthropic "thinking" deltas (extended thinking)
-        if (chunk.type === 'content_block_delta' && chunk.delta?.type === 'thinking_delta') {
-          const thinkText = chunk.delta.thinking || '';
-          if (!streamingStarted && thinkText) { spinner.beginStreaming(); streamingStarted = true; }
-          reasoningContent += thinkText;
-          tokenCount++;
-          spinner.updateTokens(tokenCount, reasoningContent.length);
-          spinner.appendStreamChunk(thinkText, 'reasoning');
-          continue;
-        }
-        if (chunk.type === 'content_block_delta' && chunk.delta?.type === 'text_delta') {
-          const text = chunk.delta.text || '';
-          if (!streamingStarted && text) { spinner.beginStreaming(); streamingStarted = true; }
-          fullContent += text;
-          tokenCount++;
-          spinner.updateTokens(tokenCount, fullContent.length);
-          spinner.appendStreamChunk(text, 'content');
-        }
-      } catch (_) {}
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed.startsWith('data: ')) continue;
+        const payload = trimmed.slice(6);
+        if (!payload) continue;
+        try {
+          const chunk = JSON.parse(payload);
+          // Anthropic "thinking" deltas (extended thinking)
+          if (chunk.type === 'content_block_delta' && chunk.delta?.type === 'thinking_delta') {
+            const thinkText = chunk.delta.thinking || '';
+            if (!streamingStarted && thinkText) { spinner.beginStreaming(); streamingStarted = true; }
+            reasoningContent += thinkText;
+            tokenCount++;
+            spinner.updateTokens(tokenCount, reasoningContent.length);
+            spinner.appendStreamChunk(thinkText, 'reasoning');
+            continue;
+          }
+          if (chunk.type === 'content_block_delta' && chunk.delta?.type === 'text_delta') {
+            const text = chunk.delta.text || '';
+            if (!streamingStarted && text) { spinner.beginStreaming(); streamingStarted = true; }
+            fullContent += text;
+            tokenCount++;
+            spinner.updateTokens(tokenCount, fullContent.length);
+            spinner.appendStreamChunk(text, 'content');
+          }
+        } catch (_) {}
+      }
+    }
+  } catch (streamErr) {
+    // Bug undici Node.js 24.x (cf. streamOpenAICompatResponse).
+    if (fullContent.trim() || reasoningContent.trim()) {
+      logger.warn('Cloud streaming (Anthropic) : déconnexion socket interceptée (bug undici 24.x) — contenu partiel conservé (' + (fullContent.length + reasoningContent.length) + ' chars).');
+    } else {
+      throw streamErr;
     }
   }
 
