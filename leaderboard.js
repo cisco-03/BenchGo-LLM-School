@@ -1,3 +1,35 @@
+// --- Protection contre le bug undici de Node.js 24.x ---
+// Bug : TypeError: Cannot assign to read only property 'name' of object
+//   'Error: socket idle timeout'. Se produit quand une connexion HTTP (fetch
+//   vers l'API GitHub lors de la soumission communautaire) reste idle et qu'
+//   undici déclenche son timeout interne. Sans cette interception, le serveur
+//   interactif crash → le navigateur affiche "Failed to fetch" dans la modale
+//   "Envoyer à la communauté" et la soumission devient impossible.
+// Même protection que runner.js (ligne 11) : on log et on ignore l'erreur
+// undici spécifique. Le fetch concerné a déjà aborté et son catch prend le
+// relais (la soumission échoue proprement sur ce modèle, les autres continuent).
+process.on('uncaughtException', (err) => {
+  if (err && /Cannot assign to read only property 'name'/.test(err.message)
+      && /socket idle timeout|UndiciError|InformationalError/.test(err.stack || '')) {
+    logger.warn('[undici] Timeout socket intercepté (bug Node.js 24.x) — continuation du serveur.');
+    return;
+  }
+  logger.error('[ERREUR FATALE non interceptée] ' + (err && err.stack || err));
+  process.exit(1);
+});
+
+// Rejet de promesse non géré : on log sans crasher (une soumission peut
+// rejeter si GitHub coupe la connexion au milieu d'une PR — le serveur doit
+// rester debout pour les soumissions suivantes).
+process.on('unhandledRejection', (reason) => {
+  if (reason && /Cannot assign to read only property 'name'/.test(reason.message || '')
+      && /socket idle timeout|UndiciError|InformationalError/.test(reason.stack || '')) {
+    logger.warn('[undici] Rejet de promesse intercepté (bug Node.js 24.x) — continuation.');
+    return;
+  }
+  logger.error('[Promesse rejetée non gérée] ' + (reason && (reason.stack || reason.message || reason) || reason));
+});
+
 const http = require('http');
 const { exec } = require('child_process');
 const fs = require('fs');
@@ -2929,7 +2961,14 @@ function openSubmitModal() {
     + '    <div style="margin-bottom: 16px;">'
     + '      <label style="display: block; margin-bottom: 6px; font-weight: 600;">Token GitHub (PAT, scope repo)</label>'
     + '      <input type="password" id="submitToken" placeholder="ghp_xxxxxxxxxxxx" style="width: 100%; padding: 10px; background: var(--bg-3); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-family: monospace;" />'
-    + '      <p style="font-size: 12px; color: var(--text-muted); margin-top: 4px;"> Creez-en un sur github.com/settings/tokens (scope "repo").</p>'
+    '      <p style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">'
+    + '        Pas encore de token ? '
+    + '        <a href="https://github.com/settings/tokens/new?scopes=repo&description=BenchGo-LLM-School" target="_blank" '
+    + '           style="color: var(--accent); text-decoration: underline;">Creez-en un ici</a> '
+    + '        (connectez-vous a votre compte GitHub, cochez le scope "repo", puis Generate token). '
+    + '        <a href="https://docs.github.com/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens" target="_blank" '
+    + '           style="color: var(--text-muted); text-decoration: underline;">Aide GitHub</a>'
+    + '      </p>'
     + '    </div>'
     + '    <div style="margin-bottom: 16px;">'
     + '      <label style="display: block; margin-bottom: 6px; font-weight: 600;">Pseudo public (optionnel)</label>'

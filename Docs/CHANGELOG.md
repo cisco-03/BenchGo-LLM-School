@@ -1,5 +1,76 @@
 # CHANGELOG - Carnet de Notes BenchGo
 
+## 2026-08-02 — fix: "Failed to fetch" dans la modale Envoyer à la communauté (crash serveur undici Node.js 24.x) + lien de création de token GitHub
+
+### Contexte
+Dans le classement interactif (`node leaderboard.js --serve`), la modale
+"🌐 Envoyer à la communauté" affichait `Erreur : Failed to fetch` dès la
+validation du token ou pendant la soumission, rendant l'envoi des carnets
+vers le classement communautaire GitHub totalement impossible.
+
+Cause racine : sous **Node.js 24.x**, undici garde des sockets keep-alive
+idle vers `api.github.com`. Lorsque undici déclenche son timeout interne sur
+une socket idle, il tente d'affecter la propriété `name` d'une `Error` en
+lecture seule → `TypeError: Cannot assign to read only property 'name'`.
+`runner.js` interceptait déjà cette erreur (ligne 11) mais **`leaderboard.js`
+n'avait aucune protection** : le serveur interactif crashait silencieusement
+en plein milieu d'une soumission → le navigateur voyait la connexion TCP
+coupée et affichait `Failed to fetch`. Le bug se déclenche surtout avec un
+token valide car `/api/submit-check` enchaîne jusqu'à 41 `fetch` vers
+`api.github.com` (un par modèle via `getSubmissionContent`), multipliant la
+probabilité d'un timeout socket idle.
+
+Par ailleurs, l'aide pour créer un token GitHub était un texte brut non
+cliquable (`github.com/settings/tokens`), peu utile pour les nouveaux
+utilisateurs qui ne trouvent pas la page dans leur compte.
+
+### Implémentation
+- **`leaderboard.js`** — Ajout en tête de fichier des handlers
+  `process.on('uncaughtException')` et `process.on('unhandledRejection')`
+  qui interceptent l'erreur undici spécifique (regex sur le message +
+  stack) et loggent sans crasher, identique à la protection de `runner.js`.
+  Le serveur reste debout, le fetch concerné échoue proprement et la
+  soumission continue sur les modèles suivants.
+- **`community-sync.js`** — Nouveau wrapper `githubFetch()` avec
+  `AbortController` (timeout 20s) appliqué à TOUS les appels vers
+  `api.github.com` (9 occurrences : `getMainBranchSha`, `createBranch`,
+  `deleteBranch`, `putFile` ×2, `createPullRequest`,
+  `findExistingPullRequest`, `mergePullRequest`, `validateGithubToken`,
+  `getAlreadySubmittedModels`, `getSubmissionContent`). Le timeout ferme
+  explicitement la connexion avant qu'undici n'expire lui-même, évitant
+  le déclenchement du bug. Les catchs existants renvoient une erreur
+  explicite au lieu de crasher le process.
+- **`leaderboard.js`** (modale "Envoyer à la communauté") — Remplacement
+  du texte d'aide brut par deux liens cliquables génériques :
+  (1) `https://github.com/settings/tokens/new?scopes=repo&description=BenchGo-LLM-School`
+  qui pré-remplit le formulaire de création avec le scope `repo` déjà coché
+  et une description par défaut, (2) lien vers la doc officielle GitHub
+  sur la gestion des tokens. Aucun apostrophe dans le JS inline généré
+  (contrainte `no_apostrophes_in_generated_code` respectée).
+
+### Fichiers modifiés
+- `leaderboard.js` (handlers undici + lien token dans la modale)
+- `community-sync.js` (wrapper `githubFetch` + timeout 20s sur 11 appels)
+- `Docs/CHANGELOG.md`
+
+### Résultat obtenu
+- Le serveur interactif ne crash plus pendant la soumission communautaire,
+  même avec un token valide et 40+ modèles à comparer.
+- `Failed to fetch` est éliminé : une erreur réseau GitHub remonte
+  proprement dans la modale (`Erreur : HTTP 401`, `timeout`, etc.) au lieu
+  de couper la connexion.
+- L'utilisateur dispose d'un lien direct pour créer son token GitHub sans
+  chercher dans les paramètres de son compte.
+
+### Validation
+- `node --check leaderboard.js` + `node --check community-sync.js` : OK
+- `node tests/run-tests.js` : 27/27 passés
+- `node scripts/check-inline-js.js` : JS inline valide (classement.html +
+  community-leaderboard.html)
+- Test live : serveur démarré sur port 3940, appels `/api/submit-validate`,
+  `/api/already-submitted`, `/api/submit-check` (3 modèles) → serveur
+  toujours debout, aucune erreur undici dans les logs.
+
 ## 2026-08-02 — feat: séparation Local/Cloud dans le classement + commande --cloud + détection isCloud robuste
 
 ### Contexte

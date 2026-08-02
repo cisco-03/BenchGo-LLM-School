@@ -40,6 +40,29 @@ const COMMUNITY_REPO = {
 
 const GITHUB_API = 'https://api.github.com';
 
+// Timeout appliqué à CHAQUE appel fetch vers l'API GitHub (20s). Sans cela,
+// undici (Node.js 24.x) garde des sockets keep-alive idle qui finissent par
+// déclencher le bug "Cannot assign to read only property 'name'" → crash du
+// serveur leaderboard → "Failed to fetch" dans la modale de soumission. Le
+// AbortController ferme proprement la connexion avant qu'undici n'expire tout
+// seul, et le catch renvoie une erreur explicite au lieu de crasher le process.
+const GITHUB_FETCH_TIMEOUT_MS = 20000;
+
+// Wrapper fetch avec timeout pour tous les appels GitHub API.
+// @param {string} url - URL complète vers api.github.com
+// @param {object} [options] - options fetch standards (method, headers, body...)
+// @returns {Promise<Response>} réponse fetch (ou rejette avec une Error timeout)
+async function githubFetch(url, options) {
+  options = options || {};
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), GITHUB_FETCH_TIMEOUT_MS);
+  try {
+    return await fetch(url, Object.assign({}, options, { signal: controller.signal }));
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 // Fichier de profil local (préférences communautaires). Stocké à la racine du
 // projet, automatiquement ignoré par .gitignore (règle `*` qui ignore tout).
 const PROFILE_FILE = path.join(__dirname, '.benchgo-profile.json');
@@ -171,7 +194,7 @@ async function sendPing() {
 
 // Récupère le SHA de la branche de référence (main) du dépôt communautaire.
 async function getMainBranchSha(token) {
-  const res = await fetch(`${GITHUB_API}/repos/${COMMUNITY_REPO.owner}/${COMMUNITY_REPO.repo}/git/refs/heads/main`, {
+  const res = await githubFetch(`${GITHUB_API}/repos/${COMMUNITY_REPO.owner}/${COMMUNITY_REPO.repo}/git/refs/heads/main`, {
     headers: {
       'Authorization': `Bearer ${token}`,
       'Accept': 'application/vnd.github+json',
@@ -188,7 +211,7 @@ async function getMainBranchSha(token) {
 
 // Crée une branche à partir du SHA de main.
 async function createBranch(token, branchName, sha) {
-  const res = await fetch(`${GITHUB_API}/repos/${COMMUNITY_REPO.owner}/${COMMUNITY_REPO.repo}/git/refs`, {
+  const res = await githubFetch(`${GITHUB_API}/repos/${COMMUNITY_REPO.owner}/${COMMUNITY_REPO.repo}/git/refs`, {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${token}`,
@@ -215,7 +238,7 @@ async function createBranch(token, branchName, sha) {
 // pointe vers un vieux commit de main, ce qui peut causer des PR vides ou
 // des conflits de merge.
 async function deleteBranch(token, branchName) {
-  const res = await fetch(`${GITHUB_API}/repos/${COMMUNITY_REPO.owner}/${COMMUNITY_REPO.repo}/git/refs/heads/${encodeURIComponent(branchName)}`, {
+  const res = await githubFetch(`${GITHUB_API}/repos/${COMMUNITY_REPO.owner}/${COMMUNITY_REPO.repo}/git/refs/heads/${encodeURIComponent(branchName)}`, {
     method: 'DELETE',
     headers: {
       'Authorization': `Bearer ${token}`,
@@ -235,7 +258,7 @@ async function deleteBranch(token, branchName) {
 async function putFile(token, branch, filePath, contentBase64, message) {
   // Vérifie si le fichier existe déjà (pour récupérer le sha et faire un update).
   let existingSha = null;
-  const checkRes = await fetch(`${GITHUB_API}/repos/${COMMUNITY_REPO.owner}/${COMMUNITY_REPO.repo}/contents/${encodeURIComponent(filePath)}?ref=${branch}`, {
+  const checkRes = await githubFetch(`${GITHUB_API}/repos/${COMMUNITY_REPO.owner}/${COMMUNITY_REPO.repo}/contents/${encodeURIComponent(filePath)}?ref=${branch}`, {
     headers: {
       'Authorization': `Bearer ${token}`,
       'Accept': 'application/vnd.github+json',
@@ -254,7 +277,7 @@ async function putFile(token, branch, filePath, contentBase64, message) {
   };
   if (existingSha) body.sha = existingSha;
 
-  const res = await fetch(`${GITHUB_API}/repos/${COMMUNITY_REPO.owner}/${COMMUNITY_REPO.repo}/contents/${encodeURIComponent(filePath)}`, {
+  const res = await githubFetch(`${GITHUB_API}/repos/${COMMUNITY_REPO.owner}/${COMMUNITY_REPO.repo}/contents/${encodeURIComponent(filePath)}`, {
     method: 'PUT',
     headers: {
       'Authorization': `Bearer ${token}`,
@@ -273,7 +296,7 @@ async function putFile(token, branch, filePath, contentBase64, message) {
 
 // Ouvre une Pull Request vers main.
 async function createPullRequest(token, headBranch, title, body) {
-  const res = await fetch(`${GITHUB_API}/repos/${COMMUNITY_REPO.owner}/${COMMUNITY_REPO.repo}/pulls`, {
+  const res = await githubFetch(`${GITHUB_API}/repos/${COMMUNITY_REPO.owner}/${COMMUNITY_REPO.repo}/pulls`, {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${token}`,
@@ -302,7 +325,7 @@ async function createPullRequest(token, headBranch, title, body) {
 
 // Cherche une PR déjà ouverte pour une branche donnée.
 async function findExistingPullRequest(token, headBranch) {
-  const res = await fetch(`${GITHUB_API}/repos/${COMMUNITY_REPO.owner}/${COMMUNITY_REPO.repo}/pulls?head=${COMMUNITY_REPO.owner}:${headBranch}&state=open`, {
+  const res = await githubFetch(`${GITHUB_API}/repos/${COMMUNITY_REPO.owner}/${COMMUNITY_REPO.repo}/pulls?head=${COMMUNITY_REPO.owner}:${headBranch}&state=open`, {
     headers: {
       'Authorization': `Bearer ${token}`,
       'Accept': 'application/vnd.github+json',
@@ -328,7 +351,7 @@ async function findExistingPullRequest(token, headBranch) {
 // @param {number} prNumber - numéro de la PR à merger
 // @returns {Promise<{ok: boolean, merged: boolean, message?: string}>}
 async function mergePullRequest(token, prNumber) {
-  const res = await fetch(`${GITHUB_API}/repos/${COMMUNITY_REPO.owner}/${COMMUNITY_REPO.repo}/pulls/${prNumber}/merge`, {
+  const res = await githubFetch(`${GITHUB_API}/repos/${COMMUNITY_REPO.owner}/${COMMUNITY_REPO.repo}/pulls/${prNumber}/merge`, {
     method: 'PUT',
     headers: {
       'Authorization': `Bearer ${token}`,
@@ -471,7 +494,7 @@ async function submitResults(shortName, ledger, token, options) {
 // Vérifie qu'un token GitHub est valide en interrogeant l'API /user.
 async function validateGithubToken(token) {
   try {
-    const res = await fetch(`${GITHUB_API}/user`, {
+    const res = await githubFetch(`${GITHUB_API}/user`, {
       headers: {
         'Authorization': `Bearer ${token}`,
         'Accept': 'application/vnd.github+json',
@@ -498,7 +521,7 @@ async function getAlreadySubmittedModels(token) {
   const dirPath = `submissions/${safeUserId}`;
 
   try {
-    const res = await fetch(
+    const res = await githubFetch(
       `${GITHUB_API}/repos/${COMMUNITY_REPO.owner}/${COMMUNITY_REPO.repo}/contents/${encodeURIComponent(dirPath)}?ref=main`,
       {
         headers: {
@@ -541,7 +564,7 @@ async function getSubmissionContent(token, shortName) {
   const safeShortName = String(shortName).replace(/[^a-zA-Z0-9._-]/g, '_');
   const filePath = `submissions/${safeUserId}/${safeShortName}.json`;
   try {
-    const res = await fetch(
+    const res = await githubFetch(
       `${GITHUB_API}/repos/${COMMUNITY_REPO.owner}/${COMMUNITY_REPO.repo}/contents/${encodeURIComponent(filePath)}?ref=main`,
       {
         headers: {
