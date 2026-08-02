@@ -20,13 +20,17 @@
 const logger = require('./logger');
 const { BenchgoError } = require('./cli-help');
 
-// Sous-classe d'Error pour les timeouts du middleware, dont la propriété name
-// est configurable (contrairement à une Error native sur certaines plateformes
-// Node.js 24.x + undici, où name est en lecture seule → Object.assign crash).
+// Sous-classe d'Error pour les timeouts du middleware. On NE touche PAS à
+// this.name : sur Node.js 24.x + undici, la propriété name d'une Error peut
+// être en lecture seule (non-writable) → this.name = ... déclenche un
+// TypeError dans le callback du setTimeout, hors de tout try/catch, donc
+// uncaughtException → crash du process entier (cf. issues-fixes/2026-08-02-
+// undici-timeout-object-assign.md et Tasks1.md). isRetryableError() matche
+// sur le message 'timeout' (pas sur name), donc laisser name à 'Error' est
+// sans incidence sur la logique de retry.
 class TimeoutError extends Error {
   constructor(message) {
     super(message);
-    this.name = 'TimeoutError';
   }
 }
 
@@ -86,11 +90,13 @@ async function withRetry(opts) {
     const t0 = Date.now();
     try {
       // Wrapper timeout : si fn ne résout pas avant timeoutMs, on rejette.
-      // NB : on utilise une sous-classe TimeoutError (et pas Object.assign sur
-      // une Error native) car sur Node.js 24.x + undici, la propriété name d'une
-      // Error peut être en lecture seule → Object.assign déclenche un
-      // TypeError "Cannot assign to read only property 'name'" qui crash le
-      // process entier (cf. issues-fixes/2026-08-02-undici-timeout-object-assign.md).
+      // NB : on utilise une sous-classe TimeoutError sans muter this.name.
+      // Sur Node.js 24.x + undici, la propriété name d'une Error peut être en
+      // lecture seule → this.name = ... ou Object.assign déclenche un
+      // TypeError "Cannot assign to read only property 'name'" dans le
+      // callback du setTimeout (hors try/catch) → uncaughtException → crash
+      // du process entier, qui tue le run en plein tier et empêche l'écriture
+      // du carnet-professeur en fin de runSchool (cf. Tasks1.md 2026-08-02).
       const result = await Promise.race([
         fn({ attempt }),
         new Promise((_, reject) => setTimeout(

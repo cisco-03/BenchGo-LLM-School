@@ -1,5 +1,50 @@
 # CHANGELOG - Carnet de Notes BenchGo
 
+## 2026-08-02 — fix: crash TimeoutError.name read-only → carnet-professeur vide pour les modèles frontière
+
+### Contexte
+Le benchmark du modèle frontière cloud `nvidia/nemotron-3-ultra-550b-a55b:free`
+(profil FRONTIER) crashait en plein Tier 3 avec :
+`TypeError: Cannot assign to read only property 'name' of object 'Error: timeout'`
+à `http-middleware.js:29` (`new TimeoutError`). Le run mourait avant la fin de
+`runSchool()`, là où le carnet-professeur est écrit — d'où l'absence totale de
+`Carnet-Professeur/2026-08-02/` et le constat (Tasks1.md) que « les modèles
+frontières cloud ne peuvent pas envoyer une demande au professeur ».
+
+### Cause racine
+La correction précédente (Object.assign → sous-classe TimeoutError) avait
+déplacé le bug sans l'éliminer : sur Node.js 24.x + undici, `this.name = ...`
+dans le constructeur d'une sous-classe d'Error peut elle aussi être read-only.
+Le `TypeError` était levé dans le callback du setTimeout (hors try/catch) →
+`uncaughtException` → le handler de runner.js ne filtrait que les marqueurs
+undici natifs, pas notre propre erreur → `process.exit(1)`.
+
+### Solution
+`http-middleware.js` : le constructeur `TimeoutError` n'écrit plus `this.name`.
+Aucun consommateur ne lit `name === 'TimeoutError'` — `isRetryableError()` et
+le codage du code d'erreur reposent sur le message `'timeout'` (inchangé).
+Le `name` était purement décoratif ; le supprimer élimine définitivement
+l'écriture sur propriété read-only.
+
+### Fichiers modifiés
+- `http-middleware.js` (constructeur `TimeoutError` : retrait de `this.name`)
+- `Memories-BenchGo/issues-fixes/2026-08-02-timeout-error-name-read-only-crash-carnet-professeur.md`
+- `Docs/CHANGELOG.md`
+
+### Validation
+- `node --check http-middleware.js` → OK
+- `node tests/run-tests.js` → 27/27 passés
+- Smoke test `withRetry` sur `throw new Error('timeout')` → `E502_LM_TIMEOUT`
+  (comportement de retry/codage inchangé)
+
+### Résultat obtenu
+Les runs frontière (cloud, sujets aux timeouts sur les modèles gratuits)
+n'écrasent plus le process sur un timeout du middleware. Le runner termine
+`runSchool()` et écrit le carnet-professeur : les demandes des modèles
+frontière sont désormais consignées comme celles des autres profils.
+
+---
+
 ## 2026-08-02 — fix(v2): "Failed to fetch" — remplacement de fetch par https natif (bypass undici Node.js 24.x)
 
 ### Contexte
