@@ -87,12 +87,24 @@ function pickBest(attempts) {
 // `quantization` (optionnel) est stockée au niveau du carnet (par modèle) : un même
 // modèle testé avec plusieurs quantifications verra sa dernière quantification connue
 // mise à jour. C'est au niveau du résultat qu'elle est aussi conservée, pour l'historique.
-function saveResult(shortName, modelName, result, quantization, publisher) {
+function saveResult(shortName, modelName, result, quantization, publisher, provider) {
   const ledger = loadLedger(shortName);
   ledger.model = modelName;
   ledger.shortName = shortName;
   if (publisher) {
     ledger.publisher = publisher;
+  }
+  // Origine du modèle : 'local' (LM Studio) ou nom du provider cloud
+  // (openrouter, openai, groq, etc.). Permet au leaderboard de séparer les
+  // modèles locaux des modèles cloud dans le classement (cf. tâche 2026-08-02).
+  // Si non fourni, on garde la valeur précédente (rétrocompatible).
+  if (provider) {
+    ledger.provider = provider;
+  }
+  // Drapeau booléen pratique pour le filtrage côté leaderboard.
+  // Un modèle est "cloud" si provider est défini et différent de 'local'.
+  if (provider) {
+    ledger.isCloud = (provider !== 'local');
   }
   // Horodatage précis (ms) du résultat (§6 Données) : permet l'analyse de
   // convergence temporelle et la comparaison inter-modèles fine. Stocké en plus
@@ -261,8 +273,8 @@ function buildBilanMarkdown(shortName, modelName) {
 }
 
 // Sauvegarde le résultat courant puis renvoie le markdown du bilan (pour l'ajouter au rapport).
-function saveAndBuildBilan(shortName, modelName, result, quantization) {
-  saveResult(shortName, modelName, result, quantization);
+function saveAndBuildBilan(shortName, modelName, result, quantization, provider) {
+  saveResult(shortName, modelName, result, quantization, null, provider);
   return buildBilanMarkdown(shortName, modelName);
 }
 

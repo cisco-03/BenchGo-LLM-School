@@ -20,6 +20,16 @@
 const logger = require('./logger');
 const { BenchgoError } = require('./cli-help');
 
+// Sous-classe d'Error pour les timeouts du middleware, dont la propriété name
+// est configurable (contrairement à une Error native sur certaines plateformes
+// Node.js 24.x + undici, où name est en lecture seule → Object.assign crash).
+class TimeoutError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = 'TimeoutError';
+  }
+}
+
 // Attend ms millisecondes (utilisé pour le backoff).
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
@@ -76,10 +86,15 @@ async function withRetry(opts) {
     const t0 = Date.now();
     try {
       // Wrapper timeout : si fn ne résout pas avant timeoutMs, on rejette.
+      // NB : on utilise une sous-classe TimeoutError (et pas Object.assign sur
+      // une Error native) car sur Node.js 24.x + undici, la propriété name d'une
+      // Error peut être en lecture seule → Object.assign déclenche un
+      // TypeError "Cannot assign to read only property 'name'" qui crash le
+      // process entier (cf. issues-fixes/2026-08-02-undici-timeout-object-assign.md).
       const result = await Promise.race([
         fn({ attempt }),
         new Promise((_, reject) => setTimeout(
-          () => reject(Object.assign(new Error('timeout'), { name: 'TimeoutError' })),
+          () => reject(new TimeoutError('timeout')),
           timeoutMs
         ))
       ]);

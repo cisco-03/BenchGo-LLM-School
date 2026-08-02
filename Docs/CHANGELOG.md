@@ -1,5 +1,122 @@
 # CHANGELOG - Carnet de Notes BenchGo
 
+## 2026-08-02 — feat: séparation local / cloud dans le classement (leaderboard)
+
+### Contexte
+Les modèles frontières (cloud) et les modèles locaux (LM Studio) étaient mélangés
+dans le même classement sans distinction. Or ce sont deux catégories fondamentalement
+différentes : les modèles cloud tournent sur des serveurs distants (OpenRouter,
+OpenAI, etc.) avec une latence et un débit qui dépendent du réseau, tandis que les
+modèles locaux s'exécutent sur la machine de l'utilisateur. Les comparer directement
+sur la vitesse (tokens/s) n'a pas de sens — un modèle cloud rapide peut sembler
+lent à cause de la latence réseau, et inversement. Il fallait pouvoir les séparer.
+
+### Implémentation
+
+**Stockage de l'origine dans le carnet (score-ledger.js)**
+- `saveResult()` accepte désormais un paramètre `provider` (ex: `'local'`,
+  `'openrouter'`, `'openai'`, etc.) et stocke `ledger.provider` + `ledger.isCloud`
+  (booléen) au niveau du carnet. Rétrocompatible : si `provider` n'est pas fourni,
+  la valeur précédente est conservée.
+- `saveAndBuildBilan()` propage le `provider`.
+
+**Propagation depuis le runner (runner.js)**
+- L'appel à `saveAndBuildBilan` passe `isCloudMode ? resolvedProvider : 'local'`.
+
+**Détection dans le leaderboard (leaderboard.js)**
+- `aggregateLedger()` extrait `isCloud` et `provider` du carnet. Rétrocompatible :
+  si le carnet n'a pas encore ces champs (anciens carnets), on déduit depuis
+  l'école "Post-Doctorat" (profil FRONTIER = cloud).
+- Nouveau filtre déroulant "Origine" (Toutes origines / 🏠 Local · LM Studio /
+  ☁️ Cloud · API) avec compteurs.
+- Badge visuel sur chaque carte : 🏠 Local (vert) ou ☁️ Cloud (jaune).
+- CSS : `.badge.cloud` (jaune) et `.badge.local` (vert).
+- Logique de filtrage JS dans `renderCards()` + event listener sur `originSelect`.
+
+### Fichiers modifiés
+- `score-ledger.js` — `saveResult()` + `saveAndBuildBilan()` : paramètre `provider`.
+- `runner.js` — passage du provider à `saveAndBuildBilan`.
+- `leaderboard.js` — `aggregateLedger()` (isCloud/provider), `modelsData`
+  (isCloud/provider), filtre Origine (HTML select + CSS badges + JS filtrage),
+  compteurs `originCounts`.
+- `Docs/CHANGELOG.md` : cette entrée.
+
+### Vérifications
+- `node --check score-ledger.js` : OK.
+- `node --check runner.js` : OK.
+- `node --check leaderboard.js` : OK.
+- `node tests/run-tests.js` : 27/27 passés.
+- `node scripts/check-inline-js.js` : JS inline valide (classement + community).
+
+## 2026-08-02 — fix: erreur fatale undici (Object.assign sur Error read-only) + mode batch frontier + suppression leaderboard
+
+### Contexte
+Lors d'un test de modèle frontière (`inclusionai/ling-3.0-flash:free` via OpenRouter),
+le runner crashait avec `TypeError: Cannot assign to read only property 'name' of
+object 'Error: timeout'` depuis `http-middleware.js:82`. L'erreur venait de
+`Object.assign(new Error('timeout'), { name: 'TimeoutError' })` — sur Node.js 24.x +
+undici, la propriété `name` d'une Error native peut être en lecture seule → crash non
+intercepté par le handler `uncaughtException` (le message ne matchait pas le filtre
+undici natif). Parallèlement, 4 autres problèmes ont été identifiés et corrigés :
+suppression de modèle faisant "monter" les autres dans le classement, modèles
+frontières proposés à tort en écoles séquentielles (Primaire/Collège), absence de
+mode batch pour tester plusieurs modèles cloud à la suite, et notes de
+configuration non conformes.
+
+### Implémentation
+
+**1. Erreur fatale undici (http-middleware.js)**
+- Remplacement de `Object.assign(new Error('timeout'), { name: 'TimeoutError' })` par
+  une sous-classe dédiée `TimeoutError` dont `this.name` est assigné dans le
+  constructeur (propriété configurable, contrairement à une Error native sur
+  Node 24.x + undici).
+
+**2. Suppression modèle → montée artificielle (leaderboard.js)**
+- Ajout de `adjustSnapshotForDeletion(deletedShortName, entries)` appelée dans
+  `deleteLedger()` avant la suppression du fichier carnet. Décrémente de 1 le rang
+  de tous les modèles qui étaient *strictement en dessous* du modèle supprimé dans
+  le snapshot précédent → neutralise l'effet "montée" parasite (flèches ▲ trompeuses).
+
+**3. Modèles frontières : forçage au plus haut niveau (runner.js)**
+- Exclusion de `FRONTIER` de la proposition d'écoles séquentielles
+  (Primaire + école principale). Les modèles cloud frontière sont extrêmement
+  performants et doivent être testés directement à leur niveau (Post-Doctorat),
+  pas passer par Primaire/Collège. Ajout de la variable `isFrontier` + condition
+  `!isFrontier` dans le bloc de décision `schoolsToRun`.
+
+**4. Mode batch pour modèles frontières (frontier-batch.js — nouveau module)**
+- Nouveau script `frontier-batch.js` équivalent de `night-batch.js` mais pour les
+  modèles cloud. Enchaîne automatiquement le test de plusieurs modèles frontière
+  à la suite, chacun avec `--profile=FRONTIER --force` (plus haut niveau, sans
+  confirmation interactive). Supporte `--provider=`, `--models=`, `--api-key=`,
+  `--no-teacher`. Récupère la clé API depuis `.api-keys.json` si mémorisée.
+  Génère le classement final à la fin.
+
+**5. Notes-Cisco.md (Admin/)**
+- Correction du nombre de fichiers tier (18, pas 16) + ajout de
+  `tier4_frontier.json` manquant dans la structure des dossiers. Suppression des
+  backslash d'échappement incorrects (`tier0\_expert.json` → `tier0_expert.json`).
+  Ajout des commandes `frontier-batch.js` et exemple OpenRouter.
+
+### Fichiers modifiés
+- `http-middleware.js` — classe `TimeoutError` + remplacement du `Object.assign`.
+- `leaderboard.js` — `adjustSnapshotForDeletion()` + intégration dans `deleteLedger()`.
+- `runner.js` — exclusion `FRONTIER` des écoles séquentielles (`isFrontier`).
+- `frontier-batch.js` — nouveau script (mode batch cloud).
+- `Admin/Notes-Cisco.md` — conformité (18 fichiers tier, tier4_frontier, commandes).
+- `Memories-BenchGo/issues-fixes/2026-08-02-undici-timeout-object-assign.md`
+- `Memories-BenchGo/issues-fixes/2026-08-02-leaderboard-suppression-montee-artificielle.md`
+- `Docs/CHANGELOG.md` : cette entrée.
+
+### Vérifications
+- `node --check http-middleware.js` : OK.
+- `node --check leaderboard.js` : OK.
+- `node --check runner.js` : OK.
+- `node --check frontier-batch.js` : OK.
+- `node tests/run-tests.js` : 27/27 passés.
+- Tiers FRONTIER (`tier0_expert` à `tier4_frontier`, `tier5_standard`, `tier6_master`)
+  chargés et validés via parsing JSON (11 tâches pour tier4_frontier, mandatory FRONTIER).
+
 ## 2026-08-01 — feat: mode manuel par modèle (option 7) dans le mode nuit
 
 ### Contexte

@@ -2445,7 +2445,7 @@ async function main() {
         ? Math.round((schoolTokens / (schoolElapsedMs / 1000)) * 100) / 100
         : 0
     };
-    const bilanMd = scoreLedger.saveAndBuildBilan(shortName, effectiveModel, ecoleResult, resolvedQuantization || null);
+    const bilanMd = scoreLedger.saveAndBuildBilan(shortName, effectiveModel, ecoleResult, resolvedQuantization || null, isCloudMode ? resolvedProvider : 'local');
     if (bilanMd) globalReport += bilanMd;
   }
 
@@ -2493,11 +2493,18 @@ async function main() {
   // (LIGHT) puis Collège-Lycée (STANDARD) dans le même run — même clé, même
   // auto-profilage, gameState réinitialisé entre écoles. Utile pour benchmarker
   // un modèle sur deux niveaux scolaires d'un coup.
+  //
+  // EXCEPTION : les modèles FRONTIER (cloud, extrêmement performants) ne sont
+  // JAMAIS proposés en écoles séquentielles avec Primaire/Collège. Ce sont des
+  // modèles de pointe qui doivent être testés directement à leur plus haut niveau
+  // (Post-Doctorat). Les forcer à passer par Primaire n'a aucun sens et fait
+  // perdre du temps + tokens API (cf. tâche utilisateur 2026-08-02).
   let schoolsToRun = [profileArg];
   const modelIsBigEnough = (profileArg !== 'LIGHT'); // > 3B → STANDARD ou plus
+  const isFrontier = (profileArg === 'FRONTIER'); // cloud frontier → pas d'écoles séquentielles
   const isInteractive = process.stdin.isTTY && process.stdout.isTTY;
 
-  if (tierArg === "all" && modelIsBigEnough && isInteractive) {
+  if (tierArg === "all" && modelIsBigEnough && isInteractive && !isFrontier) {
     console.log(`\n  \x1b[1;36m━━━ ÉCOLES À ÉVALUER ━━━\x1b[0m`);
     console.log(`  \x1b[90mLe modèle (${profile.label}) est supérieur à 3B paramètres : il peut être évalué sur plusieurs écoles.\x1b[0m`);
     console.log(`  \x1b[90m(A) ${profile.label} uniquement (école courante)\x1b[0m`);

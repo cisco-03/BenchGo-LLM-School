@@ -9,7 +9,8 @@ OS : Windows, PowerShell 5.1. Projet Node.js 18+ **sans `package.json`** (module
 | Usage | Commande |
 |---|---|
 | Benchmark interactif | `node runner.js all` |
-| Mode nuit (batch) | `node night-batch.js` |
+| Mode nuit (batch local) | `node night-batch.js` |
+| Mode batch cloud (frontière) | `node frontier-batch.js` |
 | Valider config sans exécuter | `node runner.js all --dry-run` |
 | Tests unitaires | `node tests/run-tests.js` |
 | Classement HTML/MD | `node leaderboard.js` |

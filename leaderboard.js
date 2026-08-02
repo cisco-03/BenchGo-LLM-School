@@ -292,7 +292,16 @@ function aggregateLedger(ledger) {
     elapsedMs: totalElapsedMs,
     wallMs: totalWallMs,
     tokens: totalTokens,
-    tokensPerSecond
+    tokensPerSecond,
+    // --- Origine du modèle (local vs cloud) ---
+    // Permet de séparer les modèles locaux (LM Studio) des modèles cloud
+    // (OpenRouter, OpenAI, Groq...) dans le classement. Rétrocompatible :
+    // si le carnet n'a pas encore provider/isCloud (anciens carnets), on
+    // déduit depuis l'école "Post-Doctorat" (profil FRONTIER = cloud).
+    provider: ledger.provider || null,
+    isCloud: (ledger.isCloud === true)
+      || (ledger.provider && ledger.provider !== 'local')
+      || ecoles.some(e => e.ecole === 'Post-Doctorat')
   };
 }
 
@@ -470,11 +479,14 @@ function buildLeaderboardHTML(entries) {
   const healthCounts = { positif: 0, negatif: 0 };
   // Filtre École : compte combien de modèles ont été testés sur chaque école.
   const ecoleCounts = {};
+  // Filtre Origine : local (LM Studio) vs cloud (OpenRouter, OpenAI, etc.).
+  const originCounts = { local: 0, cloud: 0 };
   entries.forEach((e, idx) => {
     const rank = idx + 1;
     catCounts[getCategory(e, rank).key]++;
     sizeCounts[getParamSize(e.model).key]++;
     if ((e.globalLifeScore || 0) >= 0) healthCounts.positif++; else healthCounts.negatif++;
+    if (e.isCloud) originCounts.cloud++; else originCounts.local++;
     for (const ec of (e.ecoles || [])) {
       ecoleCounts[ec.ecole] = (ecoleCounts[ec.ecole] || 0) + 1;
     }
@@ -529,6 +541,9 @@ function buildLeaderboardHTML(entries) {
       wallMs: e.wallMs || 0,
       tokens: e.tokens || 0,
       tokensPerSecond: e.tokensPerSecond || 0,
+      // Origine du modèle (local vs cloud) pour le filtre d'origine.
+      isCloud: !!e.isCloud,
+      provider: e.provider || (e.isCloud ? 'cloud' : 'local'),
       verdict,
       cat,
       paramSize: psize,
@@ -866,6 +881,8 @@ function buildLeaderboardHTML(entries) {
   }
   .badge.quant { color: var(--purple); border-color: rgba(188,140,255,0.35); background: rgba(188,140,255,0.10); }
   .badge.note { color: var(--accent); border-color: rgba(88,166,255,0.35); background: rgba(88,166,255,0.10); }
+  .badge.cloud { color: #d29922; border-color: rgba(210,153,34,0.35); background: rgba(210,153,34,0.10); }
+  .badge.local { color: #3fb950; border-color: rgba(63,185,80,0.35); background: rgba(63,185,80,0.10); }
   .badge.trend-up   { color: #3fb950; border-color: rgba(63,185,80,0.35); background: rgba(63,185,80,0.10); }
   .badge.trend-down { color: #f85149; border-color: rgba(248,81,73,0.35); background: rgba(248,81,73,0.10); }
   .badge.trend-stable { color: #8b949e; border-color: var(--border); background: var(--bg-3); }
@@ -1312,6 +1329,15 @@ function buildLeaderboardHTML(entries) {
           </select>
         </div>
 
+        <label class="filter-label" for="originSelect" style="margin-left: var(--space-xs);">Origine</label>
+        <div class="select-wrap">
+          <select class="select" id="originSelect">
+            <option value="all" selected>Toutes origines (${entries.length})</option>
+            <option value="local">🏠 Local · LM Studio (${originCounts.local})</option>
+            <option value="cloud">☁️ Cloud · API (${originCounts.cloud})</option>
+          </select>
+        </div>
+
         <button class="btn btn-primary" id="btnRecentSort" title="Trier les modèles par date de dernier test (du plus récent au plus ancien)" style="margin-left: var(--space-xs);">🕒 Récents</button>
       </div>
 
@@ -1509,12 +1535,14 @@ function renderCards() {
   var sizeSel = document.getElementById('sizeSelect');
   var healthSel = document.getElementById('healthSelect');
   var ecoleSel = document.getElementById('ecoleSelect');
+  var originSel = document.getElementById('originSelect');
   if (!catSel) { console.error('[renderCards] ERREUR : select de catégorie introuvable — le DOM n’est pas prêt.'); return; }
   if (!sizeSel) { console.error('[renderCards] ERREUR : select de taille introuvable.'); return; }
   var activeCat = catSel.value;
   var activeSize = sizeSel.value;
   var activeHealth = healthSel ? healthSel.value : 'all';
   var activeEcole = ecoleSel ? ecoleSel.value : 'all';
+  var activeOrigin = originSel ? originSel.value : 'all';
   var searchEl = document.getElementById('search');
   var q = searchEl ? searchEl.value.trim().toLowerCase() : '';
   var container = document.getElementById('cards');
@@ -1535,6 +1563,10 @@ function renderCards() {
     if (activeEcole !== 'all') {
       var hasEcole = (m.ecoleNames || []).indexOf(activeEcole) !== -1;
       if (!hasEcole) { skippedEcole++; continue; }
+    }
+    if (activeOrigin !== 'all') {
+      if (activeOrigin === 'cloud' && !m.isCloud) continue;
+      if (activeOrigin === 'local' && m.isCloud) continue;
     }
     if (q && m.model.toLowerCase().indexOf(q) === -1 && m.shortName.toLowerCase().indexOf(q) === -1) { skippedSearch++; continue; }
     shown++;
@@ -1560,6 +1592,12 @@ function renderCards() {
       : (m.elapsedMs > 0 ? fmtDurJS(m.elapsedMs) : '—');
     var vitesseLbl = m.tokensPerSecond > 0 ? 'Vitesse' : 'Temps';
     var szBadge = '<span class="badge" title="' + esc(m.paramSize.label) + '">' + m.paramSize.icon + ' ' + esc(m.paramSize.short) + '</span>';
+    // Badge d'origine : 🏠 Local (LM Studio) ou ☁️ Cloud (API distante). Permet
+    // de distinguer visuellement les modèles locaux des modèles cloud dans le
+    // classement. Le filtre déroulant "Origine" permet de les séparer.
+    var originBadge = m.isCloud
+      ? ' <span class="badge cloud" title="Modèle cloud (API distante : ' + esc(m.provider || 'cloud') + ')">☁️ Cloud</span>'
+      : ' <span class="badge local" title="Modèle local (LM Studio)">🏠 Local</span>';
     // Badge 📄 : apparaît quand le rapport intégral de ce modèle a déjà été
     // exporté (téléchargé) au moins une fois. Persistance via localStorage
     // (clé par shortName) pour garder le suivi entre deux générations du
@@ -1601,7 +1639,7 @@ function renderCards() {
         '<div class="rank">' + rankDisp + '</div>' +
         '<div class="model-name">' +
           '<div class="name-line"><span class="cat-icon">' + m.cat.icon + '</span>' + esc(m.model) + posArrow + '</div>' +
-          '<div class="badges">' + szBadge + ' ' + quantBadge + ' ' + noteBadge + ' ' + trendBadge + exportedBadge + dateBadge + '</div>' +
+          '<div class="badges">' + szBadge + originBadge + ' ' + quantBadge + ' ' + noteBadge + ' ' + trendBadge + exportedBadge + dateBadge + '</div>' +
         '</div>' +
         '<div class="mini-stats">' +
           '<div class="mini-stat"><span class="lbl">%</span><span class="val" style="color:' + pc + '">' + dispPct(m.pct) + '%</span><div class="pct-bar-wrap"><div class="pct-bar-fill" style="width:' + Math.max(2,dispPct(m.pct)) + '%;background:' + pc + '"></div></div></div>' +
@@ -2494,6 +2532,8 @@ var _healthSel = document.getElementById('healthSelect');
 if (_healthSel) _healthSel.addEventListener('change', renderCards);
 var _ecoleSel = document.getElementById('ecoleSelect');
 if (_ecoleSel) _ecoleSel.addEventListener('change', renderCards);
+var _originSel = document.getElementById('originSelect');
+if (_originSel) _originSel.addEventListener('change', renderCards);
 var _recentBtn = document.getElementById('btnRecentSort');
 if (_recentBtn) _recentBtn.addEventListener('click', toggleRecentSort);
 
@@ -3583,6 +3623,45 @@ function generateLeaderboard() {
   return { htmlPath, mdPath, reasoningPath, entries };
 }
 
+// Ajuste le snapshot de position après suppression d'un modèle pour neutraliser
+// l'effet de "montée artificielle" des autres modèles. En effet, supprimer le
+// modèle classé N fait remonter tous ceux en dessous d'un cran (N+1→N, N+2→N+1...)
+// ce qui déclenche à tort des flèches ▲ sur la prochaine génération.
+//
+// Pour corriger : on décrémente de 1 le rang de chaque modèle qui était *strictement
+// en dessous* du modèle supprimé dans l'ancien snapshot. Ainsi, à la régénération,
+// les rangs recalculés coïncident avec les rangs ajustés du snapshot → delta = 0
+// (stable) pour les modèles qui n'ont pas bougé de score, et aucune flèche parasite.
+//
+// @param {string} deletedShortName - Le shortName du modèle supprimé.
+// @param {Array}  entries          - Les entries triées AVANT suppression (pour
+//                                    retrouver le rang du modèle supprimé).
+function adjustSnapshotForDeletion(deletedShortName, entries) {
+  if (!deletedShortName) return;
+  const snapshot = loadPositionSnapshot();
+  // Rang (1-based) du modèle supprimé dans le snapshot précédent.
+  const deletedRank = snapshot[deletedShortName];
+  if (deletedRank == null) return;
+  // Retire le modèle supprimé du snapshot.
+  delete snapshot[deletedShortName];
+  // Décrémente de 1 le rang de tous les modèles qui étaient strictement en dessous
+  // du modèle supprimé (rang > deletedRank) : leur rang baisse de 1, ce qui compense
+  // exactement la remontée due à la suppression.
+  for (const sn of Object.keys(snapshot)) {
+    if (snapshot[sn] > deletedRank) {
+      snapshot[sn] = snapshot[sn] - 1;
+    }
+  }
+  try {
+    fs.mkdirSync(LEDGER_DIR, { recursive: true });
+    fs.writeFileSync(SNAPSHOT_FILE, JSON.stringify(snapshot, null, 2), 'utf8');
+    logger.info('Snapshot de position ajusté après suppression de ' + deletedShortName +
+      ' (rang ' + deletedRank + ') : ' + (Object.keys(snapshot).length) + ' modèles restants.');
+  } catch (e) {
+    logger.warn('Impossible d_ajuster le snapshot de position : ' + e.message);
+  }
+}
+
 // Supprime un carnet de scores par shortName, puis régénère le classement.
 function deleteLedger(shortName) {
   // Sécurité : valider le shortName pour empêcher le path traversal.
@@ -3605,6 +3684,24 @@ function deleteLedger(shortName) {
   }
   if (!fs.existsSync(file)) {
     return { ok: false, error: 'Carnet introuvable : ' + shortName };
+  }
+  // Récupère le rang du modèle à supprimer dans le classement actuel, pour
+  // ajuster le snapshot de position (cf. adjustSnapshotForDeletion).
+  let deletedRank = null;
+  try {
+    const ledgers = loadAllLedgers();
+    const entries = ledgers.map(aggregateLedger).filter(Boolean);
+    entries.sort((a, b) => {
+      if (b.pct !== a.pct) return b.pct - a.pct;
+      if (b.score !== a.score) return b.score - a.score;
+      return b.globalLifeScore - a.globalLifeScore;
+    });
+    deletedRank = entries.findIndex(e => e.shortName === safeName);
+    if (deletedRank >= 0) {
+      adjustSnapshotForDeletion(safeName, entries);
+    }
+  } catch (e) {
+    logger.warn('Impossible de calculer le rang du modèle supprimé : ' + e.message);
   }
   fs.unlinkSync(file);
   logger.info('Carnet supprimé : ' + safeName + '.json');
