@@ -33,17 +33,21 @@ const PROJECT_ROOT = __dirname;
 const RUNNER = path.join(PROJECT_ROOT, 'runner.js');
 
 // Providers cloud supportes (reprend la liste de cloud-client.js).
-// On exclut les serveurs locaux (ollama, lmstudio, custom) : ce script est
-// dedie aux modeles cloud frontiere.
+// On inclut aussi les serveurs OpenAI-compatibles (ollama, lmstudio, custom) :
+// Ollama propose un service cloud payant (cle + base URL) en plus du local ;
+// le runner les traite via cloud-client.js. Pour le local, pas de cle requise.
 const CLOUD_PROVIDERS = [
   { key: 'openrouter', label: 'OpenRouter (agregateur, modeles gratuits dispo)' },
   { key: 'openai',     label: 'OpenAI (GPT-4o, o1, etc.)' },
+  { key: 'anthropic',  label: 'Anthropic (Claude)' },
   { key: 'groq',       label: 'Groq (inference ultra-rapide)' },
   { key: 'together',   label: 'Together AI' },
   { key: 'mistral',    label: 'Mistral AI' },
-  { key: 'anthropic',  label: 'Anthropic (Claude)' },
   { key: 'deepseek',   label: 'DeepSeek' },
-  { key: 'cohere',     label: 'Cohere' }
+  { key: 'cohere',     label: 'Cohere' },
+  { key: 'ollama',     label: 'Ollama (cloud payant: --endpoint + --api-key ; ou local)' },
+  { key: 'lmstudio',   label: 'LM Studio (local, serveur OpenAI-compat, pas de cle)' },
+  { key: 'custom',     label: 'Personnalise (--endpoint= requis, OpenAI-compat)' }
 ];
 
 // --- Couleurs ANSI ---
@@ -74,11 +78,12 @@ function nowDate() {
 // Parse les arguments CLI : --provider=, --models=, --no-teacher, --api-key=
 function parseCliArgs() {
   const args = process.argv.slice(2);
-  const opts = { provider: null, models: null, noTeacher: false, apiKey: null };
+  const opts = { provider: null, models: null, noTeacher: false, apiKey: null, endpoint: null };
   for (const a of args) {
     if (a.startsWith('--provider=')) opts.provider = a.slice('--provider='.length);
     else if (a.startsWith('--models=')) opts.models = a.slice('--models='.length);
     else if (a.startsWith('--api-key=')) opts.apiKey = a.slice('--api-key='.length);
+    else if (a.startsWith('--endpoint=')) opts.endpoint = a.slice('--endpoint='.length);
     else if (a === '--no-teacher') opts.noTeacher = true;
     else if (a === '--help' || a === '-h') {
       printHelp();
@@ -99,11 +104,14 @@ ${C.bold}Usage :${C.reset}
   node frontier-batch.js --provider=openrouter --models=m1,m2
   node frontier-batch.js --no-teacher                 # desactive le professeur IA
   node frontier-batch.js --api-key=sk-...             # cle API fournie
+  node frontier-batch.js --provider=ollama --endpoint=https://...  # endpoint custom
 
 ${C.bold}Options :${C.reset}
-  --provider=<name>   Provider cloud (openrouter, openai, groq, together, mistral, anthropic, deepseek, cohere)
+  --provider=<name>   Provider cloud (openrouter, openai, anthropic, groq, together,
+                      mistral, deepseek, cohere, ollama, lmstudio, custom)
   --models=<list>     Liste de modeles separes par virgules
   --api-key=<key>     Cle API pour le provider (sinon recuperee depuis .api-keys.json ou saisie)
+  --endpoint=<url>    Base URL du provider (ollama/lmstudio/custom, ou override d un provider)
   --no-teacher        Desactive le professeur IA (correcteur externe)
   --help, -h          Affiche cette aide
 
@@ -165,6 +173,27 @@ function selectProviderInteractive(defaultProvider) {
 }
 
 // Saisie interactive de la cle API (masquee) si non memorisee et non fournie.
+// Pour ollama/lmstudio/custom (requiresAuth: false cote cloud-client), la cle
+// est optionnelle : vide = pas de cle (mode local sans auth). Pour les autres
+// providers, une cle vide = abandon.
+// Apres saisie d une NOUVELLE cle (non deja memorisee dans .api-keys.json), on
+// propose de la memoriser localement pour les prochains runs (comme le runner).
+const PROVIDERS_OPTIONAL_KEY = new Set(['ollama', 'lmstudio', 'custom']);
+
+// askYesNo local (le runner ne l exporte pas). Retourne true pour Oui.
+function askYesNoLocal(question, defaultYes) {
+  return new Promise(resolve => {
+    const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+    const hint = defaultYes ? 'O/n' : 'o/N';
+    rl.question(`  ${C.cyan}${question} [${hint}] :${C.reset} `, answer => {
+      rl.close();
+      const a = (answer || '').trim().toLowerCase();
+      if (!a) { resolve(Boolean(defaultYes)); return; }
+      resolve(a === 'o' || a === 'oui' || a === 'y' || a === 'yes');
+    });
+  });
+}
+
 function promptApiKey(provider, cliApiKey) {
   return new Promise(resolve => {
     if (cliApiKey) { resolve(cliApiKey); return; }
@@ -174,9 +203,15 @@ function promptApiKey(provider, cliApiKey) {
       resolve(stored);
       return;
     }
+    const optionalKey = PROVIDERS_OPTIONAL_KEY.has(provider);
     console.log(`\n  ${C.bold}${C.cyan}=== CLE API ${provider.toUpperCase()} ===${C.reset}`);
     console.log(`  ${C.gray}Aucune cle memorisee pour ${provider}.${C.reset}`);
-    console.log(`  ${C.gray}Saisissez votre cle API (elle restera en memoire pour cette session).${C.reset}`);
+    if (optionalKey) {
+      console.log(`  ${C.gray}Pour ${provider} en local : laissez vide (pas d'authentification).${C.reset}`);
+      console.log(`  ${C.gray}Pour ${provider} en mode cloud payant : saisissez votre cle.${C.reset}`);
+    } else {
+      console.log(`  ${C.gray}Saisissez votre cle API (elle restera en memoire pour cette session).${C.reset}`);
+    }
     const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
     // Masque la saisie pour eviter que la cle s_affiche en clair.
     const stdin = process.stdin;
@@ -188,15 +223,74 @@ function promptApiKey(provider, cliApiKey) {
       if (c === '\u007f' || c === '\b') { maskedChars.pop(); return; }
       maskedChars.push(c);
     });
-    rl.question(`  ${C.cyan}Cle API :${C.reset} `, answer => {
+    rl.question(`  ${C.cyan}Cle API${optionalKey ? ' (vide = sans cle)' : ''} :${C.reset} `, async answer => {
       rl.close();
       const key = (answer || '').trim();
-      if (!key) {
+      if (!key && !optionalKey) {
         console.log(`  ${C.red}Cle API manquante. Abandon.${C.reset}`);
         process.exit(1);
       }
-      resolve(key);
+      // Proposition de mémorisation pour les prochains runs (comme le runner).
+      // On ne propose QUE pour une clé non vide, non déjà mémorisée, et en TTY.
+      if (key && process.stdin.isTTY && process.stdout.isTTY) {
+        try {
+          const store = require('./api-keys-store');
+          if (!store.getKey(provider)) {
+            console.log(`\n  ${C.bold}${C.cyan}━━ MÉMORISATION DE LA CLÉ ${provider.toUpperCase()} ━━${C.reset}`);
+            console.log(`  ${C.gray}Si vous la mémorisez : les prochains frontier-batch retrouveront la clé automatiquement.${C.reset}`);
+            console.log(`  ${C.gray}Sécurité : stockée dans .api-keys.json (local, ignoré par git). Effaçable via node runner.js --forget-key=${provider}.${C.reset}`);
+            const memorize = await askYesNoLocal(`  Mémoriser cette clé localement ?`, false);
+            if (memorize) {
+              store.saveKey(provider, key);
+              console.log(`  ${C.green}Clé mémorisée dans .api-keys.json.${C.reset}\n`);
+            } else {
+              console.log(`  ${C.gray}Clé non mémorisée — session uniquement.${C.reset}\n`);
+            }
+          }
+        } catch (_) { /* store indisponible : on continue sans mémoriser */ }
+      }
+      resolve(key || null);
     });
+  });
+}
+
+// Saisie interactive du point de terminaison (base URL) pour les providers qui
+// en ont besoin : custom (obligatoire), ollama/lmstudio en mode cloud payant
+// (override de l'URL locale par defaut). Pour ollama/lmstudio en local, on
+// garde l'URL par defaut (localhost) si rien n'est saisi.
+const PROVIDERS_NEEDING_ENDPOINT = new Set(['custom']);
+const PROVIDERS_OPTIONAL_ENDPOINT = new Set(['ollama', 'lmstudio']);
+function promptEndpoint(provider, cliEndpoint) {
+  return new Promise(resolve => {
+    if (cliEndpoint) { resolve(cliEndpoint); return; }
+    if (PROVIDERS_NEEDING_ENDPOINT.has(provider)) {
+      console.log(`\n  ${C.bold}${C.cyan}=== BASE URL ${provider.toUpperCase()} ===${C.reset}`);
+      console.log(`  ${C.gray}Ce provider ne possede pas d'URL par defaut.${C.reset}`);
+      console.log(`  ${C.gray}Saisissez la base URL du serveur (ex: https://api.exemple.com/v1/chat/completions).${C.reset}`);
+      const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+      rl.question(`  ${C.cyan}Endpoint :${C.reset} `, answer => {
+        rl.close();
+        const url = (answer || '').trim();
+        if (!url) {
+          console.log(`  ${C.red}Endpoint manquant pour ${provider}. Abandon.${C.reset}`);
+          process.exit(1);
+        }
+        resolve(url);
+      });
+      return;
+    }
+    if (PROVIDERS_OPTIONAL_ENDPOINT.has(provider)) {
+      console.log(`\n  ${C.bold}${C.cyan}=== BASE URL ${provider.toUpperCase()} ===${C.reset}`);
+      console.log(`  ${C.gray}Par defaut : serveur local (localhost).${C.reset}`);
+      console.log(`  ${C.gray}Pour utiliser ${provider} en mode cloud payant, saisissez la base URL fournie.${C.reset}`);
+      const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+      rl.question(`  ${C.cyan}Endpoint (vide = local par defaut) :${C.reset} `, answer => {
+        rl.close();
+        resolve((answer || '').trim() || null);
+      });
+      return;
+    }
+    resolve(null);
   });
 }
 
@@ -241,15 +335,16 @@ function selectModelsInteractive(cliModels) {
 
 // Execute le runner pour un modele cloud frontiere.
 // Renvoie { ok, exitCode, durationMs }.
-function runModel(provider, model, apiKey, noTeacher) {
+function runModel(provider, model, apiKey, noTeacher, endpoint) {
   const args = [
     RUNNER, 'all',
     '--force',
     '--provider=' + provider,
     '--model=' + model,
-    '--profile=FRONTIER',
-    '--api-key=' + apiKey
+    '--profile=FRONTIER'
   ];
+  if (apiKey) args.push('--api-key=' + apiKey);
+  if (endpoint) args.push('--endpoint=' + endpoint);
   if (noTeacher) args.push('--no-teacher');
 
   console.log(`\n  ${C.bold}${C.magenta}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${C.reset}`);
@@ -300,11 +395,13 @@ async function main() {
   console.log(`  ${C.gray}directement, sans passer par Primaire/Collège.${C.reset}\n`);
 
   const provider = await selectProviderInteractive(opts.provider);
+  const endpoint = await promptEndpoint(provider, opts.endpoint);
   const apiKey = await promptApiKey(provider, opts.apiKey);
   const models = await selectModelsInteractive(opts.models);
 
   console.log(`\n  ${C.bold}${C.green}=== RESUME DE LA SESSION ===${C.reset}`);
   console.log(`  ${C.bold}Provider  :${C.reset} ${provider}`);
+  if (endpoint) console.log(`  ${C.bold}Endpoint  :${C.reset} ${endpoint}`);
   console.log(`  ${C.bold}Modeles  :${C.reset} ${models.length} modele(s)`);
   models.forEach((m, i) => console.log(`    ${C.gray}${i + 1}.${C.reset} ${m}`));
   console.log(`  ${C.bold}Profil    :${C.reset} FRONTIER (Post-Doctorat)`);
@@ -320,7 +417,7 @@ async function main() {
   for (let i = 0; i < models.length; i++) {
     const model = models[i];
     console.log(`\n  ${C.cyan}━━━ Modele ${i + 1}/${models.length} ━━━${C.reset}`);
-    const res = runModel(provider, model, apiKey, opts.noTeacher);
+    const res = runModel(provider, model, apiKey, opts.noTeacher, endpoint);
     results.push({ model, ...res });
     console.log(`  ${C.gray}Heure de fin : ${nowClock()} — duree : ${fmtDuration(res.durationMs)}${C.reset}`);
     if (!res.ok) {

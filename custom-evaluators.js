@@ -3,6 +3,7 @@ const vm = require('vm');
 const { EVAL_TIMEOUT_MS } = require('./config');
 const { buildSandbox } = require('./vm-sandbox');
 const { stripTS } = require('./parsing-utils');
+const logger = require('./logger');
 
 function evaluateGeoJSONRFC7946(code) {
   const errors = [];
@@ -380,6 +381,24 @@ function detecterNomFonction(strippedCode, nomParDefaut) {
   return match ? match[1] : nomParDefaut;
 }
 
+// Inspection securisee d'un resultat etudiant pour le log : tronque les objets
+// volumineux et evite les crashs sur valeurs non-serialisables (cycles, fonctions).
+function safeInspect(value) {
+  try {
+    const seen = new WeakSet();
+    return JSON.stringify(value, (k, v) => {
+      if (typeof v === 'function') return '[Function]';
+      if (typeof v === 'object' && v !== null) {
+        if (seen.has(v)) return '[Circular]';
+        seen.add(v);
+      }
+      return v;
+    }).substring(0, 800);
+  } catch (_) {
+    return String(value).substring(0, 500);
+  }
+}
+
 /**
  * Définit le code étudiant dans un contexte VM isolé et retourne une référence
  * vers la fonction nommée exposée globalement dans ce contexte, prête à être
@@ -389,10 +408,15 @@ function detecterNomFonction(strippedCode, nomParDefaut) {
  */
 function exposerFonctionVM(code, nomParDefaut, extraGlobals) {
   const stripped = stripTS(code);
-  // Sécurité : inspecter le code avant exécution pour détecter les patterns d'évasion
   const { detectSandboxEscape } = require('./vm-sandbox');
   const escapeAttempt = detectSandboxEscape(stripped);
   if (escapeAttempt) {
+    logger.exercise('custom', {
+      stage: 'exposerFonctionVM',
+      blocked: true,
+      reason: escapeAttempt,
+      codePreview: stripped.substring(0, 300)
+    });
     throw new Error(`Sécurité : ${escapeAttempt}`);
   }
   const fnName = detecterNomFonction(stripped, nomParDefaut);
@@ -400,16 +424,32 @@ function exposerFonctionVM(code, nomParDefaut, extraGlobals) {
   if (extraGlobals) Object.assign(sandbox, extraGlobals);
   const ctx = vm.createContext(sandbox);
 
+  logger.exercise('custom', {
+    stage: 'exposerFonctionVM',
+    detectedFnName: fnName,
+    expectedDefault: nomParDefaut,
+    extraGlobals: extraGlobals ? Object.keys(extraGlobals) : [],
+    codePreview: stripped.substring(0, 400)
+  });
+
   try {
-    // Convertir const/let top-level en var pour qu'ils s'attachent au global du VM
     const varCode = stripped.replace(/^\s*(const|let)\s+/gm, 'var ');
     vm.runInContext(varCode, ctx, { timeout: EVAL_TIMEOUT_MS });
   } catch (e) {
+    logger.exercise('custom', {
+      stage: 'exposerFonctionVM',
+      compileError: e.message
+    });
     throw new Error(`Erreur de compilation du code : ${e.message}`);
   }
 
   const fn = ctx[fnName];
   if (typeof fn !== 'function') {
+    logger.exercise('custom', {
+      stage: 'exposerFonctionVM',
+      fnNotFound: fnName,
+      availableGlobals: Object.keys(ctx).filter(k => typeof ctx[k] === 'function')
+    });
     throw new Error(`Fonction '${fnName}' introuvable ou non définie globalement. Vérifie le nom exact demandé.`);
   }
   return fn;
@@ -433,13 +473,30 @@ async function evaluateAsyncPartialErrors(code) {
     return { url, data: 'ok' };
   };
 
+  const inputUrls = ['ok-1', 'fail-1', 'ok-2', 'fail-2'];
+  logger.exercise('custom', {
+    stage: 'evaluateAsyncPartialErrors',
+    inputUrls,
+    expectedContract: { succes: ['ok-1', 'ok-2'], echecs: ['fail-1', 'fail-2'] }
+  });
+
   let result;
   try {
     result = await avecTimeout(
-      Promise.resolve(studentFn(['ok-1', 'fail-1', 'ok-2', 'fail-2'], mockFetch)),
+      Promise.resolve(studentFn(inputUrls, mockFetch)),
       'chargement partiel'
     );
+    logger.exercise('custom', {
+      stage: 'evaluateAsyncPartialErrors',
+      studentResultType: typeof result,
+      studentResult: safeInspect(result)
+    });
   } catch (e) {
+    logger.exercise('custom', {
+      stage: 'evaluateAsyncPartialErrors',
+      studentRejected: true,
+      error: e.message
+    });
     throw new Error(`La fonction a rejeté/planté au lieu de gérer les échecs partiels : ${e.message}. Utilise Promise.allSettled au lieu de Promise.all pour éviter le fail-fast sur le premier échec.`);
   }
 
@@ -457,6 +514,12 @@ async function evaluateAsyncPartialErrors(code) {
       errors.push(`Attendu 2 échecs ('fail-1', 'fail-2'), obtenu ${result.echecs.length}. Vérifie que les deux échecs sont bien capturés sans interrompre le traitement des autres URLs.`);
     }
   }
+
+  logger.exercise('custom', {
+    stage: 'evaluateAsyncPartialErrors',
+    finalErrors: errors.slice(),
+    passed: errors.length === 0
+  });
 
   if (errors.length > 0) throw new Error(errors.join('\n'));
 }

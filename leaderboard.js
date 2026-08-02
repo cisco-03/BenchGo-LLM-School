@@ -369,6 +369,39 @@ function detectIsCloudFromLedger(ledger) {
   return false;
 }
 
+// Labels et métadonnées d'affichage par provider, pour le badge d'origine.
+// Permet de différencier visuellement OpenRouter, OpenAI, Anthropic, Ollama,
+// etc. dans le leaderboard HTML/CLI et le classement communautaire, au lieu du
+// badge générique "Cloud" qui mélange tous les providers.
+//
+// Chaque entrée : { label, icon, color } où color est une teinte CSS (utilisé
+// pour le badge HTML). Les providers non listés retournent un fallback générique.
+const PROVIDER_DISPLAY = {
+  openrouter: { label: 'OpenRouter', icon: '🔀', color: '#d29922' },
+  openai:      { label: 'OpenAI',     icon: '🟢', color: '#10a37f' },
+  anthropic:   { label: 'Anthropic', icon: '🟣', color: '#a855f7' },
+  groq:        { label: 'Groq',      icon: '⚡', color: '#f55036' },
+  together:    { label: 'Together',  icon: '🤝', color: '#0f6fff' },
+  mistral:     { label: 'Mistral',   icon: '🌬️', color: '#ff7000' },
+  deepseek:    { label: 'DeepSeek',  icon: '🐋', color: '#4d6bfe' },
+  cohere:      { label: 'Cohere',    icon: '🔗', color: '#39594d' },
+  ollama:      { label: 'Ollama',    icon: '🦙', color: '#d29922' },
+  lmstudio:    { label: 'LM Studio', icon: '🏠', color: '#3fb950' },
+  custom:      { label: 'Custom',    icon: '⚙️', color: '#8b949e' },
+};
+
+// Retourne les infos d'affichage d'un provider depuis son nom.
+// Fallbacks : 'local' (LM Studio local sans provider explicite) et
+// 'cloud' (provider inconnu mais isCloud=true).
+function providerDisplay(provider, isCloud) {
+  if (provider && PROVIDER_DISPLAY[provider]) return PROVIDER_DISPLAY[provider];
+  if (provider && provider !== 'local') {
+    return { label: provider, icon: '☁️', color: '#d29922' };
+  }
+  if (isCloud) return { label: 'Cloud', icon: '☁️', color: '#d29922' };
+  return { label: 'Local', icon: '🏠', color: '#3fb950' };
+}
+
 // Génère des arguments qualitatifs (forces / faiblesses) selon les métriques.
 function buildArguments(entry) {
   const forces = [];
@@ -545,12 +578,19 @@ function buildLeaderboardHTML(entries) {
   const ecoleCounts = {};
   // Filtre Origine : local (LM Studio) vs cloud (OpenRouter, OpenAI, etc.).
   const originCounts = { local: 0, cloud: 0 };
+  // Filtre Provider : compte par provider cloud (openrouter, openai, ollama...)
+  // pour permettre de filtrer finement par provider dans le leaderboard HTML.
+  const providerCounts = {};
   entries.forEach((e, idx) => {
     const rank = idx + 1;
     catCounts[getCategory(e, rank).key]++;
     sizeCounts[getParamSize(e.model).key]++;
     if ((e.globalLifeScore || 0) >= 0) healthCounts.positif++; else healthCounts.negatif++;
     if (e.isCloud) originCounts.cloud++; else originCounts.local++;
+    if (e.isCloud) {
+      const pk = e.provider || 'cloud';
+      providerCounts[pk] = (providerCounts[pk] || 0) + 1;
+    }
     for (const ec of (e.ecoles || [])) {
       ecoleCounts[ec.ecole] = (ecoleCounts[ec.ecole] || 0) + 1;
     }
@@ -960,6 +1000,7 @@ function buildLeaderboardHTML(entries) {
   .badge.note { color: var(--accent); border-color: rgba(88,166,255,0.35); background: rgba(88,166,255,0.10); }
   .badge.cloud { color: #d29922; border-color: rgba(210,153,34,0.35); background: rgba(210,153,34,0.10); }
   .badge.local { color: #3fb950; border-color: rgba(63,185,80,0.35); background: rgba(63,185,80,0.10); }
+  .badge.provider { border-style: dashed; }
   .badge.trend-up   { color: #3fb950; border-color: rgba(63,185,80,0.35); background: rgba(63,185,80,0.10); }
   .badge.trend-down { color: #f85149; border-color: rgba(248,81,73,0.35); background: rgba(248,81,73,0.10); }
   .badge.trend-stable { color: #8b949e; border-color: var(--border); background: var(--bg-3); }
@@ -1412,6 +1453,10 @@ function buildLeaderboardHTML(entries) {
             <option value="all" selected>Toutes origines (${entries.length})</option>
             <option value="local">🏠 Local · LM Studio (${originCounts.local})</option>
             <option value="cloud">☁️ Cloud · API (${originCounts.cloud})</option>
+            ${Object.keys(providerCounts).sort().map(pk => {
+              const info = providerDisplay(pk, true);
+              return `<option value="prov:${esc(pk)}">${info.icon} ${esc(info.label)} (${providerCounts[pk]})</option>`;
+            }).join('')}
           </select>
         </div>
 
@@ -1644,6 +1689,11 @@ function renderCards() {
     if (activeOrigin !== 'all') {
       if (activeOrigin === 'cloud' && !m.isCloud) continue;
       if (activeOrigin === 'local' && m.isCloud) continue;
+      // Filtre par provider spécifique (valeur "prov:<provider>").
+      if (activeOrigin.indexOf('prov:') === 0) {
+        var provFilter = activeOrigin.slice(5);
+        if ((m.provider || (m.isCloud ? 'cloud' : 'local')) !== provFilter) continue;
+      }
     }
     if (q && m.model.toLowerCase().indexOf(q) === -1 && m.shortName.toLowerCase().indexOf(q) === -1) { skippedSearch++; continue; }
     shown++;
@@ -1669,12 +1719,18 @@ function renderCards() {
       : (m.elapsedMs > 0 ? fmtDurJS(m.elapsedMs) : '—');
     var vitesseLbl = m.tokensPerSecond > 0 ? 'Vitesse' : 'Temps';
     var szBadge = '<span class="badge" title="' + esc(m.paramSize.label) + '">' + m.paramSize.icon + ' ' + esc(m.paramSize.short) + '</span>';
-    // Badge d'origine : 🏠 Local (LM Studio) ou ☁️ Cloud (API distante). Permet
-    // de distinguer visuellement les modèles locaux des modèles cloud dans le
-    // classement. Le filtre déroulant "Origine" permet de les séparer.
-    var originBadge = m.isCloud
-      ? ' <span class="badge cloud" title="Modèle cloud (API distante : ' + esc(m.provider || 'cloud') + ')">☁️ Cloud</span>'
-      : ' <span class="badge local" title="Modèle local (LM Studio)">🏠 Local</span>';
+    // Badge d'origine : 🏠 Local (LM Studio) ou badge provider spécifique pour
+    // les modèles cloud (OpenRouter, OpenAI, Anthropic, Ollama...). Permet de
+    // différencier visuellement les providers au lieu d un "Cloud" générique
+    // qui mélange tout. La couleur provient de providerDisplay() (par provider).
+    var provInfo = providerDisplay(m.provider, m.isCloud);
+    var originBadge;
+    if (m.isCloud) {
+      var provTitle = 'Modèle cloud — Provider : ' + esc(provInfo.label) + (m.provider ? ' (' + esc(m.provider) + ')' : '');
+      originBadge = ' <span class="badge provider" title="' + provTitle + '" style="color:' + provInfo.color + ';border-color:' + provInfo.color + '55;background:' + provInfo.color + '18">' + provInfo.icon + ' ' + esc(provInfo.label) + '</span>';
+    } else {
+      originBadge = ' <span class="badge local" title="Modèle local (LM Studio)">🏠 Local</span>';
+    }
     // Badge 📄 : apparaît quand le rapport intégral de ce modèle a déjà été
     // exporté (téléchargé) au moins une fois. Persistance via localStorage
     // (clé par shortName) pour garder le suivi entre deux générations du
@@ -3742,8 +3798,8 @@ function printLeaderboardSection(title, sectionEntries) {
   }
   console.log(`  \x1b[1;36m━━━ ${title} (${sectionEntries.length}) ━━━\x1b[0m`);
 
-  const lbHeaders = ['Rang', 'Modèle', 'Quant', 'Temps', 'Vitesse', 'Pct', 'Mvt', 'Verdict'];
-  const lbAligns = ['left', 'left', 'left', 'right', 'right', 'right', 'center', 'left'];
+  const lbHeaders = ['Rang', 'Modèle', 'Provider', 'Quant', 'Temps', 'Vitesse', 'Pct', 'Mvt', 'Verdict'];
+  const lbAligns = ['left', 'left', 'left', 'left', 'right', 'right', 'right', 'center', 'left'];
   const lbRows = [];
   const lbMedals = [];
   for (let i = 0; i < sectionEntries.length; i++) {
@@ -3752,6 +3808,12 @@ function printLeaderboardSection(title, sectionEntries) {
     const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : '  ';
     const vColor = verdict.rank === 0 ? '\x1b[93m' : verdict.rank === 1 ? '\x1b[32m' : verdict.rank === 2 ? '\x1b[36m' : verdict.rank === 3 ? '\x1b[33m' : '\x1b[31m';
     const quant = e.quantization ? `\x1b[35m${e.quantization}\x1b[0m` : '\x1b[90m—\x1b[0m';
+    // Colonne Provider : label coloré par provider (openrouter, openai, ollama...)
+    // pour différencier les origines au lieu de tout mélanger sous "cloud".
+    const provInfo = providerDisplay(e.provider, e.isCloud);
+    const provCell = e.isCloud
+      ? `\x1b[33m${provInfo.icon} ${provInfo.label}\x1b[0m`
+      : `\x1b[32m${provInfo.icon} ${provInfo.label}\x1b[0m`;
     const temps = e.elapsedMs > 0 ? `\x1b[90m${formatDuration(e.elapsedMs)}\x1b[0m` : '\x1b[90m—\x1b[0m';
     const tpsC = e.tokensPerSecond >= 50 ? '\x1b[32m' : e.tokensPerSecond >= 25 ? '\x1b[33m' : e.tokensPerSecond > 0 ? '\x1b[31m' : '\x1b[90m';
     const vit = e.tokensPerSecond > 0 ? `${tpsC}${e.tokensPerSecond + ' t/s'}\x1b[0m` : '\x1b[90m—\x1b[0m';
@@ -3770,6 +3832,7 @@ function printLeaderboardSection(title, sectionEntries) {
     lbRows.push([
       (i + 1) + '.',
       e.model,
+      provCell,
       quant,
       temps,
       vit,

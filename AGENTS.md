@@ -50,7 +50,7 @@ Tous les modules sont à la racine (pas de sous-dossiers pour les sources). Les 
 
 - **`runner.js`** — orchestrateur (2689 lignes). Contient `main()`, `runSchool()`, `runTierAttempt()`, `askYesNo()`.
 - **`config.js`** — profils, parse CLI, timeout, auto-profilage.
-- **`cloud-client.js`** — 6 providers cloud (OpenAI compat + Anthropic natif).
+- **`cloud-client.js`** — 11 providers cloud (OpenAI compat + Anthropic natif) : openrouter, openai, anthropic, groq, together, mistral, deepseek, cohere, ollama, lmstudio, custom.
 - **`lm-studio-client.js`** — client local LM Studio (streaming SSE).
 - **`teacher-client.js`** — professeur IA (correction via OpenRouter Free Router).
 - **`score-ledger.js`** — carnets persistants dans `Export-Rapports/.carnet/<shortName>.json`.

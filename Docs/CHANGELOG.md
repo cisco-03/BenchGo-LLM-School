@@ -1,5 +1,212 @@
 # CHANGELOG - Carnet de Notes BenchGo
 
+## 2026-08-02 — feat: logs exhaustifs par exercice pour diagnostic contestations + bug tache_2a identifie
+
+### Contexte
+1. Quand un eleve (modele) declare qu'un exercice est errone, il etait
+   impossible de determiner a posteriori si l echec venait du modele (eleve)
+   ou de l exercice (enonce/evaluateur incoherent). Aucun log detaille par
+   exercice n existait : seules des lignes globales EVAL etaient ecrites.
+2. Le rapport Memories-BenchGo/Tasks1.md (profil DOCTORAT/FRONTIER sur
+   tier2_expert) montrait un echec sur tache_2a "Pool de concurrence async".
+   L eleve etait penalise de -56 points, mais le professeur IA n avait pas
+   remonte une incoherence evidente entre l enonce et l evaluateur.
+
+### Diagnostic tache_2a (bug de l exercice, pas de l eleve)
+- Le prompt `tier2_expert.json` demande : `executerEnPool(taches, concurrence)`
+  qui "Returns an array of results in original order" (un tableau ordonne).
+- L evaluateur custom `evaluateAsyncPartialErrors` (custom-evaluators.js) :
+  - cherche la fonction `chargerEnParallele` (pas `executerEnPool` !),
+  - l appelle avec `(urls, mockFetch)` (signature differente),
+  - attend un objet `{ succes: [...], echecs: [...] }` (pas un tableau).
+- Conclusion : l eleve ne pouvait pas reussir. Le contrat du prompt et celui
+  de l evaluateur sont contradictoires. **C est l exercice qui est en tort.**
+- Non corrige dans cette session (le fix de l enonce/evaluateur est a part).
+  Les logs ajoutes permettent desormais de le prouver.
+
+### Solution : logs exhaustifs par exercice
+**logger.js** :
+- Nouvelle fonction `exercise(category, data)` : ecrit une ligne
+  `[EXERCISE] [category] {json}` par `appendFileSync` (persistance garantie).
+  Categories : `submit`, `eval`, `vm`, `custom`, `provider`, `response`.
+- Exportee dans le module.
+
+**task-evaluator.js** :
+- Log `submit` au debut : taskId, label, nombre d evaluations, apercu du code.
+- Log `eval` par evaluation : type, description, call, assert, method, etc.
+- Log `vm` apres execCodeInVM : passed, resultat, erreur, temps d execution.
+- Log `eval` en cas d exception : erreur + stack tronque.
+- Log `eval` final : allPassed, nombre de resultats.
+- Helper `safeStringify` pour serialiser sans crasher (cycles, fonctions).
+
+**custom-evaluators.js** :
+- Import du logger.
+- `exposerFonctionVM` : log detectedFnName vs expectedDefault, extraGlobals,
+  erreurs de compilation, fonction introuvable (liste des globaux dispo).
+- `evaluateAsyncPartialErrors` : log inputUrls, contrat attendu, resultat de
+  l eleve (type + apercu), rejet eventuel, erreurs finales, verdict.
+- Helper `safeInspect` (serialisation safe).
+
+**vm-sandbox.js** :
+- Log au demarrage de execCodeInVM : call, assert, longueurs setup/code.
+- Log a la fin : passed, type et apercu du resultat, temps d execution.
+- Log en cas de throw : call, assert, message d erreur.
+- Log en cas de blocage securite (sandbox escape).
+- Helper `safeVmInspect`.
+
+**runner.js** :
+- `extractStudentCode` : log `submit` avec methode d extraction
+  (regexHeader/jsonKey/firstCodeBlock/fullResponse), apercu reponse brute
+  et apercu code extrait.
+- Avant l appel au modele : log `provider` queryFn_start (mode cloud/local,
+  prompt, taskIds).
+- Apres reception reponse : log `response` (modele, duree, tokens, apercu).
+- Verdict final par exercice : log `eval` verdict (status, points, erreurs,
+  code eleve).
+
+**cloud-client.js** :
+- Log `provider` cloud_request : provider, model, prompt, timeout, reasoning.
+- Log `provider` cloud_response : duree, tokens, longueur, apercu contenu.
+- Log `provider` cloud_error : code, isTimeout, raison.
+
+**lm-studio-client.js** :
+- Log `provider` local_request : apiUrl, prompt, budget contexte, reasoning.
+- Log `provider` local_response : duree, tokens, longueur, apercu contenu.
+- Log `provider` local_error : errorCode, isTimeout, raison.
+
+### Fichiers modifies
+- logger.js
+- task-evaluator.js
+- custom-evaluators.js
+- vm-sandbox.js
+- runner.js
+- cloud-client.js
+- lm-studio-client.js
+
+### Resultat obtenu
+- Chaque exercice produit desormais une trace complete dans
+  `logs/benchgo_<timestamp>.log` :
+  1. Prompt envoye au modele (provider, mode, apercu)
+  2. Reponse du modele (modele, duree, tokens, apercu)
+  3. Code extrait par le parser (methode, code eleve)
+  4. Chaque evaluation (type, call, assert, resultat VM, erreur)
+  5. Verdict final (status, points, erreurs, code eleve)
+- Grep par exercice : `Select-String -Pattern "tache_2a" logs/*.log`
+- Les logs prouvent le bug tache_2a : detectedFnName="executerEnPool" vs
+  expectedDefault="chargerEnParallele" + studentResult="[]" (tableau, pas
+  objet attendu).
+
+### Validation
+- `node --check` OK sur les 7 fichiers modifies.
+- `node tests/run-tests.js` : 27/27 passes.
+- Test manuel `evaluateAsyncPartialErrors` (solution correcte) : OK + logs.
+- Test manuel (solution type eleve tache_2a) : reproduit l echec + logs
+  montrent l incoherence enonce/evaluateur.
+
+## 2026-08-02 — feat: badges provider par cloud (OpenRouter/OpenAI/Ollama…) + mémorisation clé frontier-batch
+
+### Contexte
+1. Le leaderboard n'affichait qu'un badge générique « ☁️ Cloud » sans
+   différencier les providers (OpenRouter, OpenAI, Anthropic, Ollama…).
+   Impossible de distinguer visuellement l'origine réelle d'un modèle.
+2. `frontier-batch.js` ne proposait jamais de mémoriser la clé API saisie,
+   contrairement au runner : l'utilisateur devait re-saisir sa clé à chaque
+   session cloud.
+
+### Solution
+**Badges provider** (leaderboard.js + consolidate-leaderboard.js) :
+- Nouveau helper `providerDisplay(provider, isCloud)` : mappe chaque provider
+  vers `{ label, icon, color }` (OpenRouter 🔀, OpenAI 🟢, Anthropic 🟣, Groq ⚡,
+  Ollama 🦙, LM Studio 🏠…). Fallback générique pour providers inconnus.
+- Badge HTML enrichi : le badge « Cloud » générique est remplacé par le badge
+  provider spécifique avec sa couleur (style inline). « Local » inchangé.
+- Nouveau filtre déroulant « Provider » dans le leaderboard HTML : options par
+  provider cloud (avec compte), en plus de Local/Cloud générique. Filtrage
+  côté client via `prov:<provider>`.
+- Colonne « Provider » ajoutée au CLI `printLeaderboardSection` (classement
+  local + section cloud), avec icône + label coloré.
+- consolidate-leaderboard : `aggregateCarnet` stocke `provider`/`isCloud` ;
+  badge provider précalculé (`provInfo`) sérialisé dans le JSON client et
+  rendu dans les cartes communautaires.
+
+**Mémorisation clé API** (frontier-batch.js) :
+- `promptApiKey` propose désormais de mémoriser la clé dans `.api-keys.json`
+  après saisie (comme le runner), via `askYesNoLocal`. Les prochains
+  `frontier-batch` retrouvent la clé automatiquement.
+- `--no-save-keys` non applicable ici (frontier-batch n'a pas ce flag) ; la
+  proposition est conditionnée par TTY uniquement.
+
+### Fichiers modifiés
+- `leaderboard.js` (helper `providerDisplay`, `PROVIDER_DISPLAY`, badge HTML
+  enrichi, filtre provider, colonne CLI, `providerCounts`)
+- `consolidate-leaderboard.js` (helper `providerDisplay`, `PROVIDER_DISPLAY`,
+  `aggregateCarnet` stocke provider/isCloud, badge provider dans les cartes)
+- `frontier-batch.js` (mémorisation clé API via `askYesNoLocal` + `api-keys-store`)
+- `Docs/CHANGELOG.md`
+
+### Validation
+- `node --check` sur les 3 fichiers → OK
+- `node tests/run-tests.js` → 27/27 passés
+- `node scripts/check-inline-js.js` → JS inline valide (classement + communauté)
+- `node leaderboard.js` → colonne Provider visible (Local + Cloud)
+- `node consolidate-leaderboard.js` → badge provider dans les cartes
+
+### Résultat obtenu
+- Leaderboard HTML : badge provider coloré par cloud (🔀 OpenRouter, 🟢 OpenAI,
+  🦙 Ollama…) + filtre déroulant par provider.
+- CLI : colonne Provider dans le classement local et la section cloud.
+- Classement communautaire : badge provider sur chaque carte.
+- frontier-batch : la clé API est mémorisée après saisie, plus de re-saisie à
+  chaque session.
+
+---
+
+## 2026-08-02 — feat: ajout d'Ollama (cloud payant + local) et des serveurs OpenAI-compat au menu provider CLI de frontier-batch
+
+### Contexte
+Le menu interactif de `frontier-batch.js` ne proposait que 8 providers cloud
+(openrouter, openai, groq, together, mistral, anthropic, deepseek, cohere) et
+excluait volontairement ollama/lmstudio/custom (commentaire : « dédié aux
+modèles cloud frontière »). Or Ollama propose désormais un service cloud payant
+(abonnement mensuel, base URL + clé API) en plus de son mode local. Ollama
+était absent du menu alors qu'il est déjà supporté par `cloud-client.js`.
+
+### Solution
+- `frontier-batch.js` : la liste `CLOUD_PROVIDERS` inclut désormais
+  `ollama`, `lmstudio` et `custom`, avec labels indiquant le mode (cloud payant
+  via `--endpoint` + `--api-key`, ou local sans clé).
+- Nouveau flag `--endpoint=<url>` dans `parseCliArgs()` + `printHelp()` : permet
+  d'overrider l'URL par défaut (Ollama local `localhost:11434` → URL cloud).
+- Nouvelle fonction `promptEndpoint(provider, cliEndpoint)` : prompt
+  interactif de base URL pour `custom` (obligatoire) et `ollama`/`lmstudio`
+  (optionnel — vide = URL locale par défaut).
+- `promptApiKey` : la clé est désormais optionnelle pour
+  `ollama`/`lmstudio`/`custom` (mode local sans auth) ; vide = pas de clé.
+  `runModel` ne passe `--api-key=` au runner que si une clé est fournie.
+- `runModel` propage `--endpoint=` au runner si présent.
+- `main()` : le résumé de session affiche l'endpoint si défini.
+
+Ollama cloud fonctionne déjà via `cloud-client.js` :
+- `--endpoint=` override l'URL locale (cloud-client.js:210)
+- la clé est passée dans le header `Authorization` même avec
+  `requiresAuth: false` (cloud-client.js:243)
+
+### Fichiers modifiés
+- `frontier-batch.js` (liste providers, `--endpoint`, `promptEndpoint`,
+  clé optionnelle, `runModel`, `main`, `printHelp`)
+
+### Validation
+- `node --check frontier-batch.js` → OK
+- `node frontier-batch.js --help` → liste complète des 11 providers + `--endpoint`
+
+### Résultat obtenu
+`node frontier-batch.js` propose désormais 11 providers :
+openrouter, openai, anthropic, groq, together, mistral, deepseek, cohere,
+ollama, lmstudio, custom. Ollama cloud (payant) est accessible via
+`--endpoint=https://... --api-key=...`, le mode local reste sans clé.
+
+---
+
 ## 2026-08-02 — fix: crash TimeoutError.name read-only → carnet-professeur vide pour les modèles frontière
 
 ### Contexte

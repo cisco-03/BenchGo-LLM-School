@@ -84,6 +84,17 @@ async function queryLLM(prompt, difficulty, tierId, isMandatory, spinner, option
 
     logger.promptHash(tierId, prompt);
     logger.info(`Tier ${tierId} — Budget contexte: limite=${contextLimitTokens}, entrée~${estimatedInputTokens}, sortie max=${maxTokensExplicit == null ? maxTokens + ' (auto)' : 'illimitée (carte blanche)'} tokens.`);
+    logger.exercise('provider', {
+      stage: 'local_request',
+      tierId,
+      apiUrl: LM_STUDIO_API_URL,
+      promptLength: (prompt || '').length,
+      promptPreview: (prompt || '').substring(0, 600),
+      estimatedInputTokens,
+      contextLimitTokens,
+      maxTokens,
+      disableReasoning: Boolean(options.disableReasoning)
+    });
 
     const requestBody = {
       model: "local-model",
@@ -216,6 +227,15 @@ async function queryLLM(prompt, difficulty, tierId, isMandatory, spinner, option
         const duration = Date.now() - startTime;
         logger.apiRequest(tierId, duration, 'OK');
         logger.info(`API Tier ${tierId} : réponse reçue en ${duration}ms (${tokenCount} chunks, ${fullContent.length} chars).`);
+        logger.exercise('provider', {
+          stage: 'local_response',
+          tierId,
+          durationMs: duration,
+          tokenCount,
+          contentLength: fullContent.length,
+          contentPreview: fullContent.substring(0, 800),
+          modelName: responseModelName || 'Modele_Local'
+        });
         // Benchmarking intégré (§2) : enregistre latence + tokens pour ce modèle.
         benchMetrics.record({
           modelName: responseModelName || 'Modele_Local',
@@ -259,6 +279,14 @@ async function queryLLM(prompt, difficulty, tierId, isMandatory, spinner, option
       : 'E504_LM_HTTP_ERROR';
     logger.apiRequest(tierId || '?', duration, 'ERREUR');
     logger.error(`API Tier ${tierId} — code=${code} — raison=${reason}`);
+    logger.exercise('provider', {
+      stage: 'local_error',
+      tierId,
+      durationMs: duration,
+      errorCode: code,
+      isTimeout,
+      error: reason
+    });
     // Benchmarking intégré (§2) : enregistre l'échec pour le taux d'erreur.
     benchMetrics.record({
       modelName: (spinner && spinner._modelName) || 'Modele_Local',

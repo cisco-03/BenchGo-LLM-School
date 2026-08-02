@@ -71,6 +71,7 @@ function extractStudentCode(rawResponse, taskId) {
   if (!rawResponse || !taskId) return null;
 
   let studentCode = extractCodeRegex(rawResponse, taskId);
+  let extractMethod = studentCode ? 'regexHeader' : 'none';
 
   if (!studentCode) {
     try {
@@ -79,6 +80,7 @@ function extractStudentCode(rawResponse, taskId) {
       if (studentCode && typeof studentCode === 'object') {
         studentCode = studentCode.code || studentCode.solution || studentCode.fonction;
       }
+      if (studentCode) extractMethod = 'jsonKey';
     } catch (e) { }
   }
 
@@ -86,11 +88,21 @@ function extractStudentCode(rawResponse, taskId) {
     const codeMatch = rawResponse.match(/```(?:javascript|js|typescript|ts)?\n([\s\S]*?)```/);
     if (codeMatch) {
       studentCode = codeMatch[1];
+      extractMethod = 'firstCodeBlock';
     } else {
-      // Ultime recours : on tente d'utiliser toute la réponse
       studentCode = rawResponse;
+      extractMethod = 'fullResponse';
     }
   }
+
+  logger.exercise('submit', {
+    taskId,
+    extractMethod,
+    rawResponseLength: (rawResponse || '').length,
+    rawResponsePreview: (rawResponse || '').substring(0, 600),
+    extractedCodeLength: (studentCode || '').length,
+    extractedCodePreview: (studentCode || '').substring(0, 500)
+  });
 
   return studentCode;
 }
@@ -435,6 +447,17 @@ async function runTierAttempt({ tierNum, tierData, isMandatory, profileArg, cont
 
     try {
       const startTime = performance.now();
+
+      logger.exercise('provider', {
+        stage: 'queryFn_start',
+        tierNum,
+        classNum,
+        mode: isCloudMode ? 'cloud' : 'local',
+        promptLength: dynamicPrompt.length,
+        promptPreview: dynamicPrompt.substring(0, 1000),
+        taskIds: availableTasks.map(t => t.id)
+      });
+
       // Spinner utilisé pour l'appel courant (référence partagée pour récupérer
       // le nombre de tokens produits via spinner.tokenCount).
       let tierSpinner = spinner;
@@ -512,6 +535,16 @@ async function runTierAttempt({ tierNum, tierData, isMandatory, profileArg, cont
       const rawResponse = responseData.content;
       rawResponseAll += '\n\n---\n' + rawResponse;
       if (!responseModelName) responseModelName = responseData.modelName;
+
+      logger.exercise('response', {
+        tierNum,
+        classNum,
+        modelName: responseData.modelName,
+        inferenceTimeMs,
+        tokenCount: tierSpinner.tokenCount || 0,
+        responseLength: (rawResponse || '').length,
+        responsePreview: (rawResponse || '').substring(0, 800)
+      });
 
       // Extraction de la sélection (optionnelle — les modèles capables peuvent
       // utiliser SELECTION; les petits modèles renvoient directement le JSON).
@@ -777,6 +810,19 @@ async function runTierAttempt({ tierNum, tierData, isMandatory, profileArg, cont
             failureExplanation: taskFailureExplanations[task.id] || null,
             teacherCorrection: taskTeacherCorrections[task.id] || null
           };
+
+          logger.exercise('eval', {
+            stage: 'verdict',
+            tierNum,
+            taskId: task.id,
+            status: taskPassed ? 'success' : 'failed',
+            points: taskNetPoints[task.id] || 0,
+            maxPoints: task.points || 8,
+            retryCount: taskRetryMap[task.id] || 0,
+            helpUsed: Boolean(taskHelpUsed[task.id]),
+            errors: errors.substring(0, 500),
+            studentCode: (studentCode || '').substring(0, 500)
+          });
        }
 
        // Retire les exercices réussis de la liste restante.

@@ -235,6 +235,16 @@ async function queryLLM(prompt, difficulty, tierId, isMandatory, spinner, option
   try {
     logger.promptHash(tierId, prompt);
     logger.info(`Cloud Tier ${tierId} — provider=${provider}, model=${model}`);
+    logger.exercise('provider', {
+      stage: 'cloud_request',
+      tierId,
+      provider,
+      model,
+      promptLength: (prompt || '').length,
+      promptPreview: (prompt || '').substring(0, 600),
+      timeoutMs,
+      disableReasoning: Boolean(options.disableReasoning)
+    });
 
     let response;
 
@@ -312,6 +322,16 @@ async function queryLLM(prompt, difficulty, tierId, isMandatory, spinner, option
     const duration = Date.now() - startTime;
     logger.apiRequest(tierId, duration, 'OK');
     logger.info(`Cloud Tier ${tierId} : réponse reçue en ${duration}ms (${streamResult.tokenCount} chunks, ${streamResult.content.length} chars).`);
+    logger.exercise('provider', {
+      stage: 'cloud_response',
+      tierId,
+      provider,
+      model,
+      durationMs: duration,
+      tokenCount: streamResult.tokenCount,
+      contentLength: streamResult.content.length,
+      contentPreview: streamResult.content.substring(0, 800)
+    });
     // Benchmarking intégré (§2) : enregistre latence + tokens pour ce modèle cloud.
     benchMetrics.record({
       modelName: model,
@@ -336,6 +356,15 @@ async function queryLLM(prompt, difficulty, tierId, isMandatory, spinner, option
 
     logger.apiRequest(tierId || '?', duration, 'ERREUR');
     logger.error(`Cloud Tier ${tierId} — ${reason}`);
+    logger.exercise('provider', {
+      stage: 'cloud_error',
+      tierId,
+      provider,
+      model,
+      durationMs: duration,
+      isTimeout,
+      error: reason
+    });
     // Benchmarking intégré (§2) : enregistre l'échec pour le taux d'erreur.
     benchMetrics.record({
       modelName: model,

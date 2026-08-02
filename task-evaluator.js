@@ -24,6 +24,24 @@ function evalCacheKey(taskId, studentCode) {
   return taskId + '::' + hash;
 }
 
+// Serialise un resultat VM de facon sure : tronque les objets volumineux et
+// evite les crashs sur les valeurs non-serialisables (fonctions, cycles).
+function safeStringify(value) {
+  try {
+    const seen = new WeakSet();
+    return JSON.stringify(value, (k, v) => {
+      if (typeof v === 'function') return '[Function]';
+      if (typeof v === 'object' && v !== null) {
+        if (seen.has(v)) return '[Circular]';
+        seen.add(v);
+      }
+      return v;
+    }).substring(0, 1000);
+  } catch (_) {
+    return String(value).substring(0, 500);
+  }
+}
+
 async function evaluateTask(taskDef, studentCode) {
   // Lookup cache : si ce code exact a déjà été évalué pour cet exercice, on
   // renvoie le résultat mis en cache (même verdict, mêmes erreurs). Évite le
@@ -37,9 +55,30 @@ async function evaluateTask(taskDef, studentCode) {
 
   const results = [];
 
-  for (const evalDef of taskDef.evaluations) {
+  logger.exercise('eval', {
+    taskId: taskDef.id,
+    label: taskDef.label,
+    evaluationsCount: taskDef.evaluations.length,
+    codeLength: (studentCode || '').length,
+    codePreview: (studentCode || '').substring(0, 500)
+  });
+
+  for (let i = 0; i < taskDef.evaluations.length; i++) {
+    const evalDef = taskDef.evaluations[i];
     let passed = false;
     let errorMsg = null;
+
+    logger.exercise('eval', {
+      taskId: taskDef.id,
+      evalIndex: i,
+      type: evalDef.type,
+      description: evalDef.description,
+      call: evalDef.call || null,
+      assert: evalDef.assert || null,
+      method: evalDef.method || null,
+      required: evalDef.required || null,
+      forbidden: evalDef.forbidden || null
+    });
 
     try {
       if (evalDef.type === "exec") {
@@ -48,6 +87,16 @@ async function evaluateTask(taskDef, studentCode) {
         passed = execResult.passed;
         if (!passed && execResult.error) errorMsg = execResult.error;
         if (!passed && !errorMsg) errorMsg = `Assertion échouée : ${evalDef.assert}`;
+
+        logger.exercise('vm', {
+          taskId: taskDef.id,
+          evalIndex: i,
+          passed,
+          result: safeStringify(execResult.result),
+          error: execResult.error || null,
+          executionTimeMs: execResult.executionTimeMs,
+          expected: evalDef.assert
+        });
 
         if (passed && evalDef.maxTimeMs && execResult.executionTimeMs != null) {
           if (execResult.executionTimeMs > evalDef.maxTimeMs) {
@@ -73,16 +122,42 @@ async function evaluateTask(taskDef, studentCode) {
           }
         }
         passed = true;
+        logger.exercise('eval', {
+          taskId: taskDef.id,
+          evalIndex: i,
+          type: 'pattern',
+          passed: true
+        });
       }
       else if (evalDef.type === "custom") {
         const evaluator = customEvaluators[evalDef.method];
         if (!evaluator) throw new Error(`Évaluateur '${evalDef.method}' introuvable.`);
+        logger.exercise('custom', {
+          taskId: taskDef.id,
+          evalIndex: i,
+          method: evalDef.method,
+          starting: true
+        });
         await evaluator(studentCode || '');
         passed = true;
+        logger.exercise('custom', {
+          taskId: taskDef.id,
+          evalIndex: i,
+          method: evalDef.method,
+          passed: true
+        });
       }
     } catch (e) {
       passed = false;
       errorMsg = e.message;
+      logger.exercise('eval', {
+        taskId: taskDef.id,
+        evalIndex: i,
+        type: evalDef.type,
+        passed: false,
+        error: e.message,
+        stack: e.stack ? e.stack.split('\n').slice(0, 3).join(' | ') : null
+      });
     }
 
     results.push({
@@ -91,6 +166,14 @@ async function evaluateTask(taskDef, studentCode) {
       error: errorMsg
     });
   }
+
+  const allPassed = results.every(r => r.passed);
+  logger.exercise('eval', {
+    taskId: taskDef.id,
+    final: true,
+    allPassed,
+    resultsCount: results.length
+  });
 
   // Stockage dans le cache LRU (avec TTL) pour les prochaines évaluations du
   // même code. Journalisé pour le diagnostic du hit-rate en fin de run.

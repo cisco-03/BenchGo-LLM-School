@@ -68,6 +68,32 @@ function loadAllSubmissions() {
   return submissions;
 }
 
+// Labels et couleurs par provider cloud, pour le badge d'origine dans le
+// classement communautaire. Permet de différencier OpenRouter, OpenAI, Ollama,
+// etc. au lieu d'un "Cloud" générique. Synchronisé avec leaderboard.js.
+const PROVIDER_DISPLAY = {
+  openrouter: { label: 'OpenRouter', icon: '🔀', color: '#d29922' },
+  openai:      { label: 'OpenAI',     icon: '🟢', color: '#10a37f' },
+  anthropic:   { label: 'Anthropic', icon: '🟣', color: '#a855f7' },
+  groq:        { label: 'Groq',      icon: '⚡', color: '#f55036' },
+  together:    { label: 'Together',  icon: '🤝', color: '#0f6fff' },
+  mistral:     { label: 'Mistral',   icon: '🌬️', color: '#ff7000' },
+  deepseek:    { label: 'DeepSeek',  icon: '🐋', color: '#4d6bfe' },
+  cohere:      { label: 'Cohere',    icon: '🔗', color: '#39594d' },
+  ollama:      { label: 'Ollama',    icon: '🦙', color: '#d29922' },
+  lmstudio:    { label: 'LM Studio', icon: '🏠', color: '#3fb950' },
+  custom:      { label: 'Custom',    icon: '⚙️', color: '#8b949e' },
+};
+
+function providerDisplay(provider, isCloud) {
+  if (provider && PROVIDER_DISPLAY[provider]) return PROVIDER_DISPLAY[provider];
+  if (provider && provider !== 'local') {
+    return { label: provider, icon: '☁️', color: '#d29922' };
+  }
+  if (isCloud) return { label: 'Cloud', icon: '☁️', color: '#d29922' };
+  return { label: 'Local', icon: '🏠', color: '#3fb950' };
+}
+
 // Agrège un carnet en une entrée de classement (meilleure tentative par école).
 function aggregateCarnet(carnet) {
   if (!carnet || !carnet.ecoles) return null;
@@ -154,6 +180,8 @@ function aggregateCarnet(carnet) {
     modelUrl: carnet.modelUrl || guessModelUrl(carnet.model, carnet.publisher) || null,
     note: carnet.note || null,
     publisher: carnet.publisher || null,
+    provider: carnet.provider || null,
+    isCloud: Boolean(carnet.isCloud || (carnet.provider && carnet.provider !== 'local')),
     score, max, pct, globalLifeScore, optionalBonus,
     mandatoryPassed, mandatoryTotal, mandatoryPct,
     helpCount, retriedCount,
@@ -379,10 +407,13 @@ function buildConsolidatedHTML(entries) {
     const verdict = getVerdict(e, idx + 1)
     const grade = gradeLetter(e.pct)
     const args = buildArguments(e)
+    const provInfo = providerDisplay(e.provider, e.isCloud)
     return {
       rank, model: e.model, shortName: e.shortName,
       quantization: e.quantization, modelUrl: e.modelUrl || null,
       note: e.note || null,
+      provider: e.provider || null, isCloud: Boolean(e.isCloud),
+      provInfo,
       pct: e.pct, score: e.score, max: e.max,
       grade, globalLifeScore: e.globalLifeScore,
       mandatoryPct: e.mandatoryPct, mandatoryPassed: e.mandatoryPassed, mandatoryTotal: e.mandatoryTotal,
@@ -657,6 +688,7 @@ function buildConsolidatedHTML(entries) {
   }
   .badge.quant { color: var(--purple); border-color: rgba(188,140,255,0.35); background: rgba(188,140,255,0.10); }
   .badge.note { color: var(--accent); border-color: rgba(88,166,255,0.35); background: rgba(88,166,255,0.10); }
+  .badge.provider { border-style: dashed; }
   .pos-arrow { font-size: var(--fs-tiny); font-weight: 700; margin-left: 6px; vertical-align: middle; }
   .pos-arrow.pos-up { color: #3fb950; }
   .pos-arrow.pos-down { color: #f85149; }
@@ -1107,6 +1139,9 @@ function renderCards() {
     var noteBadge = m.note ? '<span class="badge note" title="Note personnelle disponible">📝 Note</span>' : '';
     var contribBadge = m.contributors > 1 ? '<span class="badge contrib">👥 ' + m.contributors + ' testeurs</span>' : '';
     var pseudoBadge = m.pseudo ? '<span class="badge pseudo">✍️ ' + esc(m.pseudo) + '</span>' : '';
+    // Badge provider : différencie OpenRouter, OpenAI, Ollama, etc. au lieu
+    // d'un "Cloud" générique. provInfo est précalculé côté serveur.
+    var provBadge = m.provInfo ? '<span class="badge provider" title="Provider : ' + esc(m.provInfo.label) + '" style="color:' + m.provInfo.color + ';border-color:' + m.provInfo.color + '55;background:' + m.provInfo.color + '18">' + m.provInfo.icon + ' ' + esc(m.provInfo.label) + '</span>' : '';
     var posArrow = positionArrow(m.positionDelta);
 
     var html = '<div class="card ' + cardClass + '" onclick="openModal(' + i + ')">' +
@@ -1114,7 +1149,7 @@ function renderCards() {
         '<div class="rank">' + rankDisp + '</div>' +
         '<div class="model-name">' +
           '<div class="name-line"><span class="cat-icon">' + m.cat.icon + '</span>' + esc(m.model) + posArrow + '</div>' +
-          '<div class="badges">' + szBadge + ' ' + quantBadge + ' ' + noteBadge + ' ' + contribBadge + ' ' + pseudoBadge + '</div>' +
+          '<div class="badges">' + szBadge + ' ' + provBadge + ' ' + quantBadge + ' ' + noteBadge + ' ' + contribBadge + ' ' + pseudoBadge + '</div>' +
         '</div>' +
         '<div class="mini-stats">' +
           '<div class="mini-stat"><span class="lbl">%</span><span class="val" style="color:' + pc + '">' + dispPct(m.pct) + '%</span><div class="pct-bar-wrap"><div class="pct-bar-fill" style="width:' + Math.max(2,dispPct(m.pct)) + '%;background:' + pc + '"></div></div></div>' +

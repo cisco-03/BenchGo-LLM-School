@@ -58,6 +58,20 @@ function vmError(tierNum, taskId, errMessage) {
   writeLine('VM_ERROR', `Tier ${tierNum} — ${taskId} — ${errMessage}`);
 }
 
+// Trace exhaustive d'un exercice pour diagnostic quand un eleve conteste une
+// penalite. Capture TOUT ce qui permet de determiner si l erreur vient du
+// modele (eleve) ou de l exercice (enonce/evaluateur). Les donnees sont loggees
+// en JSON sur une seule ligne pour faciliter le grep et le parsing ulterieur.
+// category : 'submit' | 'eval' | 'vm' | 'custom' | 'provider' | 'response'
+function exercise(category, data) {
+  try {
+    const payload = typeof data === 'string' ? data : JSON.stringify(data);
+    writeLine('EXERCISE', `[${category}] ${payload}`);
+  } catch (_) {
+    writeLine('EXERCISE', `[${category}] (serialisation echouee)`);
+  }
+}
+
 function modelDetection(modelName, paramSize, detected) {
   writeLine('MODEL_DETECTION', `modèle="${modelName}" — taille=${paramSize || 'inconnue'} — profil détecté=${detected}`);
 }
@@ -91,6 +105,7 @@ module.exports = {
   vmError,
   modelDetection,
   runConfig,
+  exercise,
   getFilePath,
   close,
   closeSync

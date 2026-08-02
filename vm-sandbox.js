@@ -1,6 +1,7 @@
 
 const vm = require('vm');
 const { EVAL_TIMEOUT_MS } = require('./config');
+const logger = require('./logger');
 
 // CRITIQUE (sécurité) : le module 'vm' de Node.js n'est PAS une sandbox de
 // sécurité. Un code malveillant peut s'échapper via la chaîne de prototypes :
@@ -91,8 +92,35 @@ function detectSandboxEscape(code) {
   return null
 }
 
+// Inspection securisee d'un resultat VM pour le log : tronque les objets
+// volumineux et evite les crashs sur valeurs non-serialisables (cycles, fonctions).
+function safeVmInspect(value) {
+  try {
+    if (value === undefined) return 'undefined';
+    const seen = new WeakSet();
+    return JSON.stringify(value, (k, v) => {
+      if (typeof v === 'function') return '[Function]';
+      if (typeof v === 'object' && v !== null) {
+        if (seen.has(v)) return '[Circular]';
+        seen.add(v);
+      }
+      return v;
+    }).substring(0, 500);
+  } catch (_) {
+    return String(value).substring(0, 300);
+  }
+}
+
 function execCodeInVM(code, setup, callExpr, assertExpr, timeout = EVAL_TIMEOUT_MS) {
   const sandbox = buildSandbox();
+  logger.exercise('vm', {
+    stage: 'execCodeInVM',
+    starting: true,
+    call: callExpr,
+    assert: assertExpr,
+    setupLength: (setup || '').length,
+    codeLength: (code || '').length
+  });
   const ctx = vm.createContext(sandbox);
 
   try {
@@ -109,6 +137,13 @@ function execCodeInVM(code, setup, callExpr, assertExpr, timeout = EVAL_TIMEOUT_
     // FINAL (après transformation const/let → var) qui sera réellement exécuté.
     const escapeAttempt = detectSandboxEscape(fullCode)
     if (escapeAttempt) {
+      logger.exercise('vm', {
+        stage: 'execCodeInVM',
+        blocked: true,
+        reason: escapeAttempt,
+        call: callExpr,
+        assert: assertExpr
+      })
       return {
         passed: false,
         result: null,
@@ -119,13 +154,31 @@ function execCodeInVM(code, setup, callExpr, assertExpr, timeout = EVAL_TIMEOUT_
     vm.runInContext(fullCode, ctx, { timeout });
     const t1 = performance.now();
 
+    const passedNow = Boolean(ctx.__passed__);
+    logger.exercise('vm', {
+      stage: 'execCodeInVM',
+      passed: passedNow,
+      call: callExpr,
+      assert: assertExpr,
+      resultType: typeof ctx.__result__,
+      resultPreview: safeVmInspect(ctx.__result__),
+      executionTimeMs: t1 - t0
+    });
+
     return {
-      passed: Boolean(ctx.__passed__),
+      passed: passedNow,
       result: ctx.__result__,
       error: null,
       executionTimeMs: t1 - t0
     };
   } catch (e) {
+    logger.exercise('vm', {
+      stage: 'execCodeInVM',
+      threw: true,
+      call: callExpr,
+      assert: assertExpr,
+      error: e.message
+    });
     return {
       passed: false,
       result: null,
