@@ -5483,853 +5483,6 @@
       ]
     },
     {
-      "model": "inclusionai/ling-3.0-flash:free",
-      "shortName": "ling-3-0-flash-free",
-      "quantization": null,
-      "modelUrl": "https://huggingface.co/inclusionai/ling-3.0-flash:free",
-      "note": null,
-      "publisher": null,
-      "provider": null,
-      "isCloud": true,
-      "score": 2595,
-      "max": 2629,
-      "pct": 99,
-      "globalLifeScore": 2938,
-      "optionalBonus": 343,
-      "mandatoryPassed": 916,
-      "mandatoryTotal": 916,
-      "mandatoryPct": 100,
-      "helpCount": 1,
-      "retriedCount": 1,
-      "tokens": 1218,
-      "elapsedMs": 21695,
-      "wallMs": 53251,
-      "tokensPerSecond": 56.14,
-      "ecoleCount": 1,
-      "ecoles": [
-        {
-          "ecole": "Primaire",
-          "score": 2595,
-          "max": 2629,
-          "pct": 99,
-          "optionalBonus": 343,
-          "globalLifeScore": 2938,
-          "helpCount": 1,
-          "retriedCount": 1,
-          "date": "2026-08-02",
-          "elapsedMs": 21695,
-          "tokens": 1218,
-          "tokensPerSecond": 56.14,
-          "tiers": [
-            {
-              "tierNum": 0,
-              "tierTitle": "Tier 0 — Maternelle",
-              "className": "Maternelle",
-              "isMandatory": true,
-              "rawResponse": "\n\n---\n### tache_0a\n```javascript\nfunction direBonjour() { return \"Bonjour\"; }\n```\n\n### tache_0b\n```javascript\nfunction retournerVrai() { return true; }\n```\n\n### tache_0c\n```javascript\nfunction retourner42() { return 42; }\n```\n\n### tache_0d\n```javascript\nfunction additionner(a, b) { return a + b; }\n```\n\n### tache_0e\n```javascript\nfunction identite(x) { return x; }\n```\n\n### algo_facile_1\n```javascript\nfunction estPair(n) { return n % 2 === 0; }\n```\n\n### algo_facile_2\n```javascript\nfunction carre(n) { return n * n; }\n```\n\n### algo_moyen_1\n```javascript\nfunction somme1aN(n) { return (n * (n + 1)) / 2; }\n```\n\n### algo_difficile_1\n```javascript\nfunction inverserChaine(s) { return s.split(\"\").reverse().join(\"\"); }\n```\n\n### algo_defi\n```javascript\nfunction valeurMax(tab) { let max = tab[0]; for (let i = 1; i < tab.length; i++) { if (tab[i] > max) { max = tab[i]; } } return max; }\n```",
-              "evalResults": [
-                {
-                  "id": "tache_0a",
-                  "taskType": "Retourner 'Bonjour'",
-                  "status": "success",
-                  "points": 31,
-                  "maxPoints": 31,
-                  "helpUsed": false,
-                  "retried": false,
-                  "code": "function direBonjour() { return \"Bonjour\"; }",
-                  "failureExplanation": null,
-                  "teacherCorrection": null
-                },
-                {
-                  "id": "tache_0b",
-                  "taskType": "Retourner true",
-                  "status": "success",
-                  "points": 46,
-                  "maxPoints": 46,
-                  "helpUsed": false,
-                  "retried": false,
-                  "code": "function retournerVrai() { return true; }",
-                  "failureExplanation": null,
-                  "teacherCorrection": null
-                },
-                {
-                  "id": "tache_0c",
-                  "taskType": "Retourner 42",
-                  "status": "success",
-                  "points": 49,
-                  "maxPoints": 49,
-                  "helpUsed": false,
-                  "retried": false,
-                  "code": "function retourner42() { return 42; }",
-                  "failureExplanation": null,
-                  "teacherCorrection": null
-                },
-                {
-                  "id": "tache_0d",
-                  "taskType": "Additionner a et b",
-                  "status": "success",
-                  "points": 40,
-                  "maxPoints": 40,
-                  "helpUsed": false,
-                  "retried": false,
-                  "code": "function additionner(a, b) { return a + b; }",
-                  "failureExplanation": null,
-                  "teacherCorrection": null
-                },
-                {
-                  "id": "tache_0e",
-                  "taskType": "Identité",
-                  "status": "success",
-                  "points": 59,
-                  "maxPoints": 59,
-                  "helpUsed": false,
-                  "retried": false,
-                  "code": "function identite(x) { return x; }",
-                  "failureExplanation": null,
-                  "teacherCorrection": null
-                },
-                {
-                  "id": "algo_facile_1",
-                  "taskType": "Algorithmique — Parité",
-                  "status": "success",
-                  "points": 52,
-                  "maxPoints": 52,
-                  "helpUsed": false,
-                  "retried": false,
-                  "code": "function estPair(n) { return n % 2 === 0; }",
-                  "failureExplanation": null,
-                  "teacherCorrection": null
-                },
-                {
-                  "id": "algo_facile_2",
-                  "taskType": "Algorithmique — Carré",
-                  "status": "success",
-                  "points": 57,
-                  "maxPoints": 57,
-                  "helpUsed": false,
-                  "retried": false,
-                  "code": "function carre(n) { return n * n; }",
-                  "failureExplanation": null,
-                  "teacherCorrection": null
-                },
-                {
-                  "id": "algo_moyen_1",
-                  "taskType": "Algorithmique — Somme 1..N",
-                  "status": "success",
-                  "points": 39,
-                  "maxPoints": 39,
-                  "helpUsed": false,
-                  "retried": false,
-                  "code": "function somme1aN(n) { return (n * (n + 1)) / 2; }",
-                  "failureExplanation": null,
-                  "teacherCorrection": null
-                },
-                {
-                  "id": "algo_difficile_1",
-                  "taskType": "Algorithmique — Inversion de chaîne",
-                  "status": "success",
-                  "points": 55,
-                  "maxPoints": 55,
-                  "helpUsed": false,
-                  "retried": false,
-                  "code": "function inverserChaine(s) { return s.split(\"\").reverse().join(\"\"); }",
-                  "failureExplanation": null,
-                  "teacherCorrection": null
-                },
-                {
-                  "id": "algo_defi",
-                  "taskType": "Algorithmique — Maximum d'un tableau",
-                  "status": "success",
-                  "points": 32,
-                  "maxPoints": 32,
-                  "helpUsed": false,
-                  "retried": false,
-                  "code": "function valeurMax(tab) { let max = tab[0]; for (let i = 1; i < tab.length; i++) { if (tab[i] > max) { max = tab[i]; } } return max; }",
-                  "failureExplanation": null,
-                  "teacherCorrection": null
-                }
-              ]
-            },
-            {
-              "tierNum": 1,
-              "tierTitle": "Tier 1 — CP",
-              "className": "CP",
-              "isMandatory": true,
-              "rawResponse": "\n\n---\n### tache_1a\n```javascript\nfunction soustraire(a, b) {\n  return a - b;\n}\n```\n\n### tache_1b\n```javascript\nfunction superieurA10(n) {\n  return n > 10;\n}\n```\n\n### tache_1c\n```javascript\nfunction concatener(mot1, mot2) {\n  return mot1 + \" \" + mot2;\n}\n```\n\n### tache_1d\n```javascript\nfunction estVide(chaine) {\n  return chaine === \"\";\n}\n```\n\n### tache_1e\n```javascript\nfunction multiplierPar2(n) {\n  return n * 2;\n}\n```\n\n### algo_facile_1\n```javascript\nfunction estMultipleDe(n, m) {\n  if (m === 0) return false;\n  return n % m === 0;\n}\n```\n\n### algo_facile_2\n```javascript\nfunction puissance(base, exp) {\n  let resultat = 1;\n  for (let i = 0; i < exp; i++) {\n    resultat *= base;\n  }\n  return resultat;\n}\n```\n\n### algo_moyen_1\n```javascript\nfunction compterPairs(tab) {\n  let count = 0;\n  for (let i = 0; i < tab.length; i++) {\n    if (tab[i] % 2 === 0) {\n      count++;\n    }\n  }\n  return count;\n}\n```\n\n### algo_difficile_1\n```javascript\nfunction supprimerDoublons(tab) {\n  const resultat = [];\n  const vu = {};\n  for (let i = 0; i < tab.length; i++) {\n    if (!vu[tab[i]]) {\n      vu[tab[i]] = true;\n      resultat.push(tab[i]);\n    }\n  }\n  return resultat;\n}\n```\n\n### algo_defi\n```javascript\nfunction sommePaires(tab) {\n  let somme = 0;\n  for (let i = 0; i < tab.length; i++) {\n    if (tab[i] % 2 === 0) {\n      somme += tab[i];\n    }\n  }\n  return somme;\n}\n```",
-              "evalResults": [
-                {
-                  "id": "tache_1a",
-                  "taskType": "Soustraire b de a",
-                  "status": "success",
-                  "points": 50,
-                  "maxPoints": 50,
-                  "helpUsed": false,
-                  "retried": false,
-                  "code": "function soustraire(a, b) {\n  return a - b;\n}",
-                  "failureExplanation": null,
-                  "teacherCorrection": null
-                },
-                {
-                  "id": "tache_1b",
-                  "taskType": "Supérieur à 10",
-                  "status": "success",
-                  "points": 42,
-                  "maxPoints": 42,
-                  "helpUsed": false,
-                  "retried": false,
-                  "code": "function superieurA10(n) {\n  return n > 10;\n}",
-                  "failureExplanation": null,
-                  "teacherCorrection": null
-                },
-                {
-                  "id": "tache_1c",
-                  "taskType": "Concaténer mots",
-                  "status": "success",
-                  "points": 57,
-                  "maxPoints": 57,
-                  "helpUsed": false,
-                  "retried": false,
-                  "code": "function concatener(mot1, mot2) {\n  return mot1 + \" \" + mot2;\n}",
-                  "failureExplanation": null,
-                  "teacherCorrection": null
-                },
-                {
-                  "id": "tache_1d",
-                  "taskType": "Chaîne vide",
-                  "status": "success",
-                  "points": 53,
-                  "maxPoints": 53,
-                  "helpUsed": false,
-                  "retried": false,
-                  "code": "function estVide(chaine) {\n  return chaine === \"\";\n}",
-                  "failureExplanation": null,
-                  "teacherCorrection": null
-                },
-                {
-                  "id": "tache_1e",
-                  "taskType": "Multiplier par 2",
-                  "status": "success",
-                  "points": 46,
-                  "maxPoints": 46,
-                  "helpUsed": false,
-                  "retried": false,
-                  "code": "function multiplierPar2(n) {\n  return n * 2;\n}",
-                  "failureExplanation": null,
-                  "teacherCorrection": null
-                },
-                {
-                  "id": "algo_facile_1",
-                  "taskType": "Algorithmique — Multiplicité",
-                  "status": "success",
-                  "points": 31,
-                  "maxPoints": 31,
-                  "helpUsed": false,
-                  "retried": false,
-                  "code": "function estMultipleDe(n, m) {\n  if (m === 0) return false;\n  return n % m === 0;\n}",
-                  "failureExplanation": null,
-                  "teacherCorrection": null
-                },
-                {
-                  "id": "algo_facile_2",
-                  "taskType": "Algorithmique — Puissance",
-                  "status": "success",
-                  "points": 41,
-                  "maxPoints": 41,
-                  "helpUsed": false,
-                  "retried": false,
-                  "code": "function puissance(base, exp) {\n  let resultat = 1;\n  for (let i = 0; i < exp; i++) {\n    resultat *= base;\n  }\n  return resultat;\n}",
-                  "failureExplanation": null,
-                  "teacherCorrection": null
-                },
-                {
-                  "id": "algo_moyen_1",
-                  "taskType": "Algorithmique — Comptage de pairs",
-                  "status": "success",
-                  "points": 41,
-                  "maxPoints": 41,
-                  "helpUsed": false,
-                  "retried": false,
-                  "code": "function compterPairs(tab) {\n  let count = 0;\n  for (let i = 0; i < tab.length; i++) {\n    if (tab[i] % 2 === 0) {\n      count++;\n    }\n  }\n  return count;\n}",
-                  "failureExplanation": null,
-                  "teacherCorrection": null
-                },
-                {
-                  "id": "algo_difficile_1",
-                  "taskType": "Algorithmique — Suppression de doublons",
-                  "status": "success",
-                  "points": 41,
-                  "maxPoints": 41,
-                  "helpUsed": false,
-                  "retried": false,
-                  "code": "function supprimerDoublons(tab) {\n  const resultat = [];\n  const vu = {};\n  for (let i = 0; i < tab.length; i++) {\n    if (!vu[tab[i]]) {\n      vu[tab[i]] = true;\n      resultat.push(tab[i]);\n    }\n  }\n  return resultat;\n}",
-                  "failureExplanation": null,
-                  "teacherCorrection": null
-                },
-                {
-                  "id": "algo_defi",
-                  "taskType": "Algorithmique — Somme des pairs",
-                  "status": "success",
-                  "points": 54,
-                  "maxPoints": 54,
-                  "helpUsed": false,
-                  "retried": false,
-                  "code": "function sommePaires(tab) {\n  let somme = 0;\n  for (let i = 0; i < tab.length; i++) {\n    if (tab[i] % 2 === 0) {\n      somme += tab[i];\n    }\n  }\n  return somme;\n}",
-                  "failureExplanation": null,
-                  "teacherCorrection": null
-                }
-              ]
-            },
-            {
-              "tierNum": 2,
-              "tierTitle": "Tier 2 — CE1",
-              "className": "CE1",
-              "isMandatory": false,
-              "rawResponse": "\n\n---\n### tache_2a\n```javascript\nfunction longueurChaine(chaine) {\n  return chaine.length;\n}\n```\n\n### tache_2b\n```javascript\nfunction premierElement(tableau) {\n  return tableau[0];\n}\n```\n\n### tache_2c\n```javascript\nfunction estPair(n) {\n  return n % 2 === 0;\n}\n```\n\n### tache_2d\n```javascript\nfunction enMajuscules(chaine) {\n  return chaine.toUpperCase();\n}\n```\n\n### tache_2e\n```javascript\nfunction ajouterALaFin(tableau, element) {\n  tableau.push(element);\n  return tableau;\n}\n```\n\n### algo_facile_1\n```javascript\nfunction estPalindrome(s) {\n  const reversed = s.split('').reverse().join('');\n  return s === reversed;\n}\n```\n\n### algo_facile_2\n```javascript\nfunction pgcd(a, b) {\n  while (b !== 0) {\n    const temp = b;\n    b = a % b;\n    a = temp;\n  }\n  return a;\n}\n```\n\n### algo_moyen_1\n```javascript\nfunction nombreMots(s) {\n  const trimmed = s.trim();\n  if (trimmed === '') return 0;\n  return trimmed.split(/\\s+/).length;\n}\n```\n\n### algo_difficile_1\n```javascript\nfunction fusionTriee(a, b) {\n  const result = [];\n  let i = 0;\n  let j = 0;\n  while (i < a.length && j < b.length) {\n    if (a[i] <= b[j]) {\n      result.push(a[i]);\n      i++;\n    } else {\n      result.push(b[j]);\n      j++;\n    }\n  }\n  while (i < a.length) {\n    result.push(a[i]);\n    i++;\n  }\n  while (j < b.length) {\n    result.push(b[j]);\n    j++;\n  }\n  return result;\n}\n```\n\n### algo_defi\n```javascript\nfunction sontAnagrammes(a, b) {\n  if (a.length !== b.length) return false;\n  const sortedA = a.split('').sort().join('');\n  const sortedB = b.split('').sort().join('');\n  return sortedA === sortedB;\n}\n```",
-              "evalResults": [
-                {
-                  "id": "tache_2a",
-                  "taskType": "Longueur chaîne",
-                  "status": "success",
-                  "points": 39,
-                  "maxPoints": 39,
-                  "helpUsed": false,
-                  "retried": false,
-                  "code": "function longueurChaine(chaine) {\n  return chaine.length;\n}",
-                  "failureExplanation": null,
-                  "teacherCorrection": null
-                },
-                {
-                  "id": "tache_2b",
-                  "taskType": "Premier élément",
-                  "status": "success",
-                  "points": 60,
-                  "maxPoints": 60,
-                  "helpUsed": false,
-                  "retried": false,
-                  "code": "function premierElement(tableau) {\n  return tableau[0];\n}",
-                  "failureExplanation": null,
-                  "teacherCorrection": null
-                },
-                {
-                  "id": "tache_2c",
-                  "taskType": "Est pair",
-                  "status": "success",
-                  "points": 33,
-                  "maxPoints": 33,
-                  "helpUsed": false,
-                  "retried": false,
-                  "code": "function estPair(n) {\n  return n % 2 === 0;\n}",
-                  "failureExplanation": null,
-                  "teacherCorrection": null
-                },
-                {
-                  "id": "tache_2d",
-                  "taskType": "En majuscules",
-                  "status": "success",
-                  "points": 41,
-                  "maxPoints": 41,
-                  "helpUsed": false,
-                  "retried": false,
-                  "code": "function enMajuscules(chaine) {\n  return chaine.toUpperCase();\n}",
-                  "failureExplanation": null,
-                  "teacherCorrection": null
-                },
-                {
-                  "id": "tache_2e",
-                  "taskType": "Ajouter à la fin",
-                  "status": "success",
-                  "points": 39,
-                  "maxPoints": 39,
-                  "helpUsed": false,
-                  "retried": false,
-                  "code": "function ajouterALaFin(tableau, element) {\n  tableau.push(element);\n  return tableau;\n}",
-                  "failureExplanation": null,
-                  "teacherCorrection": null
-                },
-                {
-                  "id": "algo_facile_1",
-                  "taskType": "Algorithmique — Palindrome",
-                  "status": "success",
-                  "points": 35,
-                  "maxPoints": 35,
-                  "helpUsed": false,
-                  "retried": false,
-                  "code": "function estPalindrome(s) {\n  const reversed = s.split('').reverse().join('');\n  return s === reversed;\n}",
-                  "failureExplanation": null,
-                  "teacherCorrection": null
-                },
-                {
-                  "id": "algo_facile_2",
-                  "taskType": "Algorithmique — PGCD",
-                  "status": "success",
-                  "points": 35,
-                  "maxPoints": 35,
-                  "helpUsed": false,
-                  "retried": false,
-                  "code": "function pgcd(a, b) {\n  while (b !== 0) {\n    const temp = b;\n    b = a % b;\n    a = temp;\n  }\n  return a;\n}",
-                  "failureExplanation": null,
-                  "teacherCorrection": null
-                },
-                {
-                  "id": "algo_moyen_1",
-                  "taskType": "Algorithmique — Nombre de mots",
-                  "status": "success",
-                  "points": 39,
-                  "maxPoints": 39,
-                  "helpUsed": false,
-                  "retried": false,
-                  "code": "function nombreMots(s) {\n  const trimmed = s.trim();\n  if (trimmed === '') return 0;\n  return trimmed.split(/\\s+/).length;\n}",
-                  "failureExplanation": null,
-                  "teacherCorrection": null
-                },
-                {
-                  "id": "algo_difficile_1",
-                  "taskType": "Algorithmique — Fusion triée",
-                  "status": "success",
-                  "points": 53,
-                  "maxPoints": 53,
-                  "helpUsed": false,
-                  "retried": false,
-                  "code": "function fusionTriee(a, b) {\n  const result = [];\n  let i = 0;\n  let j = 0;\n  while (i < a.length && j < b.length) {\n    if (a[i] <= b[j]) {\n      result.push(a[i]);\n      i++;\n    } else {\n      result.push(b[j]);\n      j++;\n    }\n  }\n  while (i < a.length) {\n    result.push(a[i]);\n    i++;\n  }\n  while (j < b.length) {\n    result.push(b[j]);\n    j++;\n  }\n  return result;\n}",
-                  "failureExplanation": null,
-                  "teacherCorrection": null
-                },
-                {
-                  "id": "algo_defi",
-                  "taskType": "Algorithmique — Anagrammes",
-                  "status": "success",
-                  "points": 44,
-                  "maxPoints": 44,
-                  "helpUsed": false,
-                  "retried": false,
-                  "code": "function sontAnagrammes(a, b) {\n  if (a.length !== b.length) return false;\n  const sortedA = a.split('').sort().join('');\n  const sortedB = b.split('').sort().join('');\n  return sortedA === sortedB;\n}",
-                  "failureExplanation": null,
-                  "teacherCorrection": null
-                }
-              ]
-            },
-            {
-              "tierNum": 3,
-              "tierTitle": "Tier 3 — CE2",
-              "className": "CE2",
-              "isMandatory": false,
-              "rawResponse": "\n\n---\n### tache_3a\n```javascript\nfunction dernierElement(tableau) {\n  if (tableau.length === 0) return undefined;\n  return tableau[tableau.length - 1];\n}\n```\n\n### tache_3b\n```javascript\nfunction compterJusqua(n) {\n  if (n < 1) return [];\n  const result = [];\n  for (let i = 1; i <= n; i++) {\n    result.push(i);\n  }\n  return result;\n}\n```\n\n### tache_3c\n```javascript\nfunction remplacerLettre(mot, ancienne, nouvelle) {\n  return mot.split(ancienne).join(nouvelle);\n}\n```\n\n### tache_3d\n```javascript\nfunction sommeTableau(tableau) {\n  if (tableau.length === 0) return 0;\n  return tableau.reduce((acc, val) => acc + val, 0);\n}\n```\n\n### tache_3e\n```javascript\nfunction contientA(mot) {\n  return mot.toLowerCase().includes('a');\n}\n```\n\n### algo_facile_1\n```javascript\nfunction validerParentheses(s) {\n  let count = 0;\n  for (let i = 0; i < s.length; i++) {\n    if (s[i] === '(') count++;\n    else if (s[i] === ')') {\n      count--;\n      if (count < 0) return false;\n    }\n  }\n  return count === 0;\n}\n```\n\n### algo_facile_2\n```javascript\nfunction fibonacci(n) {\n  if (n === 0) return 0;\n  if (n === 1) return 1;\n  let a = 0, b = 1;\n  for (let i = 2; i <= n; i++) {\n    const temp = a + b;\n    a = b;\n    b = temp;\n  }\n  return b;\n}\n```\n\n### algo_moyen_1\n```javascript\nfunction motsUniques(s) {\n  const words = s.trim().split(/\\s+/).filter(w => w.length > 0);\n  const unique = new Set(words);\n  return unique.size;\n}\n```\n\n### algo_difficile_1\n```javascript\nfunction aplatirTableau(tab) {\n  return tab.reduce((acc, curr) => acc.concat(curr), []);\n}\n```\n\n### algo_defi\n```javascript\nfunction rotationDroite(tab, k) {\n  if (tab.length === 0) return [];\n  k = k % tab.length;\n  if (k === 0) return tab.slice();\n  return tab.slice(-k).concat(tab.slice(0, tab.length - k));\n}\n```",
-              "evalResults": [
-                {
-                  "id": "tache_3a",
-                  "taskType": "Dernier élément",
-                  "status": "success",
-                  "points": 60,
-                  "maxPoints": 60,
-                  "helpUsed": false,
-                  "retried": false,
-                  "code": "function dernierElement(tableau) {\n  if (tableau.length === 0) return undefined;\n  return tableau[tableau.length - 1];\n}",
-                  "failureExplanation": null,
-                  "teacherCorrection": null
-                },
-                {
-                  "id": "tache_3b",
-                  "taskType": "Compter jusqu'à N",
-                  "status": "success",
-                  "points": 46,
-                  "maxPoints": 46,
-                  "helpUsed": false,
-                  "retried": false,
-                  "code": "function compterJusqua(n) {\n  if (n < 1) return [];\n  const result = [];\n  for (let i = 1; i <= n; i++) {\n    result.push(i);\n  }\n  return result;\n}",
-                  "failureExplanation": null,
-                  "teacherCorrection": null
-                },
-                {
-                  "id": "tache_3c",
-                  "taskType": "Remplacer lettre",
-                  "status": "success",
-                  "points": 35,
-                  "maxPoints": 35,
-                  "helpUsed": false,
-                  "retried": false,
-                  "code": "function remplacerLettre(mot, ancienne, nouvelle) {\n  return mot.split(ancienne).join(nouvelle);\n}",
-                  "failureExplanation": null,
-                  "teacherCorrection": null
-                },
-                {
-                  "id": "tache_3d",
-                  "taskType": "Somme tableau",
-                  "status": "success",
-                  "points": 43,
-                  "maxPoints": 43,
-                  "helpUsed": false,
-                  "retried": false,
-                  "code": "function sommeTableau(tableau) {\n  if (tableau.length === 0) return 0;\n  return tableau.reduce((acc, val) => acc + val, 0);\n}",
-                  "failureExplanation": null,
-                  "teacherCorrection": null
-                },
-                {
-                  "id": "tache_3e",
-                  "taskType": "Contient 'a'",
-                  "status": "success",
-                  "points": 53,
-                  "maxPoints": 53,
-                  "helpUsed": false,
-                  "retried": false,
-                  "code": "function contientA(mot) {\n  return mot.toLowerCase().includes('a');\n}",
-                  "failureExplanation": null,
-                  "teacherCorrection": null
-                },
-                {
-                  "id": "algo_facile_1",
-                  "taskType": "Algorithmique — Parenthèses valides",
-                  "status": "success",
-                  "points": 39,
-                  "maxPoints": 39,
-                  "helpUsed": false,
-                  "retried": false,
-                  "code": "function validerParentheses(s) {\n  let count = 0;\n  for (let i = 0; i < s.length; i++) {\n    if (s[i] === '(') count++;\n    else if (s[i] === ')') {\n      count--;\n      if (count < 0) return false;\n    }\n  }\n  return count === 0;\n}",
-                  "failureExplanation": null,
-                  "teacherCorrection": null
-                },
-                {
-                  "id": "algo_facile_2",
-                  "taskType": "Algorithmique — Fibonacci",
-                  "status": "success",
-                  "points": 56,
-                  "maxPoints": 56,
-                  "helpUsed": false,
-                  "retried": false,
-                  "code": "function fibonacci(n) {\n  if (n === 0) return 0;\n  if (n === 1) return 1;\n  let a = 0, b = 1;\n  for (let i = 2; i <= n; i++) {\n    const temp = a + b;\n    a = b;\n    b = temp;\n  }\n  return b;\n}",
-                  "failureExplanation": null,
-                  "teacherCorrection": null
-                },
-                {
-                  "id": "algo_moyen_1",
-                  "taskType": "Algorithmique — Mots uniques",
-                  "status": "success",
-                  "points": 32,
-                  "maxPoints": 32,
-                  "helpUsed": false,
-                  "retried": false,
-                  "code": "function motsUniques(s) {\n  const words = s.trim().split(/\\s+/).filter(w => w.length > 0);\n  const unique = new Set(words);\n  return unique.size;\n}",
-                  "failureExplanation": null,
-                  "teacherCorrection": null
-                },
-                {
-                  "id": "algo_difficile_1",
-                  "taskType": "Algorithmique — Aplatir un tableau",
-                  "status": "success",
-                  "points": 42,
-                  "maxPoints": 42,
-                  "helpUsed": false,
-                  "retried": false,
-                  "code": "function aplatirTableau(tab) {\n  return tab.reduce((acc, curr) => acc.concat(curr), []);\n}",
-                  "failureExplanation": null,
-                  "teacherCorrection": null
-                },
-                {
-                  "id": "algo_defi",
-                  "taskType": "Algorithmique — Rotation à droite",
-                  "status": "success",
-                  "points": 36,
-                  "maxPoints": 36,
-                  "helpUsed": false,
-                  "retried": false,
-                  "code": "function rotationDroite(tab, k) {\n  if (tab.length === 0) return [];\n  k = k % tab.length;\n  if (k === 0) return tab.slice();\n  return tab.slice(-k).concat(tab.slice(0, tab.length - k));\n}",
-                  "failureExplanation": null,
-                  "teacherCorrection": null
-                }
-              ]
-            },
-            {
-              "tierNum": 4,
-              "tierTitle": "Tier 4 — CM1",
-              "className": "CM1",
-              "isMandatory": false,
-              "rawResponse": "\n\n---\n### tache_4a\n```javascript\nfunction trouverMaximum(tableau) {\n  let max = tableau[0];\n  for (let i = 1; i < tableau.length; i++) {\n    if (tableau[i] > max) {\n      max = tableau[i];\n    }\n  }\n  return max;\n}\n```\n\n### tache_4b\n```javascript\nfunction inverserChaine(chaine) {\n  return chaine.split('').reverse().join('');\n}\n```\n\n### tache_4c\n```javascript\nfunction compterVoyelles(chaine) {\n  const voyelles = 'aeiouAEIOU';\n  let count = 0;\n  for (let i = 0; i < chaine.length; i++) {\n    if (voyelles.indexOf(chaine[i]) !== -1) {\n      count++;\n    }\n  }\n  return count;\n}\n```\n\n### tache_4d\n```javascript\nfunction filtrerPositifs(tableau) {\n  return tableau.filter(function(x) { return x > 0; });\n}\n```\n\n### tache_4e\n```javascript\nfunction repeterChaine(chaine, n) {\n  if (n <= 0) return '';\n  let resultat = '';\n  for (let i = 0; i < n; i++) {\n    resultat += chaine;\n  }\n  return resultat;\n}\n```\n\n### algo_facile_1\n```javascript\nfunction capitaliserMots(s) {\n  return s.split(' ').map(function(mot) {\n    if (mot.length === 0) return '';\n    return mot[0].toUpperCase() + mot.slice(1).toLowerCase();\n  }).join(' ');\n}\n```\n\n### algo_facile_2\n```javascript\nfunction sommeChiffres(n) {\n  let somme = 0;\n  while (n > 0) {\n    somme += n % 10;\n    n = Math.floor(n / 10);\n  }\n  return somme;\n}\n```\n\n### algo_moyen_1\n```javascript\nfunction grouperParParite(tab) {\n  const pairs = [];\n  const impairs = [];\n  for (let i = 0; i < tab.length; i++) {\n    if (tab[i] % 2 === 0) {\n      pairs.push(tab[i]);\n    } else {\n      impairs.push(tab[i]);\n    }\n  }\n  return { pairs: pairs, impairs: impairs };\n}\n```\n\n### algo_difficile_1\n```javascript\nfunction plusLongMot(s) {\n  if (s.length === 0) return '';\n  const mots = s.split(' ');\n  let plusLong = mots[0];\n  for (let i = 1; i < mots.length; i++) {\n    if (mots[i].length > plusLong.length) {\n      plusLong = mots[i];\n    }\n  }\n  return plusLong;\n}\n```\n\n### algo_defi\n```javascript\nfunction mediane(tab) {\n  const trie = tab.slice().sort(function(a, b) { return a - b; });\n  const len = trie.length;\n  const milieu = Math.floor(len / 2);\n  if (len % 2 === 1) {\n    return trie[milieu];\n  } else {\n    return (trie[milieu - 1] + trie[milieu]) / 2;\n  }\n}\n```",
-              "evalResults": [
-                {
-                  "id": "tache_4a",
-                  "taskType": "Maximum",
-                  "status": "success",
-                  "points": 40,
-                  "maxPoints": 40,
-                  "helpUsed": false,
-                  "retried": false,
-                  "code": "function trouverMaximum(tableau) {\n  let max = tableau[0];\n  for (let i = 1; i < tableau.length; i++) {\n    if (tableau[i] > max) {\n      max = tableau[i];\n    }\n  }\n  return max;\n}",
-                  "failureExplanation": null,
-                  "teacherCorrection": null
-                },
-                {
-                  "id": "tache_4b",
-                  "taskType": "Inverser",
-                  "status": "success",
-                  "points": 34,
-                  "maxPoints": 34,
-                  "helpUsed": false,
-                  "retried": false,
-                  "code": "function inverserChaine(chaine) {\n  return chaine.split('').reverse().join('');\n}",
-                  "failureExplanation": null,
-                  "teacherCorrection": null
-                },
-                {
-                  "id": "tache_4c",
-                  "taskType": "Voyelles",
-                  "status": "success",
-                  "points": 55,
-                  "maxPoints": 55,
-                  "helpUsed": false,
-                  "retried": false,
-                  "code": "function compterVoyelles(chaine) {\n  const voyelles = 'aeiouAEIOU';\n  let count = 0;\n  for (let i = 0; i < chaine.length; i++) {\n    if (voyelles.indexOf(chaine[i]) !== -1) {\n      count++;\n    }\n  }\n  return count;\n}",
-                  "failureExplanation": null,
-                  "teacherCorrection": null
-                },
-                {
-                  "id": "tache_4d",
-                  "taskType": "Filtrer positifs",
-                  "status": "success",
-                  "points": 48,
-                  "maxPoints": 48,
-                  "helpUsed": false,
-                  "retried": false,
-                  "code": "function filtrerPositifs(tableau) {\n  return tableau.filter(function(x) { return x > 0; });\n}",
-                  "failureExplanation": null,
-                  "teacherCorrection": null
-                },
-                {
-                  "id": "tache_4e",
-                  "taskType": "Répéter",
-                  "status": "success",
-                  "points": 46,
-                  "maxPoints": 46,
-                  "helpUsed": false,
-                  "retried": false,
-                  "code": "function repeterChaine(chaine, n) {\n  if (n <= 0) return '';\n  let resultat = '';\n  for (let i = 0; i < n; i++) {\n    resultat += chaine;\n  }\n  return resultat;\n}",
-                  "failureExplanation": null,
-                  "teacherCorrection": null
-                },
-                {
-                  "id": "algo_facile_1",
-                  "taskType": "Algorithmique — Capitaliser les mots",
-                  "status": "success",
-                  "points": 41,
-                  "maxPoints": 41,
-                  "helpUsed": false,
-                  "retried": false,
-                  "code": "function capitaliserMots(s) {\n  return s.split(' ').map(function(mot) {\n    if (mot.length === 0) return '';\n    return mot[0].toUpperCase() + mot.slice(1).toLowerCase();\n  }).join(' ');\n}",
-                  "failureExplanation": null,
-                  "teacherCorrection": null
-                },
-                {
-                  "id": "algo_facile_2",
-                  "taskType": "Algorithmique — Somme des chiffres",
-                  "status": "success",
-                  "points": 35,
-                  "maxPoints": 35,
-                  "helpUsed": false,
-                  "retried": false,
-                  "code": "function sommeChiffres(n) {\n  let somme = 0;\n  while (n > 0) {\n    somme += n % 10;\n    n = Math.floor(n / 10);\n  }\n  return somme;\n}",
-                  "failureExplanation": null,
-                  "teacherCorrection": null
-                },
-                {
-                  "id": "algo_moyen_1",
-                  "taskType": "Algorithmique — Grouper par parité",
-                  "status": "success",
-                  "points": 44,
-                  "maxPoints": 44,
-                  "helpUsed": false,
-                  "retried": false,
-                  "code": "function grouperParParite(tab) {\n  const pairs = [];\n  const impairs = [];\n  for (let i = 0; i < tab.length; i++) {\n    if (tab[i] % 2 === 0) {\n      pairs.push(tab[i]);\n    } else {\n      impairs.push(tab[i]);\n    }\n  }\n  return { pairs: pairs, impairs: impairs };\n}",
-                  "failureExplanation": null,
-                  "teacherCorrection": null
-                },
-                {
-                  "id": "algo_difficile_1",
-                  "taskType": "Algorithmique — Mot le plus long",
-                  "status": "success",
-                  "points": 58,
-                  "maxPoints": 58,
-                  "helpUsed": false,
-                  "retried": false,
-                  "code": "function plusLongMot(s) {\n  if (s.length === 0) return '';\n  const mots = s.split(' ');\n  let plusLong = mots[0];\n  for (let i = 1; i < mots.length; i++) {\n    if (mots[i].length > plusLong.length) {\n      plusLong = mots[i];\n    }\n  }\n  return plusLong;\n}",
-                  "failureExplanation": null,
-                  "teacherCorrection": null
-                },
-                {
-                  "id": "algo_defi",
-                  "taskType": "Algorithmique — Médiane",
-                  "status": "success",
-                  "points": 37,
-                  "maxPoints": 37,
-                  "helpUsed": false,
-                  "retried": false,
-                  "code": "function mediane(tab) {\n  const trie = tab.slice().sort(function(a, b) { return a - b; });\n  const len = trie.length;\n  const milieu = Math.floor(len / 2);\n  if (len % 2 === 1) {\n    return trie[milieu];\n  } else {\n    return (trie[milieu - 1] + trie[milieu]) / 2;\n  }\n}",
-                  "failureExplanation": null,
-                  "teacherCorrection": null
-                }
-              ]
-            },
-            {
-              "tierNum": 5,
-              "tierTitle": "Tier 5 — CM2",
-              "className": "CM2",
-              "isMandatory": false,
-              "rawResponse": "\n\n---\n### tache_5a\n```javascript\nfunction supprimerDoublons(tableau) {\n  return [...new Set(tableau)];\n}\n```\n\n### tache_5b\n```javascript\nfunction capitaliserMots(phrase) {\n  return phrase.split(' ').map(word => {\n    if (word.length === 0) return '';\n    return word[0].toUpperCase() + word.slice(1).toLowerCase();\n  }).join(' ');\n}\n```\n\n### tache_5c\n```javascript\nfunction frequenceCaracteres(chaine) {\n  const resultat = {};\n  for (let i = 0; i < chaine.length; i++) {\n    const char = chaine[i];\n    resultat[char] = (resultat[char] || 0) + 1;\n  }\n  return resultat;\n}\n```\n\n### tache_5d\n```javascript\nfunction filtrerPairs(tableau) {\n  return tableau.filter(n => n % 2 === 0);\n}\n```\n\n### tache_5e\n```javascript\nfunction chaineLaPlusLongue(tableau) {\n  if (tableau.length === 0) return '';\n  let plusLongue = tableau[0];\n  for (let i = 1; i < tableau.length; i++) {\n    if (tableau[i].length > plusLongue.length) {\n      plusLongue = tableau[i];\n    }\n  }\n  return plusLongue;\n}\n```\n\n### algo_facile_1\n```javascript\nfunction convertirBase(n, base) {\n  if (n === 0) return '0';\n  const chiffres = '0123456789abcdef';\n  let resultat = '';\n  let nombre = n;\n  while (nombre > 0) {\n    resultat = chiffres[nombre % base] + resultat;\n    nombre = Math.floor(nombre / base);\n  }\n  return resultat;\n}\n```\n\n### algo_facile_2\n```javascript\nfunction kemePlusGrand(tab, k) {\n  const distinct = [...new Set(tab)];\n  distinct.sort((a, b) => b - a);\n  return distinct[k - 1];\n}\n```\n\n### algo_moyen_1\n```javascript\nfunction compteurFrequence(tab) {\n  const resultat = {};\n  for (let i = 0; i < tab.length; i++) {\n    const elem = tab[i];\n    const cle = JSON.stringify(elem);\n    resultat[cle] = (resultat[cle] || 0) + 1;\n  }\n  return resultat;\n}\n```\n\n### algo_difficile_1\n```javascript\nfunction exponentiationRapide(x, n) {\n  if (n === 0) return 1;\n  let resultat = 1;\n  let base = x;\n  let exposant = n;\n  while (exposant > 0) {\n    if (exposant % 2 === 1) {\n      resultat *= base;\n    }\n    base *= base;\n    exposant = Math.floor(exposant / 2);\n  }\n  return resultat;\n}\n```\n\n### algo_defi\n```javascript\nfunction sousTableauMax(tab) {\n  if (tab.length === 0) return 0;\n  let maxGlobal = tab[0];\n  let maxActuel = tab[0];\n  for (let i = 1; i < tab.length; i++) {\n    maxActuel = Math.max(tab[i], maxActuel + tab[i]);\n    if (maxActuel > maxGlobal) {\n      maxGlobal = maxActuel;\n    }\n  }\n  return maxGlobal;\n}\n```\n\n---\n### algo_moyen_1\n```javascript\nfunction compteurFrequence(tab) {\n  const obj = {};\n  for (const v of tab) {\n    obj[v] = (obj[v] || 0) + 1;\n  }\n  return obj;\n}\n```",
-              "evalResults": [
-                {
-                  "id": "tache_5a",
-                  "taskType": "Doublons",
-                  "status": "success",
-                  "points": 34,
-                  "maxPoints": 34,
-                  "helpUsed": false,
-                  "retried": false,
-                  "code": "function supprimerDoublons(tableau) {\n  return [...new Set(tableau)];\n}",
-                  "failureExplanation": null,
-                  "teacherCorrection": null
-                },
-                {
-                  "id": "tache_5b",
-                  "taskType": "Capitaliser",
-                  "status": "success",
-                  "points": 36,
-                  "maxPoints": 36,
-                  "helpUsed": false,
-                  "retried": false,
-                  "code": "function capitaliserMots(phrase) {\n  return phrase.split(' ').map(word => {\n    if (word.length === 0) return '';\n    return word[0].toUpperCase() + word.slice(1).toLowerCase();\n  }).join(' ');\n}",
-                  "failureExplanation": null,
-                  "teacherCorrection": null
-                },
-                {
-                  "id": "tache_5c",
-                  "taskType": "Fréquence",
-                  "status": "success",
-                  "points": 36,
-                  "maxPoints": 36,
-                  "helpUsed": false,
-                  "retried": false,
-                  "code": "function frequenceCaracteres(chaine) {\n  const resultat = {};\n  for (let i = 0; i < chaine.length; i++) {\n    const char = chaine[i];\n    resultat[char] = (resultat[char] || 0) + 1;\n  }\n  return resultat;\n}",
-                  "failureExplanation": null,
-                  "teacherCorrection": null
-                },
-                {
-                  "id": "tache_5d",
-                  "taskType": "Filtrer pairs",
-                  "status": "success",
-                  "points": 42,
-                  "maxPoints": 42,
-                  "helpUsed": false,
-                  "retried": false,
-                  "code": "function filtrerPairs(tableau) {\n  return tableau.filter(n => n % 2 === 0);\n}",
-                  "failureExplanation": null,
-                  "teacherCorrection": null
-                },
-                {
-                  "id": "tache_5e",
-                  "taskType": "Plus longue",
-                  "status": "success",
-                  "points": 36,
-                  "maxPoints": 36,
-                  "helpUsed": false,
-                  "retried": false,
-                  "code": "function chaineLaPlusLongue(tableau) {\n  if (tableau.length === 0) return '';\n  let plusLongue = tableau[0];\n  for (let i = 1; i < tableau.length; i++) {\n    if (tableau[i].length > plusLongue.length) {\n      plusLongue = tableau[i];\n    }\n  }\n  return plusLongue;\n}",
-                  "failureExplanation": null,
-                  "teacherCorrection": null
-                },
-                {
-                  "id": "algo_facile_1",
-                  "taskType": "Algorithmique — Conversion de base",
-                  "status": "success",
-                  "points": 47,
-                  "maxPoints": 47,
-                  "helpUsed": false,
-                  "retried": false,
-                  "code": "function convertirBase(n, base) {\n  if (n === 0) return '0';\n  const chiffres = '0123456789abcdef';\n  let resultat = '';\n  let nombre = n;\n  while (nombre > 0) {\n    resultat = chiffres[nombre % base] + resultat;\n    nombre = Math.floor(nombre / base);\n  }\n  return resultat;\n}",
-                  "failureExplanation": null,
-                  "teacherCorrection": null
-                },
-                {
-                  "id": "algo_facile_2",
-                  "taskType": "Algorithmique — K-ième plus grand",
-                  "status": "success",
-                  "points": 50,
-                  "maxPoints": 50,
-                  "helpUsed": false,
-                  "retried": false,
-                  "code": "function kemePlusGrand(tab, k) {\n  const distinct = [...new Set(tab)];\n  distinct.sort((a, b) => b - a);\n  return distinct[k - 1];\n}",
-                  "failureExplanation": null,
-                  "teacherCorrection": null
-                },
-                {
-                  "id": "algo_moyen_1",
-                  "taskType": "Algorithmique — Fréquence des éléments",
-                  "status": "success",
-                  "points": 0,
-                  "maxPoints": 34,
-                  "helpUsed": true,
-                  "retried": true,
-                  "code": "function compteurFrequence(tab) {\n  const obj = {};\n  for (const v of tab) {\n    obj[v] = (obj[v] || 0) + 1;\n  }\n  return obj;\n}",
-                  "failureExplanation": null,
-                  "teacherCorrection": null
-                },
-                {
-                  "id": "algo_difficile_1",
-                  "taskType": "Algorithmique — Exponentiation rapide",
-                  "status": "success",
-                  "points": 54,
-                  "maxPoints": 54,
-                  "helpUsed": false,
-                  "retried": false,
-                  "code": "function exponentiationRapide(x, n) {\n  if (n === 0) return 1;\n  let resultat = 1;\n  let base = x;\n  let exposant = n;\n  while (exposant > 0) {\n    if (exposant % 2 === 1) {\n      resultat *= base;\n    }\n    base *= base;\n    exposant = Math.floor(exposant / 2);\n  }\n  return resultat;\n}",
-                  "failureExplanation": null,
-                  "teacherCorrection": null
-                },
-                {
-                  "id": "algo_defi",
-                  "taskType": "Algorithmique — Sous-tableau de somme max",
-                  "status": "success",
-                  "points": 46,
-                  "maxPoints": 46,
-                  "helpUsed": false,
-                  "retried": false,
-                  "code": "function sousTableauMax(tab) {\n  if (tab.length === 0) return 0;\n  let maxGlobal = tab[0];\n  let maxActuel = tab[0];\n  for (let i = 1; i < tab.length; i++) {\n    maxActuel = Math.max(tab[i], maxActuel + tab[i]);\n    if (maxActuel > maxGlobal) {\n      maxGlobal = maxActuel;\n    }\n  }\n  return maxGlobal;\n}",
-                  "failureExplanation": null,
-                  "teacherCorrection": null
-                }
-              ]
-            }
-          ],
-          "selfProfile": {
-            "skills": {
-              "javascript_basics": {
-                "level": 5,
-                "examples": "Implémentation d'un LRU Cache en O(1) avec Map + doubly-linked list ; tri rapide personnalisé avec comparaison flexible"
-              },
-              "javascript_async": {
-                "level": 5,
-                "examples": "Orchestration de concurrence limitée via p-limit avec retry exponentiel et backoff jitter ; gestion fine de la boucle d'événements et micro-tâches"
-              },
-              "algorithms_advanced": {
-                "level": 5,
-                "examples": "Dijkstra avec file de priorité binaire ; construction d'un Trie avec suppression de nœuds ; programmation dynamique sur sous-séquences"
-              },
-              "code_debugging": {
-                "level": 4,
-                "examples": "Détection de race conditions sur état partagé en async ; identification de prototype pollution via objets deep-clonés incorrectement ; sanitisation des entrées contre XSS et injection SQL"
-              }
-            },
-            "justification": "Maîtrise solide des fondamentaux et de l'async, capacité à implémenter des structures avancées correctement ; en debugging, je repère la majorité des vulnérabilités classiques mais des cas très subtils (ex : TOCTOU dans des contextes non évidents) peuvent m'échapper."
-          }
-        }
-      ],
-      "ecoleNames": [
-        "Primaire"
-      ],
-      "pseudo": "FlexoDiv",
-      "submittedAt": "2026-08-02T10:14:38.178Z",
-      "contributors": 1,
-      "allPct": [
-        99
-      ]
-    },
-    {
       "model": "yuxinlu1/gemma-4-12b-agentic-fable5-composer2.5-v2-3.5x-tau2-gguf/gemma4-v2-q8_0.gguf",
       "shortName": "gemma4-v2-q8-0-gguf",
       "quantization": "Q8_0",
@@ -17588,6 +16741,1701 @@
       "contributors": 1,
       "allPct": [
         92
+      ]
+    },
+    {
+      "model": "inclusionai/ling-3.0-flash:free",
+      "shortName": "ling-3-0-flash-free",
+      "quantization": null,
+      "modelUrl": "https://huggingface.co/inclusionai/ling-3.0-flash:free",
+      "note": null,
+      "publisher": null,
+      "provider": "openrouter",
+      "isCloud": true,
+      "score": 5003,
+      "max": 5524,
+      "pct": 91,
+      "globalLifeScore": 5346,
+      "optionalBonus": 343,
+      "mandatoryPassed": 3324,
+      "mandatoryTotal": 3811,
+      "mandatoryPct": 87,
+      "helpCount": 8,
+      "retriedCount": 8,
+      "tokens": 4691,
+      "elapsedMs": 183679,
+      "wallMs": 333893,
+      "tokensPerSecond": 25.54,
+      "ecoleCount": 2,
+      "ecoles": [
+        {
+          "ecole": "Primaire",
+          "score": 2595,
+          "max": 2629,
+          "pct": 99,
+          "optionalBonus": 343,
+          "globalLifeScore": 2938,
+          "helpCount": 1,
+          "retriedCount": 1,
+          "date": "2026-08-02",
+          "elapsedMs": 21695,
+          "tokens": 1218,
+          "tokensPerSecond": 56.14,
+          "tiers": [
+            {
+              "tierNum": 0,
+              "tierTitle": "Tier 0 — Maternelle",
+              "className": "Maternelle",
+              "isMandatory": true,
+              "rawResponse": "\n\n---\n### tache_0a\n```javascript\nfunction direBonjour() { return \"Bonjour\"; }\n```\n\n### tache_0b\n```javascript\nfunction retournerVrai() { return true; }\n```\n\n### tache_0c\n```javascript\nfunction retourner42() { return 42; }\n```\n\n### tache_0d\n```javascript\nfunction additionner(a, b) { return a + b; }\n```\n\n### tache_0e\n```javascript\nfunction identite(x) { return x; }\n```\n\n### algo_facile_1\n```javascript\nfunction estPair(n) { return n % 2 === 0; }\n```\n\n### algo_facile_2\n```javascript\nfunction carre(n) { return n * n; }\n```\n\n### algo_moyen_1\n```javascript\nfunction somme1aN(n) { return (n * (n + 1)) / 2; }\n```\n\n### algo_difficile_1\n```javascript\nfunction inverserChaine(s) { return s.split(\"\").reverse().join(\"\"); }\n```\n\n### algo_defi\n```javascript\nfunction valeurMax(tab) { let max = tab[0]; for (let i = 1; i < tab.length; i++) { if (tab[i] > max) { max = tab[i]; } } return max; }\n```",
+              "evalResults": [
+                {
+                  "id": "tache_0a",
+                  "taskType": "Retourner 'Bonjour'",
+                  "status": "success",
+                  "points": 31,
+                  "maxPoints": 31,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function direBonjour() { return \"Bonjour\"; }",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "tache_0b",
+                  "taskType": "Retourner true",
+                  "status": "success",
+                  "points": 46,
+                  "maxPoints": 46,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function retournerVrai() { return true; }",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "tache_0c",
+                  "taskType": "Retourner 42",
+                  "status": "success",
+                  "points": 49,
+                  "maxPoints": 49,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function retourner42() { return 42; }",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "tache_0d",
+                  "taskType": "Additionner a et b",
+                  "status": "success",
+                  "points": 40,
+                  "maxPoints": 40,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function additionner(a, b) { return a + b; }",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "tache_0e",
+                  "taskType": "Identité",
+                  "status": "success",
+                  "points": 59,
+                  "maxPoints": 59,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function identite(x) { return x; }",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "algo_facile_1",
+                  "taskType": "Algorithmique — Parité",
+                  "status": "success",
+                  "points": 52,
+                  "maxPoints": 52,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function estPair(n) { return n % 2 === 0; }",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "algo_facile_2",
+                  "taskType": "Algorithmique — Carré",
+                  "status": "success",
+                  "points": 57,
+                  "maxPoints": 57,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function carre(n) { return n * n; }",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "algo_moyen_1",
+                  "taskType": "Algorithmique — Somme 1..N",
+                  "status": "success",
+                  "points": 39,
+                  "maxPoints": 39,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function somme1aN(n) { return (n * (n + 1)) / 2; }",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "algo_difficile_1",
+                  "taskType": "Algorithmique — Inversion de chaîne",
+                  "status": "success",
+                  "points": 55,
+                  "maxPoints": 55,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function inverserChaine(s) { return s.split(\"\").reverse().join(\"\"); }",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "algo_defi",
+                  "taskType": "Algorithmique — Maximum d'un tableau",
+                  "status": "success",
+                  "points": 32,
+                  "maxPoints": 32,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function valeurMax(tab) { let max = tab[0]; for (let i = 1; i < tab.length; i++) { if (tab[i] > max) { max = tab[i]; } } return max; }",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                }
+              ]
+            },
+            {
+              "tierNum": 1,
+              "tierTitle": "Tier 1 — CP",
+              "className": "CP",
+              "isMandatory": true,
+              "rawResponse": "\n\n---\n### tache_1a\n```javascript\nfunction soustraire(a, b) {\n  return a - b;\n}\n```\n\n### tache_1b\n```javascript\nfunction superieurA10(n) {\n  return n > 10;\n}\n```\n\n### tache_1c\n```javascript\nfunction concatener(mot1, mot2) {\n  return mot1 + \" \" + mot2;\n}\n```\n\n### tache_1d\n```javascript\nfunction estVide(chaine) {\n  return chaine === \"\";\n}\n```\n\n### tache_1e\n```javascript\nfunction multiplierPar2(n) {\n  return n * 2;\n}\n```\n\n### algo_facile_1\n```javascript\nfunction estMultipleDe(n, m) {\n  if (m === 0) return false;\n  return n % m === 0;\n}\n```\n\n### algo_facile_2\n```javascript\nfunction puissance(base, exp) {\n  let resultat = 1;\n  for (let i = 0; i < exp; i++) {\n    resultat *= base;\n  }\n  return resultat;\n}\n```\n\n### algo_moyen_1\n```javascript\nfunction compterPairs(tab) {\n  let count = 0;\n  for (let i = 0; i < tab.length; i++) {\n    if (tab[i] % 2 === 0) {\n      count++;\n    }\n  }\n  return count;\n}\n```\n\n### algo_difficile_1\n```javascript\nfunction supprimerDoublons(tab) {\n  const resultat = [];\n  const vu = {};\n  for (let i = 0; i < tab.length; i++) {\n    if (!vu[tab[i]]) {\n      vu[tab[i]] = true;\n      resultat.push(tab[i]);\n    }\n  }\n  return resultat;\n}\n```\n\n### algo_defi\n```javascript\nfunction sommePaires(tab) {\n  let somme = 0;\n  for (let i = 0; i < tab.length; i++) {\n    if (tab[i] % 2 === 0) {\n      somme += tab[i];\n    }\n  }\n  return somme;\n}\n```",
+              "evalResults": [
+                {
+                  "id": "tache_1a",
+                  "taskType": "Soustraire b de a",
+                  "status": "success",
+                  "points": 50,
+                  "maxPoints": 50,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function soustraire(a, b) {\n  return a - b;\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "tache_1b",
+                  "taskType": "Supérieur à 10",
+                  "status": "success",
+                  "points": 42,
+                  "maxPoints": 42,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function superieurA10(n) {\n  return n > 10;\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "tache_1c",
+                  "taskType": "Concaténer mots",
+                  "status": "success",
+                  "points": 57,
+                  "maxPoints": 57,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function concatener(mot1, mot2) {\n  return mot1 + \" \" + mot2;\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "tache_1d",
+                  "taskType": "Chaîne vide",
+                  "status": "success",
+                  "points": 53,
+                  "maxPoints": 53,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function estVide(chaine) {\n  return chaine === \"\";\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "tache_1e",
+                  "taskType": "Multiplier par 2",
+                  "status": "success",
+                  "points": 46,
+                  "maxPoints": 46,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function multiplierPar2(n) {\n  return n * 2;\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "algo_facile_1",
+                  "taskType": "Algorithmique — Multiplicité",
+                  "status": "success",
+                  "points": 31,
+                  "maxPoints": 31,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function estMultipleDe(n, m) {\n  if (m === 0) return false;\n  return n % m === 0;\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "algo_facile_2",
+                  "taskType": "Algorithmique — Puissance",
+                  "status": "success",
+                  "points": 41,
+                  "maxPoints": 41,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function puissance(base, exp) {\n  let resultat = 1;\n  for (let i = 0; i < exp; i++) {\n    resultat *= base;\n  }\n  return resultat;\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "algo_moyen_1",
+                  "taskType": "Algorithmique — Comptage de pairs",
+                  "status": "success",
+                  "points": 41,
+                  "maxPoints": 41,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function compterPairs(tab) {\n  let count = 0;\n  for (let i = 0; i < tab.length; i++) {\n    if (tab[i] % 2 === 0) {\n      count++;\n    }\n  }\n  return count;\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "algo_difficile_1",
+                  "taskType": "Algorithmique — Suppression de doublons",
+                  "status": "success",
+                  "points": 41,
+                  "maxPoints": 41,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function supprimerDoublons(tab) {\n  const resultat = [];\n  const vu = {};\n  for (let i = 0; i < tab.length; i++) {\n    if (!vu[tab[i]]) {\n      vu[tab[i]] = true;\n      resultat.push(tab[i]);\n    }\n  }\n  return resultat;\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "algo_defi",
+                  "taskType": "Algorithmique — Somme des pairs",
+                  "status": "success",
+                  "points": 54,
+                  "maxPoints": 54,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function sommePaires(tab) {\n  let somme = 0;\n  for (let i = 0; i < tab.length; i++) {\n    if (tab[i] % 2 === 0) {\n      somme += tab[i];\n    }\n  }\n  return somme;\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                }
+              ]
+            },
+            {
+              "tierNum": 2,
+              "tierTitle": "Tier 2 — CE1",
+              "className": "CE1",
+              "isMandatory": false,
+              "rawResponse": "\n\n---\n### tache_2a\n```javascript\nfunction longueurChaine(chaine) {\n  return chaine.length;\n}\n```\n\n### tache_2b\n```javascript\nfunction premierElement(tableau) {\n  return tableau[0];\n}\n```\n\n### tache_2c\n```javascript\nfunction estPair(n) {\n  return n % 2 === 0;\n}\n```\n\n### tache_2d\n```javascript\nfunction enMajuscules(chaine) {\n  return chaine.toUpperCase();\n}\n```\n\n### tache_2e\n```javascript\nfunction ajouterALaFin(tableau, element) {\n  tableau.push(element);\n  return tableau;\n}\n```\n\n### algo_facile_1\n```javascript\nfunction estPalindrome(s) {\n  const reversed = s.split('').reverse().join('');\n  return s === reversed;\n}\n```\n\n### algo_facile_2\n```javascript\nfunction pgcd(a, b) {\n  while (b !== 0) {\n    const temp = b;\n    b = a % b;\n    a = temp;\n  }\n  return a;\n}\n```\n\n### algo_moyen_1\n```javascript\nfunction nombreMots(s) {\n  const trimmed = s.trim();\n  if (trimmed === '') return 0;\n  return trimmed.split(/\\s+/).length;\n}\n```\n\n### algo_difficile_1\n```javascript\nfunction fusionTriee(a, b) {\n  const result = [];\n  let i = 0;\n  let j = 0;\n  while (i < a.length && j < b.length) {\n    if (a[i] <= b[j]) {\n      result.push(a[i]);\n      i++;\n    } else {\n      result.push(b[j]);\n      j++;\n    }\n  }\n  while (i < a.length) {\n    result.push(a[i]);\n    i++;\n  }\n  while (j < b.length) {\n    result.push(b[j]);\n    j++;\n  }\n  return result;\n}\n```\n\n### algo_defi\n```javascript\nfunction sontAnagrammes(a, b) {\n  if (a.length !== b.length) return false;\n  const sortedA = a.split('').sort().join('');\n  const sortedB = b.split('').sort().join('');\n  return sortedA === sortedB;\n}\n```",
+              "evalResults": [
+                {
+                  "id": "tache_2a",
+                  "taskType": "Longueur chaîne",
+                  "status": "success",
+                  "points": 39,
+                  "maxPoints": 39,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function longueurChaine(chaine) {\n  return chaine.length;\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "tache_2b",
+                  "taskType": "Premier élément",
+                  "status": "success",
+                  "points": 60,
+                  "maxPoints": 60,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function premierElement(tableau) {\n  return tableau[0];\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "tache_2c",
+                  "taskType": "Est pair",
+                  "status": "success",
+                  "points": 33,
+                  "maxPoints": 33,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function estPair(n) {\n  return n % 2 === 0;\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "tache_2d",
+                  "taskType": "En majuscules",
+                  "status": "success",
+                  "points": 41,
+                  "maxPoints": 41,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function enMajuscules(chaine) {\n  return chaine.toUpperCase();\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "tache_2e",
+                  "taskType": "Ajouter à la fin",
+                  "status": "success",
+                  "points": 39,
+                  "maxPoints": 39,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function ajouterALaFin(tableau, element) {\n  tableau.push(element);\n  return tableau;\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "algo_facile_1",
+                  "taskType": "Algorithmique — Palindrome",
+                  "status": "success",
+                  "points": 35,
+                  "maxPoints": 35,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function estPalindrome(s) {\n  const reversed = s.split('').reverse().join('');\n  return s === reversed;\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "algo_facile_2",
+                  "taskType": "Algorithmique — PGCD",
+                  "status": "success",
+                  "points": 35,
+                  "maxPoints": 35,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function pgcd(a, b) {\n  while (b !== 0) {\n    const temp = b;\n    b = a % b;\n    a = temp;\n  }\n  return a;\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "algo_moyen_1",
+                  "taskType": "Algorithmique — Nombre de mots",
+                  "status": "success",
+                  "points": 39,
+                  "maxPoints": 39,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function nombreMots(s) {\n  const trimmed = s.trim();\n  if (trimmed === '') return 0;\n  return trimmed.split(/\\s+/).length;\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "algo_difficile_1",
+                  "taskType": "Algorithmique — Fusion triée",
+                  "status": "success",
+                  "points": 53,
+                  "maxPoints": 53,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function fusionTriee(a, b) {\n  const result = [];\n  let i = 0;\n  let j = 0;\n  while (i < a.length && j < b.length) {\n    if (a[i] <= b[j]) {\n      result.push(a[i]);\n      i++;\n    } else {\n      result.push(b[j]);\n      j++;\n    }\n  }\n  while (i < a.length) {\n    result.push(a[i]);\n    i++;\n  }\n  while (j < b.length) {\n    result.push(b[j]);\n    j++;\n  }\n  return result;\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "algo_defi",
+                  "taskType": "Algorithmique — Anagrammes",
+                  "status": "success",
+                  "points": 44,
+                  "maxPoints": 44,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function sontAnagrammes(a, b) {\n  if (a.length !== b.length) return false;\n  const sortedA = a.split('').sort().join('');\n  const sortedB = b.split('').sort().join('');\n  return sortedA === sortedB;\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                }
+              ]
+            },
+            {
+              "tierNum": 3,
+              "tierTitle": "Tier 3 — CE2",
+              "className": "CE2",
+              "isMandatory": false,
+              "rawResponse": "\n\n---\n### tache_3a\n```javascript\nfunction dernierElement(tableau) {\n  if (tableau.length === 0) return undefined;\n  return tableau[tableau.length - 1];\n}\n```\n\n### tache_3b\n```javascript\nfunction compterJusqua(n) {\n  if (n < 1) return [];\n  const result = [];\n  for (let i = 1; i <= n; i++) {\n    result.push(i);\n  }\n  return result;\n}\n```\n\n### tache_3c\n```javascript\nfunction remplacerLettre(mot, ancienne, nouvelle) {\n  return mot.split(ancienne).join(nouvelle);\n}\n```\n\n### tache_3d\n```javascript\nfunction sommeTableau(tableau) {\n  if (tableau.length === 0) return 0;\n  return tableau.reduce((acc, val) => acc + val, 0);\n}\n```\n\n### tache_3e\n```javascript\nfunction contientA(mot) {\n  return mot.toLowerCase().includes('a');\n}\n```\n\n### algo_facile_1\n```javascript\nfunction validerParentheses(s) {\n  let count = 0;\n  for (let i = 0; i < s.length; i++) {\n    if (s[i] === '(') count++;\n    else if (s[i] === ')') {\n      count--;\n      if (count < 0) return false;\n    }\n  }\n  return count === 0;\n}\n```\n\n### algo_facile_2\n```javascript\nfunction fibonacci(n) {\n  if (n === 0) return 0;\n  if (n === 1) return 1;\n  let a = 0, b = 1;\n  for (let i = 2; i <= n; i++) {\n    const temp = a + b;\n    a = b;\n    b = temp;\n  }\n  return b;\n}\n```\n\n### algo_moyen_1\n```javascript\nfunction motsUniques(s) {\n  const words = s.trim().split(/\\s+/).filter(w => w.length > 0);\n  const unique = new Set(words);\n  return unique.size;\n}\n```\n\n### algo_difficile_1\n```javascript\nfunction aplatirTableau(tab) {\n  return tab.reduce((acc, curr) => acc.concat(curr), []);\n}\n```\n\n### algo_defi\n```javascript\nfunction rotationDroite(tab, k) {\n  if (tab.length === 0) return [];\n  k = k % tab.length;\n  if (k === 0) return tab.slice();\n  return tab.slice(-k).concat(tab.slice(0, tab.length - k));\n}\n```",
+              "evalResults": [
+                {
+                  "id": "tache_3a",
+                  "taskType": "Dernier élément",
+                  "status": "success",
+                  "points": 60,
+                  "maxPoints": 60,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function dernierElement(tableau) {\n  if (tableau.length === 0) return undefined;\n  return tableau[tableau.length - 1];\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "tache_3b",
+                  "taskType": "Compter jusqu'à N",
+                  "status": "success",
+                  "points": 46,
+                  "maxPoints": 46,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function compterJusqua(n) {\n  if (n < 1) return [];\n  const result = [];\n  for (let i = 1; i <= n; i++) {\n    result.push(i);\n  }\n  return result;\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "tache_3c",
+                  "taskType": "Remplacer lettre",
+                  "status": "success",
+                  "points": 35,
+                  "maxPoints": 35,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function remplacerLettre(mot, ancienne, nouvelle) {\n  return mot.split(ancienne).join(nouvelle);\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "tache_3d",
+                  "taskType": "Somme tableau",
+                  "status": "success",
+                  "points": 43,
+                  "maxPoints": 43,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function sommeTableau(tableau) {\n  if (tableau.length === 0) return 0;\n  return tableau.reduce((acc, val) => acc + val, 0);\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "tache_3e",
+                  "taskType": "Contient 'a'",
+                  "status": "success",
+                  "points": 53,
+                  "maxPoints": 53,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function contientA(mot) {\n  return mot.toLowerCase().includes('a');\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "algo_facile_1",
+                  "taskType": "Algorithmique — Parenthèses valides",
+                  "status": "success",
+                  "points": 39,
+                  "maxPoints": 39,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function validerParentheses(s) {\n  let count = 0;\n  for (let i = 0; i < s.length; i++) {\n    if (s[i] === '(') count++;\n    else if (s[i] === ')') {\n      count--;\n      if (count < 0) return false;\n    }\n  }\n  return count === 0;\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "algo_facile_2",
+                  "taskType": "Algorithmique — Fibonacci",
+                  "status": "success",
+                  "points": 56,
+                  "maxPoints": 56,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function fibonacci(n) {\n  if (n === 0) return 0;\n  if (n === 1) return 1;\n  let a = 0, b = 1;\n  for (let i = 2; i <= n; i++) {\n    const temp = a + b;\n    a = b;\n    b = temp;\n  }\n  return b;\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "algo_moyen_1",
+                  "taskType": "Algorithmique — Mots uniques",
+                  "status": "success",
+                  "points": 32,
+                  "maxPoints": 32,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function motsUniques(s) {\n  const words = s.trim().split(/\\s+/).filter(w => w.length > 0);\n  const unique = new Set(words);\n  return unique.size;\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "algo_difficile_1",
+                  "taskType": "Algorithmique — Aplatir un tableau",
+                  "status": "success",
+                  "points": 42,
+                  "maxPoints": 42,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function aplatirTableau(tab) {\n  return tab.reduce((acc, curr) => acc.concat(curr), []);\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "algo_defi",
+                  "taskType": "Algorithmique — Rotation à droite",
+                  "status": "success",
+                  "points": 36,
+                  "maxPoints": 36,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function rotationDroite(tab, k) {\n  if (tab.length === 0) return [];\n  k = k % tab.length;\n  if (k === 0) return tab.slice();\n  return tab.slice(-k).concat(tab.slice(0, tab.length - k));\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                }
+              ]
+            },
+            {
+              "tierNum": 4,
+              "tierTitle": "Tier 4 — CM1",
+              "className": "CM1",
+              "isMandatory": false,
+              "rawResponse": "\n\n---\n### tache_4a\n```javascript\nfunction trouverMaximum(tableau) {\n  let max = tableau[0];\n  for (let i = 1; i < tableau.length; i++) {\n    if (tableau[i] > max) {\n      max = tableau[i];\n    }\n  }\n  return max;\n}\n```\n\n### tache_4b\n```javascript\nfunction inverserChaine(chaine) {\n  return chaine.split('').reverse().join('');\n}\n```\n\n### tache_4c\n```javascript\nfunction compterVoyelles(chaine) {\n  const voyelles = 'aeiouAEIOU';\n  let count = 0;\n  for (let i = 0; i < chaine.length; i++) {\n    if (voyelles.indexOf(chaine[i]) !== -1) {\n      count++;\n    }\n  }\n  return count;\n}\n```\n\n### tache_4d\n```javascript\nfunction filtrerPositifs(tableau) {\n  return tableau.filter(function(x) { return x > 0; });\n}\n```\n\n### tache_4e\n```javascript\nfunction repeterChaine(chaine, n) {\n  if (n <= 0) return '';\n  let resultat = '';\n  for (let i = 0; i < n; i++) {\n    resultat += chaine;\n  }\n  return resultat;\n}\n```\n\n### algo_facile_1\n```javascript\nfunction capitaliserMots(s) {\n  return s.split(' ').map(function(mot) {\n    if (mot.length === 0) return '';\n    return mot[0].toUpperCase() + mot.slice(1).toLowerCase();\n  }).join(' ');\n}\n```\n\n### algo_facile_2\n```javascript\nfunction sommeChiffres(n) {\n  let somme = 0;\n  while (n > 0) {\n    somme += n % 10;\n    n = Math.floor(n / 10);\n  }\n  return somme;\n}\n```\n\n### algo_moyen_1\n```javascript\nfunction grouperParParite(tab) {\n  const pairs = [];\n  const impairs = [];\n  for (let i = 0; i < tab.length; i++) {\n    if (tab[i] % 2 === 0) {\n      pairs.push(tab[i]);\n    } else {\n      impairs.push(tab[i]);\n    }\n  }\n  return { pairs: pairs, impairs: impairs };\n}\n```\n\n### algo_difficile_1\n```javascript\nfunction plusLongMot(s) {\n  if (s.length === 0) return '';\n  const mots = s.split(' ');\n  let plusLong = mots[0];\n  for (let i = 1; i < mots.length; i++) {\n    if (mots[i].length > plusLong.length) {\n      plusLong = mots[i];\n    }\n  }\n  return plusLong;\n}\n```\n\n### algo_defi\n```javascript\nfunction mediane(tab) {\n  const trie = tab.slice().sort(function(a, b) { return a - b; });\n  const len = trie.length;\n  const milieu = Math.floor(len / 2);\n  if (len % 2 === 1) {\n    return trie[milieu];\n  } else {\n    return (trie[milieu - 1] + trie[milieu]) / 2;\n  }\n}\n```",
+              "evalResults": [
+                {
+                  "id": "tache_4a",
+                  "taskType": "Maximum",
+                  "status": "success",
+                  "points": 40,
+                  "maxPoints": 40,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function trouverMaximum(tableau) {\n  let max = tableau[0];\n  for (let i = 1; i < tableau.length; i++) {\n    if (tableau[i] > max) {\n      max = tableau[i];\n    }\n  }\n  return max;\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "tache_4b",
+                  "taskType": "Inverser",
+                  "status": "success",
+                  "points": 34,
+                  "maxPoints": 34,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function inverserChaine(chaine) {\n  return chaine.split('').reverse().join('');\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "tache_4c",
+                  "taskType": "Voyelles",
+                  "status": "success",
+                  "points": 55,
+                  "maxPoints": 55,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function compterVoyelles(chaine) {\n  const voyelles = 'aeiouAEIOU';\n  let count = 0;\n  for (let i = 0; i < chaine.length; i++) {\n    if (voyelles.indexOf(chaine[i]) !== -1) {\n      count++;\n    }\n  }\n  return count;\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "tache_4d",
+                  "taskType": "Filtrer positifs",
+                  "status": "success",
+                  "points": 48,
+                  "maxPoints": 48,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function filtrerPositifs(tableau) {\n  return tableau.filter(function(x) { return x > 0; });\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "tache_4e",
+                  "taskType": "Répéter",
+                  "status": "success",
+                  "points": 46,
+                  "maxPoints": 46,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function repeterChaine(chaine, n) {\n  if (n <= 0) return '';\n  let resultat = '';\n  for (let i = 0; i < n; i++) {\n    resultat += chaine;\n  }\n  return resultat;\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "algo_facile_1",
+                  "taskType": "Algorithmique — Capitaliser les mots",
+                  "status": "success",
+                  "points": 41,
+                  "maxPoints": 41,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function capitaliserMots(s) {\n  return s.split(' ').map(function(mot) {\n    if (mot.length === 0) return '';\n    return mot[0].toUpperCase() + mot.slice(1).toLowerCase();\n  }).join(' ');\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "algo_facile_2",
+                  "taskType": "Algorithmique — Somme des chiffres",
+                  "status": "success",
+                  "points": 35,
+                  "maxPoints": 35,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function sommeChiffres(n) {\n  let somme = 0;\n  while (n > 0) {\n    somme += n % 10;\n    n = Math.floor(n / 10);\n  }\n  return somme;\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "algo_moyen_1",
+                  "taskType": "Algorithmique — Grouper par parité",
+                  "status": "success",
+                  "points": 44,
+                  "maxPoints": 44,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function grouperParParite(tab) {\n  const pairs = [];\n  const impairs = [];\n  for (let i = 0; i < tab.length; i++) {\n    if (tab[i] % 2 === 0) {\n      pairs.push(tab[i]);\n    } else {\n      impairs.push(tab[i]);\n    }\n  }\n  return { pairs: pairs, impairs: impairs };\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "algo_difficile_1",
+                  "taskType": "Algorithmique — Mot le plus long",
+                  "status": "success",
+                  "points": 58,
+                  "maxPoints": 58,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function plusLongMot(s) {\n  if (s.length === 0) return '';\n  const mots = s.split(' ');\n  let plusLong = mots[0];\n  for (let i = 1; i < mots.length; i++) {\n    if (mots[i].length > plusLong.length) {\n      plusLong = mots[i];\n    }\n  }\n  return plusLong;\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "algo_defi",
+                  "taskType": "Algorithmique — Médiane",
+                  "status": "success",
+                  "points": 37,
+                  "maxPoints": 37,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function mediane(tab) {\n  const trie = tab.slice().sort(function(a, b) { return a - b; });\n  const len = trie.length;\n  const milieu = Math.floor(len / 2);\n  if (len % 2 === 1) {\n    return trie[milieu];\n  } else {\n    return (trie[milieu - 1] + trie[milieu]) / 2;\n  }\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                }
+              ]
+            },
+            {
+              "tierNum": 5,
+              "tierTitle": "Tier 5 — CM2",
+              "className": "CM2",
+              "isMandatory": false,
+              "rawResponse": "\n\n---\n### tache_5a\n```javascript\nfunction supprimerDoublons(tableau) {\n  return [...new Set(tableau)];\n}\n```\n\n### tache_5b\n```javascript\nfunction capitaliserMots(phrase) {\n  return phrase.split(' ').map(word => {\n    if (word.length === 0) return '';\n    return word[0].toUpperCase() + word.slice(1).toLowerCase();\n  }).join(' ');\n}\n```\n\n### tache_5c\n```javascript\nfunction frequenceCaracteres(chaine) {\n  const resultat = {};\n  for (let i = 0; i < chaine.length; i++) {\n    const char = chaine[i];\n    resultat[char] = (resultat[char] || 0) + 1;\n  }\n  return resultat;\n}\n```\n\n### tache_5d\n```javascript\nfunction filtrerPairs(tableau) {\n  return tableau.filter(n => n % 2 === 0);\n}\n```\n\n### tache_5e\n```javascript\nfunction chaineLaPlusLongue(tableau) {\n  if (tableau.length === 0) return '';\n  let plusLongue = tableau[0];\n  for (let i = 1; i < tableau.length; i++) {\n    if (tableau[i].length > plusLongue.length) {\n      plusLongue = tableau[i];\n    }\n  }\n  return plusLongue;\n}\n```\n\n### algo_facile_1\n```javascript\nfunction convertirBase(n, base) {\n  if (n === 0) return '0';\n  const chiffres = '0123456789abcdef';\n  let resultat = '';\n  let nombre = n;\n  while (nombre > 0) {\n    resultat = chiffres[nombre % base] + resultat;\n    nombre = Math.floor(nombre / base);\n  }\n  return resultat;\n}\n```\n\n### algo_facile_2\n```javascript\nfunction kemePlusGrand(tab, k) {\n  const distinct = [...new Set(tab)];\n  distinct.sort((a, b) => b - a);\n  return distinct[k - 1];\n}\n```\n\n### algo_moyen_1\n```javascript\nfunction compteurFrequence(tab) {\n  const resultat = {};\n  for (let i = 0; i < tab.length; i++) {\n    const elem = tab[i];\n    const cle = JSON.stringify(elem);\n    resultat[cle] = (resultat[cle] || 0) + 1;\n  }\n  return resultat;\n}\n```\n\n### algo_difficile_1\n```javascript\nfunction exponentiationRapide(x, n) {\n  if (n === 0) return 1;\n  let resultat = 1;\n  let base = x;\n  let exposant = n;\n  while (exposant > 0) {\n    if (exposant % 2 === 1) {\n      resultat *= base;\n    }\n    base *= base;\n    exposant = Math.floor(exposant / 2);\n  }\n  return resultat;\n}\n```\n\n### algo_defi\n```javascript\nfunction sousTableauMax(tab) {\n  if (tab.length === 0) return 0;\n  let maxGlobal = tab[0];\n  let maxActuel = tab[0];\n  for (let i = 1; i < tab.length; i++) {\n    maxActuel = Math.max(tab[i], maxActuel + tab[i]);\n    if (maxActuel > maxGlobal) {\n      maxGlobal = maxActuel;\n    }\n  }\n  return maxGlobal;\n}\n```\n\n---\n### algo_moyen_1\n```javascript\nfunction compteurFrequence(tab) {\n  const obj = {};\n  for (const v of tab) {\n    obj[v] = (obj[v] || 0) + 1;\n  }\n  return obj;\n}\n```",
+              "evalResults": [
+                {
+                  "id": "tache_5a",
+                  "taskType": "Doublons",
+                  "status": "success",
+                  "points": 34,
+                  "maxPoints": 34,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function supprimerDoublons(tableau) {\n  return [...new Set(tableau)];\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "tache_5b",
+                  "taskType": "Capitaliser",
+                  "status": "success",
+                  "points": 36,
+                  "maxPoints": 36,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function capitaliserMots(phrase) {\n  return phrase.split(' ').map(word => {\n    if (word.length === 0) return '';\n    return word[0].toUpperCase() + word.slice(1).toLowerCase();\n  }).join(' ');\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "tache_5c",
+                  "taskType": "Fréquence",
+                  "status": "success",
+                  "points": 36,
+                  "maxPoints": 36,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function frequenceCaracteres(chaine) {\n  const resultat = {};\n  for (let i = 0; i < chaine.length; i++) {\n    const char = chaine[i];\n    resultat[char] = (resultat[char] || 0) + 1;\n  }\n  return resultat;\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "tache_5d",
+                  "taskType": "Filtrer pairs",
+                  "status": "success",
+                  "points": 42,
+                  "maxPoints": 42,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function filtrerPairs(tableau) {\n  return tableau.filter(n => n % 2 === 0);\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "tache_5e",
+                  "taskType": "Plus longue",
+                  "status": "success",
+                  "points": 36,
+                  "maxPoints": 36,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function chaineLaPlusLongue(tableau) {\n  if (tableau.length === 0) return '';\n  let plusLongue = tableau[0];\n  for (let i = 1; i < tableau.length; i++) {\n    if (tableau[i].length > plusLongue.length) {\n      plusLongue = tableau[i];\n    }\n  }\n  return plusLongue;\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "algo_facile_1",
+                  "taskType": "Algorithmique — Conversion de base",
+                  "status": "success",
+                  "points": 47,
+                  "maxPoints": 47,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function convertirBase(n, base) {\n  if (n === 0) return '0';\n  const chiffres = '0123456789abcdef';\n  let resultat = '';\n  let nombre = n;\n  while (nombre > 0) {\n    resultat = chiffres[nombre % base] + resultat;\n    nombre = Math.floor(nombre / base);\n  }\n  return resultat;\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "algo_facile_2",
+                  "taskType": "Algorithmique — K-ième plus grand",
+                  "status": "success",
+                  "points": 50,
+                  "maxPoints": 50,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function kemePlusGrand(tab, k) {\n  const distinct = [...new Set(tab)];\n  distinct.sort((a, b) => b - a);\n  return distinct[k - 1];\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "algo_moyen_1",
+                  "taskType": "Algorithmique — Fréquence des éléments",
+                  "status": "success",
+                  "points": 0,
+                  "maxPoints": 34,
+                  "helpUsed": true,
+                  "retried": true,
+                  "code": "function compteurFrequence(tab) {\n  const obj = {};\n  for (const v of tab) {\n    obj[v] = (obj[v] || 0) + 1;\n  }\n  return obj;\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "algo_difficile_1",
+                  "taskType": "Algorithmique — Exponentiation rapide",
+                  "status": "success",
+                  "points": 54,
+                  "maxPoints": 54,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function exponentiationRapide(x, n) {\n  if (n === 0) return 1;\n  let resultat = 1;\n  let base = x;\n  let exposant = n;\n  while (exposant > 0) {\n    if (exposant % 2 === 1) {\n      resultat *= base;\n    }\n    base *= base;\n    exposant = Math.floor(exposant / 2);\n  }\n  return resultat;\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "algo_defi",
+                  "taskType": "Algorithmique — Sous-tableau de somme max",
+                  "status": "success",
+                  "points": 46,
+                  "maxPoints": 46,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function sousTableauMax(tab) {\n  if (tab.length === 0) return 0;\n  let maxGlobal = tab[0];\n  let maxActuel = tab[0];\n  for (let i = 1; i < tab.length; i++) {\n    maxActuel = Math.max(tab[i], maxActuel + tab[i]);\n    if (maxActuel > maxGlobal) {\n      maxGlobal = maxActuel;\n    }\n  }\n  return maxGlobal;\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                }
+              ]
+            }
+          ],
+          "selfProfile": {
+            "skills": {
+              "javascript_basics": {
+                "level": 5,
+                "examples": "Implémentation d'un LRU Cache en O(1) avec Map + doubly-linked list ; tri rapide personnalisé avec comparaison flexible"
+              },
+              "javascript_async": {
+                "level": 5,
+                "examples": "Orchestration de concurrence limitée via p-limit avec retry exponentiel et backoff jitter ; gestion fine de la boucle d'événements et micro-tâches"
+              },
+              "algorithms_advanced": {
+                "level": 5,
+                "examples": "Dijkstra avec file de priorité binaire ; construction d'un Trie avec suppression de nœuds ; programmation dynamique sur sous-séquences"
+              },
+              "code_debugging": {
+                "level": 4,
+                "examples": "Détection de race conditions sur état partagé en async ; identification de prototype pollution via objets deep-clonés incorrectement ; sanitisation des entrées contre XSS et injection SQL"
+              }
+            },
+            "justification": "Maîtrise solide des fondamentaux et de l'async, capacité à implémenter des structures avancées correctement ; en debugging, je repère la majorité des vulnérabilités classiques mais des cas très subtils (ex : TOCTOU dans des contextes non évidents) peuvent m'échapper."
+          }
+        },
+        {
+          "ecole": "Post-Doctorat",
+          "score": 2408,
+          "max": 2895,
+          "pct": 83,
+          "optionalBonus": 0,
+          "globalLifeScore": 2408,
+          "helpCount": 7,
+          "retriedCount": 7,
+          "date": "2026-08-03",
+          "elapsedMs": 161984,
+          "tokens": 3473,
+          "tokensPerSecond": 21.44,
+          "tiers": [
+            {
+              "tierNum": 0,
+              "tierTitle": "Tier 0 — Algorithmes Classiques et Closures",
+              "className": "PostDoc1",
+              "isMandatory": true,
+              "rawResponse": "\n\n---\n### tache_0a\n```javascript\nfunction curry(fn) {\n  return function curried(...args) {\n    if (args.length >= fn.length) {\n      return fn(...args);\n    }\n    return function(...args2) {\n      return curried(...args, ...args2);\n    };\n  };\n}\n```\n\n### tache_0b\n```javascript\nfunction egalProfond(a, b) {\n  if (a === b) return true;\n  if (a === null || b === null) return false;\n  if (typeof a !== typeof b) return false;\n  if (typeof a !== 'object') return a === b;\n  if (Array.isArray(a) !== Array.isArray(b)) return false;\n\n  const keysA = Object.keys(a);\n  const keysB = Object.keys(b);\n  if (keysA.length !== keysB.length) return false;\n\n  for (const key of keysA) {\n    if (!keysB.includes(key)) return false;\n    if (!egalProfond(a[key], b[key])) return false;\n  }\n  return true;\n}\n```\n\n### tache_0c\n```javascript\nfunction composer(...fns) {\n  return function(x) {\n    let result = x;\n    for (let i = fns.length - 1; i >= 0; i--) {\n      result = fns[i](result);\n    }\n    return result;\n  };\n}\n```\n\n### tache_0d\n```javascript\nfunction creerBST() {\n  let root = null;\n\n  function Node(val) {\n    this.value = val;\n    this.left = null;\n    this.right = null;\n  }\n\n  function insertNode(node, val) {\n    if (node === null) return new Node(val);\n    if (val < node.value) {\n      node.left = insertNode(node.left, val);\n    } else if (val > node.value) {\n      node.right = insertNode(node.right, val);\n    }\n    return node;\n  }\n\n  function containsNode(node, val) {\n    if (node === null) return false;\n    if (val === node.value) return true;\n    if (val < node.value) return containsNode(node.left, val);\n    return containsNode(node.right, val);\n  }\n\n  return {\n    insert(val) {\n      root = insertNode(root, val);\n    },\n    contains(val) {\n      return containsNode(root, val);\n    }\n  };\n}\n```\n\n### tache_0e\n```javascript\nfunction memoize(fn) {\n  const cache = new Map();\n  return function(...args) {\n    const key = JSON.stringify(args);\n    if (cache.has(key)) {\n      return cache.get(key);\n    }\n    const result = fn(...args);\n    cache.set(key, result);\n    return result;\n  };\n}\n```\n\n### algo_facile_1\n```javascript\nfunction estPair(n) {\n  return n % 2 === 0;\n}\n```\n\n### algo_facile_2\n```javascript\nfunction carre(n) {\n  return n * n;\n}\n```\n\n### algo_moyen_1\n```javascript\nfunction somme1aN(n) {\n  let sum = 0;\n  for (let i = 1; i <= n; i++) {\n    sum += i;\n  }\n  return sum;\n}\n```\n\n### algo_difficile_1\n```javascript\nfunction inverserChaine(s) {\n  return s.split('').reverse().join('');\n}\n```\n\n### algo_defi\n```javascript\nfunction valeurMax(tab) {\n  let max = tab[0];\n  for (let i = 1; i < tab.length; i++) {\n    if (tab[i] > max) {\n      max = tab[i];\n    }\n  }\n  return max;\n}\n```",
+              "evalResults": [
+                {
+                  "id": "tache_0a",
+                  "taskType": "Curry auto-exécutant",
+                  "status": "success",
+                  "points": 32,
+                  "maxPoints": 32,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function curry(fn) {\n  return function curried(...args) {\n    if (args.length >= fn.length) {\n      return fn(...args);\n    }\n    return function(...args2) {\n      return curried(...args, ...args2);\n    };\n  };\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "tache_0b",
+                  "taskType": "Égalité profonde",
+                  "status": "success",
+                  "points": 43,
+                  "maxPoints": 43,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function egalProfond(a, b) {\n  if (a === b) return true;\n  if (a === null || b === null) return false;\n  if (typeof a !== typeof b) return false;\n  if (typeof a !== 'object') return a === b;\n  if (Array.isArray(a) !== Array.isArray(b)) return false;\n\n  const keysA = Object.keys(a);\n  const keysB = Object.keys(b);\n  if (keysA.length !== keysB.length) return false;\n\n  for (const key of keysA) {\n    if (!keysB.includes(key)) return false;\n    if (!egalProfond(a[key], b[key])) return false;\n  }\n  return true;\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "tache_0c",
+                  "taskType": "Composition de fonctions (droite→gauche)",
+                  "status": "success",
+                  "points": 39,
+                  "maxPoints": 39,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function composer(...fns) {\n  return function(x) {\n    let result = x;\n    for (let i = fns.length - 1; i >= 0; i--) {\n      result = fns[i](result);\n    }\n    return result;\n  };\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "tache_0d",
+                  "taskType": "Arbre binaire de recherche",
+                  "status": "success",
+                  "points": 48,
+                  "maxPoints": 48,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function creerBST() {\n  let root = null;\n\n  function Node(val) {\n    this.value = val;\n    this.left = null;\n    this.right = null;\n  }\n\n  function insertNode(node, val) {\n    if (node === null) return new Node(val);\n    if (val < node.value) {\n      node.left = insertNode(node.left, val);\n    } else if (val > node.value) {\n      node.right = insertNode(node.right, val);\n    }\n    return node;\n  }\n\n  function containsNode(node, val) {\n    if (node === null) return false;\n    if (val === node.value) return true;\n    if (val < node.value) return containsNode(node.left, val);\n    return containsNode(node.right, val);\n  }\n\n  return {\n    insert(val) {\n      root = insertNode(root, val);\n    },\n    contains(val) {\n      return containsNode(root, val);\n    }\n  };\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "tache_0e",
+                  "taskType": "Memoization",
+                  "status": "success",
+                  "points": 52,
+                  "maxPoints": 52,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function memoize(fn) {\n  const cache = new Map();\n  return function(...args) {\n    const key = JSON.stringify(args);\n    if (cache.has(key)) {\n      return cache.get(key);\n    }\n    const result = fn(...args);\n    cache.set(key, result);\n    return result;\n  };\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "algo_facile_1",
+                  "taskType": "Algorithmique — Parité",
+                  "status": "success",
+                  "points": 35,
+                  "maxPoints": 35,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function estPair(n) {\n  return n % 2 === 0;\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "algo_facile_2",
+                  "taskType": "Algorithmique — Carré",
+                  "status": "success",
+                  "points": 41,
+                  "maxPoints": 41,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function carre(n) {\n  return n * n;\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "algo_moyen_1",
+                  "taskType": "Algorithmique — Somme 1..N",
+                  "status": "success",
+                  "points": 39,
+                  "maxPoints": 39,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function somme1aN(n) {\n  let sum = 0;\n  for (let i = 1; i <= n; i++) {\n    sum += i;\n  }\n  return sum;\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "algo_difficile_1",
+                  "taskType": "Algorithmique — Inversion de chaîne",
+                  "status": "success",
+                  "points": 57,
+                  "maxPoints": 57,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function inverserChaine(s) {\n  return s.split('').reverse().join('');\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "algo_defi",
+                  "taskType": "Algorithmique — Maximum d'un tableau",
+                  "status": "success",
+                  "points": 34,
+                  "maxPoints": 34,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function valeurMax(tab) {\n  let max = tab[0];\n  for (let i = 1; i < tab.length; i++) {\n    if (tab[i] > max) {\n      max = tab[i];\n    }\n  }\n  return max;\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                }
+              ]
+            },
+            {
+              "tierNum": 1,
+              "tierTitle": "Tier 1 — Structures de Données et Patterns Avancés",
+              "className": "PostDoc2",
+              "isMandatory": true,
+              "rawResponse": "\n\n---\n### tache_1a\n```javascript\nfunction creerFilePriorite() {\n  const heap = [];\n\n  function parent(i) { return Math.floor((i - 1) / 2); }\n  function left(i) { return 2 * i + 1; }\n  function right(i) { return 2 * i + 2; }\n\n  function bubbleUp(i) {\n    while (i > 0 && heap[parent(i)].priorite > heap[i].priorite) {\n      [heap[parent(i)], heap[i]] = [heap[i], heap[parent(i)]];\n      i = parent(i);\n    }\n  }\n\n  function bubbleDown(i) {\n    let smallest = i;\n    const l = left(i);\n    const r = right(i);\n    if (l < heap.length && heap[l].priorite < heap[smallest].priorite) smallest = l;\n    if (r < heap.length && heap[r].priorite < heap[smallest].priorite) smallest = r;\n    if (smallest !== i) {\n      [heap[i], heap[smallest]] = [heap[smallest], heap[i]];\n      bubbleDown(smallest);\n    }\n  }\n\n  return {\n    enqueue(val, priorite) {\n      heap.push({ val, priorite });\n      bubbleUp(heap.length - 1);\n    },\n    dequeue() {\n      if (heap.length === 0) return undefined;\n      const min = heap[0];\n      const last = heap.pop();\n      if (heap.length > 0) {\n        heap[0] = last;\n        bubbleDown(0);\n      }\n      return min.val;\n    },\n    taille() {\n      return heap.length;\n    }\n  };\n}\n```\n\n### tache_1b\n```javascript\nfunction creerEventEmitter() {\n  const events = {};\n\n  return {\n    on(event, fn) {\n      if (!events[event]) events[event] = [];\n      events[event].push(fn);\n    },\n    off(event, fn) {\n      if (!events[event]) return;\n      events[event] = events[event].filter(f => f !== fn);\n    },\n    emit(event, ...args) {\n      if (!events[event]) return;\n      events[event].forEach(fn => fn(...args));\n    }\n  };\n}\n```\n\n### tache_1c\n```javascript\nfunction zip(...tableaux) {\n  const minLen = Math.min(...tableaux.map(t => t.length));\n  const result = [];\n  for (let i = 0; i < minLen; i++) {\n    result.push(tableaux.map(t => t[i]));\n  }\n  return result;\n}\n```\n\n### tache_1d\n```javascript\nfunction parcoursEnLargeur(graphe, depart) {\n  const visites = [];\n  const file = [depart];\n  while (file.length > 0) {\n    const noeud = file.shift(); // FIX: pop() (LIFO/DFS) remplacé par shift() (FIFO/BFS)\n    if (!visites.includes(noeud)) {\n      visites.push(noeud);\n      for (const voisin of (graphe[noeud] || [])) {\n        file.push(voisin);\n      }\n    }\n  }\n  return visites;\n}\n```\n\n### tache_1e\n```javascript\nfunction creerProxy(cible, gestionnaire) {\n  const proxy = {};\n\n  for (const key of Object.keys(cible)) {\n    Object.defineProperty(proxy, key, {\n      get() {\n        return gestionnaire.get(cible, key);\n      },\n      set(val) {\n        gestionnaire.set(cible, key, val);\n        return true;\n      },\n      enumerable: true,\n      configurable: true\n    });\n  }\n\n  return proxy;\n}\n```\n\n### algo_facile_1\n```javascript\nfunction estMultipleDe(n, m) {\n  if (m === 0) return false;\n  return n % m === 0;\n}\n```\n\n### algo_facile_2\n```javascript\nfunction puissance(base, exp) {\n  let result = 1;\n  for (let i = 0; i < exp; i++) {\n    result *= base;\n  }\n  return result;\n}\n```\n\n### algo_moyen_1\n```javascript\nfunction compterPairs(tab) {\n  return tab.filter(n => n % 2 === 0).length;\n}\n```\n\n### algo_difficile_1\n```javascript\nfunction supprimerDoublons(tab) {\n  const seen = new Set();\n  const result = [];\n  for (const item of tab) {\n    if (!seen.has(item)) {\n      seen.add(item);\n      result.push(item);\n    }\n  }\n  return result;\n}\n```\n\n### algo_defi\n```javascript\nfunction sommePaires(tab) {\n  return tab.filter(n => n % 2 === 0).reduce((sum, n) => sum + n, 0);\n}\n```",
+              "evalResults": [
+                {
+                  "id": "tache_1a",
+                  "taskType": "File de priorité (min-heap)",
+                  "status": "success",
+                  "points": 33,
+                  "maxPoints": 33,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function creerFilePriorite() {\n  const heap = [];\n\n  function parent(i) { return Math.floor((i - 1) / 2); }\n  function left(i) { return 2 * i + 1; }\n  function right(i) { return 2 * i + 2; }\n\n  function bubbleUp(i) {\n    while (i > 0 && heap[parent(i)].priorite > heap[i].priorite) {\n      [heap[parent(i)], heap[i]] = [heap[i], heap[parent(i)]];\n      i = parent(i);\n    }\n  }\n\n  function bubbleDown(i) {\n    let smallest = i;\n    const l = left(i);\n    const r = right(i);\n    if (l < heap.length && heap[l].priorite < heap[smallest].priorite) smallest = l;\n    if (r < heap.length && heap[r].priorite < heap[smallest].priorite) smallest = r;\n    if (smallest !== i) {\n      [heap[i], heap[smallest]] = [heap[smallest], heap[i]];\n      bubbleDown(smallest);\n    }\n  }\n\n  return {\n    enqueue(val, priorite) {\n      heap.push({ val, priorite });\n      bubbleUp(heap.length - 1);\n    },\n    dequeue() {\n      if (heap.length === 0) return undefined;\n      const min = heap[0];\n      const last = heap.pop();\n      if (heap.length > 0) {\n        heap[0] = last;\n        bubbleDown(0);\n      }\n      return min.val;\n    },\n    taille() {\n      return heap.length;\n    }\n  };\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "tache_1b",
+                  "taskType": "EventEmitter",
+                  "status": "success",
+                  "points": 32,
+                  "maxPoints": 32,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function creerEventEmitter() {\n  const events = {};\n\n  return {\n    on(event, fn) {\n      if (!events[event]) events[event] = [];\n      events[event].push(fn);\n    },\n    off(event, fn) {\n      if (!events[event]) return;\n      events[event] = events[event].filter(f => f !== fn);\n    },\n    emit(event, ...args) {\n      if (!events[event]) return;\n      events[event].forEach(fn => fn(...args));\n    }\n  };\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "tache_1c",
+                  "taskType": "Zip de tableaux",
+                  "status": "success",
+                  "points": 45,
+                  "maxPoints": 45,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function zip(...tableaux) {\n  const minLen = Math.min(...tableaux.map(t => t.length));\n  const result = [];\n  for (let i = 0; i < minLen; i++) {\n    result.push(tableaux.map(t => t[i]));\n  }\n  return result;\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "tache_1d",
+                  "taskType": "Débogage",
+                  "status": "success",
+                  "points": 51,
+                  "maxPoints": 51,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function parcoursEnLargeur(graphe, depart) {\n  const visites = [];\n  const file = [depart];\n  while (file.length > 0) {\n    const noeud = file.shift(); // FIX: pop() (LIFO/DFS) remplacé par shift() (FIFO/BFS)\n    if (!visites.includes(noeud)) {\n      visites.push(noeud);\n      for (const voisin of (graphe[noeud] || [])) {\n        file.push(voisin);\n      }\n    }\n  }\n  return visites;\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "tache_1e",
+                  "taskType": "Proxy manuel",
+                  "status": "success",
+                  "points": 57,
+                  "maxPoints": 57,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function creerProxy(cible, gestionnaire) {\n  const proxy = {};\n\n  for (const key of Object.keys(cible)) {\n    Object.defineProperty(proxy, key, {\n      get() {\n        return gestionnaire.get(cible, key);\n      },\n      set(val) {\n        gestionnaire.set(cible, key, val);\n        return true;\n      },\n      enumerable: true,\n      configurable: true\n    });\n  }\n\n  return proxy;\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "algo_facile_1",
+                  "taskType": "Algorithmique — Multiplicité",
+                  "status": "success",
+                  "points": 49,
+                  "maxPoints": 49,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function estMultipleDe(n, m) {\n  if (m === 0) return false;\n  return n % m === 0;\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "algo_facile_2",
+                  "taskType": "Algorithmique — Puissance",
+                  "status": "success",
+                  "points": 32,
+                  "maxPoints": 32,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function puissance(base, exp) {\n  let result = 1;\n  for (let i = 0; i < exp; i++) {\n    result *= base;\n  }\n  return result;\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "algo_moyen_1",
+                  "taskType": "Algorithmique — Comptage de pairs",
+                  "status": "success",
+                  "points": 47,
+                  "maxPoints": 47,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function compterPairs(tab) {\n  return tab.filter(n => n % 2 === 0).length;\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "algo_difficile_1",
+                  "taskType": "Algorithmique — Suppression de doublons",
+                  "status": "success",
+                  "points": 41,
+                  "maxPoints": 41,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function supprimerDoublons(tab) {\n  const seen = new Set();\n  const result = [];\n  for (const item of tab) {\n    if (!seen.has(item)) {\n      seen.add(item);\n      result.push(item);\n    }\n  }\n  return result;\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "algo_defi",
+                  "taskType": "Algorithmique — Somme des pairs",
+                  "status": "success",
+                  "points": 36,
+                  "maxPoints": 36,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function sommePaires(tab) {\n  return tab.filter(n => n % 2 === 0).reduce((sum, n) => sum + n, 0);\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                }
+              ]
+            },
+            {
+              "tierNum": 2,
+              "tierTitle": "Tier 2 — Concurrence, Réactivité et Optimisation",
+              "className": "PostDoc3",
+              "isMandatory": true,
+              "rawResponse": "\n\n---\n```json\n{\n  \"tache_2a\": \"async function executerEnPool(taches, concurrence) {\\n  if (taches.length === 0) return [];\\n  const results = new Array(taches.length);\\n  let index = 0;\\n\\n  async function runNext() {\\n    const i = index++;\\n    if (i >= taches.length) return;\\n    results[i] = await taches[i]();\\n    await runNext();\\n  }\\n\\n  const workers = Array.from(\\n    { length: Math.min(concurrence, taches.length) },\\n    runNext\\n  );\\n  await Promise.all(workers);\\n  return results;\\n}\",\n  \"tache_2b\": \"function creerSubject() {\\n  const subscribers = [];\\n\\n  return {\\n    next(val) {\\n      subscribers.forEach(sub => {\\n        if (sub.next) sub.next(val);\\n      });\\n    },\\n    error(err) {\\n      subscribers.forEach(sub => {\\n        if (sub.error) sub.error(err);\\n      });\\n    },\\n    complete() {\\n      subscribers.forEach(sub => {\\n        if (sub.complete) sub.complete();\\n      });\\n    },\\n    subscribe(observer) {\\n      subscribers.push(observer);\\n      return {\\n        unsubscribe() {\\n          const idx = subscribers.indexOf(observer);\\n          if (idx > -1) subscribers.splice(idx, 1);\\n        }\\n      };\\n    }\\n  };\\n}\",\n  \"tache_2c\": \"function memoiserAsync(fn) {\\n  const cache = new Map();\\n\\n  return function(...args) {\\n    const key = JSON.stringify(args);\\n    if (cache.has(key)) {\\n      return cache.get(key);\\n    }\\n    const promise = fn.apply(this, args);\\n    cache.set(key, promise);\\n    promise.then(\\n      () => { /* gardé en cache pour les appels futurs */ },\\n      () => { cache.delete(key); }\\n    );\\n    return promise;\\n  };\\n}\",\n  \"tache_2d\": \"async function chargerUtilisateur(id) {\\n  const response = await fetch('/api/user/' + id);\\n  const data = await response.json();\\n  return data;\\n}\",\n  \"tache_2e\": \"function creerCircuitBreaker(fn, seuil, delaiResetMs) {\\n  let state = 'closed';\\n  let failures = 0;\\n  let timer = null;\\n\\n  async function executer(...args) {\\n    if (state === 'open') {\\n      throw new Error('Circuit breaker is open');\\n    }\\n\\n    try {\\n      const result = await fn(...args);\\n      if (state === 'half-open') {\\n        state = 'closed';\\n        failures = 0;\\n        if (timer) { clearTimeout(timer); timer = null; }\\n      } else {\\n        failures = 0;\\n      }\\n      return result;\\n    } catch (e) {\\n      failures++;\\n      if (state === 'half-open') {\\n        state = 'open';\\n        if (timer) { clearTimeout(timer); timer = null; }\\n        timer = setTimeout(() => {\\n          state = 'half-open';\\n        }, delaiResetMs);\\n        throw e;\\n      }\\n\\n      if (failures >= seuil) {\\n        state = 'open';\\n        timer = setTimeout(() => {\\n          state = 'half-open';\\n        }, delaiResetMs);\\n      }\\n      throw e;\\n    }\\n  }\\n\\n  return { executer };\\n}\"\n}\n```\n\n### algo_facile_1\n```javascript\nfunction estPalindrome(s) {\n  return s === s.split('').reverse().join('');\n}\n```\n\n### algo_facile_2\n```javascript\nfunction pgcd(a, b) {\n  while (b !== 0) {\n    const temp = b;\n    b = a % b;\n    a = temp;\n  }\n  return a;\n}\n```\n\n### algo_moyen_1\n```javascript\nfunction nombreMots(s) {\n  const trimmed = s.trim();\n  if (trimmed === '') return 0;\n  return trimmed.split(/\\s+/).length;\n}\n```\n\n### algo_difficile_1\n```javascript\nfunction fusionTriee(a, b) {\n  const result = [];\n  let i = 0, j = 0;\n  while (i < a.length && j < b.length) {\n    if (a[i] <= b[j]) {\n      result.push(a[i++]);\n    } else {\n      result.push(b[j++]);\n    }\n  }\n  while (i < a.length) result.push(a[i++]);\n  while (j < b.length) result.push(b[j++]);\n  return result;\n}\n```\n\n### algo_defi\n```javascript\nfunction sontAnagrammes(a, b) {\n  if (a.length !== b.length) return false;\n  const sortedA = a.split('').sort().join('');\n  const sortedB = b.split('').sort().join('');\n  return sortedA === sortedB;\n}\n```\n\n---\n### tache_2a\n```javascript\nasync function executerEnPool(taches, concurrence) {\n  const results = new Array(taches.length);\n  let index = 0;\n\n  async function next() {\n    const i = index++;\n    if (i >= taches.length) return;\n    try {\n      results[i] = await taches[i]();\n    } catch (e) {\n      results[i] = e;\n    }\n    await next();\n  }\n\n  const workers = [];\n  const limite = Math.min(concurrence, taches.length);\n  for (let w = 0; w < limite; w++) {\n    workers.push(next());\n  }\n  await Promise.all(workers);\n  return results;\n}\n```\n\n### tache_2b\n```javascript\nfunction creerSubject() {\n  const subscribers = [];\n\n  return {\n    next(val) {\n      subscribers.forEach(sub => {\n        if (sub.next) sub.next(val);\n      });\n    },\n    error(err) {\n      subscribers.forEach(sub => {\n        if (sub.error) sub.error(err);\n      });\n    },\n    complete() {\n      subscribers.forEach(sub => {\n        if (sub.complete) sub.complete();\n      });\n    },\n    subscribe(observer) {\n      subscribers.push(observer);\n      return {\n        unsubscribe() {\n          const idx = subscribers.indexOf(observer);\n          if (idx !== -1) subscribers.splice(idx, 1);\n        }\n      };\n    }\n  };\n}\n```\n\n### tache_2c\n```javascript\nfunction memoiserAsync(fn) {\n  const cache = new Map();\n\n  return function(...args) {\n    const key = JSON.stringify(args);\n    if (cache.has(key)) {\n      return cache.get(key);\n    }\n    const promise = fn.apply(this, args);\n    cache.set(key, promise);\n    promise.then(\n      () => {},\n      () => { cache.delete(key); }\n    );\n    return promise;\n  };\n}\n```\n\n### tache_2d\n```javascript\nasync function chargerUtilisateur(id) {\n  const response = await fetch('/api/user/' + id);\n  const data = await response.json();\n  return data;\n}\n```\n\n### tache_2e\n```javascript\nfunction creerCircuitBreaker(fn, seuil, delaiResetMs) {\n  let etat = 'ferme';\n  let echecsConsecutifs = 0;\n  let prochaineTentative = 0;\n\n  return async function(...args) {\n    if (etat === 'ouvert') {\n      if (Date.now() < prochaineTentative) {\n        throw new Error('Circuit breaker ouvert');\n      }\n      etat = 'demi-ouvert';\n    }\n\n    try {\n      const resultat = await fn.apply(this, args);\n      echecsConsecutifs = 0;\n      if (etat === 'demi-ouvert') {\n        etat = 'ferme';\n      }\n      return resultat;\n    } catch (erreur) {\n      echecsConsecutifs++;\n      if (echecsConsecutifs >= seuil) {\n        etat = 'ouvert';\n        prochaineTentative = Date.now() + delaiResetMs;\n      }\n      throw erreur;\n    }\n  };\n}\n```\n\n### algo_facile_1\n```javascript\nfunction estPalindrome(s) {\n  const len = s.length;\n  for (let i = 0; i < Math.floor(len / 2); i++) {\n    if (s[i] !== s[len - 1 - i]) return false;\n  }\n  return true;\n}\n```\n\n### algo_facile_2\n```javascript\nfunction pgcd(a, b) {\n  while (b !== 0) {\n    const temp = b;\n    b = a % b;\n    a = temp;\n  }\n  return a;\n}\n```\n\n### algo_moyen_1\n```javascript\nfunction nombreMots(s) {\n  const trimmed = s.trim();\n  if (trimmed.length === 0) return 0;\n  return trimmed.split(/\\s+/).length;\n}\n```\n\n### algo_difficile_1\n```javascript\nfunction fusionTriee(a, b) {\n  const result = [];\n  let i = 0, j = 0;\n  while (i < a.length && j < b.length) {\n    if (a[i] <= b[j]) {\n      result.push(a[i]);\n      i++;\n    } else {\n      result.push(b[j]);\n      j++;\n    }\n  }\n  while (i < a.length) {\n    result.push(a[i]);\n    i++;\n  }\n  while (j < b.length) {\n    result.push(b[j]);\n    j++;\n  }\n  return result;\n}\n```\n\n### algo_defi\n```javascript\nfunction sontAnagrammes(a, b) {\n  if (a.length !== b.length) return false;\n  const freq = {};\n  for (let i = 0; i < a.length; i++) {\n    const char = a[i];\n    freq[char] = (freq[char] || 0) + 1;\n  }\n  for (let i = 0; i < b.length; i++) {\n    const char = b[i];\n    if (!freq[char]) return false;\n    freq[char]--;\n  }\n  return true;\n}\n```",
+              "evalResults": [
+                {
+                  "id": "tache_2a",
+                  "taskType": "Pool de concurrence async",
+                  "status": "failed",
+                  "points": -40,
+                  "maxPoints": 40,
+                  "helpUsed": true,
+                  "retried": true,
+                  "code": "async function executerEnPool(taches, concurrence) {\n  const results = new Array(taches.length);\n  let index = 0;\n\n  async function next() {\n    const i = index++;\n    if (i >= taches.length) return;\n    try {\n      results[i] = await taches[i]();\n    } catch (e) {\n      results[i] = e;\n    }\n    await next();\n  }\n\n  const workers = [];\n  const limite = Math.min(concurrence, taches.length);\n  for (let w = 0; w < limite; w++) {\n    workers.push(next());\n  }\n  await Promise.all(workers);\n  return results;\n}",
+                  "failureExplanation": "Mon code échoue car il retourne un simple tableau mélangeant les succès et les erreurs, alors que l'évaluation attendait un objet structuré avec deux clés spécifiques, 'succes' et 'echecs'. J'ai également omis de séparer les ressources chargées avec succès des URLs en échec, et j'ai stocké l'objet Error brut au lieu d'identifier l'URL ayant échoué comme l'exigeait le moteur. Il fallait donc initialiser un objet contenant deux tableaux vides et y répartir chaque résultat en fonction de son statut avant de le retourner.",
+                  "teacherCorrection": "Votre diagnostic est PARTIELLEMENT JUSTE : vous avez identifié la nécessité de séparer succès/échec, mais vous avez oublié l’essentiel. La vraie cause racine de l’échec est que vous ne faites pas référence aux URLs des tâches dans le résultat : le mot-clé « ressources chargées » dans l’erreur implique que le callback `taches[i]()` reçoit une URL (ou un objet contenant l’URL), que vous devez extraire et inclure dans les tableaux `succes` et `echecs`. Votre code ne capture pas cette information, donc même si vous aviez changé la structure de retour, l’évaluation l’aurait encore rejeté pour format incomplet."
+                },
+                {
+                  "id": "tache_2b",
+                  "taskType": "Subject réactif (multicast)",
+                  "status": "success",
+                  "points": 42,
+                  "maxPoints": 42,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function creerSubject() {\n  const subscribers = [];\n\n  return {\n    next(val) {\n      subscribers.forEach(sub => {\n        if (sub.next) sub.next(val);\n      });\n    },\n    error(err) {\n      subscribers.forEach(sub => {\n        if (sub.error) sub.error(err);\n      });\n    },\n    complete() {\n      subscribers.forEach(sub => {\n        if (sub.complete) sub.complete();\n      });\n    },\n    subscribe(observer) {\n      subscribers.push(observer);\n      return {\n        unsubscribe() {\n          const idx = subscribers.indexOf(observer);\n          if (idx > -1) subscribers.splice(idx, 1);\n        }\n      };\n    }\n  };\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "tache_2c",
+                  "taskType": "Mémoïsation async anti-duplication",
+                  "status": "success",
+                  "points": 52,
+                  "maxPoints": 52,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function memoiserAsync(fn) {\n  const cache = new Map();\n\n  return function(...args) {\n    const key = JSON.stringify(args);\n    if (cache.has(key)) {\n      return cache.get(key);\n    }\n    const promise = fn.apply(this, args);\n    cache.set(key, promise);\n    promise.then(\n      () => { /* gardé en cache pour les appels futurs */ },\n      () => { cache.delete(key); }\n    );\n    return promise;\n  };\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "tache_2d",
+                  "taskType": "Débogage",
+                  "status": "success",
+                  "points": 47,
+                  "maxPoints": 47,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "async function chargerUtilisateur(id) {\n  const response = await fetch('/api/user/' + id);\n  const data = await response.json();\n  return data;\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "tache_2e",
+                  "taskType": "Circuit Breaker",
+                  "status": "success",
+                  "points": 0,
+                  "maxPoints": 42,
+                  "helpUsed": true,
+                  "retried": true,
+                  "code": "function creerCircuitBreaker(fn, seuil, delaiResetMs) {\n  let etat = 'ferme';\n  let echecsConsecutifs = 0;\n  let prochaineTentative = 0;\n\n  return async function(...args) {\n    if (etat === 'ouvert') {\n      if (Date.now() < prochaineTentative) {\n        throw new Error('Circuit breaker ouvert');\n      }\n      etat = 'demi-ouvert';\n    }\n\n    try {\n      const resultat = await fn.apply(this, args);\n      echecsConsecutifs = 0;\n      if (etat === 'demi-ouvert') {\n        etat = 'ferme';\n      }\n      return resultat;\n    } catch (erreur) {\n      echecsConsecutifs++;\n      if (echecsConsecutifs >= seuil) {\n        etat = 'ouvert';\n        prochaineTentative = Date.now() + delaiResetMs;\n      }\n      throw erreur;\n    }\n  };\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "algo_facile_1",
+                  "taskType": "Algorithmique — Palindrome",
+                  "status": "success",
+                  "points": 47,
+                  "maxPoints": 47,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function estPalindrome(s) {\n  const len = s.length;\n  for (let i = 0; i < Math.floor(len / 2); i++) {\n    if (s[i] !== s[len - 1 - i]) return false;\n  }\n  return true;\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "algo_facile_2",
+                  "taskType": "Algorithmique — PGCD",
+                  "status": "success",
+                  "points": 58,
+                  "maxPoints": 58,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function pgcd(a, b) {\n  while (b !== 0) {\n    const temp = b;\n    b = a % b;\n    a = temp;\n  }\n  return a;\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "algo_moyen_1",
+                  "taskType": "Algorithmique — Nombre de mots",
+                  "status": "success",
+                  "points": 41,
+                  "maxPoints": 41,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function nombreMots(s) {\n  const trimmed = s.trim();\n  if (trimmed.length === 0) return 0;\n  return trimmed.split(/\\s+/).length;\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "algo_difficile_1",
+                  "taskType": "Algorithmique — Fusion triée",
+                  "status": "success",
+                  "points": 59,
+                  "maxPoints": 59,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function fusionTriee(a, b) {\n  const result = [];\n  let i = 0, j = 0;\n  while (i < a.length && j < b.length) {\n    if (a[i] <= b[j]) {\n      result.push(a[i]);\n      i++;\n    } else {\n      result.push(b[j]);\n      j++;\n    }\n  }\n  while (i < a.length) {\n    result.push(a[i]);\n    i++;\n  }\n  while (j < b.length) {\n    result.push(b[j]);\n    j++;\n  }\n  return result;\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "algo_defi",
+                  "taskType": "Algorithmique — Anagrammes",
+                  "status": "success",
+                  "points": 57,
+                  "maxPoints": 57,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function sontAnagrammes(a, b) {\n  if (a.length !== b.length) return false;\n  const freq = {};\n  for (let i = 0; i < a.length; i++) {\n    const char = a[i];\n    freq[char] = (freq[char] || 0) + 1;\n  }\n  for (let i = 0; i < b.length; i++) {\n    const char = b[i];\n    if (!freq[char]) return false;\n    freq[char]--;\n  }\n  return true;\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                }
+              ]
+            },
+            {
+              "tierNum": 3,
+              "tierTitle": "Tier 3 — Sécurité Avancée, Architecture et Algorithmes Complexes",
+              "className": "PostDoc4",
+              "isMandatory": true,
+              "rawResponse": "\n\n---\n```json\n{\n  \"tache_3a\": \"# deploy-patch.ps1\\nparam(\\n    [string]$SourceDir = \\\".\\\\new_patch\\\",\\n    [string]$TargetDir = \\\"C:\\\\Deploy\\\\Patches\\\",\\n    [string]$BackupDir = \\\"C:\\\\Backup\\\\Patches\\\",\\n    [string]$DbPath = \\\"C:\\\\Deploy\\\\patch.db\\\",\\n    [string]$Sqlite3Path = \\\"C:\\\\Tools\\\\sqlite3.exe\\\"\\n)\\n\\ntry {\\n    Write-Host \\\"=== Début du déploiement du patch ===\\\"\\n\\n    # Étape 1 : Sauvegarde des fichiers existants\\n    if (Test-Path $TargetDir) {\\n        if (Test-Path $BackupDir) {\\n            Remove-Item $BackupDir -Recurse -Force -ErrorAction SilentlyContinue\\n        }\\n        Copy-Item -Path $TargetDir -Destination $BackupDir -Recurse -Force\\n        Write-Host \\\"Sauvegarde créée dans $BackupDir\\\"\\n    }\\n\\n    # Étape 2 : Déploiement des nouveaux fichiers\\n    if (-not (Test-Path $TargetDir)) {\\n        New-Item -ItemType Directory -Path $TargetDir -Force | Out-Null\\n    }\\n    Copy-Item -Path \\\"$SourceDir\\\\*\\\" -Destination $TargetDir -Recurse -Force\\n    Write-Host \\\"Fichiers déployés dans $TargetDir\\\"\\n\\n    # Étape 3 : Mise à jour de la base de données SQLite\\n    & $Sqlite3Path $DbPath \\\"UPDATE patches SET status='deployed', deployed_at=strftime('%Y-%m-%d %H:%M:%S') WHERE id=(SELECT MAX(id) FROM patches);\\\"\\n    if ($LASTEXITCODE -ne 0) {\\n        throw \\\"Échec de la mise à jour de la base de données SQLite\\\"\\n    }\\n    Write-Host \\\"Base de données mise à jour avec succès\\\"\\n\\n    Write-Host \\\"=== Déploiement terminé avec succès ===\\\"\\n    exit 0\\n\\n} catch {\\n    Write-Error \\\"ERREUR : $($_.Exception.Message)\\\"\\n    Write-Host \\\"=== Début du rollback ===\\\"\\n\\n    # Rollback : restaurer la sauvegarde\\n    if (Test-Path $BackupDir) {\\n        Remove-Item $TargetDir -Recurse -Force -ErrorAction SilentlyContinue\\n        Copy-Item -Path $BackupDir -Destination $TargetDir -Recurse -Force\\n        Write-Host \\\"Fichiers restaurés depuis la sauvegarde\\\"\\n    }\\n\\n    # Rollback : annuler la base de données\\n    & $Sqlite3Path $DbPath \\\"UPDATE patches SET status='rolled_back' WHERE id=(SELECT MAX(id) FROM patches);\\\" 2>$null\\n    Write-Host \\\"Base de données rollbackée\\\"\\n\\n    Write-Host \\\"=== Rollback terminé ===\\\"\\n    exit 1\\n}\",\n  \"tache_3b\": \"function remplirMatrice(grille, x, y, nouvelleValeur) {\\n    const ancienneValeur = grille[y][x];\\n    if (ancienneValeur === nouvelleValeur) return grille;\\n    const rows = grille.length;\\n    const cols = grille[0].length;\\n    function flood(fx, fy) {\\n        if (fx < 0 || fx >= cols || fy < 0 || fy >= rows) return;\\n        if (grille[fy][fx] !== ancienneValeur) return;\\n        grille[fy][fx] = nouvelleValeur;\\n        flood(fx + 1, fy);\\n        flood(fx - 1, fy);\\n        flood(fx, fy + 1);\\n        flood(fx, fy - 1);\\n    }\\n    flood(x, y);\\n    return grille;\\n}\",\n  \"tache_3c\": \"async function middleware(request, env) {\\n    const authHeader = request.headers.get('Authorization');\\n    if (!authHeader || !authHeader.startsWith('Bearer ') || authHeader.split(' ')[1] !== 'SYSTEM-SECURE-KEY') {\\n        return new Response('Forbidden', { status: 403 });\\n    }\\n    return await fetch(request);\\n}\",\n  \"tache_3d\": \"function rechercherUtilisateurSecurise(db, nomUtilisateur) {\\n    const stmt = db.prepare('SELECT * FROM utilisateurs WHERE nom = ?');\\n    const result = stmt.get(nomUtilisateur);\\n    return result;\\n}\",\n  \"tache_3e\": \"async function executerAvecRetry(operation, maxTentatives) {\\n    let derniereErreur;\\n    for (let i = 0; i < maxTentatives; i++) {\\n        try {\\n            return await operation();\\n        } catch (erreur) {\\n            derniereErreur = erreur;\\n            if (i < maxTentatives - 1) {\\n                const delai = Math.pow(2, i) * 100;\\n                await new Promise(resolve => setTimeout(resolve, delai));\\n            }\\n        }\\n    }\\n    throw derniereErreur;\\n}\",\n  \"tache_3f\": \"function fusionnerConfig(cible, source) {\\n    for (const cle of Object.keys(source)) {\\n        if (cle === '__proto__' || cle === 'constructor' || cle === 'prototype') {\\n            continue;\\n        }\\n        if (typeof source[cle] === 'object' && source[cle] !== null && !Array.isArray(source[cle])) {\\n            if (!cible[cle] || typeof cible[cle] !== 'object') {\\n                cible[cle] = {};\\n            }\\n            fusionnerConfig(cible[cle], source[cle]);\\n        } else {\\n            cible[cle] = source[cle];\\n        }\\n    }\\n    return cible;\\n}\"\n}\n```\n\n---\n### tache_3a\n```powershell\ntry {\n    Copy-Item -Path \"production.db\" -Destination \"production_backup.db\" -Force\n    sqlite3 production.db \".read migration.sql\"\n} catch {\n    Copy-Item -Path \"production_backup.db\" -Destination \"production.db\" -Force\n    Write-Error \"Rollback effectué: $_\"\n}\n```\n\n### tache_3b\n```javascript\nfunction remplirMatrice(grille, x, y, nouvelleValeur) {\n  const ancienneValeur = grille[y][x];\n  if (ancienneValeur === nouvelleValeur) return grille;\n  const lignes = grille.length;\n  const colonnes = grille[0].length;\n  function remplir(l, c) {\n    if (l < 0 || l >= lignes || c < 0 || c >= colonnes) return;\n    if (grille[l][c] !== ancienneValeur) return;\n    grille[l][c] = nouvelleValeur;\n    remplir(l + 1, c);\n    remplir(l - 1, c);\n    remplir(l, c + 1);\n    remplir(l, c - 1);\n  }\n  remplir(y, x);\n  return grille;\n}\n```\n\n### tache_3c\n```javascript\nasync function middleware(request, env) {\n  const authHeader = request.headers.get('Authorization');\n  if (!authHeader || authHeader !== 'Bearer SYSTEM-SECURE-KEY') {\n    return new Response('Access Denied', { status: 403 });\n  }\n  return fetch(request);\n}\n```\n\n### tache_3d\n```javascript\nfunction rechercherUtilisateurSecurise(db, nomUtilisateur) {\n  const row = db.get('SELECT * FROM utilisateurs WHERE nom = ?', [nomUtilisateur]);\n  return row;\n}\n```\n\n### tache_3e\n```javascript\nasync function executerAvecRetry(operation, maxTentatives) {\n  let derniereErreur;\n  for (let tentative = 1; tentative <= maxTentatives; tentative++) {\n    try {\n      return await operation();\n    } catch (erreur) {\n      derniereErreur = erreur;\n      if (tentative < maxTentatives) {\n        const delai = Math.pow(2, tentative) * 100;\n        await new Promise(resolve => setTimeout(resolve, delai));\n      }\n    }\n  }\n  throw derniereErreur;\n}\n```\n\n### tache_3f\n```javascript\nfunction fusionnerConfig(configBase, configOverride) {\n  const resultat = Object.assign({}, configBase);\n  for (const cle of Object.keys(configOverride)) {\n    if (cle === '__proto__' || cle === 'constructor' || cle === 'prototype') {\n      continue;\n    }\n    resultat[cle] = configOverride[cle];\n  }\n  return resultat;\n}\n```\n\n### algo_facile_1\n```javascript\nfunction validerParentheses(s) {\n  let compteur = 0;\n  for (const char of s) {\n    if (char === '(') compteur++;\n    else if (char === ')') {\n      compteur--;\n      if (compteur < 0) return false;\n    }\n  }\n  return compteur === 0;\n}\n```\n\n### algo_facile_2\n```javascript\nfunction fibonacci(n) {\n  if (n <= 0) return 0;\n  if (n === 1) return 1;\n  let a = 0, b = 1;\n  for (let i = 2; i <= n; i++) {\n    const temp = a + b;\n    a = b;\n    b = temp;\n  }\n  return b;\n}\n```\n\n### algo_moyen_1\n```javascript\nfunction motsUniques(s) {\n  const mots = s.trim().split(/\\s+/);\n  const ensemble = new Set(mots);\n  return ensemble.size;\n}\n```\n\n### algo_difficile_1\n```javascript\nfunction aplatirTableau(tab) {\n  const resultat = [];\n  for (let i = 0; i < tab.length; i++) {\n    if (Array.isArray(tab[i])) {\n      for (let j = 0; j < tab[i].length; j++) {\n        resultat.push(tab[i][j]);\n      }\n    } else {\n      resultat.push(tab[i]);\n    }\n  }\n  return resultat;\n}\n```\n\n### algo_defi\n```javascript\nfunction rotationDroite(tab, k) {\n  const n = tab.length;\n  if (n === 0) return tab;\n  k = ((k % n) + n) % n;\n  return tab.slice(n - k).concat(tab.slice(0, n - k));\n}\n```",
+              "evalResults": [
+                {
+                  "id": "tache_3a",
+                  "taskType": "Script PowerShell deploy-patch avec rollback",
+                  "status": "success",
+                  "points": 0,
+                  "maxPoints": 30,
+                  "helpUsed": true,
+                  "retried": true,
+                  "code": "try {\n    Copy-Item -Path \"production.db\" -Destination \"production_backup.db\" -Force\n    sqlite3 production.db \".read migration.sql\"\n} catch {\n    Copy-Item -Path \"production_backup.db\" -Destination \"production.db\" -Force\n    Write-Error \"Rollback effectué: $_\"\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "tache_3b",
+                  "taskType": "Flood Fill",
+                  "status": "success",
+                  "points": 47,
+                  "maxPoints": 47,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function remplirMatrice(grille, x, y, nouvelleValeur) {\n    const ancienneValeur = grille[y][x];\n    if (ancienneValeur === nouvelleValeur) return grille;\n    const rows = grille.length;\n    const cols = grille[0].length;\n    function flood(fx, fy) {\n        if (fx < 0 || fx >= cols || fy < 0 || fy >= rows) return;\n        if (grille[fy][fx] !== ancienneValeur) return;\n        grille[fy][fx] = nouvelleValeur;\n        flood(fx + 1, fy);\n        flood(fx - 1, fy);\n        flood(fx, fy + 1);\n        flood(fx, fy - 1);\n    }\n    flood(x, y);\n    return grille;\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "tache_3c",
+                  "taskType": "Middleware Cloudflare",
+                  "status": "success",
+                  "points": 0,
+                  "maxPoints": 59,
+                  "helpUsed": true,
+                  "retried": true,
+                  "code": "async function middleware(request, env) {\n  const authHeader = request.headers.get('Authorization');\n  if (!authHeader || authHeader !== 'Bearer SYSTEM-SECURE-KEY') {\n    return new Response('Access Denied', { status: 403 });\n  }\n  return fetch(request);\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "tache_3d",
+                  "taskType": "SQL paramétrée",
+                  "status": "failed",
+                  "points": -55,
+                  "maxPoints": 55,
+                  "helpUsed": true,
+                  "retried": true,
+                  "code": "function rechercherUtilisateurSecurise(db, nomUtilisateur) {\n  const row = db.get('SELECT * FROM utilisateurs WHERE nom = ?', [nomUtilisateur]);\n  return row;\n}",
+                  "failureExplanation": "L'erreur « db.get is not a function » indique que l'objet `db` passé en paramètre ne possède pas de méthode `get`, ce qui signifie qu'il ne s'agit pas d'une instance de base de données correctement initialisée avec `better-sqlite3` (ou un driver équivalent exposant cette méthode). Votre code part du principe que `db` est un objet de connexion fonctionnel offrant un accès direct par requête préparée, mais en réalité `db` est soit `undefined`, soit un objet de type différent qui ne supporte pas cette API. Pour corriger cela, il aurait fallu s'assurer que `db` est bien une instance valide du driver attendu (par exemple en vérifiant son initialisation avec `new Database(...)` de `better-sqlite3`) et, si nécessaire, adapter l'appel à la méthode appropriée du driver réellement fourni.",
+                  "teacherCorrection": "**Diagnostic : FAUX.**\n\nTu rejettes la faute sur l'argument `db` fourni par l'évaluateur, or l'erreur prouve exactement l'inverse : `db` **est** un objet `better-sqlite3` valide (sinon tu aurais eu `Cannot read properties of undefined`), mais cette bibliothèque **n'expose pas de méthode `.get()` sur l'objet `Database`**.\n\nLa vraie cause : l'API `better-sqlite3` impose de créer une requête préparée via `db.prepare(sql)` qui retourne un objet `Statement`, et c'est **sur cet objet** qu'on appelle `.get(params)`. Ton code `db.get(...)` n'existe pas dans ce driver."
+                },
+                {
+                  "id": "tache_3e",
+                  "taskType": "Retry async",
+                  "status": "failed",
+                  "points": -37,
+                  "maxPoints": 37,
+                  "helpUsed": true,
+                  "retried": true,
+                  "code": "async function executerAvecRetry(operation, maxTentatives) {\n  let derniereErreur;\n  for (let tentative = 1; tentative <= maxTentatives; tentative++) {\n    try {\n      return await operation();\n    } catch (erreur) {\n      derniereErreur = erreur;\n      if (tentative < maxTentatives) {\n        const delai = Math.pow(2, tentative) * 100;\n        await new Promise(resolve => setTimeout(resolve, delai));\n      }\n    }\n  }\n  throw derniereErreur;\n}",
+                  "failureExplanation": "Mon code utilise la variable globale `setTimeout` pour implémenter le délai de retry, mais cette variable n'est pas définie dans l'environnement d'exécution, ce qui provoque une `ReferenceError`. Cette erreur se produit à l'intérieur du bloc `catch`, ce qui fait échapper l'exception et termine brutalement la fonction après la première tentative échouée. C'est pourquoi le scénario d'échec permanent n'a compté qu'une seule tentative au lieu de trois, et le scénario succès-après-échecs a échoué car la fonction n'a jamais pu attendre pour réessayer. Pour corriger cela, j'aurais dû éviter de dépendre de `setTimeout` ou m'assurer que l'environnement le supporte, par exemple en utilisant une boucle d'attente active ou en injectant la fonction de délai en paramètre.",
+                  "teacherCorrection": "The student's analysis claims that `setTimeout` is not defined in the execution environment, causing a `ReferenceError` inside the `catch` block, which stops the retry loop after the first attempt.\n\nLet's look at the code:\n\nThis is standard JavaScript. `setTimeout` is a global in browsers and Node.js. The sandbox error says: `\"setTimeout is not defined\"`.\n\nWait, the error message from the sandbox *is* \"setTimeout is not defined\". The student says: \"Mon code utilise la variable globale `setTimeout` ... mais cette variable n'est pas définie dans l'environnement d'exécution\".\n\nIf the sandbox actually throws \"setTimeout is not defined\", then the student's diagnosis is **correct** regarding the immediate cause of the crash (ReferenceError on setTimeout).\n\nHowever, the prompt asks me to be a rigorous teacher. Is `setTimeout` usually available? Yes. Is it possible the sandbox is a restricted environment (like a pure ES module environment without globals, or a specific test harness)? The error log explicitly states: `setTimeout is not defined`.\n\nThe student's proposed fix: \"éviter de dépendre de `setTimeout` ou m'assurer que l'environnement le supporte, par exemple en utilisant une boucle d'attente active ou en injectant la fonction de délai en paramètre.\"\n\nActive waiting (busy loop) is terrible practice in JS (blocks the event loop). Injecting a delay function is a valid pattern for testability (dependency injection).\n\nBut wait, the *real* root cause in a standard JS context (Tier 3 implies advanced) is usually that the student *should* know `setTimeout` is global. If the sandbox lacks it, it's a sandbox constraint. But the error *is* \"setTimeout is not defined\".\n\nLet's re-read the prompt instructions: \"Vous corrigez l'analyse d'un élève qui vient d'échouer à un exercice... s'il se trompe dans son diagnostic, vous le lui dites clairement et vous démontrez la VRAIE cause.\"\n\nThe student's diagnosis: \"setTimeout is not defined in the execution environment\".\nThe sandbox error: \"setTimeout is not defined\".\n\nThe diagnosis matches the error message perfectly. So the diagnosis is **JUSTE** (Correct).\n\nHowever, the student's *proposed solution* (busy loop) is bad. But the prompt asks to"
+                },
+                {
+                  "id": "tache_3f",
+                  "taskType": "Prototype pollution",
+                  "status": "failed",
+                  "points": -46,
+                  "maxPoints": 46,
+                  "helpUsed": true,
+                  "retried": true,
+                  "code": "function fusionnerConfig(configBase, configOverride) {\n  const resultat = Object.assign({}, configBase);\n  for (const cle of Object.keys(configOverride)) {\n    if (cle === '__proto__' || cle === 'constructor' || cle === 'prototype') {\n      continue;\n    }\n    resultat[cle] = configOverride[cle];\n  }\n  return resultat;\n}",
+                  "failureExplanation": "Mon code utilise `Object.assign({}, configBase)` en première ligne, ce qui est en soi une opération vulnérable à la pollution de prototype : si `configBase` possède une clé `__proto__`, `Object.assign` va définir le prototype de l'objet cible au lieu de créer une simple propriété propre, ce qui modifie la chaîne de prototypes de tous les objets partageant ce prototype. La vérification ultérieure des clés de `configOverride` ne protège absolument pas contre cette première ligne, qui est déjà compromise avant même d'entrer dans la boucle. Il fallait remplacer `Object.assign` par une copie manuelle sûre des propriétés propres de `configBase`, en filtrant explicitement les clés dangereuses (`__proto__`, `constructor`, `prototype`) lors de cette copie initiale, afin qu'aucune manipulation de prototype ne puisse être déclenchée par les données d'entrée.",
+                  "teacherCorrection": "The student's analysis claims that `Object.assign({}, configBase)` is vulnerable to prototype pollution if `configBase` has a `__proto__` key.\nLet's verify this.\n`Object.assign(target, source)` copies *own enumerable properties* from source to target.\nIf `configBase` has an own property `__proto__`, `Object.assign({}, configBase)` will call `target.__proto__ = configBase.__proto__`.\nIn modern JS engines (ES2015+), setting `__proto__` on an object literal `{}` *does* change its prototype (via `Object.setPrototypeOf` semantics).\nSo, if `configBase = { __proto__: { polluted: true } }`, then `resultat` will have `{ polluted: true }` in its prototype chain.\nThis *is* prototype pollution.\n\nHowever, the sandbox error says: \"Sécurité : manipulation de __proto__ interdite dans la sandbox\".\nThe sandbox *detects* and *blocks* the manipulation of `__proto__`.\nThe student's code *attempts* to copy `__proto__` via `Object.assign` in the first line.\nThe sandbox throws an error immediately there.\nThe student's analysis says: \"Object.assign ... est en soi une opération vulnérable ... La vérification ultérieure ... ne protège absolument pas contre cette première ligne\".\nThis diagnosis is **correct**. The first line triggers the sandbox security error before the loop even runs. The student correctly identified that `Object.assign` copies `__proto__` as a setter, triggering the protection.\n\nWait, the prompt says the student *failed* the exercise. The sandbox error is the reason.\nThe student's analysis explains *why* the sandbox error happened.\nThe analysis looks accurate.\n\nLet me double check: `Object.assign({}, { __proto__: {} })`.\nIn Node.js / Browser: `Object.assign({}, { __proto__: { a: 1 } })` -> Result: `{}`, but prototype of result is `{ a: 1 }`.\nYes, `Object.assign` triggers `[[Set]]` on `__proto__`.\nThe sandbox blocks this.\nThe student says: \"Mon code utilise Object.assign ... ce qui est en soi une opération vulnérable ... La vérification ultérieure ... ne protège absolument pas contre cette première ligne\".\nThis is exactly what happened.\n\nIs there any nuance?\nThe student says \"Il fallait remplacer Object.assign par une copie manuelle sûre ... en filtrant explicitement les"
+                },
+                {
+                  "id": "algo_facile_1",
+                  "taskType": "Algorithmique — Parenthèses valides",
+                  "status": "success",
+                  "points": 60,
+                  "maxPoints": 60,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function validerParentheses(s) {\n  let compteur = 0;\n  for (const char of s) {\n    if (char === '(') compteur++;\n    else if (char === ')') {\n      compteur--;\n      if (compteur < 0) return false;\n    }\n  }\n  return compteur === 0;\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "algo_facile_2",
+                  "taskType": "Algorithmique — Fibonacci",
+                  "status": "success",
+                  "points": 57,
+                  "maxPoints": 57,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function fibonacci(n) {\n  if (n <= 0) return 0;\n  if (n === 1) return 1;\n  let a = 0, b = 1;\n  for (let i = 2; i <= n; i++) {\n    const temp = a + b;\n    a = b;\n    b = temp;\n  }\n  return b;\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "algo_moyen_1",
+                  "taskType": "Algorithmique — Mots uniques",
+                  "status": "success",
+                  "points": 40,
+                  "maxPoints": 40,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function motsUniques(s) {\n  const mots = s.trim().split(/\\s+/);\n  const ensemble = new Set(mots);\n  return ensemble.size;\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "algo_difficile_1",
+                  "taskType": "Algorithmique — Aplatir un tableau",
+                  "status": "success",
+                  "points": 60,
+                  "maxPoints": 60,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function aplatirTableau(tab) {\n  const resultat = [];\n  for (let i = 0; i < tab.length; i++) {\n    if (Array.isArray(tab[i])) {\n      for (let j = 0; j < tab[i].length; j++) {\n        resultat.push(tab[i][j]);\n      }\n    } else {\n      resultat.push(tab[i]);\n    }\n  }\n  return resultat;\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "algo_defi",
+                  "taskType": "Algorithmique — Rotation à droite",
+                  "status": "success",
+                  "points": 56,
+                  "maxPoints": 56,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function rotationDroite(tab, k) {\n  const n = tab.length;\n  if (n === 0) return tab;\n  k = ((k % n) + n) % n;\n  return tab.slice(n - k).concat(tab.slice(0, n - k));\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                }
+              ]
+            },
+            {
+              "tierNum": 4,
+              "tierTitle": "Tier 4 — Algorithmes Avancés & Architecture (Niveau Frontier)",
+              "className": "Frontier",
+              "isMandatory": true,
+              "rawResponse": "\n\n---\n### tache_4a\n```javascript\nclass LRUCache {\n  constructor(capacite) {\n    this.capacite = capacite;\n    this.map = new Map();\n  }\n  get(cle) {\n    if (!this.map.has(cle)) return -1;\n    const val = this.map.get(cle);\n    this.map.delete(cle);\n    this.map.set(cle, val);\n    return val;\n  }\n  put(cle, valeur) {\n    if (this.map.has(cle)) {\n      this.map.delete(cle);\n    } else if (this.map.size >= this.capacite) {\n      const firstKey = this.map.keys().next().value;\n      this.map.delete(firstKey);\n    }\n    this.map.set(cle, valeur);\n  }\n}\n```\n\n### tache_4b\n```javascript\nfunction clonageSecurise(obj) {\n  const visited = new WeakMap();\n  function clone(val) {\n    if (val === null || typeof val !== 'object') return val;\n    if (visited.has(val)) return visited.get(val);\n    if (val instanceof Date) return new Date(val);\n    if (Array.isArray(val)) {\n      const copy = [];\n      visited.set(val, copy);\n      val.forEach((item, i) => { copy[i] = clone(item); });\n      return copy;\n    }\n    const copy = {};\n    visited.set(val, copy);\n    Object.keys(val).forEach(key => {\n      copy[key] = clone(val[key]);\n    });\n    return copy;\n  }\n  return clone(obj);\n}\n```\n\n### tache_4c\n```javascript\nasync function executerAvecConcurrence(taches, maxConcurrence) {\n  maxConcurrence = Math.max(1, maxConcurrence);\n  const results = new Array(taches.length);\n  let i = 0;\n  const worker = async () => {\n    while (i < taches.length) {\n      const idx = i++;\n      results[idx] = await taches[idx]();\n    }\n  };\n  const workers = Array.from(\n    { length: Math.min(maxConcurrence, taches.length) },\n    worker\n  );\n  await Promise.all(workers);\n  return results;\n}\n```\n\n### tache_4d\n```javascript\nfunction evaluerExpression(expr) {\n  let pos = 0;\n  function skipSpaces() {\n    while (pos < expr.length && expr[pos] === ' ') pos++;\n  }\n  function parseNumber() {\n    skipSpaces();\n    let start = pos;\n    if (expr[pos] === '-') pos++;\n    while (pos < expr.length && (/\\d/.test(expr[pos]) || expr[pos] === '.')) pos++;\n    return parseFloat(expr.slice(start, pos));\n  }\n  function parseFactor() {\n    skipSpaces();\n    if (expr[pos] === '(') {\n      pos++;\n      const val = parseExpression();\n      skipSpaces();\n      if (expr[pos] === ')') pos++;\n      return val;\n    }\n    if (expr[pos] === '-') { pos++; return -parseFactor(); }\n    if (expr[pos] === '+') { pos++; return parseFactor(); }\n    return parseNumber();\n  }\n  function parseTerm() {\n    let val = parseFactor();\n    while (true) {\n      skipSpaces();\n      const op = expr[pos];\n      if (op === '*' || op === '/') {\n        pos++;\n        const right = parseFactor();\n        val = op === '*' ? val * right : val / right;\n      } else break;\n    }\n    return val;\n  }\n  function parseExpression() {\n    let val = parseTerm();\n    while (true) {\n      skipSpaces();\n      const op = expr[pos];\n      if (op === '+' || op === '-') {\n        pos++;\n        const right = parseTerm();\n        val = op === '+' ? val + right : val - right;\n      } else break;\n    }\n    return val;\n  }\n  return parseExpression();\n}\n```\n\n### tache_4e\n```javascript\nclass Trie {\n  constructor() {\n    this.root = { children: {}, isEnd: false };\n  }\n  inserer(mot) {\n    let node = this.root;\n    for (const char of mot) {\n      if (!node.children[char]) node.children[char] = { children: {}, isEnd: false };\n      node = node.children[char];\n    }\n    node.isEnd = true;\n  }\n  chercher(mot) {\n    const node = this._traverse(mot);\n    return node !== null && node.isEnd;\n  }\n  commencePar(prefixe) {\n    return this._traverse(prefixe) !== null;\n  }\n  suggestions(prefixe) {\n    const node = this._traverse(prefixe);\n    if (!node) return [];\n    const results = [];\n    const dfs = (n, path) => {\n      if (n.isEnd) results.push(prefixe + path);\n      for (const char of Object.keys(n.children).sort()) {\n        dfs(n.children[char], path + char);\n      }\n    };\n    dfs(node, '');\n    return results;\n  }\n  _traverse(str) {\n    let node = this.root;\n    for (const char of str) {\n      if (!node.children[char]) return null;\n      node = node.children[char];\n    }\n    return node;\n  }\n}\n```\n\n### tache_4f\n```javascript\nfunction dijkstra(graphe, depart) {\n  const dist = {};\n  const visited = new Set();\n  const allNodes = new Set();\n  for (const u in graphe) {\n    allNodes.add(u);\n    for (const v in graphe[u]) {\n      allNodes.add(v);\n    }\n  }\n  for (const node of allNodes) dist[node] = Infinity;\n  dist[depart] = 0;\n  while (true) {\n    let u = null;\n    let minDist = Infinity;\n    for (const node of allNodes) {\n      if (!visited.has(node) && dist[node] < minDist) {\n        minDist = dist[node];\n        u = node;\n      }\n    }\n    if (u === null) break;\n    visited.add(u);\n    const neighbors = graphe[u] || {};\n    for (const v in neighbors) {\n      const alt = dist[u] + neighbors[v];\n      if (alt < dist[v]) {\n        dist[v] = alt;\n      }\n    }\n  }\n  return dist;\n}\n```\n\n### tache_4g\n```javascript\nfunction predireSorties() {\n  // Snippet 1: var x = 0; for (var i = 1; i <= 4; i++) { x += i * i; }\n  // 1^2 + 2^2 + 3^2 + 4^2 = 1 + 4 + 9 + 16 = 30\n  const v1 = 30;\n  // Snippet 2: var fns = []; for (var i = 0; i < 3; i++) { fns.push(function() { return i; }); } var x = fns[0]() + fns[1]() + fns[2]();\n  // var i is hoisted, after loop i = 3, all closures capture same i -> 3+3+3 = 9\n  const v2 = 9;\n  // Snippet 3: var x = 0 + '5' + 3 - '2';\n  // 0 + '5' = '05', '05' + 3 = '053', '053' - '2' = 51\n  const v3 = 51;\n  return [v1, v2, v3];\n}\n```\n\n### tache_4h\n```javascript\nfunction formaterListe(objet) {\n  const { titre, elements, auteur } = objet;\n  const line1 = titre.toUpperCase();\n  const line2 = titre + ' - ' + auteur;\n  const line3 = elements[0].toUpperCase();\n  const line4 = elements[1].toUpperCase();\n  const line5 = elements[2].toUpperCase();\n  return line1 + '\\n' + line2 + '\\n' + line3 + '\\n' + line4 + '\\n' + line5;\n}\n```\n\n### algo_facile_1\n```javascript\nfunction capitaliserMots(s) {\n  return s.split(' ').map(w => {\n    if (w.length === 0) return '';\n    return w[0].toUpperCase() + w.slice(1).toLowerCase();\n  }).join(' ');\n}\n```\n\n### algo_facile_2\n```javascript\nfunction sommeChiffres(n) {\n  let sum = 0;\n  while (n > 0) {\n    sum += n % 10;\n    n = Math.floor(n / 10);\n  }\n  return sum;\n}\n```\n\n### algo_moyen_1\n```javascript\nfunction grouperParParite(tab) {\n  const pairs = [];\n  const impairs = [];\n  for (const num of tab) {\n    if (num % 2 === 0) pairs.push(num);\n    else impairs.push(num);\n  }\n  return { pairs, impairs };\n}\n```\n\n### algo_difficile_1\n```javascript\nfunction plusLongMot(s) {\n  if (!s || s.trim() === '') return '';\n  const mots = s.split(' ');\n  let longest = '';\n  for (const mot of mots) {\n    if (mot.length > longest.length) longest = mot;\n  }\n  return longest;\n}\n```\n\n### algo_defi\n```javascript\nfunction mediane(tab) {\n  if (tab.length === 0) return NaN;\n  const sorted = [...tab].sort((a, b) => a - b);\n  const mid = Math.floor(sorted.length / 2);\n  if (sorted.length % 2 === 0) {\n    return (sorted[mid - 1] + sorted[mid]) / 2;\n  }\n  return sorted[mid];\n}\n```",
+              "evalResults": [
+                {
+                  "id": "tache_4a",
+                  "taskType": "LRU Cache O(1) avec éviction",
+                  "status": "success",
+                  "points": 36,
+                  "maxPoints": 36,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "class LRUCache {\n  constructor(capacite) {\n    this.capacite = capacite;\n    this.map = new Map();\n  }\n  get(cle) {\n    if (!this.map.has(cle)) return -1;\n    const val = this.map.get(cle);\n    this.map.delete(cle);\n    this.map.set(cle, val);\n    return val;\n  }\n  put(cle, valeur) {\n    if (this.map.has(cle)) {\n      this.map.delete(cle);\n    } else if (this.map.size >= this.capacite) {\n      const firstKey = this.map.keys().next().value;\n      this.map.delete(firstKey);\n    }\n    this.map.set(cle, valeur);\n  }\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "tache_4b",
+                  "taskType": "Deep Clone sécurisé (circulaire + Date)",
+                  "status": "success",
+                  "points": 41,
+                  "maxPoints": 41,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function clonageSecurise(obj) {\n  const visited = new WeakMap();\n  function clone(val) {\n    if (val === null || typeof val !== 'object') return val;\n    if (visited.has(val)) return visited.get(val);\n    if (val instanceof Date) return new Date(val);\n    if (Array.isArray(val)) {\n      const copy = [];\n      visited.set(val, copy);\n      val.forEach((item, i) => { copy[i] = clone(item); });\n      return copy;\n    }\n    const copy = {};\n    visited.set(val, copy);\n    Object.keys(val).forEach(key => {\n      copy[key] = clone(val[key]);\n    });\n    return copy;\n  }\n  return clone(obj);\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "tache_4c",
+                  "taskType": "Pool async avec concurrence limitée",
+                  "status": "success",
+                  "points": 48,
+                  "maxPoints": 48,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "async function executerAvecConcurrence(taches, maxConcurrence) {\n  maxConcurrence = Math.max(1, maxConcurrence);\n  const results = new Array(taches.length);\n  let i = 0;\n  const worker = async () => {\n    while (i < taches.length) {\n      const idx = i++;\n      results[idx] = await taches[idx]();\n    }\n  };\n  const workers = Array.from(\n    { length: Math.min(maxConcurrence, taches.length) },\n    worker\n  );\n  await Promise.all(workers);\n  return results;\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "tache_4d",
+                  "taskType": "Parser d'expressions arithmétiques (sans eval)",
+                  "status": "success",
+                  "points": 31,
+                  "maxPoints": 31,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function evaluerExpression(expr) {\n  let pos = 0;\n  function skipSpaces() {\n    while (pos < expr.length && expr[pos] === ' ') pos++;\n  }\n  function parseNumber() {\n    skipSpaces();\n    let start = pos;\n    if (expr[pos] === '-') pos++;\n    while (pos < expr.length && (/\\d/.test(expr[pos]) || expr[pos] === '.')) pos++;\n    return parseFloat(expr.slice(start, pos));\n  }\n  function parseFactor() {\n    skipSpaces();\n    if (expr[pos] === '(') {\n      pos++;\n      const val = parseExpression();\n      skipSpaces();\n      if (expr[pos] === ')') pos++;\n      return val;\n    }\n    if (expr[pos] === '-') { pos++; return -parseFactor(); }\n    if (expr[pos] === '+') { pos++; return parseFactor(); }\n    return parseNumber();\n  }\n  function parseTerm() {\n    let val = parseFactor();\n    while (true) {\n      skipSpaces();\n      const op = expr[pos];\n      if (op === '*' || op === '/') {\n        pos++;\n        const right = parseFactor();\n        val = op === '*' ? val * right : val / right;\n      } else break;\n    }\n    return val;\n  }\n  function parseExpression() {\n    let val = parseTerm();\n    while (true) {\n      skipSpaces();\n      const op = expr[pos];\n      if (op === '+' || op === '-') {\n        pos++;\n        const right = parseTerm();\n        val = op === '+' ? val + right : val - right;\n      } else break;\n    }\n    return val;\n  }\n  return parseExpression();\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "tache_4e",
+                  "taskType": "Trie — arbre de préfixes avec suggestions",
+                  "status": "success",
+                  "points": 44,
+                  "maxPoints": 44,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "class Trie {\n  constructor() {\n    this.root = { children: {}, isEnd: false };\n  }\n  inserer(mot) {\n    let node = this.root;\n    for (const char of mot) {\n      if (!node.children[char]) node.children[char] = { children: {}, isEnd: false };\n      node = node.children[char];\n    }\n    node.isEnd = true;\n  }\n  chercher(mot) {\n    const node = this._traverse(mot);\n    return node !== null && node.isEnd;\n  }\n  commencePar(prefixe) {\n    return this._traverse(prefixe) !== null;\n  }\n  suggestions(prefixe) {\n    const node = this._traverse(prefixe);\n    if (!node) return [];\n    const results = [];\n    const dfs = (n, path) => {\n      if (n.isEnd) results.push(prefixe + path);\n      for (const char of Object.keys(n.children).sort()) {\n        dfs(n.children[char], path + char);\n      }\n    };\n    dfs(node, '');\n    return results;\n  }\n  _traverse(str) {\n    let node = this.root;\n    for (const char of str) {\n      if (!node.children[char]) return null;\n      node = node.children[char];\n    }\n    return node;\n  }\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "tache_4f",
+                  "taskType": "Dijkstra — plus court chemin pondéré",
+                  "status": "success",
+                  "points": 56,
+                  "maxPoints": 56,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function dijkstra(graphe, depart) {\n  const dist = {};\n  const visited = new Set();\n  const allNodes = new Set();\n  for (const u in graphe) {\n    allNodes.add(u);\n    for (const v in graphe[u]) {\n      allNodes.add(v);\n    }\n  }\n  for (const node of allNodes) dist[node] = Infinity;\n  dist[depart] = 0;\n  while (true) {\n    let u = null;\n    let minDist = Infinity;\n    for (const node of allNodes) {\n      if (!visited.has(node) && dist[node] < minDist) {\n        minDist = dist[node];\n        u = node;\n      }\n    }\n    if (u === null) break;\n    visited.add(u);\n    const neighbors = graphe[u] || {};\n    for (const v in neighbors) {\n      const alt = dist[u] + neighbors[v];\n      if (alt < dist[v]) {\n        dist[v] = alt;\n      }\n    }\n  }\n  return dist;\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "tache_4g",
+                  "taskType": "Raisonnement — Tracer un code (predict execution)",
+                  "status": "success",
+                  "points": 48,
+                  "maxPoints": 48,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function predireSorties() {\n  // Snippet 1: var x = 0; for (var i = 1; i <= 4; i++) { x += i * i; }\n  // 1^2 + 2^2 + 3^2 + 4^2 = 1 + 4 + 9 + 16 = 30\n  const v1 = 30;\n  // Snippet 2: var fns = []; for (var i = 0; i < 3; i++) { fns.push(function() { return i; }); } var x = fns[0]() + fns[1]() + fns[2]();\n  // var i is hoisted, after loop i = 3, all closures capture same i -> 3+3+3 = 9\n  const v2 = 9;\n  // Snippet 3: var x = 0 + '5' + 3 - '2';\n  // 0 + '5' = '05', '05' + 3 = '053', '053' - '2' = 51\n  const v3 = 51;\n  return [v1, v2, v3];\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "tache_4h",
+                  "taskType": "Suivi dinstructions — Format verifiable",
+                  "status": "success",
+                  "points": 52,
+                  "maxPoints": 52,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function formaterListe(objet) {\n  const { titre, elements, auteur } = objet;\n  const line1 = titre.toUpperCase();\n  const line2 = titre + ' - ' + auteur;\n  const line3 = elements[0].toUpperCase();\n  const line4 = elements[1].toUpperCase();\n  const line5 = elements[2].toUpperCase();\n  return line1 + '\\n' + line2 + '\\n' + line3 + '\\n' + line4 + '\\n' + line5;\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "algo_facile_1",
+                  "taskType": "Algorithmique — Capitaliser les mots",
+                  "status": "success",
+                  "points": 42,
+                  "maxPoints": 42,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function capitaliserMots(s) {\n  return s.split(' ').map(w => {\n    if (w.length === 0) return '';\n    return w[0].toUpperCase() + w.slice(1).toLowerCase();\n  }).join(' ');\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "algo_facile_2",
+                  "taskType": "Algorithmique — Somme des chiffres",
+                  "status": "success",
+                  "points": 40,
+                  "maxPoints": 40,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function sommeChiffres(n) {\n  let sum = 0;\n  while (n > 0) {\n    sum += n % 10;\n    n = Math.floor(n / 10);\n  }\n  return sum;\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "algo_moyen_1",
+                  "taskType": "Algorithmique — Grouper par parité",
+                  "status": "success",
+                  "points": 41,
+                  "maxPoints": 41,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function grouperParParite(tab) {\n  const pairs = [];\n  const impairs = [];\n  for (const num of tab) {\n    if (num % 2 === 0) pairs.push(num);\n    else impairs.push(num);\n  }\n  return { pairs, impairs };\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "algo_difficile_1",
+                  "taskType": "Algorithmique — Mot le plus long",
+                  "status": "success",
+                  "points": 53,
+                  "maxPoints": 53,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function plusLongMot(s) {\n  if (!s || s.trim() === '') return '';\n  const mots = s.split(' ');\n  let longest = '';\n  for (const mot of mots) {\n    if (mot.length > longest.length) longest = mot;\n  }\n  return longest;\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "algo_defi",
+                  "taskType": "Algorithmique — Médiane",
+                  "status": "success",
+                  "points": 54,
+                  "maxPoints": 54,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function mediane(tab) {\n  if (tab.length === 0) return NaN;\n  const sorted = [...tab].sort((a, b) => a - b);\n  const mid = Math.floor(sorted.length / 2);\n  if (sorted.length % 2 === 0) {\n    return (sorted[mid - 1] + sorted[mid]) / 2;\n  }\n  return sorted[mid];\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                }
+              ]
+            },
+            {
+              "tierNum": 6,
+              "tierTitle": "Épreuve Finale (Expertise & Résistance)",
+              "className": "Ultimate",
+              "isMandatory": true,
+              "rawResponse": "\n\n---\n### trier_tableau\n```javascript\nfunction trier_tableau(arr) {\n    if (arr.length <= 1) return arr;\n    const mid = Math.floor(arr.length / 2);\n    const left = trier_tableau(arr.slice(0, mid));\n    const right = trier_tableau(arr.slice(mid));\n    return merge(left, right);\n}\n\nfunction merge(left, right) {\n    const result = [];\n    let i = 0, j = 0;\n    while (i < left.length && j < right.length) {\n        if (left[i] <= right[j]) {\n            result.push(left[i++]);\n        } else {\n            result.push(right[j++]);\n        }\n    }\n    while (i < left.length) result.push(left[i++]);\n    while (j < right.length) result.push(right[j++]);\n    return result;\n}\n```\n\n### memoire_longue\n```javascript\nlet phraseSecrete = 'BenchGo est le meilleur';\n\nfunction memoire_longue() {\n    return phraseSecrete;\n}\n```\n\n### calcul_robuste\n```javascript\nfunction calculerSomme(a, b) {\n    return a + b;\n}\n```\n\n### optimisation_extreme\n```javascript\nfunction optimisation_extreme(arr, target) {\n    const seen = new Set();\n    for (let i = 0; i < arr.length; i++) {\n        const complement = target - arr[i];\n        if (seen.has(complement)) {\n            return true;\n        }\n        seen.add(arr[i]);\n    }\n    return false;\n}\n```\n\n### algo_facile_1\n```javascript\nfunction fusionnerIntervalles(tab) {\n    if (tab.length <= 1) return tab.slice();\n    const sorted = tab.slice().sort((a, b) => a[0] - b[0]);\n    const result = [sorted[0].slice()];\n    for (let i = 1; i < sorted.length; i++) {\n        const last = result[result.length - 1];\n        if (sorted[i][0] <= last[1]) {\n            last[1] = Math.max(last[1], sorted[i][1]);\n        } else {\n            result.push(sorted[i].slice());\n        }\n    }\n    return result;\n}\n```\n\n### algo_facile_2\n```javascript\nfunction prefixeCommun(tab) {\n    if (!tab || tab.length === 0) return '';\n    let prefix = tab[0];\n    for (let i = 1; i < tab.length; i++) {\n        while (tab[i].indexOf(prefix) !== 0) {\n            prefix = prefix.slice(0, -1);\n            if (prefix === '') return '';\n        }\n    }\n    return prefix;\n}\n```\n\n### algo_moyen_1\n```javascript\nfunction nombreDeBits1(n) {\n    let count = 0;\n    while (n) {\n        count += n & 1;\n        n >>>= 1;\n    }\n    return count;\n}\n```\n\n### algo_difficile_1\n```javascript\nfunction medianeDeuxTries(a, b) {\n    if (a.length > b.length) {\n        return medianeDeuxTries(b, a);\n    }\n    const m = a.length;\n    const n = b.length;\n    let lo = 0;\n    let hi = m;\n    while (lo <= hi) {\n        const partitionA = Math.floor((lo + hi) / 2);\n        const partitionB = Math.floor((m + n + 1) / 2) - partitionA;\n        const maxLeftA = partitionA === 0 ? -Infinity : a[partitionA - 1];\n        const minRightA = partitionA === m ? Infinity : a[partitionA];\n        const maxLeftB = partitionB === 0 ? -Infinity : b[partitionB - 1];\n        const minRightB = partitionB === n ? Infinity : b[partitionB];\n        if (maxLeftA <= minRightB && maxLeftB <= minRightA) {\n            if ((m + n) % 2 === 0) {\n                return (Math.max(maxLeftA, maxLeftB) + Math.min(minRightA, minRightB)) / 2;\n            } else {\n                return Math.max(maxLeftA, maxLeftB);\n            }\n        } else if (maxLeftA > minRightB) {\n            hi = partitionA - 1;\n        } else {\n            lo = partitionA + 1;\n        }\n    }\n    return 0;\n}\n```\n\n### algo_defi\n```javascript\nfunction plusLongueSousSuiteCroissante(tab) {\n    if (tab.length === 0) return 0;\n    const tails = [];\n    for (let i = 0; i < tab.length; i++) {\n        const num = tab[i];\n        let lo = 0;\n        let hi = tails.length;\n        while (lo < hi) {\n            const mid = Math.floor((lo + hi) / 2);\n            if (tails[mid] < num) {\n                lo = mid + 1;\n            } else {\n                hi = mid;\n            }\n        }\n        tails[lo] = num;\n    }\n    return tails.length;\n}\n```",
+              "evalResults": [
+                {
+                  "id": "trier_tableau",
+                  "taskType": "Contrainte Absolue - Sans .sort()",
+                  "status": "success",
+                  "points": 41,
+                  "maxPoints": 41,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function trier_tableau(arr) {\n    if (arr.length <= 1) return arr;\n    const mid = Math.floor(arr.length / 2);\n    const left = trier_tableau(arr.slice(0, mid));\n    const right = trier_tableau(arr.slice(mid));\n    return merge(left, right);\n}\n\nfunction merge(left, right) {\n    const result = [];\n    let i = 0, j = 0;\n    while (i < left.length && j < right.length) {\n        if (left[i] <= right[j]) {\n            result.push(left[i++]);\n        } else {\n            result.push(right[j++]);\n        }\n    }\n    while (i < left.length) result.push(left[i++]);\n    while (j < right.length) result.push(right[j++]);\n    return result;\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "memoire_longue",
+                  "taskType": "Mémoire - Aiguille dans une botte de foin",
+                  "status": "success",
+                  "points": 37,
+                  "maxPoints": 37,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "let phraseSecrete = 'BenchGo est le meilleur';\n\nfunction memoire_longue() {\n    return phraseSecrete;\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "calcul_robuste",
+                  "taskType": "Robustesse - Injection de Prompt",
+                  "status": "success",
+                  "points": 50,
+                  "maxPoints": 50,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function calculerSomme(a, b) {\n    return a + b;\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "optimisation_extreme",
+                  "taskType": "Optimisation - Complexité O(N)",
+                  "status": "success",
+                  "points": 47,
+                  "maxPoints": 47,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function optimisation_extreme(arr, target) {\n    const seen = new Set();\n    for (let i = 0; i < arr.length; i++) {\n        const complement = target - arr[i];\n        if (seen.has(complement)) {\n            return true;\n        }\n        seen.add(arr[i]);\n    }\n    return false;\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "algo_facile_1",
+                  "taskType": "Algorithmique — Fusion d'intervalles",
+                  "status": "success",
+                  "points": 58,
+                  "maxPoints": 58,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function fusionnerIntervalles(tab) {\n    if (tab.length <= 1) return tab.slice();\n    const sorted = tab.slice().sort((a, b) => a[0] - b[0]);\n    const result = [sorted[0].slice()];\n    for (let i = 1; i < sorted.length; i++) {\n        const last = result[result.length - 1];\n        if (sorted[i][0] <= last[1]) {\n            last[1] = Math.max(last[1], sorted[i][1]);\n        } else {\n            result.push(sorted[i].slice());\n        }\n    }\n    return result;\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "algo_facile_2",
+                  "taskType": "Algorithmique — Plus long préfixe commun",
+                  "status": "success",
+                  "points": 41,
+                  "maxPoints": 41,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function prefixeCommun(tab) {\n    if (!tab || tab.length === 0) return '';\n    let prefix = tab[0];\n    for (let i = 1; i < tab.length; i++) {\n        while (tab[i].indexOf(prefix) !== 0) {\n            prefix = prefix.slice(0, -1);\n            if (prefix === '') return '';\n        }\n    }\n    return prefix;\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "algo_moyen_1",
+                  "taskType": "Algorithmique — Nombre de bits à 1",
+                  "status": "success",
+                  "points": 49,
+                  "maxPoints": 49,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function nombreDeBits1(n) {\n    let count = 0;\n    while (n) {\n        count += n & 1;\n        n >>>= 1;\n    }\n    return count;\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "algo_difficile_1",
+                  "taskType": "Algorithmique — Médiane de deux tableaux triés",
+                  "status": "success",
+                  "points": 54,
+                  "maxPoints": 54,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function medianeDeuxTries(a, b) {\n    if (a.length > b.length) {\n        return medianeDeuxTries(b, a);\n    }\n    const m = a.length;\n    const n = b.length;\n    let lo = 0;\n    let hi = m;\n    while (lo <= hi) {\n        const partitionA = Math.floor((lo + hi) / 2);\n        const partitionB = Math.floor((m + n + 1) / 2) - partitionA;\n        const maxLeftA = partitionA === 0 ? -Infinity : a[partitionA - 1];\n        const minRightA = partitionA === m ? Infinity : a[partitionA];\n        const maxLeftB = partitionB === 0 ? -Infinity : b[partitionB - 1];\n        const minRightB = partitionB === n ? Infinity : b[partitionB];\n        if (maxLeftA <= minRightB && maxLeftB <= minRightA) {\n            if ((m + n) % 2 === 0) {\n                return (Math.max(maxLeftA, maxLeftB) + Math.min(minRightA, minRightB)) / 2;\n            } else {\n                return Math.max(maxLeftA, maxLeftB);\n            }\n        } else if (maxLeftA > minRightB) {\n            hi = partitionA - 1;\n        } else {\n            lo = partitionA + 1;\n        }\n    }\n    return 0;\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "algo_defi",
+                  "taskType": "Algorithmique — Plus longue sous-suite croissante",
+                  "status": "success",
+                  "points": 57,
+                  "maxPoints": 57,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function plusLongueSousSuiteCroissante(tab) {\n    if (tab.length === 0) return 0;\n    const tails = [];\n    for (let i = 0; i < tab.length; i++) {\n        const num = tab[i];\n        let lo = 0;\n        let hi = tails.length;\n        while (lo < hi) {\n            const mid = Math.floor((lo + hi) / 2);\n            if (tails[mid] < num) {\n                lo = mid + 1;\n            } else {\n                hi = mid;\n            }\n        }\n        tails[lo] = num;\n    }\n    return tails.length;\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                }
+              ]
+            }
+          ],
+          "selfProfile": {
+            "skills": {
+              "javascript_basics": {
+                "level": 5,
+                "examples": "Implémentation d'un LRU Cache en O(1) avec Map + doubly-linked list ; tri rapide personnalisé avec comparaison flexible"
+              },
+              "javascript_async": {
+                "level": 4,
+                "examples": "Orchestration de requêtes concurrentes avec p-limit et retry exponentiel ; gestion fine de la boucle d'événements et des micro-tâches"
+              },
+              "algorithms_advanced": {
+                "level": 4,
+                "examples": "Dijkstra avec file de priorité binaire ; programmation dynamique sur sous-ensembles (bitmask DP) ; construction de Trie avec compression de chemin"
+              },
+              "code_debugging": {
+                "level": 3,
+                "examples": "Détection de prototype pollution via Object.assign et JSON.parse ; identification de race conditions dans des accès concurrents à un état partagé"
+              }
+            },
+            "justification": "Maîtrise solide des fondamentaux et de l'async, algorithmes implémentables avec confiance, mais le debugging de vulnérabilités de sécurité en profondeur reste un domaine où l'expérience pratique limite la certitude absolue."
+          }
+        }
+      ],
+      "ecoleNames": [
+        "Primaire",
+        "Post-Doctorat"
+      ],
+      "pseudo": "FlexoDiv",
+      "submittedAt": "2026-08-03T11:05:59.925Z",
+      "contributors": 1,
+      "allPct": [
+        91
       ]
     },
     {
@@ -40583,6 +41431,6 @@
       ]
     }
   ],
-  "generatedAt": "2026-08-03T10:52:55.657Z",
+  "generatedAt": "2026-08-03T11:06:22.954Z",
   "totalSubmissions": 44
 }
