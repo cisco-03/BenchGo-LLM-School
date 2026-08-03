@@ -498,6 +498,16 @@ async function runTierAttempt({ tierNum, tierData, isMandatory, profileArg, cont
             if (tierAttempt > 1) spinner.stop(`Classe ${classNum} — Réponse reçue (retry réussi)`);
             break;
           }
+          // responseData=null : erreur non fatale (isMandatory=false). On ne
+          // retry QUE si c'était un vrai timeout (tierRetryReason positionné
+          // lors d'une passe précédente). Une erreur HTTP (400 modèle invalide,
+          // 401 clé, etc.) ne justifie pas de retenter : on sort immédiatement
+          // pour éviter de doubler inutilement chaque appel API.
+          if (tierRetryReason !== 'timeout') {
+            spinner.fail(`Classe ${classNum} ignorée (optionnel ou erreur API)`);
+            break;
+          }
+          // Timeout avéré : on laisse la boucle passer au tierAttempt suivant.
         } catch (tierCallErr) {
           // Récupéré ici (isMandatory=false). Si timeout → retry ; sinon on remonte.
           const isTimeoutErr = tierCallErr && tierCallErr.name === 'AbortError';
@@ -1320,13 +1330,16 @@ async function main() {
         return base;
       }
 
-      // Clé fournie en CLI ou en env → mode OpenRouter sans demander.
+      // Clé fournie en CLI, en env, ou déjà mémorisée (.api-keys.json restauré
+      // dans secrets au démarrage) → mode OpenRouter sans redemander.
       const envKey = process.env.OPENROUTER_API_KEY || process.env.OPENROUTER_KEY;
-      if (teacherApiKey || envKey) {
+      const storedKey = secrets.getSecret('openrouter');
+      if (teacherApiKey || envKey || storedKey) {
         const resolved = { ...TEACHER_CONFIG, enabled: true };
         if (teacherModel)    resolved.model    = teacherModel;
-        if (teacherApiKey)   resolved.apiKey   = teacherApiKey;
-        else if (envKey)     resolved.apiKey   = envKey;
+        if (teacherApiKey)      resolved.apiKey   = teacherApiKey;
+        else if (envKey)        resolved.apiKey   = envKey;
+        else if (storedKey)     resolved.apiKey   = storedKey;
         if (teacherEndpoint) resolved.endpoint = teacherEndpoint;
         secrets.rememberSecret('openrouter', resolved.apiKey, true);
         console.log(`  \x1b[35mProfesseur : OpenRouter (Free Router) activé — clé détectée.\x1b[0m`);
@@ -2322,7 +2335,19 @@ async function main() {
     globalReport += `\n> ⚠️ **Score obtenu ${parts.join(' et ')}.**\n`;
   }
 
-  const shortName = shortNameWithQuant(modelName, resolvedQuantization || null);
+  // --- shortName du carnet et du rapport ---
+  // En mode cloud, si le modele n a JAMAIS repondu (0 tokens, modele saturé
+  // ou dépublié), modelName reste "Modele_En_Attente" (ligne 1826) car la
+  // condition de mise a jour (ligne 1917) n est jamais satisfaite. Sans ce
+  // fallback, le shortName du carnet devient "modele_en_attente" (un seul
+  // fichier pour TOUS les modeles échoués) et les tentatives s écrasent
+  // mutuellement. On utilise resolvedCloudModel (le vrai slug passé en CLI)
+  // comme nom de secours : ainsi chaque modele cloud échoué a son propre carnet
+  // et son propre rapport, nommés correctement.
+  const shortNameForLedger = (modelName !== "Modele_En_Attente")
+    ? modelName
+    : (resolvedCloudModel || modelName);
+  const shortName = shortNameWithQuant(shortNameForLedger, resolvedQuantization || null);
   const tierTag = (tierArg && tierArg !== "all") ? `_tier${tierArg}` : "";
   const now = new Date();
   const pad = n => String(n).padStart(2, '0');

@@ -1720,7 +1720,7 @@ function renderCards() {
       if (activeOrigin === 'cloud' && !m.isCloud) continue;
       if (activeOrigin === 'local' && m.isCloud) continue;
     }
-    if (q && m.model.toLowerCase().indexOf(q) === -1 && m.shortName.toLowerCase().indexOf(q) === -1) { skippedSearch++; continue; }
+    if (q && m.model.toLowerCase().indexOf(q) === -1 && m.shortName.toLowerCase().indexOf(q) === -1 && (m.quantization || '').toLowerCase().indexOf(q) === -1) { skippedSearch++; continue; }
     shown++;
 
     var globalRank = m.globalRank || (i + 1);
@@ -2997,7 +2997,7 @@ function copyLeaderboard() {
     var m = MODELS[i];
     if (activeCat !== 'all' && m.cat.key !== activeCat) continue;
     if (activeSize !== 'all' && m.paramSize.key !== activeSize) continue;
-    if (q && m.model.toLowerCase().indexOf(q) === -1 && m.shortName.toLowerCase().indexOf(q) === -1) continue;
+    if (q && m.model.toLowerCase().indexOf(q) === -1 && m.shortName.toLowerCase().indexOf(q) === -1 && (m.quantization || '').toLowerCase().indexOf(q) === -1) continue;
     var rank = copied < 3 ? ['🥇','🥈','🥉'][copied] : ('' + (copied + 1));
     var temps = m.elapsedMs > 0 ? fmtDurJS(m.elapsedMs) : '—';
     var vit = m.tokensPerSecond > 0 ? (m.tokensPerSecond + ' t/s') : '—';
@@ -3704,8 +3704,27 @@ function printCloudLeaderboard() {
     return;
   }
 
+  // On exclut les carnets dont le meilleur score est nul (score === 0 ET
+  // tokens === 0) : ces entrées correspondent a un modele cloud qui n a jamais
+  // repondu (modele saturé, dépublié, timeout, 0 tokens produits). Les afficher
+  // a 0% polluerait le classement avec des échecs d infrastructure (pas des
+  // résultats de benchmark). Le carnet est conservé pour l historique (utile au
+  // re-test), mais masqué du leaderboard tant qu aucune tentative reussie n a
+  // été enregistrée.
+  const visibleEntries = entries.filter(e => !(e.score === 0 && e.tokens === 0));
+  const hiddenCount = entries.length - visibleEntries.length;
+  if (visibleEntries.length === 0) {
+    console.log('\x1b[33mAucun modèle cloud frontière avec un résultat exploitable trouvé dans les carnets.\x1b[0m');
+    if (hiddenCount > 0) {
+      console.log(`\x1b[90m${hiddenCount} modèle(s) cloud présent(s) dans les carnets mais sans réponse exploitable (0 point, 0 token) — masqué(s).\x1b[0m`);
+    }
+    console.log('\x1b[90mPour tester un modèle cloud : node frontier-batch.js --provider=openrouter\x1b[0m');
+    console.log('\x1b[90mSi un carnet cloud n est pas détecté : node leaderboard.js --mark-cloud=<shortName>\x1b[0m');
+    return;
+  }
+
   // Tri : % décroissant, puis score, puis santé.
-  entries.sort((a, b) => {
+  visibleEntries.sort((a, b) => {
     if (b.pct !== a.pct) return b.pct - a.pct;
     if (b.score !== a.score) return b.score - a.score;
     return b.globalLifeScore - a.globalLifeScore;
@@ -3713,14 +3732,17 @@ function printCloudLeaderboard() {
 
   console.log('');
   console.log('  \x1b[1;36m━━━ CLASSEMENT CLOUD FRONTIÈRE · MODÈLES API ━━━\x1b[0m');
-  console.log(`  \x1b[90m${entries.length} modèle(s) cloud classé(s) — séparé(s) des modèles locaux LM Studio\x1b[0m`);
+  console.log(`  \x1b[90m${visibleEntries.length} modèle(s) cloud classé(s) — séparé(s) des modèles locaux LM Studio\x1b[0m`);
+  if (hiddenCount > 0) {
+    console.log(`  \x1b[90m${hiddenCount} modèle(s) cloud sans réponse exploitable (0 point / 0 token) masqué(s) du classement.\x1b[0m`);
+  }
 
   const headers = ['Rang', 'Modèle', 'Provider', 'École(s)', 'Vitesse', 'Pct', 'Verdict'];
   const aligns = ['left', 'left', 'left', 'left', 'right', 'right', 'left'];
   const rows = [];
   const medals = [];
-  for (let i = 0; i < entries.length; i++) {
-    const e = entries[i];
+  for (let i = 0; i < visibleEntries.length; i++) {
+    const e = visibleEntries[i];
     const verdict = getVerdict(e, i + 1);
     const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : '  ';
     const vColor = verdict.rank === 0 ? '\x1b[93m' : verdict.rank === 1 ? '\x1b[32m' : verdict.rank === 2 ? '\x1b[36m' : verdict.rank === 3 ? '\x1b[33m' : '\x1b[31m';

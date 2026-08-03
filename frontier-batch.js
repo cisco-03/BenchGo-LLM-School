@@ -23,6 +23,8 @@
 //   node frontier-batch.js --models=m1,m2,m3        # modeles sans saisie
 //   node frontier-batch.js --provider=openrouter --models=m1,m2
 //   node frontier-batch.js --no-teacher             # desactive le professeur IA
+//   node frontier-batch.js --profile=STANDARD        # test niveau Collège/Lycée (petits modèles)
+//   node frontier-batch.js --profile=LIGHT            # test niveau Primaire (très petits modèles)
 
 const { spawnSync } = require('child_process');
 const readline = require('readline');
@@ -31,6 +33,23 @@ const path = require('path');
 
 const PROJECT_ROOT = __dirname;
 const RUNNER = path.join(PROJECT_ROOT, 'runner.js');
+
+// Importe PROFILES et detectProfileFromModelName pour proposer le bon niveau
+// d'école selon la taille du modèle cloud (un petit 12B ne passera jamais le
+// Post-Doctorat — il faut le tester en Collège/Lycée, voire Primaire).
+const { PROFILES, detectProfileFromModelName } = require('./config');
+
+// Profils d'école sélectionnables pour les modèles cloud. FRONTIER (Post-Doctorat)
+// reste le défaut pour les gros modèles, mais les petits modèles cloud (< 15B)
+// peuvent être testés à un niveau adapté à leur capacité.
+// L'ordre correspond à la difficulté croissante.
+const CLOUD_PROFILES = [
+  { key: 'LIGHT',    label: 'LIGHT — Primaire (< 3B)',          ecole: 'Primaire' },
+  { key: 'STANDARD', label: 'STANDARD — Collège/Lycée (3B-15B)', ecole: 'Collège-Lycée' },
+  { key: 'EXPERT',   label: 'EXPERT — Université (15B-30B)',     ecole: 'Université' },
+  { key: 'DOCTORAT', label: 'DOCTORAT — Thèse (> 30B)',         ecole: 'Thèse' },
+  { key: 'FRONTIER', label: 'FRONTIER — Post-Doctorat (cloud, tous niveaux)', ecole: 'Post-Doctorat' }
+];
 
 // Providers cloud supportes (reprend la liste de cloud-client.js).
 // On inclut aussi les serveurs OpenAI-compatibles (ollama, lmstudio, custom) :
@@ -75,15 +94,17 @@ function nowDate() {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
 }
 
-// Parse les arguments CLI : --provider=, --models=, --no-teacher, --api-key=
+// Parse les arguments CLI : --provider=, --models=, --no-teacher, --api-key=,
+// --profile= (niveau d'école : LIGHT, STANDARD, EXPERT, DOCTORAT, FRONTIER).
 function parseCliArgs() {
   const args = process.argv.slice(2);
-  const opts = { provider: null, models: null, noTeacher: false, apiKey: null, endpoint: null };
+  const opts = { provider: null, models: null, noTeacher: false, apiKey: null, endpoint: null, profile: null };
   for (const a of args) {
     if (a.startsWith('--provider=')) opts.provider = a.slice('--provider='.length);
     else if (a.startsWith('--models=')) opts.models = a.slice('--models='.length);
     else if (a.startsWith('--api-key=')) opts.apiKey = a.slice('--api-key='.length);
     else if (a.startsWith('--endpoint=')) opts.endpoint = a.slice('--endpoint='.length);
+    else if (a.startsWith('--profile=')) opts.profile = a.slice('--profile='.length).toUpperCase();
     else if (a === '--no-teacher') opts.noTeacher = true;
     else if (a === '--help' || a === '-h') {
       printHelp();
@@ -98,10 +119,12 @@ function printHelp() {
 ${C.bold}frontier-batch.js${C.reset} - Mode batch pour modeles cloud (frontiere)
 
 ${C.bold}Usage :${C.reset}
-  node frontier-batch.js                              # interactif (provider + modeles)
+  node frontier-batch.js                              # interactif (provider + modeles + niveau)
   node frontier-batch.js --provider=openrouter        # provider fixe
   node frontier-batch.js --models=m1,m2,m3            # modeles sans saisie
   node frontier-batch.js --provider=openrouter --models=m1,m2
+  node frontier-batch.js --profile=STANDARD            # niveau Collège/Lycée (petits modèles < 15B)
+  node frontier-batch.js --profile=LIGHT              # niveau Primaire (très petits modèles < 3B)
   node frontier-batch.js --no-teacher                 # desactive le professeur IA
   node frontier-batch.js --api-key=sk-...             # cle API fournie
   node frontier-batch.js --provider=ollama --endpoint=https://...  # endpoint custom
@@ -110,16 +133,20 @@ ${C.bold}Options :${C.reset}
   --provider=<name>   Provider cloud (openrouter, openai, anthropic, groq, together,
                       mistral, deepseek, cohere, ollama, lmstudio, custom)
   --models=<list>     Liste de modeles separes par virgules
+  --profile=<level>   Niveau d ecole (LIGHT, STANDARD, EXPERT, DOCTORAT, FRONTIER).
+                      Defaut : FRONTIER (Post-Doctorat). Pour les petits modèles cloud
+                      (< 15B), utiliser STANDARD (Collège/Lycée) ou LIGHT (Primaire).
   --api-key=<key>     Cle API pour le provider (sinon recuperee depuis .api-keys.json ou saisie)
   --endpoint=<url>    Base URL du provider (ollama/lmstudio/custom, ou override d un provider)
   --no-teacher        Desactive le professeur IA (correcteur externe)
   --help, -h          Affiche cette aide
 
 ${C.bold}Comportement :${C.reset}
-  - Chaque modele est teste avec --profile=FRONTIER (Post-Doctorat, le plus haut niveau).
+  - Par defaut, chaque modele est teste avec --profile=FRONTIER (Post-Doctorat).
+  - --profile=<level> permet de tester un petit modele cloud a un niveau adapté :
+    LIGHT (Primaire, < 3B), STANDARD (Collège/Lycée, 3-15B), EXPERT (Université, 15-30B).
   - --force est passe au runner pour neutraliser les confirmations en mode non-TTY.
-  - Aucune proposition d_écoles séquentielles (Primaire/Collège) : les modeles
-    frontier vont directement au plus haut niveau.
+  - Le niveau est appliqué a TOUS les modeles de la liste (meme profil pour tous).
 `);
 }
 
@@ -333,15 +360,99 @@ function selectModelsInteractive(cliModels) {
   });
 }
 
+// Selection interactive du niveau d ecole (profil) pour les modeles cloud.
+// FRONTIER (Post-Doctorat) reste le defaut, mais les petits modeles cloud
+// (< 15B) ne peuvent pas realistiquement passer le Post-Doctorat : on propose
+// donc de les tester a un niveau adapte (LIGHT/STANDARD/EXPERT/DOCTORAT).
+//
+// Si --profile= est fourni en CLI, on l utilise directement (pas de saisie).
+// Sinon, on tente de detecter la taille des modeles saisis pour recommander
+// un profil. Si aucun signal de taille n est detecte, on propose FRONTIER par
+// defaut (comportement historique) avec un avertissement pour les petits modeles.
+function selectProfileInteractive(cliProfile, models) {
+  return new Promise(resolve => {
+    const validKeys = CLOUD_PROFILES.map(p => p.key);
+    // Profil fixe par CLI : on valide et on l accepte tel quel.
+    if (cliProfile) {
+      const upper = cliProfile.toUpperCase();
+      if (validKeys.includes(upper)) {
+        const p = CLOUD_PROFILES.find(x => x.key === upper);
+        console.log(`  ${C.gray}Profil fixe par CLI : ${p.label}${C.reset}\n`);
+        resolve(upper);
+        return;
+      }
+      console.log(`  ${C.yellow}Profil inconnu : ${cliProfile}. Selection interactive.${C.reset}`);
+    }
+
+    // Detection de la taille des modeles pour recommander un profil.
+    // On prend le modele avec la plus grande taille detectee (le plus exigeant)
+    // pour eviter de sous-estimer si un grand modele est melange avec des petits.
+    let maxParamSize = null;
+    let detectedProfile = null;
+    for (const m of models) {
+      const { paramSize, detected } = detectProfileFromModelName(m);
+      if (paramSize !== null) {
+        if (maxParamSize === null || paramSize > maxParamSize) {
+          maxParamSize = paramSize;
+          detectedProfile = detected;
+        }
+      }
+    }
+
+    // Profil recommande : celui detecte, sinon FRONTIER par defaut.
+    // FRONTIER n est jamais renvoye par detectProfileFromModelName (reserve au
+    // cloud manuel), donc un modele cloud de taille inconnue reste en FRONTIER.
+    const recommended = detectedProfile || 'FRONTIER';
+    const recIdx = CLOUD_PROFILES.findIndex(p => p.key === recommended);
+
+    console.log(`\n  ${C.bold}${C.cyan}=== NIVEAU D ECOLE (PROFIL) ===${C.reset}`);
+    console.log(`  ${C.gray}Choisissez le niveau d examen. FRONTIER = Post-Doctorat (le plus dur).${C.reset}`);
+    if (maxParamSize !== null) {
+      console.log(`  ${C.gray}Taille detectee : ~${maxParamSize}B parametres -> profil recommande : ${recommended}${C.reset}`);
+    } else {
+      console.log(`  ${C.gray}Taille non detectee. Pour un petit modele cloud (< 15B), preferer STANDARD ou LIGHT.${C.reset}`);
+    }
+    console.log('');
+    CLOUD_PROFILES.forEach((p, i) => {
+      const idx = String(i + 1).padStart(2);
+      const marker = (i === recIdx) ? `${C.green}[recommande]${C.reset} ` : '  ';
+      console.log(`  ${C.bold}${idx}.${C.reset} ${marker} ${p.label}`);
+    });
+    console.log('');
+
+    const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+    const defaultNum = recIdx >= 0 ? String(recIdx + 1) : '5';
+    rl.question(`  ${C.cyan}Niveau (numero ou nom) [defaut: ${recommended}] :${C.reset} `, answer => {
+      rl.close();
+      const raw = (answer || '').trim().toLowerCase();
+      if (!raw) { resolve(recommended); return; }
+      // Par numero
+      const n = parseInt(raw, 10);
+      if (Number.isInteger(n) && n >= 1 && n <= CLOUD_PROFILES.length) {
+        resolve(CLOUD_PROFILES[n - 1].key);
+        return;
+      }
+      // Par nom
+      const upper = raw.toUpperCase();
+      if (validKeys.includes(upper)) {
+        resolve(upper);
+        return;
+      }
+      console.log(`  ${C.red}Niveau inconnu : ${raw}. Utilisation de ${recommended}.${C.reset}`);
+      resolve(recommended);
+    });
+  });
+}
+
 // Execute le runner pour un modele cloud frontiere.
 // Renvoie { ok, exitCode, durationMs }.
-function runModel(provider, model, apiKey, noTeacher, endpoint) {
+function runModel(provider, model, apiKey, noTeacher, endpoint, profile) {
   const args = [
     RUNNER, 'all',
     '--force',
     '--provider=' + provider,
     '--model=' + model,
-    '--profile=FRONTIER'
+    '--profile=' + (profile || 'FRONTIER')
   ];
   if (apiKey) args.push('--api-key=' + apiKey);
   if (endpoint) args.push('--endpoint=' + endpoint);
@@ -351,7 +462,8 @@ function runModel(provider, model, apiKey, noTeacher, endpoint) {
   console.log(`  ${C.bold}${C.magenta}  TEST FRONTIERE : ${model}${C.reset}`);
   console.log(`  ${C.bold}${C.magenta}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${C.reset}`);
   console.log(`  ${C.gray}Heure de debut : ${nowClock()}${C.reset}`);
-  console.log(`  ${C.gray}Commande : node runner.js all --force --provider=${provider} --model=<...> --profile=FRONTIER${C.reset}\n`);
+  console.log(`  ${C.gray}Profil : ${profile || 'FRONTIER'}${C.reset}`);
+  console.log(`  ${C.gray}Commande : node runner.js all --force --provider=${provider} --model=<...> --profile=${profile || 'FRONTIER'}${C.reset}\n`);
 
   const t0 = Date.now();
   const r = spawnSync('node', args, {
@@ -387,24 +499,27 @@ async function main() {
   const opts = parseCliArgs();
 
   console.log(`\n  ${C.bold}${C.cyan}═══════════════════════════════════════════════════════${C.reset}`);
-  console.log(`  ${C.bold}${C.cyan}       FRONTIER BATCH - Modeles cloud (Post-Doctorat)    ${C.reset}`);
+  console.log(`  ${C.bold}${C.cyan}       FRONTIER BATCH - Modeles cloud (frontiere)       ${C.reset}`);
   console.log(`  ${C.bold}${C.cyan}═══════════════════════════════════════════════════════${C.reset}\n`);
 
-  console.log(`  ${C.gray}Ce script enchaine le test de plusieurs modeles cloud frontiere${C.reset}`);
-  console.log(`  ${C.gray}a la suite. Chaque modele passe le niveau FRONTIER (Post-Doctorat)${C.reset}`);
-  console.log(`  ${C.gray}directement, sans passer par Primaire/Collège.${C.reset}\n`);
+  console.log(`  ${C.gray}Ce script enchaine le test de plusieurs modeles cloud${C.reset}`);
+  console.log(`  ${C.gray}a la suite. Le niveau d ecole est configurable (FRONTIER par defaut,${C.reset}`);
+  console.log(`  ${C.gray}mais les petits modeles peuvent etre testes en STANDARD/LIGHT/EXPERT).${C.reset}\n`);
 
   const provider = await selectProviderInteractive(opts.provider);
   const endpoint = await promptEndpoint(provider, opts.endpoint);
   const apiKey = await promptApiKey(provider, opts.apiKey);
   const models = await selectModelsInteractive(opts.models);
+  const profile = await selectProfileInteractive(opts.profile, models);
+
+  const profileLabel = (CLOUD_PROFILES.find(p => p.key === profile) || {}).label || profile;
 
   console.log(`\n  ${C.bold}${C.green}=== RESUME DE LA SESSION ===${C.reset}`);
   console.log(`  ${C.bold}Provider  :${C.reset} ${provider}`);
   if (endpoint) console.log(`  ${C.bold}Endpoint  :${C.reset} ${endpoint}`);
   console.log(`  ${C.bold}Modeles  :${C.reset} ${models.length} modele(s)`);
   models.forEach((m, i) => console.log(`    ${C.gray}${i + 1}.${C.reset} ${m}`));
-  console.log(`  ${C.bold}Profil    :${C.reset} FRONTIER (Post-Doctorat)`);
+  console.log(`  ${C.bold}Profil    :${C.reset} ${profileLabel}`);
   console.log(`  ${C.bold}Professeur:${C.reset} ${opts.noTeacher ? 'desactive' : 'active'}`);
   console.log(`  ${C.bold}Heure     :${C.reset} ${nowClock()}\n`);
 
@@ -417,7 +532,7 @@ async function main() {
   for (let i = 0; i < models.length; i++) {
     const model = models[i];
     console.log(`\n  ${C.cyan}━━━ Modele ${i + 1}/${models.length} ━━━${C.reset}`);
-    const res = runModel(provider, model, apiKey, opts.noTeacher, endpoint);
+    const res = runModel(provider, model, apiKey, opts.noTeacher, endpoint, profile);
     results.push({ model, ...res });
     console.log(`  ${C.gray}Heure de fin : ${nowClock()} — duree : ${fmtDuration(res.durationMs)}${C.reset}`);
     if (!res.ok) {
@@ -439,6 +554,7 @@ async function main() {
   console.log(`  ${C.bold}${C.cyan}═══════════════════════════════════════════════════════${C.reset}`);
   console.log(`  ${C.bold}Date      :${C.reset} ${nowDate()} ${nowClock()}`);
   console.log(`  ${C.bold}Provider  :${C.reset} ${provider}`);
+  console.log(`  ${C.bold}Profil    :${C.reset} ${profileLabel}`);
   console.log(`  ${C.bold}Duree     :${C.reset} ${fmtDuration(sessionDuration)}`);
   console.log(`  ${C.bold}Modeles   :${C.reset} ${results.length} teste(s)`);
   const okCount = results.filter(r => r.ok).length;

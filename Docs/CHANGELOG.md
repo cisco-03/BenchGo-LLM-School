@@ -1,5 +1,134 @@
 # CHANGELOG - Carnet de Notes BenchGo
 
+## 2026-08-03 — fix(runner): retry anti-timeout déclenché sur erreurs HTTP (modèle dépublié)
+
+### Contexte
+Le retry anti-timeout (boucle à 2 tentatives dans `runTierAttempt`) a été conçu pour les vrais
+timeouts des modèles de raisonnement locaux (phi-4-reasoning-plus, GLM, DeepSeek-R1...). Mais
+en pratique il se déclenchait sur **toute** erreur non fatale, y compris les erreurs HTTP 400
+(modèle OpenRouter dépublié `nvidia/nemotron-nano-12b-2-vl:free`), HTTP 401 (clé invalide), etc.
+Symptôme : chaque classe exécutait **deux** appels API identiques qui échouaient tous les deux,
+doublant inutilement le temps de run et affichant `[RETRY ANTI-TIMEOUT]` à tort.
+
+### Cause
+`queryFn` est appelée avec `isMandatory=false` pour récupérer l'erreur au lieu d'`exit`. Sur une
+erreur HTTP (cloud-client.js ligne 384), elle retourne `null` silencieusement. Le runner ne
+distinguait pas `null = timeout récupéré` (retry utile) de `null = HTTP 400` (retry inutile) :
+la boucle passait automatiquement à `tierAttempt=2`.
+
+### Solution
+- `runner.js` : ajout d'un `else` après `if (responseData) { break }` dans la boucle retry.
+  Si `responseData === null` et `tierRetryReason !== 'timeout'`, on `break` immédiatement.
+  Le retry ne se déclenche maintenant que pour un **vrai** timeout (`AbortError` capturé dans
+  le `catch`, qui positionne `tierRetryReason = 'timeout'`).
+
+### Fichiers modifiés
+- `runner.js` — boucle retry anti-timeout dans `runTierAttempt`
+
+### Validation
+- `node --check runner.js` → OK
+- `node tests/run-tests.js` → 27/27 passés
+
+## 2026-08-03 — fix(runner): persistance clé OpenRouter professeur ignorée en mode CLI
+
+### Contexte
+En mode CLI historique (`frontier-batch.js` → `node runner.js --provider=... --api-key=...`),
+le bloc de configuration du professeur OpenRouter redemandait la clé API à chaque run même si
+elle était déjà mémorisée dans `.api-keys.json`. `apiKeysStore.restoreIntoSession(secrets)` la
+chargeait bien dans `secrets` au démarrage (ligne 1141), mais le bloc professeur (ligne ~1325)
+ne testait que `process.env.OPENROUTER_API_KEY` et `--teacher-api-key=` — il omettait
+`secrets.getSecret('openrouter')`.
+
+### Solution
+- `runner.js` : ajout de `const storedKey = secrets.getSecret('openrouter')` et intégration dans
+  la condition de détection de clé (`teacherApiKey || envKey || storedKey`). Si une clé
+  mémorisée est trouvée, le professeur OpenRouter s'active sans redemander.
+
+### Fichiers modifiés
+- `runner.js` — bloc professeur OpenRouter en mode CLI historique
+
+### Validation
+- `node --check runner.js` → OK
+- `node tests/run-tests.js` → 27/27 passés
+
+## 2026-08-03 — feat(frontier-batch): niveau d'école configurable (--profile=) pour les petits modèles cloud
+
+### Contexte
+`frontier-batch.js` forçait systématiquement `--profile=FRONTIER` (Post-Doctorat, le niveau le
+plus élevé). Or OpenRouter propose de nombreux modèles gratuits **petits** (< 15B, voire < 3B)
+qui ne peuvent réalistement pas passer le Post-Doctorat : ils échouent à 0/2671 et n'apparaissent
+jamais dans le classement. Un modèle 12B (ex: Nemotron Nano 12B 2 VL) doit être testé au niveau
+Collège/Lycée (STANDARD), un modèle 9B au même niveau, un modèle 3B au Primaire (LIGHT).
+
+### Fonctionnalité
+- Nouvelle option `--profile=<level>` dans `frontier-batch.js` : LIGHT, STANDARD, EXPERT,
+  DOCTORAT, FRONTIER (défaut, comportement historique conservé).
+- Nouvelle **sélection interactive** du niveau d'école (après les modèles) :
+  - Affiche les 5 profils avec leur école associée.
+  - Recommande automatiquement un profil selon la **taille détectée** dans les slugs saisis
+    (via `detectProfileFromModelName` de `config.js` : 12B → STANDARD, 9B → STANDARD,
+    550B → DOCTORAT, 20B → EXPERT).
+  - Si `--profile=` est fourni en CLI, la sélection est sautée (mode non-interactif / batch).
+- Le profil est appliqué à **tous** les modèles de la liste (même niveau pour tous).
+- `--help` mis à jour avec les nouveaux exemples et la documentation de l'option.
+- `runModel()` transmet le profil au runner via `--profile=<level>` (au lieu de `FRONTIER` en dur).
+
+### Exemples
+```
+node frontier-batch.js --provider=openrouter --models=nvidia/nemotron-nano-12b-2-vl:free --profile=STANDARD
+node frontier-batch.js --provider=openrouter --profile=LIGHT            # petits modèles < 3B
+node frontier-batch.js --provider=openrouter                            # sélection interactive (recommande selon taille)
+```
+
+### Fichiers modifiés
+- `frontier-batch.js` : import `PROFILES` + `detectProfileFromModelName`, `CLOUD_PROFILES`,
+  `parseCliArgs` (`--profile=`), `selectProfileInteractive()`, `runModel()` (param `profile`),
+  `main()` (sélection + résumé), `printHelp()`.
+- `Memories-BenchGo/README.md` : description `frontier-batch.js` mise à jour.
+- `Docs/CHANGELOG.md` : présente entrée.
+
+### Vérifications
+- `node --check frontier-batch.js` : OK
+- `node tests/run-tests.js` : 27/27 passés.
+- `node frontier-batch.js --help` : aide mise à jour, `--profile=` documenté.
+- `node frontier-batch.js --profile=STANDARD --provider=openrouter --models=test/test-12b:free` :
+  profil STANDARD pris en compte et affiché dans le résumé.
+- `detectProfileFromModelName('nvidia/nemotron-nano-12b-2-vl:free')` → `{ paramSize: 12, detected: 'STANDARD' }`.
+
+## 2026-08-03 — fix(runner+leaderboard): modèles cloud échoués sauvés sous leur vrai nom + filtre 0% dans --cloud
+
+### Contexte
+Quand un modèle cloud (OpenRouter, etc.) était testé mais ne produisait **aucune réponse
+exploitable** (0 token, 0/2671 — modèle saturé, dépublié, timeout), `modelName` restait
+`"Modele_En_Attente"` (valeur initiale du runner, ligne 1826) car la mise à jour conditionnelle
+(ligne 1917) n'était jamais satisfaite (`responseModelName` absent). Conséquences :
+- Le rapport était nommé `rapport_v3_modele_en_attente_frontier_*.md` au lieu du vrai nom.
+- Le carnet était sauvegardé sous le shortName `modele_en_attente` — **un seul fichier pour
+  TOUS les modèles échoués**, qui s'écrasaient mutuellement.
+- Les modèles cloud testés mais échoués n'apparaissaient jamais dans le leaderboard `--cloud`.
+
+### Correction
+- `runner.js` : le `shortName` du carnet et du rapport utilise désormais `resolvedCloudModel`
+  (le vrai slug passé en CLI) comme valeur de secours quand `modelName === "Modele_En_Attente"`.
+  Chaque modèle cloud échoué a maintenant son propre carnet et son propre rapport, nommés
+  correctement (ex: `nvidia_nemotron-3-ultra-550b-a55b_free`).
+- `leaderboard.js` (`printCloudLeaderboard`) : les carnets cloud dont le meilleur score est
+  nul (0 point ET 0 token — modèle n'a jamais répondu) sont **masqués** du classement `--cloud`
+  pour ne pas polluer le leaderboard avec des échecs d'infrastructure. Le carnet est conservé
+  pour l'historique (utile au re-test), et un message indique combien de modèles sont masqués.
+
+### Fichiers modifiés
+- `runner.js` : calcul du `shortName` (fallback `resolvedCloudModel` quand modèle muet).
+- `leaderboard.js` : `printCloudLeaderboard` — filtre des entrées à 0 point/0 token.
+- `Docs/CHANGELOG.md` : présente entrée.
+
+### Vérifications
+- `node --check runner.js` : OK
+- `node --check leaderboard.js` : OK
+- `node tests/run-tests.js` : 27/27 passés.
+- `node scripts/check-inline-js.js` : JS inline valide.
+- `node leaderboard.js --cloud` : 3 modèles affichés, carnet de test à 0% correctement masqué.
+
 ## 2026-08-03 — fix(leaderboard): sélecteur Origine simplifié à Local/Cloud uniquement
 
 ### Contexte

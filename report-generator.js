@@ -40,7 +40,8 @@ function shortenModelName(rawName) {
 // @param {string|null} quantization - quantification (ex: "Q4_K_S") ou null
 // @returns {string} shortName unique par couple (modele, quantification)
 function shortNameWithQuant(rawName, quantization) {
-  const base = shortenModelName(rawName);
+  const baseName = rawName.replace(/@[a-z0-9._-]+$/i, '');
+  const base = shortenModelName(baseName);
   if (!quantization) return base;
   const q = String(quantization).trim().toLowerCase()
     .replace(/[^a-z0-9_]/g, '_')
