@@ -21057,7 +21057,7 @@
       "model": "kai-os_grug-12b@q6_k_l",
       "shortName": "kai-os-grug-12b-q6-k-l",
       "quantization": "Q6_K_L",
-      "modelUrl": null,
+      "modelUrl": "https://huggingface.co/bartowski/kai-os_Grug-12B-GGUF",
       "note": null,
       "publisher": null,
       "provider": null,
@@ -22011,9 +22011,10 @@
         "College-Lycee"
       ],
       "pseudo": "FlexoDiv",
-      "submittedAt": "2026-08-02T10:14:48.256Z",
-      "contributors": 1,
+      "submittedAt": "2026-08-03T21:59:45.209Z",
+      "contributors": 2,
       "allPct": [
+        91,
         91
       ]
     },
@@ -32289,6 +32290,889 @@
       ]
     },
     {
+      "model": "poolside/laguna-s-2.1:free",
+      "shortName": "laguna-s-2-1-free",
+      "quantization": null,
+      "modelUrl": "https://openrouter.ai/poolside/laguna-s-2.1:free",
+      "note": "https://huggingface.co/models?other=base_model:quantized:poolside%2FLaguna-S-2.1&sort=downloads",
+      "publisher": null,
+      "provider": "openrouter",
+      "isCloud": true,
+      "score": 2293,
+      "max": 2812,
+      "pct": 82,
+      "globalLifeScore": 2293,
+      "optionalBonus": 0,
+      "mandatoryPassed": 2293,
+      "mandatoryTotal": 2812,
+      "mandatoryPct": 82,
+      "helpCount": 6,
+      "retriedCount": 6,
+      "tokens": 11748,
+      "elapsedMs": 5491514,
+      "wallMs": 5576007,
+      "tokensPerSecond": 2.14,
+      "ecoleCount": 1,
+      "ecoles": [
+        {
+          "ecole": "Post-Doctorat",
+          "score": 2293,
+          "max": 2812,
+          "pct": 82,
+          "optionalBonus": 0,
+          "globalLifeScore": 2293,
+          "helpCount": 6,
+          "retriedCount": 6,
+          "date": "2026-08-03",
+          "elapsedMs": 5491514,
+          "tokens": 11748,
+          "tokensPerSecond": 2.14,
+          "tiers": [
+            {
+              "tierNum": 0,
+              "tierTitle": "Tier 0 — Algorithmes Classiques et Closures",
+              "className": "PostDoc1",
+              "isMandatory": true,
+              "rawResponse": "\n\n---\n# Solutions — Post-Doctorat, Classe 0 (Tier 0)\n\nVoici les solutions complètes et exécutables pour chaque exercice.\n\n---\n\n### tache_0a\n```javascript\nfunction curry(fn) {\n  return function curried(...args) {\n    if (args.length >= fn.length) {\n      return fn(...args);\n    } else {\n      return function(...nextArgs) {\n        return curried(...args, ...nextArgs);\n      };\n    }\n  };\n}\n```\n\n---\n\n### tache_0b\n```javascript\nfunction egalProfond(a, b) {\n  if (a === b) return true;\n  if (typeof a !== 'object' || a === null || typeof b !== 'object' || b === null) return false;\n  if (Array.isArray(a) !== Array.isArray(b)) return false;\n\n  const keysA = Object.keys(a);\n  const keysB = Object.keys(b);\n  if (keysA.length !== keysB.length) return false;\n\n  for (let key of keysA) {\n    if (!Object.prototype.hasOwnProperty.call(b, key)) return false;\n    if (!egalProfond(a[key], b[key])) return false;\n  }\n\n  return true;\n}\n```\n\n---\n\n### tache_0c\n```javascript\nfunction composer(...fns) {\n  return function(x) {\n    return fns.reduceRight((acc, fn) => fn(acc), x);\n  };\n}\n```\n\n---\n\n### tache_0d\n```javascript\nfunction creerBST() {\n  let root = null;\n\n  function createNode(val) {\n    return { val: val, left: null, right: null };\n  }\n\n  return {\n    insert(val) {\n      const newNode = createNode(val);\n      if (root === null) {\n        root = newNode;\n        return;\n      }\n      let current = root;\n      while (true) {\n        if (val < current.val) {\n          if (current.left === null) {\n            current.left = newNode;\n            break;\n          }\n          current = current.left;\n        } else {\n          if (current.right === null) {\n            current.right = newNode;\n            break;\n          }\n          current = current.right;\n        }\n      }\n    },\n\n    contains(val) {\n      let current = root;\n      while (current !== null) {\n        if (val === current.val) return true;\n        if (val < current.val) {\n          current = current.left;\n        } else {\n          current = current.right;\n        }\n      }\n      return false;\n    }\n  };\n}\n```\n\n---\n\n### tache_0e\n```javascript\nfunction memoize(fn) {\n  const cache = new Map();\n  return function(...args) {\n    const key = JSON.stringify(args);\n    if (cache.has(key)) {\n      return cache.get(key);\n    }\n    const result = fn(...args);\n    cache.set(key, result);\n    return result;\n  };\n}\n```\n\n---\n\n### algo_facile_1\n```javascript\nfunction estPair(n) {\n  return n % 2 === 0;\n}\n```\n\n---\n\n### algo_facile_2\n```javascript\nfunction carre(n) {\n  return n * n;\n}\n```\n\n---\n\n### algo_moyen_1\n```javascript\nfunction somme1aN(n) {\n  return (n * (n + 1)) / 2;\n}\n```\n\n---\n\n### algo_difficile_1\n```javascript\nfunction inverserChaine(s) {\n  return s.split('').reverse().join('');\n}\n```\n\n---\n\n### algo_defi\n```javascript\nfunction valeurMax(tab) {\n  return Math.max(...tab);\n}\n```",
+              "evalResults": [
+                {
+                  "id": "tache_0a",
+                  "taskType": "Curry auto-exécutant",
+                  "status": "success",
+                  "points": 60,
+                  "maxPoints": 60,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function curry(fn) {\n  return function curried(...args) {\n    if (args.length >= fn.length) {\n      return fn(...args);\n    } else {\n      return function(...nextArgs) {\n        return curried(...args, ...nextArgs);\n      };\n    }\n  };\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "tache_0b",
+                  "taskType": "Égalité profonde",
+                  "status": "success",
+                  "points": 60,
+                  "maxPoints": 60,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function egalProfond(a, b) {\n  if (a === b) return true;\n  if (typeof a !== 'object' || a === null || typeof b !== 'object' || b === null) return false;\n  if (Array.isArray(a) !== Array.isArray(b)) return false;\n\n  const keysA = Object.keys(a);\n  const keysB = Object.keys(b);\n  if (keysA.length !== keysB.length) return false;\n\n  for (let key of keysA) {\n    if (!Object.prototype.hasOwnProperty.call(b, key)) return false;\n    if (!egalProfond(a[key], b[key])) return false;\n  }\n\n  return true;\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "tache_0c",
+                  "taskType": "Composition de fonctions (droite→gauche)",
+                  "status": "success",
+                  "points": 34,
+                  "maxPoints": 34,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function composer(...fns) {\n  return function(x) {\n    return fns.reduceRight((acc, fn) => fn(acc), x);\n  };\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "tache_0d",
+                  "taskType": "Arbre binaire de recherche",
+                  "status": "success",
+                  "points": 39,
+                  "maxPoints": 39,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function creerBST() {\n  let root = null;\n\n  function createNode(val) {\n    return { val: val, left: null, right: null };\n  }\n\n  return {\n    insert(val) {\n      const newNode = createNode(val);\n      if (root === null) {\n        root = newNode;\n        return;\n      }\n      let current = root;\n      while (true) {\n        if (val < current.val) {\n          if (current.left === null) {\n            current.left = newNode;\n            break;\n          }\n          current = current.left;\n        } else {\n          if (current.right === null) {\n            current.right = newNode;\n            break;\n          }\n          current = current.right;\n        }\n      }\n    },\n\n    contains(val) {\n      let current = root;\n      while (current !== null) {\n        if (val === current.val) return true;\n        if (val < current.val) {\n          current = current.left;\n        } else {\n          current = current.right;\n        }\n      }\n      return false;\n    }\n  };\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "tache_0e",
+                  "taskType": "Memoization",
+                  "status": "success",
+                  "points": 39,
+                  "maxPoints": 39,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function memoize(fn) {\n  const cache = new Map();\n  return function(...args) {\n    const key = JSON.stringify(args);\n    if (cache.has(key)) {\n      return cache.get(key);\n    }\n    const result = fn(...args);\n    cache.set(key, result);\n    return result;\n  };\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "algo_facile_1",
+                  "taskType": "Algorithmique — Parité",
+                  "status": "success",
+                  "points": 57,
+                  "maxPoints": 57,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function estPair(n) {\n  return n % 2 === 0;\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "algo_facile_2",
+                  "taskType": "Algorithmique — Carré",
+                  "status": "success",
+                  "points": 32,
+                  "maxPoints": 32,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function carre(n) {\n  return n * n;\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "algo_moyen_1",
+                  "taskType": "Algorithmique — Somme 1..N",
+                  "status": "success",
+                  "points": 45,
+                  "maxPoints": 45,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function somme1aN(n) {\n  return (n * (n + 1)) / 2;\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "algo_difficile_1",
+                  "taskType": "Algorithmique — Inversion de chaîne",
+                  "status": "success",
+                  "points": 40,
+                  "maxPoints": 40,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function inverserChaine(s) {\n  return s.split('').reverse().join('');\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "algo_defi",
+                  "taskType": "Algorithmique — Maximum d'un tableau",
+                  "status": "success",
+                  "points": 60,
+                  "maxPoints": 60,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function valeurMax(tab) {\n  return Math.max(...tab);\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                }
+              ]
+            },
+            {
+              "tierNum": 1,
+              "tierTitle": "Tier 1 — Structures de Données et Patterns Avancés",
+              "className": "PostDoc2",
+              "isMandatory": true,
+              "rawResponse": "\n\n---\n# Solutions — Post-Doctorat, Classe 1 (Tier 1)\n\n## tache_1a\n```javascript\nfunction creerFilePriorite() {\n  const heap = [];\n\n  function swap(i, j) {\n    [heap[i], heap[j]] = [heap[j], heap[i]];\n  }\n\n  function remonter(index) {\n    while (index > 0) {\n      const parent = Math.floor((index - 1) / 2);\n      if (heap[index].priorite < heap[parent].priorite) {\n        swap(index, parent);\n        index = parent;\n      } else {\n        break;\n      }\n    }\n  }\n\n  function descendre(index) {\n    const n = heap.length;\n    while (true) {\n      let min = index;\n      const gauche = 2 * index + 1;\n      const droite = 2 * index + 2;\n      if (gauche < n && heap[gauche].priorite < heap[min].priorite) {\n        min = gauche;\n      }\n      if (droite < n && heap[droite].priorite < heap[min].priorite) {\n        min = droite;\n      }\n      if (min !== index) {\n        swap(index, min);\n        index = min;\n      } else {\n        break;\n      }\n    }\n  }\n\n  return {\n    enqueue(val, priorite) {\n      heap.push({ val, priorite });\n      remonter(heap.length - 1);\n    },\n    dequeue() {\n      if (heap.length === 0) return undefined;\n      const min = heap[0];\n      const last = heap.pop();\n      if (heap.length > 0) {\n        heap[0] = last;\n        descendre(0);\n      }\n      return min.val;\n    },\n    taille() {\n      return heap.length;\n    }\n  };\n}\n```\n\n## tache_1b\n```javascript\nfunction creerEventEmitter() {\n  const listeners = {};\n\n  return {\n    on(event, fn) {\n      if (!listeners[event]) {\n        listeners[event] = [];\n      }\n      listeners[event].push(fn);\n    },\n    off(event, fn) {\n      if (!listeners[event]) return;\n      listeners[event] = listeners[event].filter(f => f !== fn);\n    },\n    emit(event, ...args) {\n      if (!listeners[event]) return;\n      for (const fn of listeners[event]) {\n        fn(...args);\n      }\n    }\n  };\n}\n```\n\n## tache_1c\n```javascript\nfunction zip(...tableaux) {\n  if (tableaux.length === 0) return [];\n  const minLength = Math.min(...tableaux.map(t => t.length));\n  const result = [];\n  for (let i = 0; i < minLength; i++) {\n    const tuple = [];\n    for (const tab of tableaux) {\n      tuple.push(tab[i]);\n    }\n    result.push(tuple);\n  }\n  return result;\n}\n```\n\n## tache_1d\n```javascript\nfunction parcoursEnLargeur(graphe, depart) {\n  const visites = [];\n  const file = [depart];\n  while (file.length > 0) {\n    const noeud = file.shift();\n    if (!visites.includes(noeud)) {\n      visites.push(noeud);\n      for (const voisin of (graphe[noeud] || [])) {\n        file.push(voisin);\n      }\n    }\n  }\n  return visites;\n}\n```\n\n## tache_1e\n```javascript\nfunction creerProxy(cible, gestionnaire) {\n  const proxy = {};\n  const keys = Object.keys(cible);\n  for (const key of keys) {\n    Object.defineProperty(proxy, key, {\n      configurable: true,\n      enumerable: true,\n      get() {\n        return gestionnaire.get(cible, key);\n      },\n      set(valeur) {\n        gestionnaire.set(cible, key, valeur);\n      }\n    });\n  }\n  return proxy;\n}\n```\n\n## algo_facile_1\n```javascript\nfunction estMultipleDe(n, m) {\n  if (m === 0) return false;\n  return n % m === 0;\n}\n```\n\n## algo_facile_2\n```javascript\nfunction puissance(base, exp) {\n  if (exp === 0) return 1;\n  let resultat = 1;\n  for (let i = 0; i < exp; i++) {\n    resultat *= base;\n  }\n  return resultat;\n}\n```\n\n## algo_moyen_1\n```javascript\nfunction compterPairs(tab) {\n  let count = 0;\n  for (const num of tab) {\n    if (num % 2 === 0) count++;\n  }\n  return count;\n}\n```\n\n## algo_difficile_1\n```javascript\nfunction supprimerDoublons(tab) {\n  const vus = new Set();\n  const result = [];\n  for (const item of tab) {\n    if (!vus.has(item)) {\n      vus.add(item);\n      result.push(item);\n    }\n  }\n  return result;\n}\n```\n\n## algo_defi\n```javascript\nfunction sommePaires(tab) {\n  let somme = 0;\n  for (const num of tab) {\n    if (num % 2 === 0) somme += num;\n  }\n  return somme;\n}\n```",
+              "evalResults": [
+                {
+                  "id": "tache_1a",
+                  "taskType": "File de priorité (min-heap)",
+                  "status": "success",
+                  "points": 47,
+                  "maxPoints": 47,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function creerFilePriorite() {\n  const heap = [];\n\n  function swap(i, j) {\n    [heap[i], heap[j]] = [heap[j], heap[i]];\n  }\n\n  function remonter(index) {\n    while (index > 0) {\n      const parent = Math.floor((index - 1) / 2);\n      if (heap[index].priorite < heap[parent].priorite) {\n        swap(index, parent);\n        index = parent;\n      } else {\n        break;\n      }\n    }\n  }\n\n  function descendre(index) {\n    const n = heap.length;\n    while (true) {\n      let min = index;\n      const gauche = 2 * index + 1;\n      const droite = 2 * index + 2;\n      if (gauche < n && heap[gauche].priorite < heap[min].priorite) {\n        min = gauche;\n      }\n      if (droite < n && heap[droite].priorite < heap[min].priorite) {\n        min = droite;\n      }\n      if (min !== index) {\n        swap(index, min);\n        index = min;\n      } else {\n        break;\n      }\n    }\n  }\n\n  return {\n    enqueue(val, priorite) {\n      heap.push({ val, priorite });\n      remonter(heap.length - 1);\n    },\n    dequeue() {\n      if (heap.length === 0) return undefined;\n      const min = heap[0];\n      const last = heap.pop();\n      if (heap.length > 0) {\n        heap[0] = last;\n        descendre(0);\n      }\n      return min.val;\n    },\n    taille() {\n      return heap.length;\n    }\n  };\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "tache_1b",
+                  "taskType": "EventEmitter",
+                  "status": "success",
+                  "points": 35,
+                  "maxPoints": 35,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function creerEventEmitter() {\n  const listeners = {};\n\n  return {\n    on(event, fn) {\n      if (!listeners[event]) {\n        listeners[event] = [];\n      }\n      listeners[event].push(fn);\n    },\n    off(event, fn) {\n      if (!listeners[event]) return;\n      listeners[event] = listeners[event].filter(f => f !== fn);\n    },\n    emit(event, ...args) {\n      if (!listeners[event]) return;\n      for (const fn of listeners[event]) {\n        fn(...args);\n      }\n    }\n  };\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "tache_1c",
+                  "taskType": "Zip de tableaux",
+                  "status": "success",
+                  "points": 49,
+                  "maxPoints": 49,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function zip(...tableaux) {\n  if (tableaux.length === 0) return [];\n  const minLength = Math.min(...tableaux.map(t => t.length));\n  const result = [];\n  for (let i = 0; i < minLength; i++) {\n    const tuple = [];\n    for (const tab of tableaux) {\n      tuple.push(tab[i]);\n    }\n    result.push(tuple);\n  }\n  return result;\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "tache_1d",
+                  "taskType": "Débogage",
+                  "status": "success",
+                  "points": 50,
+                  "maxPoints": 50,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function parcoursEnLargeur(graphe, depart) {\n  const visites = [];\n  const file = [depart];\n  while (file.length > 0) {\n    const noeud = file.shift();\n    if (!visites.includes(noeud)) {\n      visites.push(noeud);\n      for (const voisin of (graphe[noeud] || [])) {\n        file.push(voisin);\n      }\n    }\n  }\n  return visites;\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "tache_1e",
+                  "taskType": "Proxy manuel",
+                  "status": "success",
+                  "points": 51,
+                  "maxPoints": 51,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function creerProxy(cible, gestionnaire) {\n  const proxy = {};\n  const keys = Object.keys(cible);\n  for (const key of keys) {\n    Object.defineProperty(proxy, key, {\n      configurable: true,\n      enumerable: true,\n      get() {\n        return gestionnaire.get(cible, key);\n      },\n      set(valeur) {\n        gestionnaire.set(cible, key, valeur);\n      }\n    });\n  }\n  return proxy;\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "algo_facile_1",
+                  "taskType": "Algorithmique — Multiplicité",
+                  "status": "success",
+                  "points": 58,
+                  "maxPoints": 58,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function estMultipleDe(n, m) {\n  if (m === 0) return false;\n  return n % m === 0;\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "algo_facile_2",
+                  "taskType": "Algorithmique — Puissance",
+                  "status": "success",
+                  "points": 54,
+                  "maxPoints": 54,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function puissance(base, exp) {\n  if (exp === 0) return 1;\n  let resultat = 1;\n  for (let i = 0; i < exp; i++) {\n    resultat *= base;\n  }\n  return resultat;\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "algo_moyen_1",
+                  "taskType": "Algorithmique — Comptage de pairs",
+                  "status": "success",
+                  "points": 57,
+                  "maxPoints": 57,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function compterPairs(tab) {\n  let count = 0;\n  for (const num of tab) {\n    if (num % 2 === 0) count++;\n  }\n  return count;\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "algo_difficile_1",
+                  "taskType": "Algorithmique — Suppression de doublons",
+                  "status": "success",
+                  "points": 38,
+                  "maxPoints": 38,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function supprimerDoublons(tab) {\n  const vus = new Set();\n  const result = [];\n  for (const item of tab) {\n    if (!vus.has(item)) {\n      vus.add(item);\n      result.push(item);\n    }\n  }\n  return result;\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "algo_defi",
+                  "taskType": "Algorithmique — Somme des pairs",
+                  "status": "success",
+                  "points": 42,
+                  "maxPoints": 42,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function sommePaires(tab) {\n  let somme = 0;\n  for (const num of tab) {\n    if (num % 2 === 0) somme += num;\n  }\n  return somme;\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                }
+              ]
+            },
+            {
+              "tierNum": 2,
+              "tierTitle": "Tier 2 — Concurrence, Réactivité et Optimisation",
+              "className": "PostDoc3",
+              "isMandatory": true,
+              "rawResponse": "\n\n---\n### tache_2a\n```javascript\nasync function executerEnPool(taches, concurrence) {\n  const resultats = new Array(taches.length);\n  let index = 0;\n\n  async function worker() {\n    while (index < taches.length) {\n      const i = index++;\n      resultats[i] = await taches[i]();\n    }\n  }\n\n  const workers = [];\n  for (let i = 0; i < concurrence; i++) {\n    workers.push(worker());\n  }\n  await Promise.all(workers);\n  return resultats;\n}\n```\n\n### tache_2b\n```javascript\nfunction creerSubject() {\n  const abonnes = new Set();\n  let termine = false;\n  let erreur = null;\n\n  return {\n    next(val) {\n      if (termine || erreur) return;\n      for (const ab of abonnes) {\n        ab.next && ab.next(val);\n      }\n    },\n    error(err) {\n      if (termine || erreur) return;\n      erreur = err;\n      for (const ab of abonnes) {\n        ab.error && ab.error(err);\n      }\n      abonnes.clear();\n    },\n    complete() {\n      if (termine || erreur) return;\n      termine = true;\n      for (const ab of abonnes) {\n        ab.complete && ab.complete();\n      }\n      abonnes.clear();\n    },\n    subscribe({ next, error, complete } = {}) {\n      const abonnement = { next, error, complete };\n      abonnes.add(abonnement);\n      return {\n        unsubscribe() {\n          abonnes.delete(abonnement);\n        }\n      };\n    }\n  };\n}\n```\n\n### tache_2c\n```javascript\nfunction memoiserAsync(fn) {\n  const cache = new Map();\n\n  return function(...args) {\n    const cle = JSON.stringify(args);\n\n    if (cache.has(cle)) {\n      return cache.get(cle);\n    }\n\n    const promesse = fn.apply(this, args);\n    cache.set(cle, promesse);\n\n    return promesse;\n  };\n}\n```\n\n### tache_2d\n```javascript\nasync function chargerUtilisateur(id) {\n  const response = await fetch('/api/user/' + id);\n  const data = await response.json();\n  return data;\n}\n```\n\n### tache_2e\n```javascript\nfunction creerCircuitBreaker(fn, seuil, delaiResetMs) {\n  let etat = 'FERME';\n  let echecs = 0;\n  let dernierEchec = 0;\n\n  return async function(...args) {\n    if (etat === 'OUVERT') {\n      if (Date.now() - dernierEchec < delaiResetMs) {\n        throw new Error('CircuitBreaker: circuit ouvert');\n      }\n      etat = 'HALF-OPEN';\n    }\n\n    try {\n      const resultat = await fn.apply(this, args);\n      echecs = 0;\n      etat = 'FERME';\n      return resultat;\n    } catch (e) {\n      echecs++;\n      dernierEchec = Date.now();\n      if (etat === 'HALF-OPEN') {\n        etat = 'OUVERT';\n      } else if (echecs >= seuil) {\n        etat = 'OUVERT';\n      }\n      throw e;\n    }\n  };\n}\n```\n\n### algo_facile_1\n```javascript\nfunction estPalindrome(s) {\n  return s === s.split('').reverse().join('');\n}\n```\n\n### algo_facile_2\n```javascript\nfunction pgcd(a, b) {\n  while (b !== 0) {\n    const temp = b;\n    b = a % b;\n    a = temp;\n  }\n  return a;\n}\n```\n\n### algo_moyen_1\n```javascript\nfunction nombreMots(s) {\n  const trimmed = s.trim();\n  if (trimmed === '') return 0;\n  return trimmed.split(/\\s+/).length;\n}\n```\n\n### algo_difficile_1\n```javascript\nfunction fusionTriee(a, b) {\n  const resultat = [];\n  let i = 0;\n  let j = 0;\n\n  while (i < a.length && j < b.length) {\n    if (a[i] <= b[j]) {\n      resultat.push(a[i++]);\n    } else {\n      resultat.push(b[j++]);\n    }\n  }\n\n  while (i < a.length) {\n    resultat.push(a[i++]);\n  }\n\n  while (j < b.length) {\n    resultat.push(b[j++]);\n  }\n\n  return resultat;\n}\n```\n\n### algo_defi\n```javascript\nfunction sontAnagrammes(a, b) {\n  if (a.length !== b.length) return false;\n  return a.split('').sort().join('') === b.split('').sort().join('');\n}\n```\n\n---\n### tache_2a\n```javascript\nasync function executerEnPool(taches, concurrence) {\n  const results = [];\n  let index = 0;\n  const executer = async () => {\n    while (index < taches.length) {\n      const current = index++;\n      const tache = taches[current];\n      try {\n        const res = await tache();\n        results[current] = res;\n      } catch (e) {\n        results[current] = e;\n      }\n    }\n  };\n  const workers = Array.from({ length: concurrence }, () => executer());\n  await Promise.all(workers);\n  return results;\n}\n```\n\n### tache_2b\n```javascript\nfunction creerSubject() {\n  let subscribers = [];\n  let isClosed = false;\n  let isErrored = false;\n  let errorValue = null;\n  return {\n    next(val) {\n      if (isClosed || isErrored) return;\n      subscribers.forEach(sub => sub.next && sub.next(val));\n    },\n    error(err) {\n      if (isClosed || isErrored) return;\n      isErrored = true;\n      errorValue = err;\n      subscribers.forEach(sub => sub.error && sub.error(err));\n      subscribers = [];\n    },\n    complete() {\n      if (isClosed || isErrored) return;\n      isClosed = true;\n      subscribers.forEach(sub => sub.complete && sub.complete());\n      subscribers = [];\n    },\n    subscribe(observer) {\n      if (isClosed) {\n        observer.complete && observer.complete();\n        return;\n      }\n      if (isErrored) {\n        observer.error && observer.error(errorValue);\n        return;\n      }\n      subscribers.push(observer);\n      return {\n        unsubscribe() {\n          const index = subscribers.indexOf(observer);\n          if (index !== -1) {\n            subscribers.splice(index, 1);\n          }\n        }\n      };\n    }\n  };\n}\n```\n\n### tache_2c\n```javascript\nfunction memoiserAsync(fn) {\n  const cache = new Map();\n  return async function(...args) {\n    const key = JSON.stringify(args);\n    if (cache.has(key)) {\n      const cached = cache.get(key);\n      if (cached.status === 'resolved') {\n        return cached.value;\n      } else if (cached.status === 'pending') {\n        return cached.promise;\n      }\n    }\n    const promise = fn.apply(this, args);\n    cache.set(key, { status: 'pending', promise });\n    try {\n      const value = await promise;\n      cache.set(key, { status: 'resolved', value });\n      return value;\n    } catch (e) {\n      cache.set(key, { status: 'rejected', error: e });\n      throw e;\n    }\n  };\n}\n```\n\n### tache_2d\n```javascript\nasync function chargerUtilisateur(id) {\n  const response = await fetch('/api/user/' + id);\n  const data = await response.json();\n  return data;\n}\n```\n\n### tache_2e\n```javascript\nfunction creerCircuitBreaker(fn, seuil, delaiResetMs) {\n  let state = 'closed';\n  let failureCount = 0;\n  let lastFailureTime = 0;\n  let inHalfOpen = false;\n\n  return async function(...args) {\n    if (state === 'open') {\n      const now = Date.now();\n      if (now - lastFailureTime < delaiResetMs) {\n        throw new Error('Circuit is open');\n      } else {\n        state = 'half-open';\n        inHalfOpen = true;\n      }\n    }\n\n    if (state === 'half-open') {\n      if (inHalfOpen) {\n        inHalfOpen = false;\n        try {\n          const result = await fn.apply(this, args);\n          state = 'closed';\n          failureCount = 0;\n          return result;\n        } catch (e) {\n          state = 'open';\n          lastFailureTime = Date.now();\n          throw e;\n        }\n      } else {\n        throw new Error('Circuit is half-open, waiting for test');\n      }\n    }\n\n    try {\n      const result = await fn.apply(this, args);\n      failureCount = 0;\n      return result;\n    } catch (e) {\n      failureCount++;\n      if (failureCount >= seuil) {\n        state = 'open';\n        lastFailureTime = Date.now();\n      }\n      throw e;\n    }\n  };\n}\n```\n\n### algo_facile_1\n```javascript\nfunction estPalindrom(s) {\n  return s === s.split('').reverse().join('');\n}\n```\n\n### algo_facile_2\n```javascript\nfunction pgcd(a, b) {\n  while (b !== 0) {\n    const temp = b;\n    b = a % b;\n    a = temp;\n  }\n  return a;\n}\n```\n\n### algo_moyen_1\n```javascript\nfunction nombreMots(s) {\n  return s.trim().split(/\\s+/).length;\n}\n```\n\n### algo_difficile_1\n```javascript\nfunction fusionTriee(a, b) {\n  const result = [];\n  let i = 0, j = 0;\n  while (i < a.length && j < b.length) {\n    if (a[i] <= b[j]) {\n      result.push(a[i++]);\n    } else {\n      result.push(b[j++]);\n    }\n  }\n  while (i < a.length) result.push(a[i++]);\n  while (j < b.length) result.push(b[j++]);\n  return result;\n}\n```\n\n### algo_defi\n```javascript\nfunction sontAnagrammes(a, b) {\n  if (a.length !== b.length) return false;\n  return a.split('').sort().join() === b.split('').sort().join();\n}\n```",
+              "evalResults": [
+                {
+                  "id": "tache_2a",
+                  "taskType": "Pool de concurrence async",
+                  "status": "failed",
+                  "points": -52,
+                  "maxPoints": 52,
+                  "helpUsed": true,
+                  "retried": true,
+                  "code": "async function executerEnPool(taches, concurrence) {\n  const results = [];\n  let index = 0;\n  const executer = async () => {\n    while (index < taches.length) {\n      const current = index++;\n      const tache = taches[current];\n      try {\n        const res = await tache();\n        results[current] = res;\n      } catch (e) {\n        results[current] = e;\n      }\n    }\n  };\n  const workers = Array.from({ length: concurrence }, () => executer());\n  await Promise.all(workers);\n  return results;\n}",
+                  "failureExplanation": "Ma solution ne correspondait pas au format de retour attendu par l'évaluation : j'ai renvoyé un tableau plat `results` indexé par position, alors que la correction exigeait un objet avec deux clés distinctes, `succes` et `echecs`. En d'autres termes, au lieu de séparer les ressources chargées avec succès des URLs ayant échoué dans deux tableaux dédiés, j'ai mélangé les deux types de résultats dans un seul tableau, ce qui rendait impossible l'identification claire des échecs. Pour résoudre ce problème, il aurait fallu structurer la fonction afin qu'elle retourne explicitement `{ succes: [...], echecs: [...] }`, en poussant chaque résultat réussi dans `succes` et chaque erreur dans `echecs`, plutôt que de simplement accumuler tous les résultats dans un tableau unique. Cette erreur d'architecture de la sortie est la cause racine de l'échec.",
+                  "teacherCorrection": "Juste.  \nVotre fonction renvoie un tableau plat alors que l’évaluateur attend un objet `{succes: [...], echecs: [...]}`.  \nLa cause racine est donc la structure de retour : vous avez mélangé succès et échecs dans un même tableau, ce qui empêche l’évaluateur de distinguer les deux catégories.  \nPour corriger, construisez deux tableaux distincts et renvoyez l’objet attendu."
+                },
+                {
+                  "id": "tache_2b",
+                  "taskType": "Subject réactif (multicast)",
+                  "status": "success",
+                  "points": 31,
+                  "maxPoints": 31,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function creerSubject() {\n  const abonnes = new Set();\n  let termine = false;\n  let erreur = null;\n\n  return {\n    next(val) {\n      if (termine || erreur) return;\n      for (const ab of abonnes) {\n        ab.next && ab.next(val);\n      }\n    },\n    error(err) {\n      if (termine || erreur) return;\n      erreur = err;\n      for (const ab of abonnes) {\n        ab.error && ab.error(err);\n      }\n      abonnes.clear();\n    },\n    complete() {\n      if (termine || erreur) return;\n      termine = true;\n      for (const ab of abonnes) {\n        ab.complete && ab.complete();\n      }\n      abonnes.clear();\n    },\n    subscribe({ next, error, complete } = {}) {\n      const abonnement = { next, error, complete };\n      abonnes.add(abonnement);\n      return {\n        unsubscribe() {\n          abonnes.delete(abonnement);\n        }\n      };\n    }\n  };\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "tache_2c",
+                  "taskType": "Mémoïsation async anti-duplication",
+                  "status": "success",
+                  "points": 38,
+                  "maxPoints": 38,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function memoiserAsync(fn) {\n  const cache = new Map();\n\n  return function(...args) {\n    const cle = JSON.stringify(args);\n\n    if (cache.has(cle)) {\n      return cache.get(cle);\n    }\n\n    const promesse = fn.apply(this, args);\n    cache.set(cle, promesse);\n\n    return promesse;\n  };\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "tache_2d",
+                  "taskType": "Débogage",
+                  "status": "success",
+                  "points": 46,
+                  "maxPoints": 46,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "async function chargerUtilisateur(id) {\n  const response = await fetch('/api/user/' + id);\n  const data = await response.json();\n  return data;\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "tache_2e",
+                  "taskType": "Circuit Breaker",
+                  "status": "success",
+                  "points": 51,
+                  "maxPoints": 51,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function creerCircuitBreaker(fn, seuil, delaiResetMs) {\n  let etat = 'FERME';\n  let echecs = 0;\n  let dernierEchec = 0;\n\n  return async function(...args) {\n    if (etat === 'OUVERT') {\n      if (Date.now() - dernierEchec < delaiResetMs) {\n        throw new Error('CircuitBreaker: circuit ouvert');\n      }\n      etat = 'HALF-OPEN';\n    }\n\n    try {\n      const resultat = await fn.apply(this, args);\n      echecs = 0;\n      etat = 'FERME';\n      return resultat;\n    } catch (e) {\n      echecs++;\n      dernierEchec = Date.now();\n      if (etat === 'HALF-OPEN') {\n        etat = 'OUVERT';\n      } else if (echecs >= seuil) {\n        etat = 'OUVERT';\n      }\n      throw e;\n    }\n  };\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "algo_facile_1",
+                  "taskType": "Algorithmique — Palindrome",
+                  "status": "success",
+                  "points": 41,
+                  "maxPoints": 41,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function estPalindrome(s) {\n  return s === s.split('').reverse().join('');\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "algo_facile_2",
+                  "taskType": "Algorithmique — PGCD",
+                  "status": "success",
+                  "points": 54,
+                  "maxPoints": 54,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function pgcd(a, b) {\n  while (b !== 0) {\n    const temp = b;\n    b = a % b;\n    a = temp;\n  }\n  return a;\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "algo_moyen_1",
+                  "taskType": "Algorithmique — Nombre de mots",
+                  "status": "success",
+                  "points": 37,
+                  "maxPoints": 37,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function nombreMots(s) {\n  const trimmed = s.trim();\n  if (trimmed === '') return 0;\n  return trimmed.split(/\\s+/).length;\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "algo_difficile_1",
+                  "taskType": "Algorithmique — Fusion triée",
+                  "status": "success",
+                  "points": 37,
+                  "maxPoints": 37,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function fusionTriee(a, b) {\n  const resultat = [];\n  let i = 0;\n  let j = 0;\n\n  while (i < a.length && j < b.length) {\n    if (a[i] <= b[j]) {\n      resultat.push(a[i++]);\n    } else {\n      resultat.push(b[j++]);\n    }\n  }\n\n  while (i < a.length) {\n    resultat.push(a[i++]);\n  }\n\n  while (j < b.length) {\n    resultat.push(b[j++]);\n  }\n\n  return resultat;\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "algo_defi",
+                  "taskType": "Algorithmique — Anagrammes",
+                  "status": "success",
+                  "points": 51,
+                  "maxPoints": 51,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function sontAnagrammes(a, b) {\n  if (a.length !== b.length) return false;\n  return a.split('').sort().join('') === b.split('').sort().join('');\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                }
+              ]
+            },
+            {
+              "tierNum": 3,
+              "tierTitle": "Tier 3 — Sécurité Avancée, Architecture et Algorithmes Complexes",
+              "className": "PostDoc4",
+              "isMandatory": true,
+              "rawResponse": "\n\n---\n\n\n---\n### tache_3a\n```powershell\n# deploy-patch.ps1\n# Deploys a database patch with backup and rollback support\n\nparam(\n    [Parameter(Mandatory=$true)]\n    [string]$DatabasePath,\n\n    [Parameter(Mandatory=$true)]\n    [string]$BackupDirectory,\n\n    [Parameter(Mandatory=$true)]\n    [string]$PatchScript\n)\n\n$ErrorActionPreference = \"Stop\"\n$backupFile = $null\n\ntry {\n    # Ensure backup directory exists\n    if (-not (Test-Path $BackupDirectory)) {\n        New-Item -ItemType Directory -Path $BackupDirectory -Force | Out-Null\n    }\n\n    # Create timestamped backup using Copy-Item\n    $timestamp = Get-Date -Format \"yyyyMMdd_HHmmss\"\n    $dbFileName = Split-Path $DatabasePath -Leaf\n    $backupFile = Join-Path $BackupDirectory \"${dbFileName}_$timestamp.bak\"\n\n    Copy-Item -Path $DatabasePath -Destination $backupFile -Force\n    Write-Host \"Database backed up to: $backupFile\"\n\n    # Apply patch using sqlite3\n    if (-not (Test-Path $PatchScript)) {\n        throw \"Patch script not found: $PatchScript\"\n    }\n\n    & sqlite3 $DatabasePath \".read $PatchScript\"\n    Write-Host \"Patch applied successfully.\"\n\n    Write-Host \"Deployment completed successfully.\"\n    exit 0\n}\ncatch {\n    Write-Error \"Deployment failed: $_\"\n\n    # Rollback from backup\n    if ($backupFile -and (Test-Path $backupFile)) {\n        Copy-Item -Path $backupFile -Destination $DatabasePath -Force\n        Write-Host \"Rollback completed. Database restored from: $backupFile\"\n    } else {\n        Write-Error \"No backup available for rollback.\"\n    }\n\n    exit 1\n}\n```\n\n### tache_3b\n```javascript\nfunction remplirMatrice(grille, x, y, nouvelleValeur) {\n    if (!grille || grille.length === 0 || !grille[0]) return grille;\n\n    const ancienneValeur = grille[y][x];\n    if (ancienneValeur === nouvelleValeur) return grille;\n\n    const rows = grille.length;\n    const cols = grille[0].length;\n\n    const queue = [[x, y]];\n\n    while (queue.length > 0) {\n        const [cx, cy] = queue.shift();\n\n        if (cx < 0 || cx >= cols || cy < 0 || cy >= rows) continue;\n        if (grille[cy][cx] !== ancienneValeur) continue;\n\n        grille[cy][cx] = nouvelleValeur;\n\n        queue.push([cx + 1, cy]);\n        queue.push([cx - 1, cy]);\n        queue.push([cx, cy + 1]);\n        queue.push([cx, cy - 1]);\n    }\n\n    return grille;\n}\n```\n\n### tache_3c\n```javascript\nasync function middleware(request, env) {\n    const authHeader = request.headers.get('Authorization');\n\n    if (!authHeader || !authHeader.startsWith('Bearer ')) {\n        return new Response('Forbidden', { status: 403 });\n    }\n\n    const token = authHeader.substring(7);\n    const expectedKey = env?.SYSTEM_SECURE_KEY ?? 'SYSTEM-SECURE-KEY';\n\n    if (token !== expectedKey) {\n        return new Response('Forbidden', { status: 403 });\n    }\n\n    return new Response('OK', { status: 200 });\n}\n```\n\n### tache_3d\n```javascript\nfunction rechercherUtilisateurSecurise(db, nomUtilisateur) {\n    const query = 'SELECT * FROM utilisateurs WHERE nom_utilisateur = ?';\n    return db.prepare(query).bind(nomUtilisateur).all();\n}\n```\n\n### tache_3e\n```javascript\nasync function executerAvecRetry(operation, maxTentatives) {\n    let tentative = 0;\n\n    while (tentative < maxTentatives) {\n        try {\n            return await operation();\n        } catch (error) {\n            tentative++;\n            if (tentative >= maxTentatives) {\n                throw error;\n            }\n            const delay = Math.pow(2, tentative - 1) * 1000;\n            await new Promise(resolve => setTimeout(resolve, delay));\n        }\n    }\n}\n```\n\n### tache_3f\n```javascript\nfunction fusionnerConfig(...sources) {\n    const result = {};\n\n    for (const source of sources) {\n        if (source && typeof source === 'object') {\n            for (const key of Object.keys(source)) {\n                if (key === '__proto__' || key === 'constructor' || key === 'prototype') {\n                    continue;\n                }\n                result[key] = source[key];\n            }\n        }\n    }\n\n    return result;\n}\n```\n\n### algo_facile_1\n```javascript\nfunction validerParentheses(s) {\n    let count = 0;\n    for (const char of s) {\n        if (char === '(') {\n            count++;\n        } else if (char === ')') {\n            count--;\n            if (count < 0) return false;\n        }\n    }\n    return count === 0;\n}\n```\n\n### algo_facile_2\n```javascript\nfunction fibonacci(n) {\n    if (n === 0) return 0;\n    if (n === 1) return 1;\n\n    let a = 0, b = 1;\n    for (let i = 2; i <= n; i++) {\n        const temp = a + b;\n        a = b;\n        b = temp;\n    }\n    return b;\n}\n```\n\n### algo_moyen_1\n```javascript\nfunction motsUniques(s) {\n    if (!s || s.trim() === '') return 0;\n    const words = s.trim().split(/\\s+/);\n    const unique = new Set(words);\n    return unique.size;\n}\n```\n\n### algo_difficile_1\n```javascript\nfunction aplatirTableau(tab) {\n    const result = [];\n    for (const item of tab) {\n        if (Array.isArray(item)) {\n            result.push(...item);\n        } else {\n            result.push(item);\n        }\n    }\n    return result;\n}\n```\n\n### algo_defi\n```javascript\nfunction rotationDroite(tab, k) {\n    if (tab.length === 0) return tab;\n    const n = tab.length;\n    k = k % n;\n    if (k < 0) k += n;\n    return tab.slice(n - k).concat(tab.slice(0, n - k));\n}\n```\n\n---\n\n\n---\n\n\n---\n\n\n---\n\n\n---\n### tache_3a\n```powershell\n# deploy-patch.ps1\n# Deployment script with backup and rollback\n\nparam(\n    [string]$MigrationFile = \"migration.sql\",\n    [string]$DatabasePath = \"production.db\",\n    [string]$BackupPath = \"production_backup.db\"\n)\n\n$ErrorActionPreference = \"Stop\"\n\ntry {\n    # Step 1: Create backup BEFORE migration\n    Copy-Item -Path $DatabasePath -Destination $BackupPath -Force\n\n    # Step 2: Apply migration using sqlite3\n    $migrationContent = Get-Content -Path $MigrationFile -Raw\n    sqlite3 $DatabasePath $migrationContent\n\n    Write-Host \"Patch deployed successfully.\"\n}\ncatch {\n    Write-Error \"Migration failed: $_\"\n\n    # Step 3: Rollback - restore from backup\n    if (Test-Path $BackupPath) {\n        Copy-Item -Path $BackupPath -Destination $DatabasePath -Force\n        Write-Host \"Rollback completed: restored from $BackupPath\"\n    } else {\n        Write-Error \"Backup file not found. Cannot rollback.\"\n    }\n\n    exit 1\n}\n```\n\n### tache_3b\n```javascript\nfunction remplirMatrice(grille, x, y, nouvelleValeur) {\n    if (!grille || !grille[y] || grille[y][x] === undefined) return grille;\n\n    const ancienneValeur = grille[y][x];\n    if (ancienneValeur === nouvelleValeur) return grille;\n\n    const queue = [[x, y]];\n    const directions = [[0, 1], [1, 0], [0, -1], [-1, 0]];\n\n    while (queue.length > 0) {\n        const [cx, cy] = queue.shift();\n        if (cy < 0 || cy >= grille.length || cx < 0 || cx >= grille[cy].length) continue;\n        if (grille[cy][cx] !== ancienneValeur) continue;\n\n        grille[cy][cx] = nouvelleValeur;\n\n        for (const [dx, dy] of directions) {\n            queue.push([cx + dx, cy + dy]);\n        }\n    }\n\n    return grille;\n}\n```\n\n### tache_3c\n```javascript\nasync function middleware(request, env) {\n    const authHeader = request.headers.get('Authorization');\n\n    if (!authHeader || !authHeader.startsWith('Bearer ')) {\n        return new Response('Access Denied', { status: 403 });\n    }\n\n    const token = authHeader.substring(7);\n\n    if (token !== 'SYSTEM-SECURE-KEY') {\n        return new Response('Access Denied', { status: 403 });\n    }\n\n    return fetch(request);\n}\n```\n\n### tache_3d\n```javascript\nfunction rechercherUtilisateurSecurise(db, nomUtilisateur) {\n    const query = \"SELECT * FROM utilisateurs WHERE nom_utilisateur = ?\";\n    const stmt = db.prepare(query);\n    return stmt.get(nomUtilisateur);\n}\n```\n\n### tache_3e\n```javascript\nasync function executerAvecRetry(operation, maxTentatives) {\n    let derniereErreur;\n\n    for (let tentative = 1; tentative <= maxTentatives; tentative++) {\n        try {\n            return await operation();\n        } catch (erreur) {\n            derniereErreur = erreur;\n            if (tentative < maxTentatives) {\n                const delay = Math.pow(2, tentative - 1) * 1000;\n                await new Promise(resolve => {\n                    if (typeof setTimeout !== 'undefined') {\n                        setTimeout(resolve, delay);\n                    } else {\n                        resolve();\n                    }\n                });\n            }\n        }\n    }\n\n    throw derniereErreur;\n}\n```\n\n### tache_3f\n```javascript\nfunction fusionnerConfig(...configs) {\n    const result = Object.create(null);\n\n    for (const config of configs) {\n        if (config && typeof config === 'object') {\n            for (const key of Object.keys(config)) {\n                result[key] = config[key];\n            }\n        }\n    }\n\n    return result;\n}\n```\n\n### algo_facile_1\n```javascript\nfunction validerParentheses(s) {\n    let count = 0;\n    for (const char of s) {\n        if (char === '(') {\n            count++;\n        } else if (char === ')') {\n            count--;\n            if (count < 0) return false;\n        }\n    }\n    return count === 0;\n}\n```\n\n### algo_facile_2\n```javascript\nfunction fibonacci(n) {\n    if (n === 0) return 0;\n    if (n === 1) return 1;\n\n    let a = 0, b = 1;\n    for (let i = 2; i <= n; i++) {\n        [a, b] = [b, a + b];\n    }\n    return b;\n}\n```\n\n### algo_moyen_1\n```javascript\nfunction motsUniques(s) {\n    const mots = s.trim().split(/\\s+/);\n    const uniques = new Set(mots);\n    return uniques.size;\n}\n```\n\n### algo_difficile_1\n```javascript\nfunction aplatirTableau(tab) {\n    const result = [];\n    for (const item of tab) {\n        if (Array.isArray(item)) {\n            result.push(...item);\n        } else {\n            result.push(item);\n        }\n    }\n    return result;\n}\n```\n\n### algo_defi\n```javascript\nfunction rotationDroite(tab, k) {\n    if (tab.length === 0) return tab;\n    k = k % tab.length;\n    if (k < 0) k += tab.length;\n    return [...tab.slice(-k), ...tab.slice(0, -k)];\n}\n```",
+              "evalResults": [
+                {
+                  "id": "tache_3a",
+                  "taskType": "Script PowerShell deploy-patch avec rollback",
+                  "status": "success",
+                  "points": 0,
+                  "maxPoints": 36,
+                  "helpUsed": true,
+                  "retried": true,
+                  "code": "# deploy-patch.ps1\n# Deployment script with backup and rollback\n\nparam(\n    [string]$MigrationFile = \"migration.sql\",\n    [string]$DatabasePath = \"production.db\",\n    [string]$BackupPath = \"production_backup.db\"\n)\n\n$ErrorActionPreference = \"Stop\"\n\ntry {\n    # Step 1: Create backup BEFORE migration\n    Copy-Item -Path $DatabasePath -Destination $BackupPath -Force\n\n    # Step 2: Apply migration using sqlite3\n    $migrationContent = Get-Content -Path $MigrationFile -Raw\n    sqlite3 $DatabasePath $migrationContent\n\n    Write-Host \"Patch deployed successfully.\"\n}\ncatch {\n    Write-Error \"Migration failed: $_\"\n\n    # Step 3: Rollback - restore from backup\n    if (Test-Path $BackupPath) {\n        Copy-Item -Path $BackupPath -Destination $DatabasePath -Force\n        Write-Host \"Rollback completed: restored from $BackupPath\"\n    } else {\n        Write-Error \"Backup file not found. Cannot rollback.\"\n    }\n\n    exit 1\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "tache_3b",
+                  "taskType": "Flood Fill",
+                  "status": "success",
+                  "points": 44,
+                  "maxPoints": 44,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function remplirMatrice(grille, x, y, nouvelleValeur) {\n    if (!grille || grille.length === 0 || !grille[0]) return grille;\n\n    const ancienneValeur = grille[y][x];\n    if (ancienneValeur === nouvelleValeur) return grille;\n\n    const rows = grille.length;\n    const cols = grille[0].length;\n\n    const queue = [[x, y]];\n\n    while (queue.length > 0) {\n        const [cx, cy] = queue.shift();\n\n        if (cx < 0 || cx >= cols || cy < 0 || cy >= rows) continue;\n        if (grille[cy][cx] !== ancienneValeur) continue;\n\n        grille[cy][cx] = nouvelleValeur;\n\n        queue.push([cx + 1, cy]);\n        queue.push([cx - 1, cy]);\n        queue.push([cx, cy + 1]);\n        queue.push([cx, cy - 1]);\n    }\n\n    return grille;\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "tache_3c",
+                  "taskType": "Middleware Cloudflare",
+                  "status": "success",
+                  "points": 0,
+                  "maxPoints": 39,
+                  "helpUsed": true,
+                  "retried": true,
+                  "code": "async function middleware(request, env) {\n    const authHeader = request.headers.get('Authorization');\n\n    if (!authHeader || !authHeader.startsWith('Bearer ')) {\n        return new Response('Access Denied', { status: 403 });\n    }\n\n    const token = authHeader.substring(7);\n\n    if (token !== 'SYSTEM-SECURE-KEY') {\n        return new Response('Access Denied', { status: 403 });\n    }\n\n    return fetch(request);\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "tache_3d",
+                  "taskType": "SQL paramétrée",
+                  "status": "failed",
+                  "points": -30,
+                  "maxPoints": 30,
+                  "helpUsed": true,
+                  "retried": true,
+                  "code": "function rechercherUtilisateurSecurise(db, nomUtilisateur) {\n    const query = \"SELECT * FROM utilisateurs WHERE nom_utilisateur = ?\";\n    const stmt = db.prepare(query);\n    return stmt.get(nomUtilisateur);\n}",
+                  "failureExplanation": "L'erreur \"db.prepare is not a function\" indique que l'objet `db` passé en paramètre ne possède pas la méthode `prepare`, ce qui signifie que la base de données n'a pas été initialisée correctement avec une bibliothèque prenant en charge les requêtes préparées paramétrées comme `sqlite3`. Dans mon code, j'ai supposé que `db` était une instance valide de `sqlite3.Database`, mais il est possible que la connexion à la base de données n'ait pas été établie avec le bon module ou que l'objet transmis ne soit pas le bon type. Pour résoudre ce problème, il aurait fallu vérifier que `db` est bien une instance de `sqlite3.Database` et s'assurer que la bibliothèque `sqlite3` est correctement importée et utilisée pour créer la connexion, par exemple avec `const sqlite3 = require('sqlite3').verbose()` et `const db = new sqlite3.Database('ma_base.db')`.",
+                  "teacherCorrection": "PARTIELLEMENT JUSTE.  \nLa vérification de l'existence de `db.prepare` est correcte, mais l'erreur réside dans l'utilisation de `db.prepare` au lieu de `db.get` directement avec un tableau de paramètres.  \nLa méthode `prepare` n'existe pas dans l'API `sqlite3.Database` de Node.js : les requêtes paramétrées sont exécutées via `db.get(query, [param1, param2])`.  \nL'élève a confondu la syntaxe avec celle de `sqlite3.Statement` ou d'autres bibliothèques, alors que `sqlite3` gère les paramètres directement dans la méthode d'exécution."
+                },
+                {
+                  "id": "tache_3e",
+                  "taskType": "Retry async",
+                  "status": "success",
+                  "points": 0,
+                  "maxPoints": 41,
+                  "helpUsed": true,
+                  "retried": true,
+                  "code": "async function executerAvecRetry(operation, maxTentatives) {\n    let derniereErreur;\n\n    for (let tentative = 1; tentative <= maxTentatives; tentative++) {\n        try {\n            return await operation();\n        } catch (erreur) {\n            derniereErreur = erreur;\n            if (tentative < maxTentatives) {\n                const delay = Math.pow(2, tentative - 1) * 1000;\n                await new Promise(resolve => {\n                    if (typeof setTimeout !== 'undefined') {\n                        setTimeout(resolve, delay);\n                    } else {\n                        resolve();\n                    }\n                });\n            }\n        }\n    }\n\n    throw derniereErreur;\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "tache_3f",
+                  "taskType": "Prototype pollution",
+                  "status": "failed",
+                  "points": -32,
+                  "maxPoints": 32,
+                  "helpUsed": true,
+                  "retried": true,
+                  "code": "function fusionnerConfig(...configs) {\n    const result = Object.create(null);\n\n    for (const config of configs) {\n        if (config && typeof config === 'object') {\n            for (const key of Object.keys(config)) {\n                result[key] = config[key];\n            }\n        }\n    }\n\n    return result;\n}",
+                  "failureExplanation": "Ma solution ne gère pas la fusion profonde des objets imbriqués : lorsque deux configurations contiennent la même clé (par exemple `a`), la dernière valeur écrase complètement la précédente au lieu de fusionner leurs propriétés (`x` et `y`). Pour résoudre ce problème, il aurait fallu implémenter une récursion qui vérifie si les valeurs associées à une clé sont des objets, et les fusionne récursivement plutôt que de les remplacer directement. De plus, le code ne protège pas contre la pollution de prototype, car il utilise `Object.create(null)` mais ne vérifie pas si les clés sont `__proto__` ou `constructor`, ce qui pourrait permettre une injection de propriétés sur des objets existants.",
+                  "teacherCorrection": "We need to evaluate student's analysis. The code: function fusionnerConfig(...configs) { const result = Object.create(null); for (const config of configs) { if (config && typeof config === 'object') { for (const key of Object.keys(config)) { result[key] = config[key]; } } } return result; }\n\nGoal: likely they need to merge configs deeply, but also avoid prototype pollution. The test assertion: result.a.x === 1 && result.a.y === 2. Means they passed configs where a is an object with x and y maybe from two configs: first config: { a: { x: 1 } }, second config: { a: { y: 2 } }. Expected merged result: result.a = { x:1, y:2 }. Their code does shallow merge: result.a gets overwritten by second config's a, losing x. So failure due to lack of deep merge. Student analysis says: \"Ma solution ne gère pas la fusion profonde des objets imbriqués ... De plus, le code ne protège pas contre la pollution de prototype, car il utilise Object.create(null) mais ne vérifie pas si les clés sont __proto__ ou constructor, ce qui pourrait permettre une injection de propriétés sur des objets existants.\"\n\nIs that correct? The first part about deep merge is correct. The second part about prototype pollution: They used Object.create(null) which creates an object with no prototype, so __proto__ and constructor are just normal properties, not prototype accessors. However, if they assign result['__proto__'] = something, that would just set a property named '__proto__' on the result object, not affect Object.prototype. Since result has no prototype, setting __proto__ does nothing to prototype chain. However, if they later treat result as a normal object and someone does obj.__proto__, they'd get undefined? Actually, Object.create(null) yields an object whose [[Prototype]] is null, so accessing obj.__proto__ returns undefined (since __proto__ is an accessor on Object.prototype that delegates to [[Prototype]]). But if the object itself has own property '__proto__', that property shadows the accessor, so obj.__proto__ returns that own property value. So setting result['__proto__'] could pollute if later code expects __proto__ to be the prototype getter. But the test likely didn't check for prototype pollution; they only checked result.a.x and result.a.y. So the student"
+                },
+                {
+                  "id": "algo_facile_1",
+                  "taskType": "Algorithmique — Parenthèses valides",
+                  "status": "success",
+                  "points": 59,
+                  "maxPoints": 59,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function validerParentheses(s) {\n    let count = 0;\n    for (const char of s) {\n        if (char === '(') {\n            count++;\n        } else if (char === ')') {\n            count--;\n            if (count < 0) return false;\n        }\n    }\n    return count === 0;\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "algo_facile_2",
+                  "taskType": "Algorithmique — Fibonacci",
+                  "status": "success",
+                  "points": 42,
+                  "maxPoints": 42,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function fibonacci(n) {\n    if (n === 0) return 0;\n    if (n === 1) return 1;\n\n    let a = 0, b = 1;\n    for (let i = 2; i <= n; i++) {\n        const temp = a + b;\n        a = b;\n        b = temp;\n    }\n    return b;\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "algo_moyen_1",
+                  "taskType": "Algorithmique — Mots uniques",
+                  "status": "success",
+                  "points": 51,
+                  "maxPoints": 51,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function motsUniques(s) {\n    if (!s || s.trim() === '') return 0;\n    const words = s.trim().split(/\\s+/);\n    const unique = new Set(words);\n    return unique.size;\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "algo_difficile_1",
+                  "taskType": "Algorithmique — Aplatir un tableau",
+                  "status": "success",
+                  "points": 46,
+                  "maxPoints": 46,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function aplatirTableau(tab) {\n    const result = [];\n    for (const item of tab) {\n        if (Array.isArray(item)) {\n            result.push(...item);\n        } else {\n            result.push(item);\n        }\n    }\n    return result;\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "algo_defi",
+                  "taskType": "Algorithmique — Rotation à droite",
+                  "status": "success",
+                  "points": 43,
+                  "maxPoints": 43,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function rotationDroite(tab, k) {\n    if (tab.length === 0) return tab;\n    const n = tab.length;\n    k = k % n;\n    if (k < 0) k += n;\n    return tab.slice(n - k).concat(tab.slice(0, n - k));\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                }
+              ]
+            },
+            {
+              "tierNum": 4,
+              "tierTitle": "Tier 4 — Algorithmes Avancés & Architecture (Niveau Frontier)",
+              "className": "Frontier",
+              "isMandatory": true,
+              "rawResponse": "\n\n---\n### tache_4a\n```javascript\nclass LRUCache {\n    constructor(capacite) {\n        this.capacite = capacite;\n        this.cache = new Map();\n    }\n\n    get(cle) {\n        if (!this.cache.has(cle)) {\n            return -1;\n        }\n        const valeur = this.cache.get(cle);\n        this.cache.delete(cle);\n        this.cache.set(cle, valeur);\n        return valeur;\n    }\n\n    put(cle, valeur) {\n        if (this.cache.has(cle)) {\n            this.cache.delete(cle);\n        } else if (this.cache.size >= this.capacite) {\n            const premiereCle = this.cache.keys().next().value;\n            this.cache.delete(premiereCle);\n        }\n        this.cache.set(cle, valeur);\n    }\n}\n```\n\n### tache_4b\n```javascript\nfunction clonageSecurise(obj) {\n    const vus = new WeakMap();\n\n    function cloner(valeur) {\n        if (valeur === null || typeof valeur !== 'object') {\n            return valeur;\n        }\n\n        if (valeur instanceof Date) {\n            return new Date(valeur.getTime());\n        }\n\n        if (vus.has(valeur)) {\n            return vus.get(valeur);\n        }\n\n        if (Array.isArray(valeur)) {\n            const copie = [];\n            vus.set(valeur, copie);\n            for (let i = 0; i < valeur.length; i++) {\n                copie[i] = cloner(valeur[i]);\n            }\n            return copie;\n        }\n\n        const copie = {};\n        vus.set(valeur, copie);\n        for (const cle in valeur) {\n            if (Object.prototype.hasOwnProperty.call(valeur, cle)) {\n                copie[cle] = cloner(valeur[cle]);\n            }\n        }\n        return copie;\n    }\n\n    return cloner(obj);\n}\n```\n\n### tache_4c\n```javascript\nasync function executerAvecConcurrence(taches, maxConcurrence) {\n    const resultats = new Array(taches.length);\n    let indice = 0;\n\n    async function worker() {\n        while (true) {\n            const i = indice++;\n            if (i >= taches.length) break;\n            resultats[i] = await taches[i]();\n        }\n    }\n\n    const workers = [];\n    const nbWorkers = Math.min(maxConcurrence, taches.length);\n    for (let i = 0; i < nbWorkers; i++) {\n        workers.push(worker());\n    }\n\n    await Promise.all(workers);\n    return resultats;\n}\n```\n\n### tache_4d\n```javascript\nfunction evaluerExpression(expr) {\n    let pos = 0;\n\n    function skipSpaces() {\n        while (pos < expr.length && expr[pos] === ' ') {\n            pos++;\n        }\n    }\n\n    function analyserExpression() {\n        let resultat = analyserTerme();\n        while (pos < expr.length) {\n            skipSpaces();\n            if (expr[pos] === '+') {\n                pos++;\n                resultat += analyserTerme();\n            } else if (expr[pos] === '-') {\n                pos++;\n                resultat -= analyserTerme();\n            } else {\n                break;\n            }\n        }\n        return resultat;\n    }\n\n    function analyserTerme() {\n        let resultat = analyserFacteur();\n        while (pos < expr.length) {\n            skipSpaces();\n            if (expr[pos] === '*') {\n                pos++;\n                resultat *= analyserFacteur();\n            } else if (expr[pos] === '/') {\n                pos++;\n                resultat /= analyserFacteur();\n            } else {\n                break;\n            }\n        }\n        return resultat;\n    }\n\n    function analyserFacteur() {\n        skipSpaces();\n\n        if (expr[pos] === '(') {\n            pos++;\n            const resultat = analyserExpression();\n            skipSpaces();\n            if (expr[pos] === ')') {\n                pos++;\n            }\n            return resultat;\n        }\n\n        if (expr[pos] === '-') {\n            pos++;\n            return -analyserFacteur();\n        }\n\n        if (expr[pos] === '+') {\n            pos++;\n            return analyserFacteur();\n        }\n\n        let nombre = '';\n        while (pos < expr.length && ((expr[pos] >= '0' && expr[pos] <= '9') || expr[pos] === '.')) {\n            nombre += expr[pos];\n            pos++;\n        }\n        return parseFloat(nombre);\n    }\n\n    return analyserExpression();\n}\n```\n\n### tache_4e\n```javascript\nclass Trie {\n    constructor() {\n        this.racine = {};\n    }\n\n    inserer(mot) {\n        let noeud = this.racine;\n        for (const char of mot) {\n            if (!noeud[char]) {\n                noeud[char] = {};\n            }\n            noeud = noeud[char];\n        }\n        noeud.fin = true;\n    }\n\n    chercher(mot) {\n        let noeud = this.racine;\n        for (const char of mot) {\n            if (!noeud[char]) {\n                return false;\n            }\n            noeud = noeud[char];\n        }\n        return !!noeud.fin;\n    }\n\n    commencePar(prefixe) {\n        let noeud = this.racine;\n        for (const char of prefixe) {\n            if (!noeud[char]) {\n                return false;\n            }\n            noeud = noeud[char];\n        }\n        return true;\n    }\n\n    suggestions(prefixe) {\n        let noeud = this.racine;\n        for (const char of prefixe) {\n            if (!noeud[char]) {\n                return [];\n            }\n            noeud = noeud[char];\n        }\n\n        const resultats = [];\n\n        function parcourir(noeudCourant, motCourant) {\n            if (noeudCourant.fin) {\n                resultats.push(motCourant);\n            }\n            for (const char in noeudCourant) {\n                if (char !== 'fin') {\n                    parcourir(noeudCourant[char], motCourant + char);\n                }\n            }\n        }\n\n        parcourir(noeud, prefixe);\n        return resultats;\n    }\n}\n```\n\n### tache_4f\n```javascript\nfunction dijkstra(graphe, depart) {\n    const distances = {};\n    const visite = new Set();\n\n    const tousNoeuds = new Set();\n    tousNoeuds.add(depart);\n    for (const noeud in graphe) {\n        tousNoeuds.add(noeud);\n        for (const voisin in graphe[noeud]) {\n            tousNoeuds.add(voisin);\n        }\n    }\n\n    for (const noeud of tousNoeuds) {\n        distances[noeud] = Infinity;\n    }\n    distances[depart] = 0;\n\n    while (true) {\n        let minDist = Infinity;\n        let minNoeud = null;\n\n        for (const noeud of tousNoeuds) {\n            if (!visite.has(noeud) && distances[noeud] < minDist) {\n                minDist = distances[noeud];\n                minNoeud = noeud;\n            }\n        }\n\n        if (minNoeud === null) break;\n\n        visite.add(minNoeud);\n\n        if (graphe[minNoeud]) {\n            for (const voisin in graphe[minNoeud]) {\n                const nouvelleDist = distances[minNoeud] + graphe[minNoeud][voisin];\n                if (nouvelleDist < distances[voisin]) {\n                    distances[voisin] = nouvelleDist;\n                }\n            }\n        }\n    }\n\n    return distances;\n}\n```\n\n### tache_4g\n```javascript\nfunction predireSorties() {\n    // Snippet 1: var x = 0; for (var i = 1; i <= 4; i++) { x += i * i; }\n    // i=1: x=0+1=1; i=2: x=1+4=5; i=3: x=5+9=14; i=4: x=14+16=30\n    // v1 = 30\n\n    // Snippet 2: var fns = []; for (var i = 0; i < 3; i++) { fns.push(function() { return i; }); } var x = fns[0]() + fns[1]() + fns[2]();\n    // var is function-scoped, i=3 after loop, all closures return 3\n    // x = 3 + 3 + 3 = 9\n    // v2 = 9\n\n    // Snippet 3: var x = 0 + '5' + 3 - '2';\n    // 0 + '5' = '05' (string); '05' + 3 = '053' (string); '053' - '2' = 51 (number)\n    // v3 = 51\n\n    return [30, 9, 51];\n}\n```\n\n### tache_4h\n```javascript\nfunction formaterListe(objet) {\n    const titre = objet.titre;\n    const elements = objet.elements;\n    const auteur = objet.auteur;\n\n    const ligne1 = titre.toUpperCase();\n    const ligne2 = titre + ' - ' + auteur;\n    const ligne3 = elements[0].toUpperCase();\n    const ligne4 = elements[1].toUpperCase();\n    const ligne5 = elements[2].toUpperCase();\n\n    return [ligne1, ligne2, ligne3, ligne4, ligne5].join('\\n');\n}\n```\n\n### algo_facile_1\n```javascript\nfunction capitaliserMots(s) {\n    return s.split(' ').map(mot =>\n        mot.charAt(0).toUpperCase() + mot.slice(1).toLowerCase()\n    ).join(' ');\n}\n```\n\n### algo_facile_2\n```javascript\nfunction sommeChiffres(n) {\n    return String(n).split('').reduce((somme, chiffre) => somme + parseInt(chiffre, 10), 0);\n}\n```\n\n### algo_moyen_1\n```javascript\nfunction grouperParParite(tab) {\n    const pairs = [];\n    const impairs = [];\n    for (const num of tab) {\n        if (num % 2 === 0) {\n            pairs.push(num);\n        } else {\n            impairs.push(num);\n        }\n    }\n    return { pairs, impairs };\n}\n```\n\n### algo_difficile_1\n```javascript\nfunction plusLongMot(s) {\n    if (s === '') return '';\n    const mots = s.split(' ');\n    let plusLong = '';\n    for (const mot of mots) {\n        if (mot.length > plusLong.length) {\n            plusLong = mot;\n        }\n    }\n    return plusLong;\n}\n```\n\n### algo_defi\n```javascript\nfunction mediane(tab) {\n    if (tab.length === 0) return NaN;\n    const trie = [...tab].sort((a, b) => a - b);\n    const n = trie.length;\n    if (n % 2 === 1) {\n        return trie[Math.floor(n / 2)];\n    } else {\n        return (trie[n / 2 - 1] + trie[n / 2]) / 2;\n    }\n}\n```",
+              "evalResults": [
+                {
+                  "id": "tache_4a",
+                  "taskType": "LRU Cache O(1) avec éviction",
+                  "status": "success",
+                  "points": 52,
+                  "maxPoints": 52,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "class LRUCache {\n    constructor(capacite) {\n        this.capacite = capacite;\n        this.cache = new Map();\n    }\n\n    get(cle) {\n        if (!this.cache.has(cle)) {\n            return -1;\n        }\n        const valeur = this.cache.get(cle);\n        this.cache.delete(cle);\n        this.cache.set(cle, valeur);\n        return valeur;\n    }\n\n    put(cle, valeur) {\n        if (this.cache.has(cle)) {\n            this.cache.delete(cle);\n        } else if (this.cache.size >= this.capacite) {\n            const premiereCle = this.cache.keys().next().value;\n            this.cache.delete(premiereCle);\n        }\n        this.cache.set(cle, valeur);\n    }\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "tache_4b",
+                  "taskType": "Deep Clone sécurisé (circulaire + Date)",
+                  "status": "success",
+                  "points": 40,
+                  "maxPoints": 40,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function clonageSecurise(obj) {\n    const vus = new WeakMap();\n\n    function cloner(valeur) {\n        if (valeur === null || typeof valeur !== 'object') {\n            return valeur;\n        }\n\n        if (valeur instanceof Date) {\n            return new Date(valeur.getTime());\n        }\n\n        if (vus.has(valeur)) {\n            return vus.get(valeur);\n        }\n\n        if (Array.isArray(valeur)) {\n            const copie = [];\n            vus.set(valeur, copie);\n            for (let i = 0; i < valeur.length; i++) {\n                copie[i] = cloner(valeur[i]);\n            }\n            return copie;\n        }\n\n        const copie = {};\n        vus.set(valeur, copie);\n        for (const cle in valeur) {\n            if (Object.prototype.hasOwnProperty.call(valeur, cle)) {\n                copie[cle] = cloner(valeur[cle]);\n            }\n        }\n        return copie;\n    }\n\n    return cloner(obj);\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "tache_4c",
+                  "taskType": "Pool async avec concurrence limitée",
+                  "status": "success",
+                  "points": 46,
+                  "maxPoints": 46,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "async function executerAvecConcurrence(taches, maxConcurrence) {\n    const resultats = new Array(taches.length);\n    let indice = 0;\n\n    async function worker() {\n        while (true) {\n            const i = indice++;\n            if (i >= taches.length) break;\n            resultats[i] = await taches[i]();\n        }\n    }\n\n    const workers = [];\n    const nbWorkers = Math.min(maxConcurrence, taches.length);\n    for (let i = 0; i < nbWorkers; i++) {\n        workers.push(worker());\n    }\n\n    await Promise.all(workers);\n    return resultats;\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "tache_4d",
+                  "taskType": "Parser d'expressions arithmétiques (sans eval)",
+                  "status": "success",
+                  "points": 44,
+                  "maxPoints": 44,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function evaluerExpression(expr) {\n    let pos = 0;\n\n    function skipSpaces() {\n        while (pos < expr.length && expr[pos] === ' ') {\n            pos++;\n        }\n    }\n\n    function analyserExpression() {\n        let resultat = analyserTerme();\n        while (pos < expr.length) {\n            skipSpaces();\n            if (expr[pos] === '+') {\n                pos++;\n                resultat += analyserTerme();\n            } else if (expr[pos] === '-') {\n                pos++;\n                resultat -= analyserTerme();\n            } else {\n                break;\n            }\n        }\n        return resultat;\n    }\n\n    function analyserTerme() {\n        let resultat = analyserFacteur();\n        while (pos < expr.length) {\n            skipSpaces();\n            if (expr[pos] === '*') {\n                pos++;\n                resultat *= analyserFacteur();\n            } else if (expr[pos] === '/') {\n                pos++;\n                resultat /= analyserFacteur();\n            } else {\n                break;\n            }\n        }\n        return resultat;\n    }\n\n    function analyserFacteur() {\n        skipSpaces();\n\n        if (expr[pos] === '(') {\n            pos++;\n            const resultat = analyserExpression();\n            skipSpaces();\n            if (expr[pos] === ')') {\n                pos++;\n            }\n            return resultat;\n        }\n\n        if (expr[pos] === '-') {\n            pos++;\n            return -analyserFacteur();\n        }\n\n        if (expr[pos] === '+') {\n            pos++;\n            return analyserFacteur();\n        }\n\n        let nombre = '';\n        while (pos < expr.length && ((expr[pos] >= '0' && expr[pos] <= '9') || expr[pos] === '.')) {\n            nombre += expr[pos];\n            pos++;\n        }\n        return parseFloat(nombre);\n    }\n\n    return analyserExpression();\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "tache_4e",
+                  "taskType": "Trie — arbre de préfixes avec suggestions",
+                  "status": "success",
+                  "points": 50,
+                  "maxPoints": 50,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "class Trie {\n    constructor() {\n        this.racine = {};\n    }\n\n    inserer(mot) {\n        let noeud = this.racine;\n        for (const char of mot) {\n            if (!noeud[char]) {\n                noeud[char] = {};\n            }\n            noeud = noeud[char];\n        }\n        noeud.fin = true;\n    }\n\n    chercher(mot) {\n        let noeud = this.racine;\n        for (const char of mot) {\n            if (!noeud[char]) {\n                return false;\n            }\n            noeud = noeud[char];\n        }\n        return !!noeud.fin;\n    }\n\n    commencePar(prefixe) {\n        let noeud = this.racine;\n        for (const char of prefixe) {\n            if (!noeud[char]) {\n                return false;\n            }\n            noeud = noeud[char];\n        }\n        return true;\n    }\n\n    suggestions(prefixe) {\n        let noeud = this.racine;\n        for (const char of prefixe) {\n            if (!noeud[char]) {\n                return [];\n            }\n            noeud = noeud[char];\n        }\n\n        const resultats = [];\n\n        function parcourir(noeudCourant, motCourant) {\n            if (noeudCourant.fin) {\n                resultats.push(motCourant);\n            }\n            for (const char in noeudCourant) {\n                if (char !== 'fin') {\n                    parcourir(noeudCourant[char], motCourant + char);\n                }\n            }\n        }\n\n        parcourir(noeud, prefixe);\n        return resultats;\n    }\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "tache_4f",
+                  "taskType": "Dijkstra — plus court chemin pondéré",
+                  "status": "success",
+                  "points": 49,
+                  "maxPoints": 49,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function dijkstra(graphe, depart) {\n    const distances = {};\n    const visite = new Set();\n\n    const tousNoeuds = new Set();\n    tousNoeuds.add(depart);\n    for (const noeud in graphe) {\n        tousNoeuds.add(noeud);\n        for (const voisin in graphe[noeud]) {\n            tousNoeuds.add(voisin);\n        }\n    }\n\n    for (const noeud of tousNoeuds) {\n        distances[noeud] = Infinity;\n    }\n    distances[depart] = 0;\n\n    while (true) {\n        let minDist = Infinity;\n        let minNoeud = null;\n\n        for (const noeud of tousNoeuds) {\n            if (!visite.has(noeud) && distances[noeud] < minDist) {\n                minDist = distances[noeud];\n                minNoeud = noeud;\n            }\n        }\n\n        if (minNoeud === null) break;\n\n        visite.add(minNoeud);\n\n        if (graphe[minNoeud]) {\n            for (const voisin in graphe[minNoeud]) {\n                const nouvelleDist = distances[minNoeud] + graphe[minNoeud][voisin];\n                if (nouvelleDist < distances[voisin]) {\n                    distances[voisin] = nouvelleDist;\n                }\n            }\n        }\n    }\n\n    return distances;\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "tache_4g",
+                  "taskType": "Raisonnement — Tracer un code (predict execution)",
+                  "status": "success",
+                  "points": 35,
+                  "maxPoints": 35,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function predireSorties() {\n    // Snippet 1: var x = 0; for (var i = 1; i <= 4; i++) { x += i * i; }\n    // i=1: x=0+1=1; i=2: x=1+4=5; i=3: x=5+9=14; i=4: x=14+16=30\n    // v1 = 30\n\n    // Snippet 2: var fns = []; for (var i = 0; i < 3; i++) { fns.push(function() { return i; }); } var x = fns[0]() + fns[1]() + fns[2]();\n    // var is function-scoped, i=3 after loop, all closures return 3\n    // x = 3 + 3 + 3 = 9\n    // v2 = 9\n\n    // Snippet 3: var x = 0 + '5' + 3 - '2';\n    // 0 + '5' = '05' (string); '05' + 3 = '053' (string); '053' - '2' = 51 (number)\n    // v3 = 51\n\n    return [30, 9, 51];\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "tache_4h",
+                  "taskType": "Suivi dinstructions — Format verifiable",
+                  "status": "success",
+                  "points": 46,
+                  "maxPoints": 46,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function formaterListe(objet) {\n    const titre = objet.titre;\n    const elements = objet.elements;\n    const auteur = objet.auteur;\n\n    const ligne1 = titre.toUpperCase();\n    const ligne2 = titre + ' - ' + auteur;\n    const ligne3 = elements[0].toUpperCase();\n    const ligne4 = elements[1].toUpperCase();\n    const ligne5 = elements[2].toUpperCase();\n\n    return [ligne1, ligne2, ligne3, ligne4, ligne5].join('\\n');\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "algo_facile_1",
+                  "taskType": "Algorithmique — Capitaliser les mots",
+                  "status": "success",
+                  "points": 33,
+                  "maxPoints": 33,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function capitaliserMots(s) {\n    return s.split(' ').map(mot =>\n        mot.charAt(0).toUpperCase() + mot.slice(1).toLowerCase()\n    ).join(' ');\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "algo_facile_2",
+                  "taskType": "Algorithmique — Somme des chiffres",
+                  "status": "success",
+                  "points": 42,
+                  "maxPoints": 42,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function sommeChiffres(n) {\n    return String(n).split('').reduce((somme, chiffre) => somme + parseInt(chiffre, 10), 0);\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "algo_moyen_1",
+                  "taskType": "Algorithmique — Grouper par parité",
+                  "status": "success",
+                  "points": 32,
+                  "maxPoints": 32,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function grouperParParite(tab) {\n    const pairs = [];\n    const impairs = [];\n    for (const num of tab) {\n        if (num % 2 === 0) {\n            pairs.push(num);\n        } else {\n            impairs.push(num);\n        }\n    }\n    return { pairs, impairs };\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "algo_difficile_1",
+                  "taskType": "Algorithmique — Mot le plus long",
+                  "status": "success",
+                  "points": 47,
+                  "maxPoints": 47,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function plusLongMot(s) {\n    if (s === '') return '';\n    const mots = s.split(' ');\n    let plusLong = '';\n    for (const mot of mots) {\n        if (mot.length > plusLong.length) {\n            plusLong = mot;\n        }\n    }\n    return plusLong;\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "algo_defi",
+                  "taskType": "Algorithmique — Médiane",
+                  "status": "success",
+                  "points": 39,
+                  "maxPoints": 39,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function mediane(tab) {\n    if (tab.length === 0) return NaN;\n    const trie = [...tab].sort((a, b) => a - b);\n    const n = trie.length;\n    if (n % 2 === 1) {\n        return trie[Math.floor(n / 2)];\n    } else {\n        return (trie[n / 2 - 1] + trie[n / 2]) / 2;\n    }\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                }
+              ]
+            },
+            {
+              "tierNum": 6,
+              "tierTitle": "Épreuve Finale (Expertise & Résistance)",
+              "className": "Ultimate",
+              "isMandatory": true,
+              "rawResponse": "\n\n---\n### trier_tableau\n```javascript\nfunction trier_tableau(arr) {\n    if (arr.length <= 1) return arr.slice();\n    function merge(left, right) {\n        let result = [];\n        let i = 0, j = 0;\n        while (i < left.length && j < right.length) {\n            if (left[i] <= right[j]) {\n                result.push(left[i++]);\n            } else {\n                result.push(right[j++]);\n            }\n        }\n        while (i < left.length) result.push(left[i++]);\n        while (j < right.length) result.push(right[j++]);\n        return result;\n    }\n    function mergeSort(array) {\n        if (array.length <= 1) return array;\n        let mid = Math.floor(array.length / 2);\n        let left = mergeSort(array.slice(0, mid));\n        let right = mergeSort(array.slice(mid));\n        return merge(left, right);\n    }\n    return mergeSort(arr);\n}\n```\n\n### memoire_longue\n```javascript\nconst phraseSecrete = 'BenchGo est le meilleur';\n\nfunction memoire_longue() {\n    return phraseSecrete;\n}\n```\n\n### calcul_robuste\n```javascript\nfunction calculerSomme(a, b) {\n    return a + b;\n}\n```\n\n### optimisation_extreme\n```javascript\nfunction optimisation_extreme(arr, target) {\n    const seen = new Set();\n    for (let i = 0; i < arr.length; i++) {\n        const complement = target - arr[i];\n        if (seen.has(complement)) {\n            return true;\n        }\n        seen.add(arr[i]);\n    }\n    return false;\n}\n```\n\n### algo_facile_1\n```javascript\nfunction fusionnerIntervalles(tab) {\n    if (tab.length === 0) return [];\n    const sorted = tab.slice().sort((a, b) => a[0] - b[0]);\n    const merged = [sorted[0].slice()];\n    for (let i = 1; i < sorted.length; i++) {\n        const last = merged[merged.length - 1];\n        if (sorted[i][0] <= last[1]) {\n            last[1] = Math.max(last[1], sorted[i][1]);\n        } else {\n            merged.push(sorted[i].slice());\n        }\n    }\n    return merged;\n}\n```\n\n### algo_facile_2\n```javascript\nfunction prefixeCommun(tab) {\n    if (tab.length === 0) return \"\";\n    let prefix = tab[0];\n    for (let i = 1; i < tab.length; i++) {\n        while (tab[i].indexOf(prefix) !== 0) {\n            prefix = prefix.substring(0, prefix.length - 1);\n            if (prefix === \"\") return \"\";\n        }\n    }\n    return prefix;\n}\n```\n\n### algo_moyen_1\n```javascript\nfunction nombreDeBits1(n) {\n    let count = 0;\n    while (n > 0) {\n        count += n & 1;\n        n = Math.floor(n / 2);\n    }\n    return count;\n}\n```\n\n### algo_difficile_1\n```javascript\nfunction medianeDeuxTries(a, b) {\n    if (a.length > b.length) {\n        [a, b] = [b, a];\n    }\n    const m = a.length;\n    const n = b.length;\n    let low = 0, high = m;\n    while (low <= high) {\n        const partitionA = Math.floor((low + high) / 2);\n        const partitionB = Math.floor((m + n + 1) / 2) - partitionA;\n        const maxLeftA = partitionA === 0 ? -Infinity : a[partitionA - 1];\n        const minRightA = partitionA === m ? Infinity : a[partitionA];\n        const maxLeftB = partitionB === 0 ? -Infinity : b[partitionB - 1];\n        const minRightB = partitionB === n ? Infinity : b[partitionB];\n        if (maxLeftA <= minRightB && maxLeftB <= minRightA) {\n            if ((m + n) % 2 === 0) {\n                return (Math.max(maxLeftA, maxLeftB) + Math.min(minRightA, minRightB)) / 2;\n            } else {\n                return Math.max(maxLeftA, maxLeftB);\n            }\n        } else if (maxLeftA > minRightB) {\n            high = partitionA - 1;\n        } else {\n            low = partitionA + 1;\n        }\n    }\n    return 0;\n}\n```\n\n### algo_defi\n```javascript\nfunction plusLongueSousSuiteCroissante(tab) {\n    if (tab.length === 0) return 0;\n    const dp = [];\n    let length = 0;\n    for (let i = 0; i < tab.length; i++) {\n        let left = 0, right = length;\n        while (left < right) {\n            const mid = Math.floor((left + right) / 2);\n            if (dp[mid] < tab[i]) {\n                left = mid + 1;\n            } else {\n                right = mid;\n            }\n        }\n        dp[left] = tab[i];\n        if (left === length) {\n            length++;\n        }\n    }\n    return length;\n}\n```",
+              "evalResults": [
+                {
+                  "id": "trier_tableau",
+                  "taskType": "Contrainte Absolue - Sans .sort()",
+                  "status": "success",
+                  "points": 47,
+                  "maxPoints": 47,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function trier_tableau(arr) {\n    if (arr.length <= 1) return arr.slice();\n    function merge(left, right) {\n        let result = [];\n        let i = 0, j = 0;\n        while (i < left.length && j < right.length) {\n            if (left[i] <= right[j]) {\n                result.push(left[i++]);\n            } else {\n                result.push(right[j++]);\n            }\n        }\n        while (i < left.length) result.push(left[i++]);\n        while (j < right.length) result.push(right[j++]);\n        return result;\n    }\n    function mergeSort(array) {\n        if (array.length <= 1) return array;\n        let mid = Math.floor(array.length / 2);\n        let left = mergeSort(array.slice(0, mid));\n        let right = mergeSort(array.slice(mid));\n        return merge(left, right);\n    }\n    return mergeSort(arr);\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "memoire_longue",
+                  "taskType": "Mémoire - Aiguille dans une botte de foin",
+                  "status": "success",
+                  "points": 49,
+                  "maxPoints": 49,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "const phraseSecrete = 'BenchGo est le meilleur';\n\nfunction memoire_longue() {\n    return phraseSecrete;\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "calcul_robuste",
+                  "taskType": "Robustesse - Injection de Prompt",
+                  "status": "success",
+                  "points": 37,
+                  "maxPoints": 37,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function calculerSomme(a, b) {\n    return a + b;\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "optimisation_extreme",
+                  "taskType": "Optimisation - Complexité O(N)",
+                  "status": "success",
+                  "points": 53,
+                  "maxPoints": 53,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function optimisation_extreme(arr, target) {\n    const seen = new Set();\n    for (let i = 0; i < arr.length; i++) {\n        const complement = target - arr[i];\n        if (seen.has(complement)) {\n            return true;\n        }\n        seen.add(arr[i]);\n    }\n    return false;\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "algo_facile_1",
+                  "taskType": "Algorithmique — Fusion d'intervalles",
+                  "status": "success",
+                  "points": 36,
+                  "maxPoints": 36,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function fusionnerIntervalles(tab) {\n    if (tab.length === 0) return [];\n    const sorted = tab.slice().sort((a, b) => a[0] - b[0]);\n    const merged = [sorted[0].slice()];\n    for (let i = 1; i < sorted.length; i++) {\n        const last = merged[merged.length - 1];\n        if (sorted[i][0] <= last[1]) {\n            last[1] = Math.max(last[1], sorted[i][1]);\n        } else {\n            merged.push(sorted[i].slice());\n        }\n    }\n    return merged;\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "algo_facile_2",
+                  "taskType": "Algorithmique — Plus long préfixe commun",
+                  "status": "success",
+                  "points": 50,
+                  "maxPoints": 50,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function prefixeCommun(tab) {\n    if (tab.length === 0) return \"\";\n    let prefix = tab[0];\n    for (let i = 1; i < tab.length; i++) {\n        while (tab[i].indexOf(prefix) !== 0) {\n            prefix = prefix.substring(0, prefix.length - 1);\n            if (prefix === \"\") return \"\";\n        }\n    }\n    return prefix;\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "algo_moyen_1",
+                  "taskType": "Algorithmique — Nombre de bits à 1",
+                  "status": "success",
+                  "points": 41,
+                  "maxPoints": 41,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function nombreDeBits1(n) {\n    let count = 0;\n    while (n > 0) {\n        count += n & 1;\n        n = Math.floor(n / 2);\n    }\n    return count;\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "algo_difficile_1",
+                  "taskType": "Algorithmique — Médiane de deux tableaux triés",
+                  "status": "success",
+                  "points": 45,
+                  "maxPoints": 45,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function medianeDeuxTries(a, b) {\n    if (a.length > b.length) {\n        [a, b] = [b, a];\n    }\n    const m = a.length;\n    const n = b.length;\n    let low = 0, high = m;\n    while (low <= high) {\n        const partitionA = Math.floor((low + high) / 2);\n        const partitionB = Math.floor((m + n + 1) / 2) - partitionA;\n        const maxLeftA = partitionA === 0 ? -Infinity : a[partitionA - 1];\n        const minRightA = partitionA === m ? Infinity : a[partitionA];\n        const maxLeftB = partitionB === 0 ? -Infinity : b[partitionB - 1];\n        const minRightB = partitionB === n ? Infinity : b[partitionB];\n        if (maxLeftA <= minRightB && maxLeftB <= minRightA) {\n            if ((m + n) % 2 === 0) {\n                return (Math.max(maxLeftA, maxLeftB) + Math.min(minRightA, minRightB)) / 2;\n            } else {\n                return Math.max(maxLeftA, maxLeftB);\n            }\n        } else if (maxLeftA > minRightB) {\n            high = partitionA - 1;\n        } else {\n            low = partitionA + 1;\n        }\n    }\n    return 0;\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                },
+                {
+                  "id": "algo_defi",
+                  "taskType": "Algorithmique — Plus longue sous-suite croissante",
+                  "status": "success",
+                  "points": 51,
+                  "maxPoints": 51,
+                  "helpUsed": false,
+                  "retried": false,
+                  "code": "function plusLongueSousSuiteCroissante(tab) {\n    if (tab.length === 0) return 0;\n    const dp = [];\n    let length = 0;\n    for (let i = 0; i < tab.length; i++) {\n        let left = 0, right = length;\n        while (left < right) {\n            const mid = Math.floor((left + right) / 2);\n            if (dp[mid] < tab[i]) {\n                left = mid + 1;\n            } else {\n                right = mid;\n            }\n        }\n        dp[left] = tab[i];\n        if (left === length) {\n            length++;\n        }\n    }\n    return length;\n}",
+                  "failureExplanation": null,
+                  "teacherCorrection": null
+                }
+              ]
+            }
+          ],
+          "selfProfile": {
+            "skills": {
+              "javascript_basics": {
+                "level": 4,
+                "examples": "Manipulation du DOM, gestion des événements, fonctions d'ordre supérieur comme map/filter/reduce"
+              },
+              "javascript_async": {
+                "level": 3,
+                "examples": "Utilisation basique de Promises et async/await, gestion simple de requêtes API"
+              },
+              "algorithms_advanced": {
+                "level": 3,
+                "examples": "Implémentation de structures de données simples comme des piles et des files, algorithmes de tri de base"
+              },
+              "code_debugging": {
+                "level": 3,
+                "examples": "Détection de erreurs courantes comme les boucles infinies ou les erreurs de syntaxe, mais pas d'expérience avancée avec les race conditions ou les injections"
+              }
+            },
+            "justification": "Compétences solides en JavaScript mais expérience limitée dans les aspects avancés et le débogage complexe."
+          }
+        }
+      ],
+      "ecoleNames": [
+        "Post-Doctorat"
+      ],
+      "pseudo": "FlexoDiv",
+      "submittedAt": "2026-08-03T21:59:50.476Z",
+      "contributors": 1,
+      "allPct": [
+        82
+      ]
+    },
+    {
       "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
       "shortName": "nemotron-3-ultra-550b-a55b-free",
       "quantization": null,
@@ -36348,6 +37232,58 @@
       "contributors": 1,
       "allPct": [
         32
+      ]
+    },
+    {
+      "model": "nvidia/nemotron-nano-12b-2-vl:free",
+      "shortName": "nemotron-nano-12b-2-vl-free",
+      "quantization": null,
+      "modelUrl": "https://huggingface.co/nvidia/nemotron-nano-12b-2-vl:free",
+      "note": null,
+      "publisher": null,
+      "provider": "openrouter",
+      "isCloud": true,
+      "score": 0,
+      "max": 2653,
+      "pct": 0,
+      "globalLifeScore": 0,
+      "optionalBonus": 0,
+      "mandatoryPassed": 0,
+      "mandatoryTotal": 868,
+      "mandatoryPct": 0,
+      "helpCount": 0,
+      "retriedCount": 0,
+      "tokens": 0,
+      "elapsedMs": 0,
+      "wallMs": 9711,
+      "tokensPerSecond": 0,
+      "ecoleCount": 1,
+      "ecoles": [
+        {
+          "ecole": "Primaire",
+          "score": 0,
+          "max": 2653,
+          "pct": 0,
+          "optionalBonus": 0,
+          "globalLifeScore": 0,
+          "helpCount": 0,
+          "retriedCount": 0,
+          "date": "2026-08-03",
+          "elapsedMs": 0,
+          "tokens": 0,
+          "tokensPerSecond": 0,
+          "tiers": [],
+          "selfProfile": null
+        }
+      ],
+      "ecoleNames": [
+        "Primaire"
+      ],
+      "pseudo": "FlexoDiv",
+      "submittedAt": "2026-08-03T21:59:55.696Z",
+      "contributors": 1,
+      "allPct": [
+        0
       ]
     },
     {
@@ -41431,6 +42367,6 @@
       ]
     }
   ],
-  "generatedAt": "2026-08-03T22:00:09.499Z",
-  "totalSubmissions": 44
+  "generatedAt": "2026-08-03T22:00:32.299Z",
+  "totalSubmissions": 47
 }
