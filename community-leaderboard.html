@@ -467,7 +467,7 @@
   <header class="hero">
     <span class="badge-top">🌐 BenchGo V3 · Classement Communautaire</span>
     <h1>Classement Communautaire BenchGo V3</h1>
-    <p class="subtitle">Généré le 03/08/2026 11:06:22 — 39 modèles classés · 44 soumissions de la communauté</p>
+    <p class="subtitle">Généré le 03/08/2026 21:11:02 — 39 modèles classés · 44 soumissions de la communauté</p>
   </header>
 
   <div class="sticky-bar" id="stickyBar">
@@ -520,7 +520,6 @@
             <option value="all" selected>Toutes origines (39)</option>
             <option value="local">🏠 Local · LM Studio (37)</option>
             <option value="cloud">☁️ Cloud · API (2)</option>
-            <option value="prov:openrouter">🔀 OpenRouter (2)</option>
           </select>
         </div>
       </div>
@@ -674,10 +673,6 @@ function renderCards() {
     if (activeOrigin !== 'all') {
       if (activeOrigin === 'cloud' && !m.isCloud) continue;
       if (activeOrigin === 'local' && m.isCloud) continue;
-      if (activeOrigin.indexOf('prov:') === 0) {
-        var provFilter = activeOrigin.slice(5);
-        if ((m.provider || (m.isCloud ? 'cloud' : 'local')) !== provFilter) continue;
-      }
     }
     if (q && m.model.toLowerCase().indexOf(q) === -1 && m.shortName.toLowerCase().indexOf(q) === -1) continue;
     shown++;
@@ -1234,10 +1229,6 @@ function copyLeaderboard() {
     if (activeOrigin !== 'all') {
       if (activeOrigin === 'cloud' && !m.isCloud) continue;
       if (activeOrigin === 'local' && m.isCloud) continue;
-      if (activeOrigin.indexOf('prov:') === 0) {
-        var provFilter2 = activeOrigin.slice(5);
-        if ((m.provider || (m.isCloud ? 'cloud' : 'local')) !== provFilter2) continue;
-      }
     }
     if (q && m.model.toLowerCase().indexOf(q) === -1 && m.shortName.toLowerCase().indexOf(q) === -1) continue;
     var rank = copied < 3 ? ['🥇','🥈','🥉'][copied] : ('' + (copied + 1));
