@@ -1544,6 +1544,18 @@ function providerDisplay(provider, isCloud) {
   return { label: 'Local', icon: '\u{1F3E0}', color: '#3fb950' };
 }
 
+// getCategory (replique de la version Node ligne 511) : calcule la categorie
+// d un modele en fonction de son rang (position) dans l ensemble affiche.
+// Le rang est celui de l ensemble filtre (pas le rang global), pour que
+// Top du top = les 3 premiers du filtre actif (ex: 3 premiers cloud).
+function _getCategory(pct, rank) {
+  if (rank && rank <= 3) return { key: 'top', label: 'Top du top', icon: '\u{1F3C6}' };
+  if (pct >= 90) return { key: 'recommande', label: 'Recommandes', icon: '\u2705' };
+  if (pct >= 75) return { key: 'moyenne', label: 'Dans la moyenne', icon: '\u{1F4CA}' };
+  if (pct >= 50) return { key: 'rattrapage', label: 'En rattrapage', icon: '\u26A0\uFE0F' };
+  return { key: 'catastrophe', label: 'Echec total', icon: '\u{1F4A5}' };
+}
+
 function formatRelativeDate(isoStr) {
   if (!isoStr) return '—';
   var d = new Date(isoStr);
@@ -1703,10 +1715,61 @@ function renderCards() {
   var shown = 0;
   var skippedCat = 0, skippedSize = 0, skippedSearch = 0, skippedHealth = 0, skippedEcole = 0;
 
+  // Premier passage : on filtre par TOUS les filtres SAUF la categorie.
+  // On calcule le rang filtred (position dans l ensemble affiche) pour chaque
+  // modele restant, puis on en deduit sa categorie dynamique. Cela permet
+  // a "Top du top" de designer les 3 premiers du filtre actif (ex: 3 premiers
+  // cloud) et non les 3 premiers du classement global.
+  var _preFiltered = [];
+  for (var pi = 0; pi < MODELS.length; pi++) {
+    var pm = MODELS[pi];
+    var pSizeKey = (pm.paramSize && pm.paramSize.key) ? pm.paramSize.key : '';
+    if (activeSize !== 'all' && pSizeKey !== activeSize) continue;
+    if (activeHealth !== 'all') {
+      var pIsPositif = (pm.globalLifeScore || 0) >= 0;
+      if (activeHealth === 'positif' && !pIsPositif) continue;
+      if (activeHealth === 'negatif' && pIsPositif) continue;
+    }
+    if (activeEcole !== 'all') {
+      var pHasEcole = (pm.ecoleNames || []).indexOf(activeEcole) !== -1;
+      if (!pHasEcole) continue;
+    }
+    if (activeOrigin !== 'all') {
+      if (activeOrigin === 'cloud' && !pm.isCloud) continue;
+      if (activeOrigin === 'local' && pm.isCloud) continue;
+    }
+    if (q && pm.model.toLowerCase().indexOf(q) === -1 && pm.shortName.toLowerCase().indexOf(q) === -1 && (pm.quantization || '').toLowerCase().indexOf(q) === -1) continue;
+    _preFiltered.push(pm);
+  }
+
+  // Calcul des categories dynamiques + compteurs pour le select.
+  var _dynamicCats = {};
+  var _modelCat = {};
+  for (var fi = 0; fi < _preFiltered.length; fi++) {
+    var fm = _preFiltered[fi];
+    var fRank = fi + 1;
+    var dCat = _getCategory(fm.pct, fRank);
+    _modelCat[fm.shortName] = dCat;
+    _dynamicCats[dCat.key] = (_dynamicCats[dCat.key] || 0) + 1;
+  }
+
+  // Mise a jour dynamique des compteurs affiches dans le select categorie.
+  var _catOpts = catSel.querySelectorAll('option');
+  var _catCountTotal = _preFiltered.length;
+  for (var ci = 0; ci < _catOpts.length; ci++) {
+    var opt = _catOpts[ci];
+    var val = opt.value;
+    var cnt = val === 'all' ? _catCountTotal : (_dynamicCats[val] || 0);
+    var lbl = opt.textContent.replace(/\s*\(\d+\)\s*$/, '');
+    opt.textContent = lbl + ' (' + cnt + ')';
+  }
+
   for (var i = 0; i < MODELS.length; i++) {
     var m = MODELS[i];
-    if (activeCat !== 'all' && m.cat.key !== activeCat) { skippedCat++; continue; }
-    if (activeSize !== 'all' && m.paramSize.key !== activeSize) { skippedSize++; continue; }
+    // Le filtre taille/sante/ecole/origine/recherche a deja ete applique dans
+    // le premier passage. On verifie que le modele est dans _preFiltered.
+    var pSizeKey = (m.paramSize && m.paramSize.key) ? m.paramSize.key : '';
+    if (activeSize !== 'all' && pSizeKey !== activeSize) { skippedSize++; continue; }
     if (activeHealth !== 'all') {
       var isPositif = (m.globalLifeScore || 0) >= 0;
       if (activeHealth === 'positif' && !isPositif) { skippedHealth++; continue; }
@@ -1721,6 +1784,10 @@ function renderCards() {
       if (activeOrigin === 'local' && m.isCloud) continue;
     }
     if (q && m.model.toLowerCase().indexOf(q) === -1 && m.shortName.toLowerCase().indexOf(q) === -1 && (m.quantization || '').toLowerCase().indexOf(q) === -1) { skippedSearch++; continue; }
+
+    // Categorie dynamique (rang dans l ensemble filtre, pas rang global).
+    var dynCat = _modelCat[m.shortName] || m.cat;
+    if (activeCat !== 'all' && dynCat.key !== activeCat) { skippedCat++; continue; }
     shown++;
 
     var globalRank = m.globalRank || (i + 1);
@@ -1744,15 +1811,12 @@ function renderCards() {
       : (m.elapsedMs > 0 ? fmtDurJS(m.elapsedMs) : '—');
     var vitesseLbl = m.tokensPerSecond > 0 ? 'Vitesse' : 'Temps';
     var szBadge = '<span class="badge" title="' + esc(m.paramSize.label) + '">' + m.paramSize.icon + ' ' + esc(m.paramSize.short) + '</span>';
-    // Badge d'origine : 🏠 Local (LM Studio) ou badge provider spécifique pour
-    // les modèles cloud (OpenRouter, OpenAI, Anthropic, Ollama...). Permet de
-    // différencier visuellement les providers au lieu d un "Cloud" générique
-    // qui mélange tout. La couleur provient de providerDisplay() (par provider).
-    var provInfo = providerDisplay(m.provider, m.isCloud);
+    // Badge d origine : Local (LM Studio) ou Cloud (API). Cohérent avec le
+    // sélecteur d origine qui ne propose que Local/Cloud — pas de label provider
+    // spécifique (OpenRouter...) pour éviter la redondance visuelle.
     var originBadge;
     if (m.isCloud) {
-      var provTitle = 'Modèle cloud — Provider : ' + esc(provInfo.label) + (m.provider ? ' (' + esc(m.provider) + ')' : '');
-      originBadge = ' <span class="badge provider" title="' + provTitle + '" style="color:' + provInfo.color + ';border-color:' + provInfo.color + '55;background:' + provInfo.color + '18">' + provInfo.icon + ' ' + esc(provInfo.label) + '</span>';
+      originBadge = ' <span class="badge provider" title="Modèle cloud (API)" style="color:#d29922;border-color:#d2992255;background:#d2992218">☁️ Cloud</span>';
     } else {
       originBadge = ' <span class="badge local" title="Modèle local (LM Studio)">🏠 Local</span>';
     }
@@ -1796,7 +1860,7 @@ function renderCards() {
       '<div class="card-row">' +
         '<div class="rank">' + rankDisp + '</div>' +
         '<div class="model-name">' +
-          '<div class="name-line"><span class="cat-icon">' + m.cat.icon + '</span>' + esc(m.model) + posArrow + '</div>' +
+          '<div class="name-line"><span class="cat-icon">' + dynCat.icon + '</span>' + esc(m.model) + posArrow + '</div>' +
           '<div class="badges">' + szBadge + originBadge + ' ' + quantBadge + ' ' + noteBadge + ' ' + trendBadge + exportedBadge + dateBadge + '</div>' +
         '</div>' +
         '<div class="mini-stats">' +

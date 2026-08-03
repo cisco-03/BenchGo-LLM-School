@@ -1,5 +1,58 @@
 # CHANGELOG - Carnet de Notes BenchGo
 
+## 2026-08-03 — fix(leaderboard+consolidate): categories dynamiques + badge origine unifie
+
+### Contexte
+Deux problemes dans le classement (leaderboard.js) et le classement communautaire
+(consolidate-leaderboard.js) :
+
+1. **Badge origine redondant** : le badge des cartes affichait le nom du provider
+   specifique (OpenRouter, OpenAI...) alors que le selecteur d origine ne propose
+   que Local et Cloud. Redondance visuelle (badge OpenRouter + option Cloud).
+
+2. **Filtre categorie casse** : les categories (Top du top, Recommande, etc.)
+   etaient calculees avec le rang GLOBAL (tous modeles confondus). Quand on filtre
+   par origine=cloud, les 3 premiers modeles cloud avaient un rang global de 15+
+   et n apparaissaient JAMAIS en "Top du top", alors qu ils sont TOP DU TOP dans
+   le CLI --cloud. Resultat : le filtre "Top du top" affichait 0 modele apres
+   un filtre origine=cloud.
+
+### Solution
+- **Categories dynamiques** : ajout d une fonction _getCategory() cote client
+  (replique de la version Node). Les categories sont recalculees dynamiquement
+  dans renderCards() en fonction du rang FILTRE (position dans l ensemble
+  affiche), pas le rang global. Un premier passage filtre tous les modeles
+  SAUF la categorie, calcule les rangs filtres et les categories dynamiques,
+  met a jour les compteurs du select, puis un second passage applique le
+  filtre categorie.
+- **Badge origine unifie** : tous les modeles cloud affichent le badge "Cloud"
+  (au lieu du nom du provider specifique), coherent avec le selecteur.
+- Meme correction appliquee a la fonction copyLeaderboard() (export texte).
+- Protection des acces m.cat / m.paramSize contre les valeurs undefined.
+
+### Fichiers modifies
+- `leaderboard.js` — _getCategory(), categories dynamiques dans renderCards,
+  badge origine unifie, compteurs select mis a jour dynamiquement
+- `consolidate-leaderboard.js` — _getCategory(), categories dynamiques dans
+  renderCards et copyLeaderboard, badge origine Cloud, compteurs select dynamiques
+
+### Resultat
+- Filtre origine=cloud + categorie=Top du top → affiche les 3 premiers modeles
+  cloud (91%, 82%, 81%) au lieu de 0
+- Filtre origine=local + categorie=Top du top → affiche les 3 premiers modeles
+  locaux (99%, 99%, 99%)
+- Sans filtre origine → les 3 premiers globaux (99%, 99%, 99%)
+- Badge origine : "Local" ou "Cloud" uniquement (plus de OpenRouter/OpenAI)
+- Compteurs du select categorie mis a jour dynamiquement selon les filtres actifs
+
+### Validation
+- `node --check leaderboard.js` → OK
+- `node --check consolidate-leaderboard.js` → OK
+- `node leaderboard.js` → classement.html regenere
+- `node consolidate-leaderboard.js` → community-leaderboard.html regenere
+- `node scripts/check-inline-js.js` → JS inline valide pour les 2 fichiers
+- `node tests/run-tests.js` → 27/27 passes
+
 ## 2026-08-03 — feat(runner): pénalité temps de raisonnement + nettoyage CLI
 
 ### Contexte

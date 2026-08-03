@@ -1128,6 +1128,18 @@ function esc(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
 
+// getCategory (replique de la version Node ligne 299) : calcule la categorie
+// d un modele en fonction de son rang (position) dans l ensemble affiche.
+// Le rang est celui de l ensemble filtre (pas le rang global), pour que
+// Top du top = les 3 premiers du filtre actif (ex: 3 premiers cloud).
+function _getCategory(pct, rank) {
+  if (rank && rank <= 3) return { key: 'top', icon: '\u{1F3C6}', label: 'Top du top' };
+  if (pct >= 90) return { key: 'recommande', icon: '\u2705', label: 'Recommande' };
+  if (pct >= 75) return { key: 'moyenne', icon: '\u{1F4CA}', label: 'Dans la moyenne' };
+  if (pct >= 50) return { key: 'rattrapage', icon: '\u26A0\uFE0F', label: 'En rattrapage' };
+  return { key: 'catastrophe', icon: '\u{1F4A5}', label: 'Echec total' };
+}
+
 function renderCards() {
   var catSel = document.getElementById('catSelect');
   var sizeSel = document.getElementById('sizeSelect');
@@ -1147,10 +1159,61 @@ function renderCards() {
   container.innerHTML = '';
   var shown = 0;
 
+  // Premier passage : on filtre par TOUS les filtres SAUF la categorie.
+  // On calcule le rang filtred (position dans l ensemble affiche) pour chaque
+  // modele restant, puis on en deduit sa categorie dynamique. Cela permet
+  // a Top du top de designer les 3 premiers du filtre actif (ex: 3 premiers
+  // cloud) et non les 3 premiers du classement global.
+  var _preFiltered = [];
+  for (var pi = 0; pi < MODELS.length; pi++) {
+    var pm = MODELS[pi];
+    var pSizeKey = (pm.paramSize && pm.paramSize.key) ? pm.paramSize.key : '';
+    if (activeSize !== 'all' && pSizeKey !== activeSize) continue;
+    if (activeHealth !== 'all') {
+      var pIsPositif = (pm.globalLifeScore || 0) >= 0;
+      if (activeHealth === 'positif' && !pIsPositif) continue;
+      if (activeHealth === 'negatif' && pIsPositif) continue;
+    }
+    if (activeEcole !== 'all') {
+      var pHasEcole = (pm.ecoleNames || []).indexOf(activeEcole) !== -1;
+      if (!pHasEcole) continue;
+    }
+    if (activeOrigin !== 'all') {
+      if (activeOrigin === 'cloud' && !pm.isCloud) continue;
+      if (activeOrigin === 'local' && pm.isCloud) continue;
+    }
+    if (q && pm.model.toLowerCase().indexOf(q) === -1 && pm.shortName.toLowerCase().indexOf(q) === -1) continue;
+    _preFiltered.push(pm);
+  }
+
+  // Calcul des categories dynamiques + compteurs pour le select.
+  var _dynamicCats = {};
+  var _modelCat = {};
+  for (var fi = 0; fi < _preFiltered.length; fi++) {
+    var fm = _preFiltered[fi];
+    var fRank = fi + 1;
+    var dCat = _getCategory(fm.pct, fRank);
+    _modelCat[fm.shortName] = dCat;
+    _dynamicCats[dCat.key] = (_dynamicCats[dCat.key] || 0) + 1;
+  }
+
+  // Mise a jour dynamique des compteurs affiches dans le select categorie.
+  var _catOpts = catSel.querySelectorAll('option');
+  var _catCountTotal = _preFiltered.length;
+  for (var ci = 0; ci < _catOpts.length; ci++) {
+    var opt = _catOpts[ci];
+    var val = opt.value;
+    var cnt = val === 'all' ? _catCountTotal : (_dynamicCats[val] || 0);
+    var lbl = opt.textContent.replace(/\s*\(\d+\)\s*$/, '');
+    opt.textContent = lbl + ' (' + cnt + ')';
+  }
+
   for (var i = 0; i < MODELS.length; i++) {
     var m = MODELS[i];
-    if (activeCat !== 'all' && m.cat.key !== activeCat) continue;
-    if (activeSize !== 'all' && m.paramSize.key !== activeSize) continue;
+    // Le filtre taille/sante/ecole/origine/recherche a deja ete applique dans
+    // le premier passage. On verifie que le modele est dans _preFiltered.
+    var sizeKey = (m.paramSize && m.paramSize.key) ? m.paramSize.key : '';
+    if (activeSize !== 'all' && sizeKey !== activeSize) continue;
     if (activeHealth !== 'all') {
       var isPositif = (m.globalLifeScore || 0) >= 0;
       if (activeHealth === 'positif' && !isPositif) continue;
@@ -1165,6 +1228,10 @@ function renderCards() {
       if (activeOrigin === 'local' && m.isCloud) continue;
     }
     if (q && m.model.toLowerCase().indexOf(q) === -1 && m.shortName.toLowerCase().indexOf(q) === -1) continue;
+
+    // Categorie dynamique (rang dans l ensemble filtre, pas rang global).
+    var dynCat = _modelCat[m.shortName] || m.cat;
+    if (activeCat !== 'all' && dynCat.key !== activeCat) continue;
     shown++;
 
     var cardClass = i === 0 ? 'gold' : i === 1 ? 'silver' : i === 2 ? 'bronze' : '';
@@ -1180,18 +1247,17 @@ function renderCards() {
     var tpsC = tpsColor(m.tokensPerSecond);
     var vitesseVal = m.tokensPerSecond > 0 ? m.tokensPerSecond + ' t/s' : (m.elapsedMs > 0 ? fmtDurJS(m.elapsedMs) : '—');
     var vitesseLbl = m.tokensPerSecond > 0 ? 'Vitesse' : 'Temps';
-    var szBadge = '<span class="badge" title="' + esc(m.paramSize.label) + '">' + m.paramSize.icon + ' ' + esc(m.paramSize.short) + '</span>';
+    var szBadge = '<span class="badge" title="' + esc(m.paramSize ? m.paramSize.label : '') + '">' + (m.paramSize ? m.paramSize.icon : '?') + ' ' + esc(m.paramSize ? m.paramSize.short : '?') + '</span>';
     var quantBadge = m.quantization ? '<span class="badge quant" title="Quantification">🧩 ' + esc(m.quantization) + '</span>' : '';
     var noteBadge = m.note ? '<span class="badge note" title="Note personnelle disponible">📝 Note</span>' : '';
     var contribBadge = m.contributors > 1 ? '<span class="badge contrib">👥 ' + m.contributors + ' testeurs</span>' : '';
     var pseudoBadge = m.pseudo ? '<span class="badge pseudo">✍️ ' + esc(m.pseudo) + '</span>' : '';
     // Badge d origine : départage local (LM Studio) vs cloud (frontière API).
-    // Les modèles cloud affichent leur provider spécifique (OpenRouter, OpenAI…)
-    // pour ne pas tout mélanger sous un badge générique.
+    // Cohérent avec le sélecteur d origine (Local / Cloud uniquement) : le badge
+    // affiche « Cloud » et non le provider spécifique pour éviter la redondance.
     var originBadge = '';
     if (m.isCloud) {
-      var provTitle = 'Modèle cloud — Provider : ' + esc(m.provInfo.label) + (m.provider ? ' (' + esc(m.provider) + ')' : '');
-      originBadge = '<span class="badge provider" title="' + provTitle + '" style="color:' + m.provInfo.color + ';border-color:' + m.provInfo.color + '55;background:' + m.provInfo.color + '18">' + m.provInfo.icon + ' ' + esc(m.provInfo.label) + '</span>';
+      originBadge = '<span class="badge provider" title="Modèle cloud (API)" style="color:#d29922;border-color:#d2992255;background:#d2992218">☁️ Cloud</span>';
     } else {
       originBadge = '<span class="badge local" title="Modèle local (LM Studio)">🏠 Local</span>';
     }
@@ -1201,7 +1267,7 @@ function renderCards() {
       '<div class="card-row">' +
         '<div class="rank">' + rankDisp + '</div>' +
         '<div class="model-name">' +
-          '<div class="name-line"><span class="cat-icon">' + m.cat.icon + '</span>' + esc(m.model) + posArrow + '</div>' +
+          '<div class="name-line"><span class="cat-icon">' + dynCat.icon + '</span>' + esc(m.model) + posArrow + '</div>' +
           '<div class="badges">' + szBadge + ' ' + originBadge + ' ' + quantBadge + ' ' + noteBadge + ' ' + contribBadge + ' ' + pseudoBadge + '</div>' +
         '</div>' +
         '<div class="mini-stats">' +
@@ -1254,7 +1320,7 @@ function openModal(idx) {
   var vb = document.getElementById('mVerdict');
   vb.textContent = m.verdict.label;
   vb.style.background = m.verdict.color;
-  document.getElementById('mCat').innerHTML = m.cat.icon + ' ' + esc(m.cat.label) + ' · ' + m.paramSize.icon + ' ' + esc(m.paramSize.label);
+  document.getElementById('mCat').innerHTML = (m.cat ? m.cat.icon + ' ' + esc(m.cat.label) : '') + ' · ' + (m.paramSize ? m.paramSize.icon + ' ' + esc(m.paramSize.label) : '');
 
   var pc = pctColor(m.pct);
   var sc = m.globalLifeScore < 0 ? '#f85149' : '#3fb950';
@@ -1703,10 +1769,38 @@ function copyLeaderboard() {
   lines.push('Rang | Modèle | Quantif. | Points | % | Note | Oblig. | Santé | Écoles | Temps | Vitesse | Verdict');
   lines.push('---|---|---|---|---|---|---|---|---|---|---|---');
   var copied = 0;
+  // Premier passage : filtre sans la categorie pour calculer les rangs filtres.
+  var _preF = [];
+  for (var pi = 0; pi < MODELS.length; pi++) {
+    var pm = MODELS[pi];
+    var pSK = (pm.paramSize && pm.paramSize.key) ? pm.paramSize.key : '';
+    if (activeSize !== 'all' && pSK !== activeSize) continue;
+    if (activeHealth !== 'all') {
+      var pIP = (pm.globalLifeScore || 0) >= 0;
+      if (activeHealth === 'positif' && !pIP) continue;
+      if (activeHealth === 'negatif' && pIP) continue;
+    }
+    if (activeEcole !== 'all') {
+      if ((pm.ecoleNames || []).indexOf(activeEcole) === -1) continue;
+    }
+    if (activeOrigin !== 'all') {
+      if (activeOrigin === 'cloud' && !pm.isCloud) continue;
+      if (activeOrigin === 'local' && pm.isCloud) continue;
+    }
+    if (q && pm.model.toLowerCase().indexOf(q) === -1 && pm.shortName.toLowerCase().indexOf(q) === -1) continue;
+    _preF.push(pm);
+  }
+  var _mc = {};
+  for (var fi = 0; fi < _preF.length; fi++) {
+    _mc[_preF[fi].shortName] = _getCategory(_preF[fi].pct, fi + 1);
+  }
+
   for (var i = 0; i < MODELS.length; i++) {
     var m = MODELS[i];
-    if (activeCat !== 'all' && m.cat.key !== activeCat) continue;
-    if (activeSize !== 'all' && m.paramSize.key !== activeSize) continue;
+    var dynCat = _mc[m.shortName] || m.cat;
+    if (activeCat !== 'all' && dynCat.key !== activeCat) continue;
+    var sizeKey = (m.paramSize && m.paramSize.key) ? m.paramSize.key : '';
+    if (activeSize !== 'all' && sizeKey !== activeSize) continue;
     if (activeHealth !== 'all') {
       var isPositif = (m.globalLifeScore || 0) >= 0;
       if (activeHealth === 'positif' && !isPositif) continue;
