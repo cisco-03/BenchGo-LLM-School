@@ -1198,14 +1198,22 @@ function renderCards() {
   }
 
   // Mise a jour dynamique des compteurs affiches dans le select categorie.
+  // On stocke le label de base (sans compteurs) une seule fois au 1er appel,
+  // puis on le reutilise pour eviter l accumulation de compteurs (44 (44 (4...)).
   var _catOpts = catSel.querySelectorAll('option');
+  if (!catSel._baseLabels) {
+    catSel._baseLabels = {};
+    for (var bi = 0; bi < _catOpts.length; bi++) {
+      var bo = _catOpts[bi];
+      catSel._baseLabels[bo.value] = bo.textContent.replace(/\s*\(\d+\)\s*$/, '').trim();
+    }
+  }
   var _catCountTotal = _preFiltered.length;
   for (var ci = 0; ci < _catOpts.length; ci++) {
     var opt = _catOpts[ci];
     var val = opt.value;
     var cnt = val === 'all' ? _catCountTotal : (_dynamicCats[val] || 0);
-    var lbl = opt.textContent.replace(/\s*\(\d+\)\s*$/, '');
-    opt.textContent = lbl + ' (' + cnt + ')';
+    opt.textContent = catSel._baseLabels[val] + ' (' + cnt + ')';
   }
 
   for (var i = 0; i < MODELS.length; i++) {
