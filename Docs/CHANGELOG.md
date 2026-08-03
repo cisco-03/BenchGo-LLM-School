@@ -1,5 +1,32 @@
 # CHANGELOG - Carnet de Notes BenchGo
 
+## 2026-08-03 — fix(consolidate-leaderboard): sélecteur Origine simplifié à Local/Cloud uniquement
+
+### Contexte
+Le sélecteur "Origine" du classement communautaire (consolidate-leaderboard.js) générait
+une option par provider cloud en plus des options Local/Cloud (ex: "☁️ Cloud", "🔀 OpenRouter").
+Résultat : redondances (deux fois "Cloud"), doublons et confusion visuelle. Les providers
+spécifiques sont déjà affichés via le badge d origine sur chaque carte, le sélecteur n a
+pas besoin de les répéter.
+
+### Correction
+- Suppression du bloc d options par provider dans le `<select id="originSelect">` (anciennes
+  options `prov:<provider>`).
+- Suppression des branches de filtrage `prov:` associées dans `renderCards()` et la fonction
+  d export (2 occurrences de `activeOrigin.indexOf('prov:') === 0`).
+- Suppression de la variable `providerCounts` devenue inutile.
+- Le sélecteur ne contient plus que : "Toutes origines", "🏠 Local · LM Studio", "☁️ Cloud · API".
+
+### Fichiers modifiés
+- `consolidate-leaderboard.js` : sélecteur HTML, 2 blocs de filtrage JS inline, comptage providerCounts.
+- `Docs/CHANGELOG.md` : présente entrée.
+
+### Vérifications
+- `node --check consolidate-leaderboard.js` : OK
+- `node consolidate-leaderboard.js` : 39 modèles générés sans erreur.
+- `node scripts/check-inline-js.js` : JS inline valide (classement.html + community-leaderboard.html).
+- Sélecteur Origine vérifié dans gh-pages-output/community-leaderboard.html : 3 options uniquement.
+
 ## 2026-08-03 — fix(leaderboard): déduction du provider pour les anciens carnets cloud sans champ provider
 
 ### Contexte

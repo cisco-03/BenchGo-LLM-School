@@ -360,16 +360,11 @@ function buildConsolidatedHTML(entries) {
   // (frontière API : OpenRouter, OpenAI, etc.). Les deux catégories n'ont rien à
   // voir et ne doivent pas être mélangées dans le classement communautaire.
   const originCounts = { local: 0, cloud: 0 }
-  const providerCounts = {}
   entries.forEach((e, idx) => {
     catCounts[getCategory(e.pct, idx + 1).key]++
     sizeCounts[getParamSize(e.model).key]++
     if ((e.globalLifeScore || 0) >= 0) healthCounts.positif++; else healthCounts.negatif++
     if (e.isCloud) originCounts.cloud++; else originCounts.local++
-    if (e.isCloud) {
-      const pk = e.provider || 'cloud'
-      providerCounts[pk] = (providerCounts[pk] || 0) + 1
-    }
     for (const ec of (e.ecoles || [])) {
       ecoleCounts[ec.ecole] = (ecoleCounts[ec.ecole] || 0) + 1
     }
@@ -1015,10 +1010,6 @@ function buildConsolidatedHTML(entries) {
             <option value="all" selected>Toutes origines (${entries.length})</option>
             <option value="local">🏠 Local · LM Studio (${originCounts.local})</option>
             <option value="cloud">☁️ Cloud · API (${originCounts.cloud})</option>
-            ${Object.keys(providerCounts).sort().map(pk => {
-              const info = providerDisplay(pk, true);
-              return `<option value="prov:${esc(pk)}">${info.icon} ${esc(info.label)} (${providerCounts[pk]})</option>`;
-            }).join('')}
           </select>
         </div>
       </div>
@@ -1172,10 +1163,6 @@ function renderCards() {
     if (activeOrigin !== 'all') {
       if (activeOrigin === 'cloud' && !m.isCloud) continue;
       if (activeOrigin === 'local' && m.isCloud) continue;
-      if (activeOrigin.indexOf('prov:') === 0) {
-        var provFilter = activeOrigin.slice(5);
-        if ((m.provider || (m.isCloud ? 'cloud' : 'local')) !== provFilter) continue;
-      }
     }
     if (q && m.model.toLowerCase().indexOf(q) === -1 && m.shortName.toLowerCase().indexOf(q) === -1) continue;
     shown++;
@@ -1732,10 +1719,6 @@ function copyLeaderboard() {
     if (activeOrigin !== 'all') {
       if (activeOrigin === 'cloud' && !m.isCloud) continue;
       if (activeOrigin === 'local' && m.isCloud) continue;
-      if (activeOrigin.indexOf('prov:') === 0) {
-        var provFilter2 = activeOrigin.slice(5);
-        if ((m.provider || (m.isCloud ? 'cloud' : 'local')) !== provFilter2) continue;
-      }
     }
     if (q && m.model.toLowerCase().indexOf(q) === -1 && m.shortName.toLowerCase().indexOf(q) === -1) continue;
     var rank = copied < 3 ? ['🥇','🥈','🥉'][copied] : ('' + (copied + 1));
