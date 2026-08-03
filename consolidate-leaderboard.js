@@ -1198,48 +1198,30 @@ function renderCards() {
   }
 
   // Mise a jour dynamique des compteurs affiches dans le select categorie.
-  // On stocke le label de base (sans compteurs) une seule fois au 1er appel,
-  // puis on le reutilise pour eviter l accumulation de compteurs (44 (44 (4...)).
+  // Les labels de base sont stockes en dur (sans compteurs) pour eviter toute
+  // accumulation de compteurs (44 (44 (4...)) quelque soit le nombre d appels.
+  var _catLabels = {
+    all: 'Tous',
+    top: '🏆 Top du top',
+    recommande: '✅ Recommandés',
+    moyenne: '📊 Dans la moyenne',
+    rattrapage: '⚠️ En rattrapage',
+    catastrophe: '💥 Échec total'
+  };
   var _catOpts = catSel.querySelectorAll('option');
-  if (!catSel._baseLabels) {
-    catSel._baseLabels = {};
-    for (var bi = 0; bi < _catOpts.length; bi++) {
-      var bo = _catOpts[bi];
-      catSel._baseLabels[bo.value] = bo.textContent.replace(/\s*\(\d+\)\s*$/, '').trim();
-    }
-  }
   var _catCountTotal = _preFiltered.length;
   for (var ci = 0; ci < _catOpts.length; ci++) {
     var opt = _catOpts[ci];
     var val = opt.value;
     var cnt = val === 'all' ? _catCountTotal : (_dynamicCats[val] || 0);
-    opt.textContent = catSel._baseLabels[val] + ' (' + cnt + ')';
+    opt.textContent = _catLabels[val] + ' (' + cnt + ')';
   }
 
-  for (var i = 0; i < MODELS.length; i++) {
-    var m = MODELS[i];
-    // Le filtre taille/sante/ecole/origine/recherche a deja ete applique dans
-    // le premier passage. On verifie que le modele est dans _preFiltered.
-    var sizeKey = (m.paramSize && m.paramSize.key) ? m.paramSize.key : '';
-    if (activeSize !== 'all' && sizeKey !== activeSize) continue;
-    if (activeHealth !== 'all') {
-      var isPositif = (m.globalLifeScore || 0) >= 0;
-      if (activeHealth === 'positif' && !isPositif) continue;
-      if (activeHealth === 'negatif' && isPositif) continue;
-    }
-    if (activeEcole !== 'all') {
-      var hasEcole = (m.ecoleNames || []).indexOf(activeEcole) !== -1;
-      if (!hasEcole) continue;
-    }
-    if (activeOrigin !== 'all') {
-      if (activeOrigin === 'cloud' && !m.isCloud) continue;
-      if (activeOrigin === 'local' && m.isCloud) continue;
-    }
-    if (q && m.model.toLowerCase().indexOf(q) === -1 && m.shortName.toLowerCase().indexOf(q) === -1) continue;
-
-    // Categorie dynamique (rang dans l ensemble filtre, pas rang global).
+  for (var fi = 0; fi < _preFiltered.length; fi++) {
+    var m = _preFiltered[fi];
     var dynCat = _modelCat[m.shortName] || m.cat;
     if (activeCat !== 'all' && dynCat.key !== activeCat) continue;
+    var i = MODELS.indexOf(m);
     shown++;
 
     var cardClass = i === 0 ? 'gold' : i === 1 ? 'silver' : i === 2 ? 'bronze' : '';
