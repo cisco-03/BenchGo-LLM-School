@@ -1,0 +1,75 @@
+{
+  "schemaVersion": 1,
+  "benchgoVersion": "V3",
+  "userId": "2181628c20fe6a0e",
+  "pseudo": "FlexoDiv",
+  "submittedAt": "2026-08-03T21:59:55.696Z",
+  "integrityHash": "35e2b76e036c6ddc",
+  "carnet": {
+    "model": "nvidia/nemotron-nano-12b-2-vl:free",
+    "shortName": "nvidia_nemotron-nano-12b-2-vl_free",
+    "ecoles": {
+      "Primaire": {
+        "best": {
+          "profile": "LIGHT",
+          "ecole": "Primaire",
+          "score": 0,
+          "max": 2653,
+          "pct": 0,
+          "mandatoryPassed": 0,
+          "mandatoryTotal": 868,
+          "globalLifeScore": 0,
+          "optionalBonus": 0,
+          "helpCount": 0,
+          "retriedCount": 0,
+          "calibrationIndex": null,
+          "declaredLevel": null,
+          "date": "2026-08-03",
+          "time": "20-25-43",
+          "reportFile": "Export-Rapports\\2026-08-03\\Primaire\\LIGHT\\rapport_v3_nvidia_nemotron-nano-12b-2-vl_free_light_20-25-43.md",
+          "selfProfile": null,
+          "tiers": [],
+          "quantization": null,
+          "elapsedMs": 0,
+          "wallMs": 9711,
+          "tokens": 0,
+          "tokensPerSecond": 0,
+          "timestampMs": 1785781551205,
+          "timestampIso": "2026-08-03T18:25:51.205Z"
+        },
+        "attempts": [
+          {
+            "profile": "LIGHT",
+            "ecole": "Primaire",
+            "score": 0,
+            "max": 2653,
+            "pct": 0,
+            "mandatoryPassed": 0,
+            "mandatoryTotal": 868,
+            "globalLifeScore": 0,
+            "optionalBonus": 0,
+            "helpCount": 0,
+            "retriedCount": 0,
+            "calibrationIndex": null,
+            "declaredLevel": null,
+            "date": "2026-08-03",
+            "time": "20-25-43",
+            "reportFile": "Export-Rapports\\2026-08-03\\Primaire\\LIGHT\\rapport_v3_nvidia_nemotron-nano-12b-2-vl_free_light_20-25-43.md",
+            "selfProfile": null,
+            "tiers": [],
+            "quantization": null,
+            "elapsedMs": 0,
+            "wallMs": 9711,
+            "tokens": 0,
+            "tokensPerSecond": 0,
+            "timestampMs": 1785781551205,
+            "timestampIso": "2026-08-03T18:25:51.205Z"
+          }
+        ]
+      }
+    },
+    "lastUpdated": "2026-08-03T18:25:51.205Z",
+    "provider": "openrouter",
+    "isCloud": true
+  }
+}
