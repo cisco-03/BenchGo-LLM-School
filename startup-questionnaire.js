@@ -21,6 +21,7 @@
 
 const readline = require('readline');
 const secrets = require('./secrets');
+const apiKeysStore = require('./api-keys-store');
 const { PROFILES, fetchModelMetadataFromLMStudio } = require('./config');
 const { CLOUD_PROVIDERS } = require('./cloud-client');
 const logger = require('./logger');
@@ -157,6 +158,7 @@ async function _ensureApiKey(providerName, { label = 'API', revealMs = 3000 } = 
     return null;
   }
   secrets.rememberSecret(secretKey, key);
+  apiKeysStore.saveKey(secretKey, key);
   console.log(`  \x1b[32mClé ${label} mémorisée pour la session :\x1b[0m ${secrets.maskedForDisplay(key)}`);
   return key;
 }

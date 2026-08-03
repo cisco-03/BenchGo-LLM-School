@@ -97,7 +97,7 @@ const SOLUTIONS = {
   tache_4f_frontier: 'function dijkstra(g, s) { const d = {}; for (const n in g) d[n] = 1/0; d[s] = 0; const v = new Set(); while (true) { let m = null; for (const n in d) if (!v.has(n) && (m === null || d[n] < d[m])) m = n; if (m === null) break; v.add(m); for (const nb in g[m]) { const nd = d[m] + g[m][nb]; if (nd < d[nb]) d[nb] = nd; } } return d; }',
   // Tier 5 light
   tache_5a: 'const supprimerDoublons = (t) => [...new Set(t)];',
-  tache_5b: 'const capitaliserMots = (s) => s.split(" ").map(w => w[0].toUpperCase() + w.slice(1).toLowerCase()).join(" ");',
+  tache_5b: 'const capitaliserMots = (s) => s === "" ? "" : s.split(" ").map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(" ");',
   tache_5c: 'const frequenceCaracteres = (s) => { const r = {}; for (const c of s) r[c] = (r[c]||0)+1; return r; };',
   tache_5d: 'const filtrerPairs = (t) => t.filter(x => x % 2 === 0);',
   tache_5e: 'const chaineLaPlusLongue = (t) => t.length ? t.reduce((a, b) => b.length > a.length ? b : a) : "";',

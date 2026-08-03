@@ -67,6 +67,27 @@
           "setup": "",
           "call": "additionner(-1, 1)",
           "assert": "result === 0"
+        },
+        {
+          "type": "exec",
+          "description": "Addition deux negatifs",
+          "setup": "",
+          "call": "additionner(-4, -6)",
+          "assert": "result === -10"
+        },
+        {
+          "type": "exec",
+          "description": "Addition avec zero",
+          "setup": "",
+          "call": "additionner(0, 7)",
+          "assert": "result === 7"
+        },
+        {
+          "type": "exec",
+          "description": "Addition grands nombres",
+          "setup": "",
+          "call": "additionner(1000000, 2000000)",
+          "assert": "result === 3000000"
         }
       ],
       "points": 8

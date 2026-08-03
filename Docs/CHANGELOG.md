@@ -1,5 +1,72 @@
 # CHANGELOG - Carnet de Notes BenchGo
 
+## 2026-08-02 — feat(exercices): raisonnement Cloud + edge cases Local, inspires de CRUXEval et IFEval
+
+### Contexte
+Les exercices des eleves LLM etaient trop peu denses en cas de test (plusieurs
+exercices scolaires n avaient qu un seul cas, aucun edge case). Inspire du
+depot awesome-llm-benchmarks (CRUXEval = tracer un code mentalement, IFEval =
+suivi strict d instructions de format verifiable, HumanEval+ = 80x plus de
+cas pour detecter les solutions fausses), deux axes d amelioration ont ete
+ajoutes en differenciant le profil Cloud (FRONTIER) du profil Local (LIGHT).
+
+### Cloud (FRONTIER) — nouveaux exercices de raisonnement
+Tier 4 (tier4_frontier.json) passe de 6 a 8 exercices, avec 2 nouveaux types
+d evaluation :
+
+1. **tache_4g — Tracer un code (CRUXEval-style)** : le modele doit predire
+   mentalement la sortie de 3 snippets JS sans les executer (boucle
+   accumulateur, fermeture partagee avec `var` dans une boucle, coercition
+   string/number). Renvoie un tableau [v1, v2, v3]. Verifie le raisonnement
+   d execution, pas la simple generation de code.
+2. **tache_4h — Suivi d instructions verifiables (IFEval-style)** : le modele
+   doit formater une liste selon 6 contraintes verifiables independamment
+   (exactement 5 lignes, separateur ` - ` obligatoire sur la ligne 2,
+   elements en MAJUSCULES, ordre conserve, pas le mot `auteur` sur la ligne
+   1, pas de ligne vide). Diagnostique precis : chaque contrainte defaillante
+   est signalee.
+
+De nouveaux evaluateurs custom ont ete ajoutes dans `custom-evaluators.js` :
+`evaluateCodeTracing` (async, compare aux valeurs reelles obtenues en
+executant les snippets dans le sandbox isole) et `evaluateInstructionFollowing`
+   (async, valide chaque contrainte individuellement).
+
+### Local (LIGHT) — densification des edge cases
+Style HumanEval+ : ajout de cas limites sur les tiers 0 et 5 pour detecter
+les solutions correctes sur le cas nominal mais fausses sur les bords :
+
+- **tier0_light.json** : `additionner` (negatifs, zero, grands nombres),
+  `estPair` (zero pair, negatif pair, grand impair), `carre` (negatif, un),
+  `somme1aN` (n=2, n=100), `inverserChaine` (chaine vide, phrase avec espace),
+  `valeurMax` (singleton, max au debut, avec zero).
+- **tier5_light.json** : `supprimerDoublons` (tableau vide, tous identiques),
+  `capitaliserMots` (chaine vide, deja majuscules), `filtrerPairs` (vide,
+  tous pairs, avec zero), `chaineLaPlusLongue` (egalite, singleton),
+  `convertirBase` (base 10, base 8, zero), `exponentiationRapide` (n=1,
+  base negative paire), `sousTableauMax` (tous negatifs, singleton).
+
+### Correction de solution canonique
+La densification a revele que la solution canonique de `capitaliserMots`
+(tache_5b dans verify_tiers.js) plantait sur la chaine vide (`w[0]` ->
+`undefined.toUpperCase()`). Corrigee avec `w.charAt(0)` + guard `s === ""`.
+
+### Fichiers modifies
+- `custom-evaluators.js` : +2 evaluateurs async (evaluateCodeTracing,
+  evaluateInstructionFollowing) branches dans le registre customEvaluators.
+- `tiers/tier4_frontier.json` : prompt passe a 8 exercices, +2 taches
+  (tache_4g, tache_4h) avec evaluation custom.
+- `tiers/tier0_light.json` : +13 cas exec sur 5 exercices.
+- `tiers/tier5_light.json` : +14 cas exec sur 7 exercices.
+- `verify_tiers.js` : correction solution canonique tache_5b.
+- `Docs/CHANGELOG.md` : presente entree.
+
+### Verification
+- `node --check custom-evaluators.js` : OK
+- `node verify_tiers.js` : 363 exec OK / 383 (20 custom skip), 0 probleme.
+- `node tests/run-tests.js` : 27/27 passent.
+- `node scripts/check-inline-js.js` : JS inline valide (leaderboard non touche).
+- Tests e2e via task-evaluator : tache_4g/tache_4h GOOD passent, BAD correctement rejete.
+
 ## 2026-08-02 — fix(v3): modale leaderboard ne persiste pas dans le carnet (saveLedger non exportée)
 
 ### Contexte
@@ -3883,3 +3950,39 @@ Retour utilisateur : les modèles cloud (notamment les modèles de raisonnement)
 
 ### Résultat
 - Les timeouts intempestifs sur les modèles cloud devraient être éliminés.
+
+## 2026-08-03 — fix(api-keys): persistance automatique sans confirmation interactive
+
+### Contexte
+Les clés API (élève + professeur OpenRouter) n'étaient pas persistées dans
+`.api-keys.json` lors de la saisie via le questionnaire interactif
+(`startup-questionnaire.js`) ni via le mode CLI historique (`runner.js`).
+À chaque nouveau processus, l'utilisateur devait re-collér sa clé, même
+après avoir répondu "oui" à la proposition de mémorisation.
+
+### Cause racine
+1. `_ensureApiKey()` dans `startup-questionnaire.js` appelait
+   `secrets.rememberSecret()` (mémoire de session) mais JAMAIS
+   `apiKeysStore.saveKey()` (disque).
+2. Le bloc de proposition de mémorisation dans `runner.js` (lignes 1378-1407)
+   demandait une confirmation interactive à l'utilisateur, mais en mode
+   non-TTY (night-batch) ou si l'utilisateur répondait "non", la clé
+   n'était jamais écrite sur disque.
+
+### Solution
+1. `startup-questionnaire.js` : `_ensureApiKey()` appelle désormais
+   `apiKeysStore.saveKey()` automatiquement après chaque saisie.
+2. `runner.js` : remplacement du bloc interactif de proposition par une
+   sauvegarde silencieuse et automatique (respectant `--no-save-keys`).
+   Plus de question "Mémoriser ?" — la clé est persistée d'office.
+
+### Fichiers modifiés
+- `startup-questionnaire.js` (import apiKeysStore + saveKey dans _ensureApiKey)
+- `runner.js` (remplacement du bloc _offerKeyMemorization par _autoSaveKey)
+
+### Résultat
+- Une clé saisie une fois est immédiatement persistée dans `.api-keys.json`.
+- Les runs suivants (même fenêtre, nouvelle fenêtre, night-batch) retrouvent
+  la clé sans aucune re-saisie.
+- `--no-save-keys` continue de désactiver la persistance (machine partagée).
+

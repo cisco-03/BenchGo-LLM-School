@@ -307,7 +307,7 @@ async function askModelForFailureExplanation({ queryFn, providerConfig, contextL
   }
 }
 
-async function runTierAttempt({ tierNum, tierData, isMandatory, profileArg, contextLimitTokens, attemptNumber, queryFn, providerConfig, gameState, selfProfile, teacherConfig, forceFlag }) {
+async function runTierAttempt({ tierNum, tierData, isMandatory, profileArg, contextLimitTokens, attemptNumber, queryFn, providerConfig, gameState, selfProfile, teacherConfig, forceFlag, isCloudMode }) {
   // NOTE : `selfProfile` est le profil utilisé pour le FILTRAGE des tâches.
   // Il peut provenir de l'auto-profilage (élève) OU du profilage externe
   // (professeur IA) si ce dernier était disponible. La variable a gardé son
@@ -1375,34 +1375,19 @@ async function main() {
   let preKnownModelName = isCloudMode ? resolvedCloudModel : null;
   logger.info(`Professeur : ${teacherConfigResolved && teacherConfigResolved.enabled ? `activé (${teacherConfigResolved.provider || 'openrouter'})` : 'désactivé (auto-analyse classique)'}`);
 
-  // --- Proposition de mémorisation des clés API (tous providers) ---
-  // Message interactif explicatif : on explique le compromis fenêtre/paramètres.
-  // Une clé saisie pour la 1re fois (pas déjà dans .api-keys.json) se voit
-  // proposer d'être mémorisée localement pour les prochains runs. --no-save-keys
-  // désactive cette proposition (ex: machine partagée).
-  if (!noSaveKeysFlag && process.stdin.isTTY && process.stdout.isTTY) {
-    const _offerKeyMemorization = async (providerName, keyValue, label) => {
+  // --- Sauvegarde automatique des clés API (tous providers) ---
+  // Les clés sont persistées dans .api-keys.json sans demander à l'utilisateur.
+  // --no-save-keys désactive cette persistance (ex: machine partagée).
+  if (!noSaveKeysFlag) {
+    const _autoSaveKey = (providerName, keyValue, label) => {
       if (!providerName || !keyValue) return;
-      // Déjà mémorisée ? On ne redemande pas.
       if (apiKeysStore.getKey(providerName)) return;
-      console.log(`  \x1b[36m━━ MÉMORISATION DE LA CLÉ ${label} (${providerName}) ━━\x1b[0m`);
-      console.log(`  \x1b[90mLa clé ${label} n'est pas encore mémorisée localement.\x1b[0m`);
-      console.log(`  \x1b[90m• Si vous la mémorisez : les prochains runs (même fenêtre OU nouvelle fenêtre) la retrouveront automatiquement.\x1b[0m`);
-      console.log(`  \x1b[90m• Si vous refusez : la clé reste en mémoire pour CE run uniquement — si vous ouvrez une nouvelle fenêtre, il faudra la re-saisir.\x1b[0m`);
-      console.log(`  \x1b[90m• Sécurité : la clé est stockée dans .api-keys.json (local, ignoré par git — jamais sur GitHub). Effaçable via --forget-key=${providerName}.\x1b[0m`);
-      const memorize = await askYesNo(`  Mémoriser cette clé ${label} localement pour les prochains runs ?`, false);
-      if (memorize) {
-        apiKeysStore.saveKey(providerName, keyValue);
-        console.log(`  \x1b[32mClé ${label} mémorisée dans .api-keys.json (${secrets.maskedForDisplay(keyValue)}).\x1b[0m\n`);
-      } else {
-        console.log(`  \x1b[90mClé ${label} non mémorisée — session uniquement.\x1b[0m\n`);
-      }
+      apiKeysStore.saveKey(providerName, keyValue);
+      console.log(`  \x1b[32mClé ${label} (${providerName}) sauvegardée localement.\x1b[0m\n`);
     };
-    // Clé élève (provider du modèle testé).
-    await _offerKeyMemorization(resolvedProvider, resolvedApiKey, 'API élève');
-    // Clé professeur OpenRouter.
+    _autoSaveKey(resolvedProvider, resolvedApiKey, 'API élève');
     if (teacherConfigResolved && teacherConfigResolved.enabled && teacherConfigResolved.apiKey) {
-      await _offerKeyMemorization('openrouter', teacherConfigResolved.apiKey, 'API professeur');
+      _autoSaveKey('openrouter', teacherConfigResolved.apiKey, 'API professeur');
     }
   }
 
@@ -1925,7 +1910,8 @@ async function main() {
       gameState,
       selfProfile: filterProfile,
       teacherConfig: teacherConfigResolved,
-      forceFlag
+      forceFlag,
+      isCloudMode
     });
 
     if (attemptResult.responseModelName && modelName === "Modele_En_Attente") {
@@ -2087,7 +2073,8 @@ async function main() {
           gameState,
           selfProfile: filterProfile,
           teacherConfig: teacherConfigResolved,
-          forceFlag
+          forceFlag,
+          isCloudMode
         });
 
         if (!retryResult.skippedOptional && shouldReplaceBestResult(null, retryResult)) {

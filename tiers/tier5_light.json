@@ -25,6 +25,20 @@
           "setup": "",
           "call": "supprimerDoublons([1, 2])",
           "assert": "JSON.stringify(result) === '[1,2]'"
+        },
+        {
+          "type": "exec",
+          "description": "Tableau vide",
+          "setup": "",
+          "call": "supprimerDoublons([])",
+          "assert": "JSON.stringify(result) === '[]'"
+        },
+        {
+          "type": "exec",
+          "description": "Tous identiques",
+          "setup": "",
+          "call": "supprimerDoublons([5, 5, 5])",
+          "assert": "JSON.stringify(result) === '[5]'"
         }
       ],
       "points": 8
@@ -46,6 +60,20 @@
           "setup": "",
           "call": "capitaliserMots('test')",
           "assert": "result === 'Test'"
+        },
+        {
+          "type": "exec",
+          "description": "Chaine vide",
+          "setup": "",
+          "call": "capitaliserMots('')",
+          "assert": "result === ''"
+        },
+        {
+          "type": "exec",
+          "description": "Deja majuscules",
+          "setup": "",
+          "call": "capitaliserMots('BONJOUR')",
+          "assert": "result === 'Bonjour'"
         }
       ],
       "points": 8
@@ -88,6 +116,27 @@
           "setup": "",
           "call": "filtrerPairs([1, 3])",
           "assert": "JSON.stringify(result) === '[]'"
+        },
+        {
+          "type": "exec",
+          "description": "Tableau vide",
+          "setup": "",
+          "call": "filtrerPairs([])",
+          "assert": "JSON.stringify(result) === '[]'"
+        },
+        {
+          "type": "exec",
+          "description": "Tous pairs",
+          "setup": "",
+          "call": "filtrerPairs([2, 4, 6])",
+          "assert": "JSON.stringify(result) === '[2,4,6]'"
+        },
+        {
+          "type": "exec",
+          "description": "Avec zero",
+          "setup": "",
+          "call": "filtrerPairs([0, 1, 2])",
+          "assert": "JSON.stringify(result) === '[0,2]'"
         }
       ],
       "points": 8
@@ -109,6 +158,20 @@
           "setup": "",
           "call": "chaineLaPlusLongue([])",
           "assert": "result === ''"
+        },
+        {
+          "type": "exec",
+          "description": "Egalite — premier gagne",
+          "setup": "",
+          "call": "chaineLaPlusLongue(['ab', 'cd'])",
+          "assert": "result === 'ab'"
+        },
+        {
+          "type": "exec",
+          "description": "Singleton",
+          "setup": "",
+          "call": "chaineLaPlusLongue(['seul'])",
+          "assert": "result === 'seul'"
         }
       ],
       "points": 8

@@ -689,6 +689,163 @@ async function evaluateAsyncConcurrencyLimit(code) {
   if (errors.length > 0) throw new Error(errors.join('\n'));
 }
 
+// === CRUXEval-style : tracer mentalement un code pour predire sa sortie ===
+// Exerce le raisonnement sur l'execution (etat des variables au fil des pas),
+// sans que l eleve ait a executer. Le modele doit RENVOYER une fonction
+// `predireSorties()` qui retourne un tableau [v1, v2, v3] correspondant aux
+// trois snippets donnes dans l enonce. On compare ensuite aux valeurs reelles
+// obtenues en executant chaque snippet de reference dans le sandbox.
+async function evaluateCodeTracing(code) {
+  const errors = [];
+  const studentFn = exposerFonctionVM(code, 'predireSorties');
+
+  // Trois snippets de difficulte croissante. Pour chacun, l eleve doit
+  // predire la valeur finale de la variable extraite ; on verifie en
+  // executant reellement le snippet dans le sandbox isole.
+  const snippets = [
+    {
+      label: 'boucle + accumulateur (sum i*i i=1..4)',
+      snippet: 'var x = 0; for (var i = 1; i <= 4; i++) { x += i * i; }',
+      extract: 'x'
+    },
+    {
+      label: 'fermeture partagee (var dans boucle, i final = 3)',
+      snippet: 'var fns = []; for (var i = 0; i < 3; i++) { fns.push(function() { return i; }); } var x = fns[0]() + fns[1]() + fns[2]();',
+      extract: 'x'
+    },
+    {
+      label: 'coercition + falsy (0 + "5" + 3 - "2")',
+      snippet: "var x = 0 + '5' + 3 - '2';",
+      extract: 'x'
+    }
+  ];
+
+  const expected = [];
+  for (let s = 0; s < snippets.length; s++) {
+    const snip = snippets[s];
+    try {
+      const sandbox = buildSandbox();
+      const ctx = vm.createContext(sandbox);
+      vm.runInContext(snip.snippet, ctx, { timeout: 1000 });
+      expected.push(ctx[snip.extract]);
+    } catch (e) {
+      // Si le snippet de reference lui-meme echoue (imprevu), on skip ce cas
+      // plutot que de penaliser l eleve.
+      expected.push(undefined);
+    }
+  }
+
+  let got;
+  try {
+    got = await avecTimeout(
+      Promise.resolve(studentFn()),
+      'predire sorties'
+    );
+  } catch (e) {
+    throw new Error(`La fonction a leve une erreur — ${e.message}. Verifiez le nom exact 'predireSorties'.`);
+  }
+
+  if (!Array.isArray(got)) {
+    throw new Error("La fonction doit retourner un TABLEAU de 3 valeurs [v1, v2, v3], une par snippet. Obtenu : " + JSON.stringify(got).substring(0, 200));
+  }
+
+  for (let s = 0; s < snippets.length; s++) {
+    const exp = expected[s];
+    const g = got[s];
+    const sameType = typeof g === typeof exp;
+    const sameValue = g == exp;
+    if (!sameType || !sameValue) {
+      errors.push(`Snippet ${s + 1} '${snippets[s].label}' : attendu ${JSON.stringify(exp)} (${typeof exp}), obtenu ${JSON.stringify(g)} (${typeof g}). Le raisonnement d'execution est incorrect.`);
+    }
+  }
+
+  if (errors.length > 0) throw new Error(errors.join('\n'));
+}
+
+// === IFEval-style : suivi strict d'instructions de format verifiables ===
+// L eleve doit renvoyer une fonction `formaterListe(objet)` qui respecte des
+// contraintes verifiables (nombre de lignes, majuscules, separateur, pas de
+// champ interdit). On valide chaque contrainte individuellement pour un
+// diagnostic precis, style IFEval.
+async function evaluateInstructionFollowing(code) {
+  const errors = [];
+  const studentFn = exposerFonctionVM(code, 'formaterListe');
+
+  const input = {
+    titre: 'rapport hebdomadaire',
+    elements: ['analyse', 'synthese', 'conclusion'],
+    auteur: 'Marie Curie'
+  };
+
+  let out;
+  try {
+    out = await avecTimeout(
+      Promise.resolve(studentFn(input)),
+      'formatage'
+    );
+  } catch (e) {
+    throw new Error(`La fonction a leve une erreur : ${e.message}. Verifiez le nom et la signature demands.`);
+  }
+
+  if (typeof out !== 'string') {
+    errors.push("Le resultat doit etre une CHAINE de caracteres (string), pas " + typeof out + ".");
+    if (errors.length > 0) throw new Error(errors.join('\n'));
+  }
+
+  // Contrainte 1 : exactement 5 lignes (titre + auteur + 3 elements)
+  const lines = String(out).split('\n');
+  if (lines.length !== 5) {
+    errors.push(`Contrainte 'exactement 5 lignes' : attendu 5 lignes, obtenu ${lines.length}.`);
+  }
+
+  // Contrainte 2 : aucune ligne vide ni debut/fin
+  const stripped = String(out).trim();
+  if (stripped !== String(out)) {
+    errors.push("Contrainte 'pas de ligne vide en debut/fin' : la sortie contient des lignes vides en tete ou queue.");
+  }
+  if (lines.some(l => l.trim() === '')) {
+    errors.push("Contrainte 'pas de ligne vide intermediaire' : une ligne intermediaire est vide.");
+  }
+
+  // Contrainte 3 : chaque element en MAJUSCULES (les 3 dernieres lignes)
+  const elemLines = lines.slice(2);
+  const nonUpper = elemLines.filter(l => l !== l.toUpperCase());
+  if (nonUpper.length > 0) {
+    errors.push(`Contrainte 'elements en MAJUSCULES' : ${nonUpper.length} ligne(s) d'element(s) ne sont pas en majuscules.`);
+  }
+
+  // Contrainte 4 : le separateur entre titre et auteur doit etre ' - '
+  // (ligne 2 = "<titre> - <auteur>")
+  const headerLine = lines[1] || '';
+  if (!headerLine.includes(' - ')) {
+    errors.push(`Contrainte 'separateur \" - \"' : la 2e ligne doit contenir ' - ' entre le titre et l auteur.`);
+  }
+
+  // Contrainte 5 : le champ interdit 'auteur' ne doit PAS figurer dans la
+  // 1ere ligne (titre seul, on teste l ouverture d une fuite de donnees).
+  const titleLine = lines[0] || '';
+  if (titleLine.toLowerCase().includes('auteur')) {
+    errors.push("Contrainte 'ne pas exposer le nom du champ' : la 1ere ligne ne doit pas contenir le mot 'auteur'.");
+  }
+
+  // Contrainte 6 : les 3 elements doivent apparaitre dans l'ordre donne
+  const joinedElems = elemLines.map(l => l.toLowerCase()).join('|');
+  const expectedOrder = input.elements.map(e => e).join('|');
+  // On verifie la presence dans l ordre par positions croissantes
+  let lastIdx = -1;
+  let orderOk = true;
+  for (const el of input.elements) {
+    const idx = joinedElems.indexOf(el);
+    if (idx === -1 || idx < lastIdx) { orderOk = false; break; }
+    lastIdx = idx;
+  }
+  if (!orderOk) {
+    errors.push("Contrainte 'elements dans l ordre fourni' : analyse, synthese, conclusion doivent apparaitre dans cet ordre.");
+  }
+
+  if (errors.length > 0) throw new Error(errors.join('\n'));
+}
+
 const customEvaluators = {
   evaluateGeoJSONRFC7946,
   evaluateReactHook,
@@ -699,7 +856,9 @@ const customEvaluators = {
   evaluateAsyncSequentialProcessing,
   evaluateAsyncRetryLogic,
   evaluateCloudflareMiddleware,
-  evaluateAsyncConcurrencyLimit
+  evaluateAsyncConcurrencyLimit,
+  evaluateCodeTracing,
+  evaluateInstructionFollowing
 };
 
 module.exports = customEvaluators;
