@@ -295,4 +295,201 @@ function letterGrade(pct) {
   return { grade: 'F', color: '\x1b[41m\x1b[37m' };
 }
 
-module.exports = { ProgressBar, Spinner, letterGrade };
+// ============================================================
+// BigSpinner — spinner large et visible pour les temps d'attente
+// longs (raisonnement du modèle sur Tiers 0-2). Affiche :
+//   • Un gros caractère de spinner (2x plus gros)
+//   • Le temps écoulé en secondes
+//   • Des messages pédagogiques qui tournent toutes les ~7s
+//   • Une barre de progression temporelle (points qui s'ajoutent)
+//   • Le nombre de tokens produits (quand disponible)
+// ============================================================
+const BIG_SPINNER_CHARS = ['◐', '◓', '◑', '◒'];
+
+class BigSpinner {
+  constructor(label) {
+    this.label = label;
+    this.frameIndex = 0;
+    this.interval = null;
+    this.tokenCount = 0;
+    this.charCount = 0;
+    this._startTime = null;
+    this._modelName = null;
+
+    // Messages pédagogiques rotatifs
+    this._waitingMessages = null;
+    this._messageIndex = 0;
+    this._messageRotationMs = 7000;
+    this._lastMessageTime = 0;
+
+    // Streaming
+    this._streamingActive = false;
+    this._streamStartTime = null;
+    this._streamingKind = null;
+    this._lastStatsTime = 0;
+    this._reasoningTokensWindow = [];
+  }
+
+  setWaitingMessages(messages) {
+    if (Array.isArray(messages) && messages.length > 0) {
+      this._waitingMessages = messages;
+      this._messageIndex = 0;
+      this._lastMessageTime = Date.now();
+    } else {
+      this._waitingMessages = null;
+    }
+    return this;
+  }
+
+  _currentWaitingMessage() {
+    if (!this._waitingMessages || this._waitingMessages.length === 0) return '';
+    const now = Date.now();
+    if (now - this._lastMessageTime >= this._messageRotationMs) {
+      this._messageIndex = (this._messageIndex + 1) % this._waitingMessages.length;
+      this._lastMessageTime = now;
+    }
+    return this._waitingMessages[this._messageIndex] || '';
+  }
+
+  // Barre de progression temporelle : plus le temps passe, plus on ajoute
+  // de points. 1 point toutes les 5s, max 20 points.
+  _timeDots() {
+    if (!this._startTime) return '';
+    const elapsedSec = Math.floor((Date.now() - this._startTime) / 1000);
+    const dotCount = Math.min(20, Math.floor(elapsedSec / 5));
+    const fullDots = '●'.repeat(dotCount);
+    const emptyDots = '○'.repeat(20 - dotCount);
+    return `[${fullDots}${emptyDots}]`;
+  }
+
+  _elapsedStr() {
+    if (!this._startTime) return '0s';
+    const sec = Math.floor((Date.now() - this._startTime) / 1000);
+    if (sec < 60) return `${sec}s`;
+    const m = Math.floor(sec / 60);
+    const s = sec % 60;
+    return `${m}m ${s}s`;
+  }
+
+  start() {
+    this._startTime = Date.now();
+    this._lastMessageTime = Date.now();
+    this.interval = setInterval(() => {
+      if (this._streamingActive) return;
+      this.frameIndex++;
+      const bigFrame = BIG_SPINNER_CHARS[this.frameIndex % BIG_SPINNER_CHARS.length];
+      const elapsed = this._elapsedStr();
+      const dots = this._timeDots();
+      const status = this.tokenCount > 0
+        ? `${this.label} (${this.tokenCount} tokens)`
+        : this.label;
+      const msg = this._currentWaitingMessage();
+      const dotLine = `  \x1b[36m${dots}\x1b[0m`;
+      const elapsedLine = `  \x1b[90mTemps ecoule : ${elapsed}\x1b[0m`;
+      // Ligne 1 : gros spinner + label
+      const line1 = `  \x1b[35;1m${bigFrame}\x1b[0m \x1b[1m${status}\x1b[0m`;
+      // Ligne 2 : barre de progression temporelle
+      const line2 = dotLine;
+      // Ligne 3 : temps écoulé
+      const line3 = elapsedLine;
+      // Ligne 4 : message pédagogique (si présent)
+      const line4 = msg ? `  \x1b[33m${msg}\x1b[0m` : '';
+
+      // Efface 4 lignes (3 écrites + 1 ligne vide après le dernier \n)
+      // puis 1 ligne supplémentaire si le message pédagogique est présent
+      process.stdout.write('\r\x1b[K');
+      process.stdout.write('\x1b[1A\r\x1b[K');
+      process.stdout.write('\x1b[1A\r\x1b[K');
+      process.stdout.write('\x1b[1A\r\x1b[K');
+      if (line4) process.stdout.write('\x1b[1A\r\x1b[K');
+
+      process.stdout.write(line1.padEnd(120) + '\n');
+      process.stdout.write(line2.padEnd(120) + '\n');
+      process.stdout.write(line3.padEnd(120) + '\n');
+      if (line4) process.stdout.write(line4.padEnd(120) + '\n');
+    }, 200);
+  }
+
+  updateTokens(tokenCount, charCount) {
+    this.tokenCount = tokenCount;
+    this.charCount = charCount;
+  }
+
+  beginStreaming() {
+    this._streamingActive = true;
+    this._streamStartTime = Date.now();
+    this._lastStatsTime = 0;
+    this._reasoningTokensWindow = [];
+    this._waitingMessages = null;
+    if (this.interval) { clearInterval(this.interval); this.interval = null; }
+    // Efface les 4 lignes du BigSpinner
+    process.stdout.write('\r\x1b[K\x1b[1A\r\x1b[K\x1b[1A\r\x1b[K\x1b[1A\r\x1b[K');
+  }
+
+  appendStreamChunk(text, kind) {
+    if (!text) return;
+    if (this._streamingKind && this._streamingKind !== kind) {
+      process.stdout.write('\n');
+    }
+    this._streamingKind = kind;
+    const kindTag = kind === 'reasoning' ? '💭 ' : (kind === 'content' ? '✍ ' : '');
+    const now = Date.now();
+    if (now - this._lastStatsTime > 2000 || this._lastStatsTime === 0) {
+      this._lastStatsTime = now;
+      const elapsed = (now - this._streamStartTime) / 1000;
+      const tps = elapsed > 0 ? (this.tokenCount / elapsed).toFixed(2) : '0.00';
+      this._reasoningTokensWindow.push({ t: now, count: this.tokenCount });
+      this._reasoningTokensWindow = this._reasoningTokensWindow.filter(e => now - e.t <= 3000);
+      let tps3s = '0.00';
+      if (this._reasoningTokensWindow.length >= 2) {
+        const first = this._reasoningTokensWindow[0];
+        const last = this._reasoningTokensWindow[this._reasoningTokensWindow.length - 1];
+        const dt = (last.t - first.t) / 1000;
+        if (dt > 0) tps3s = ((last.count - first.count) / dt).toFixed(2);
+      }
+      process.stdout.write(`\x1b[90m  ${kindTag}n_decoded = ${this.tokenCount}, tg = ${tps} t/s, tg_3s = ${tps3s} t/s\x1b[0m\n`);
+    }
+    process.stdout.write(text);
+  }
+
+  endStreaming() {
+    if (this._streamingActive) {
+      process.stdout.write('\n');
+      this._streamingActive = false;
+      this._streamingKind = null;
+    }
+  }
+
+  stop(finalLabel) {
+    const hadMessage = Boolean(this._waitingMessages);
+    if (this.interval) clearInterval(this.interval);
+    if (this._streamingActive) {
+      process.stdout.write('\n');
+      this._streamingActive = false;
+      this._streamingKind = null;
+    }
+    // Efface 4 lignes (toujours écrites) + 1 si message présent
+    process.stdout.write('\r\x1b[K\x1b[1A\r\x1b[K\x1b[1A\r\x1b[K\x1b[1A\r\x1b[K');
+    if (hadMessage) process.stdout.write('\x1b[1A\r\x1b[K');
+    this._waitingMessages = null;
+    const elapsed = this._startTime ? ` (${this._elapsedStr()})` : '';
+    process.stdout.write(`\r  \x1b[32m✔\x1b[0m ${finalLabel || this.label}${elapsed} (${this.tokenCount} tokens)`.padEnd(120) + '\n');
+  }
+
+  fail(finalLabel) {
+    const hadMessage = Boolean(this._waitingMessages);
+    if (this.interval) clearInterval(this.interval);
+    if (this._streamingActive) {
+      process.stdout.write('\n');
+      this._streamingActive = false;
+      this._streamingKind = null;
+    }
+    // Efface 4 lignes (toujours écrites) + 1 si message présent
+    process.stdout.write('\r\x1b[K\x1b[1A\r\x1b[K\x1b[1A\r\x1b[K\x1b[1A\r\x1b[K');
+    if (hadMessage) process.stdout.write('\x1b[1A\r\x1b[K');
+    this._waitingMessages = null;
+    process.stdout.write(`\r  \x1b[31m✘\x1b[0m ${finalLabel || this.label}`.padEnd(120) + '\n');
+  }
+}
+
+module.exports = { ProgressBar, Spinner, BigSpinner, letterGrade };

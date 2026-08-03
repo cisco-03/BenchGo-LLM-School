@@ -157,6 +157,28 @@ const WAITING_MESSAGES = [
   "Analyse en cours, merci de ne pas réveiller le modèle..."
 ];
 
+// Messages spécifiques pour le raisonnement long du modèle sur les exercices.
+// Utilisés par BigSpinner pendant les appels API longs (Tiers 0-2, modèles
+// frontières cloud). Phrases informatives qui expliquent ce que le modèle
+// est en train de faire, pour rassurer l'utilisateur.
+const REASONING_WAITING_MESSAGES = [
+  "Le modèle analyse les exercices un par un...",
+  "Raisonnement en cours — le modèle examine chaque question attentivement.",
+  "Le modèle élabore sa stratégie de résolution...",
+  "Consultation des connaissances internes pour trouver la meilleure approche.",
+  "Le modèle structure sa réponse, exercice par exercice...",
+  "Veuillez patienter, le modèle réfléchit à ses solutions.",
+  "Le modèle vérifie la cohérence de ses réponses avant de les soumettre.",
+  "Recherche de la solution optimale dans l'espace des possibles...",
+  "Le modèle compose son code avec soin...",
+  "Évaluation des différentes approches algorithmiques...",
+  "Le modèle peaufine ses implémentations...",
+  "Vérification croisée des résultats pour garantir la justesse...",
+  "Le modèle consolide ses réponses avant envoi...",
+  "Patience — le modèle travaille sur des exercices complexes.",
+  "Analyse approfondie des énoncés en cours..."
+];
+
 function parseCliArgs() {
   const rawArgs = process.argv.slice(2);
   const tierArg = rawArgs.find(a => !a.startsWith('--')) || "all";
@@ -358,6 +380,7 @@ module.exports = {
   PROFILING_WAITING_MESSAGES,
   POST_PROFILING_WAITING_MESSAGES,
   GENERIC_WAITING_MESSAGES,
+  REASONING_WAITING_MESSAGES,
   TEACHER_CONFIG,
   parseCliArgs,
   detectProfileFromModelName,

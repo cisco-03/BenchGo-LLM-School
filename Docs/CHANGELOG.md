@@ -1,5 +1,57 @@
 # CHANGELOG - Carnet de Notes BenchGo
 
+## 2026-08-03 — feat(runner): pénalité temps de raisonnement + nettoyage CLI
+
+### Contexte
+Les modèles frontières cloud mettent 5-20 minutes à raisonner sur les Tiers 0-2
+et ne produisent parfois que quelques centaines de tokens inexploitables. Aucune
+pénalité n'était appliquée, et le CLI affichait un message de "surconsommation
+de tokens" inutile à chaque succès.
+
+### Solution
+- Suppression du message "Surconsommation de tokens : ... Non pénalisé" (ligne 666)
+- Ajout d'une pénalité de 20 points si le modèle dépasse 5 min (300s) pour moins
+  de 500 tokens — le modèle est prévenu dans le prompt via une consigne explicite
+  "ATTENTION — LIMITE DE TEMPS"
+- Nettoyage de l'affichage de l'erreur undici (stderr → logger.warn) pour ne plus
+  polluer la ligne du spinner
+
+### Fichiers modifiés
+- `runner.js` — suppression message verbosité, ajout pénalité temps, nettoyage undici
+
+### Validation
+- `node --check runner.js` → OK
+- `node tests/run-tests.js` → 27/27 passés
+
+## 2026-08-03 — feat(cli): BigSpinner pour les temps d'attente longs (raisonnement modèle)
+
+### Contexte
+Les modèles frontières cloud (OpenRouter) et certains modèles locaux mettent 5-10 minutes
+à raisonner sur les Tiers 0-2. Le spinner standard était trop petit et n'affichait aucune
+information sur ce que le modèle faisait, laissant l'utilisateur sans feedback.
+
+### Solution
+- Nouvelle classe `BigSpinner` dans `progress-bar.js` : affichage large sur 3-4 lignes avec :
+  - Un gros caractère de spinner (◐◓◑◒)
+  - Une barre de progression temporelle (●○) qui s'allonge toutes les 5s
+  - Le temps écoulé (format `Xm Ys`)
+  - Des messages pédagogiques rotatifs expliquant ce que le modèle fait
+  - Le nombre de tokens produits (quand disponible)
+- Nouveau tableau `REASONING_WAITING_MESSAGES` dans `config.js` : 15 phrases informatives
+  sur le raisonnement du modèle (ex: "Le modèle analyse les exercices un par un...")
+- `runner.js` : le spinner des tentatives de classe utilise désormais `BigSpinner` avec
+  les messages de raisonnement activés
+
+### Fichiers modifiés
+- `config.js` — ajout de `REASONING_WAITING_MESSAGES` et export
+- `progress-bar.js` — ajout de la classe `BigSpinner`
+- `runner.js` — import et utilisation de `BigSpinner` dans `runTierAttempt`
+
+### Validation
+- `node --check config.js` → OK
+- `node --check progress-bar.js` → OK
+- `node --check runner.js` → OK
+
 ## 2026-08-03 — fix(runner): retry anti-timeout déclenché sur erreurs HTTP (modèle dépublié)
 
 ### Contexte

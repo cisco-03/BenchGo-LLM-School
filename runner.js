@@ -12,7 +12,9 @@ process.on('uncaughtException', (err) => {
   if (err && /Cannot assign to read only property 'name'/.test(err.message)
       && /socket idle timeout|UndiciError|InformationalError/.test(err.stack || '')) {
     // Bug undici connu — on log et on ignore (le fetch concerné a déjà aborté).
-    console.error('\x1b[33m[undici] Timeout socket intercepté (bug Node.js 24.x) — continuation.\x1b[0m');
+    // On écrit sur une ligne propre (\n) pour ne pas polluer la ligne du spinner.
+    process.stderr.write('\n');
+    logger.warn('[undici] Timeout socket intercepte (bug Node.js 24.x) — continuation.');
     return;
   }
   // Toute autre exception non interceptée → crash normal avec stack.
@@ -24,8 +26,8 @@ const fs = require('fs');
 const path = require('path');
 const readline = require('readline');
 const logger = require('./logger');
-const { PROFILES, CLASSE_NAMES, tierToClasseNum, parseCliArgs, detectProfileFromModelName, fetchModelNameFromLMStudio, fetchModelMetadataFromLMStudio, OPTIONAL_BONUS_PCT, selfProfiling, TEACHER_CONFIG, PROFILING_TIMEOUT_MS, PROFILING_WAITING_MESSAGES, POST_PROFILING_WAITING_MESSAGES } = require('./config');
-const { ProgressBar, Spinner, letterGrade } = require('./progress-bar');
+const { PROFILES, CLASSE_NAMES, tierToClasseNum, parseCliArgs, detectProfileFromModelName, fetchModelNameFromLMStudio, fetchModelMetadataFromLMStudio, OPTIONAL_BONUS_PCT, selfProfiling, TEACHER_CONFIG, PROFILING_TIMEOUT_MS, PROFILING_WAITING_MESSAGES, POST_PROFILING_WAITING_MESSAGES, REASONING_WAITING_MESSAGES } = require('./config');
+const { ProgressBar, Spinner, BigSpinner, letterGrade } = require('./progress-bar');
 const { extractJSON, extractCodeRegex } = require('./parsing-utils');
 const { queryLLM: queryLLMLocal } = require('./lm-studio-client');
 const { queryLLM: queryLLMCloud } = require('./cloud-client');
@@ -410,7 +412,8 @@ async function runTierAttempt({ tierNum, tierData, isMandatory, profileArg, cont
       }
     }
 
-    const spinner = new Spinner(`Classe ${classNum} — Essais restants: ${attemptsLeft} | Score: ${tierScore}/${totalPossiblePoints} | Santé: ${gameState.globalLifeScore}`);
+    const spinner = new BigSpinner(`Classe ${classNum} — Essais restants: ${attemptsLeft} | Score: ${tierScore}/${totalPossiblePoints} | Sante: ${gameState.globalLifeScore}`);
+    spinner.setWaitingMessages(REASONING_WAITING_MESSAGES);
     spinner.start();
 
     // Génération du Prompt Stratégique (Section 4)
@@ -430,6 +433,7 @@ async function runTierAttempt({ tierNum, tierData, isMandatory, profileArg, cont
     dynamicPrompt += `Exemple Markdown attendu :\n### ${availableTasks[0]?.id || 'tache_0a'}\n\`\`\`javascript\nfunction solution() { return true; }\n\`\`\`\n`;
     dynamicPrompt += `Vous pouvez résoudre un ou plusieurs exercices en une seule réponse.\n`;
     dynamicPrompt += `IMPORTANT : Vous devez écrire le code COMPLET et EXÉCUTABLE de chaque fonction (avec son corps complet entre accolades et l'instruction de retour). Ne renvoyez PAS uniquement la signature de la fonction ou des placeholders comme "...".\n`;
+    dynamicPrompt += `ATTENTION — LIMITE DE TEMPS : Vous disposez d'un temps limité pour répondre. Si votre raisonnement dépasse 5 minutes sans produire de code exploitable, une pénalité vous sera appliquée. Soyez concis et efficace dans vos réponses.\n`;
     dynamicPrompt += `Rappel des règles de l'exercice : ` + tierData.prompt;
 
     // Instructions spécifiques au rattrapage (exercices en seconde tentative)
@@ -473,7 +477,7 @@ async function runTierAttempt({ tierNum, tierData, isMandatory, profileArg, cont
       for (let tierAttempt = 1; tierAttempt <= 2; tierAttempt++) {
         const tierAttemptTag = tierAttempt > 1 ? ` (retry anti-timeout, reasoning off)` : '';
         const spinner2 = tierAttempt > 1
-          ? new Spinner(`Classe ${classNum} — Essais restants: ${attemptsLeft} | Score: ${tierScore}/${totalPossiblePoints} | Santé: ${gameState.globalLifeScore}${tierAttemptTag}`)
+          ? new BigSpinner(`Classe ${classNum} — Essais restants: ${attemptsLeft} | Score: ${tierScore}/${totalPossiblePoints} | Sante: ${gameState.globalLifeScore}${tierAttemptTag}`)
           : spinner;
         if (tierAttempt === 1) {
           // spinner déjà démarré plus haut (avant la génération du prompt)
@@ -545,6 +549,19 @@ async function runTierAttempt({ tierNum, tierData, isMandatory, profileArg, cont
       const rawResponse = responseData.content;
       rawResponseAll += '\n\n---\n' + rawResponse;
       if (!responseModelName) responseModelName = responseData.modelName;
+
+      // Pénalité pour raisonnement excessif : si le modèle a pris plus de 5 min
+      // (300s) pour produire moins de 500 tokens, c'est un temps mort anormal.
+      // On applique une pénalité de 20 points pour décourager les raisonnements
+      // interminables qui ne produisent rien d'exploitable.
+      const tokenCount = tierSpinner.tokenCount || 0;
+      if (inferenceTimeMs > 300000 && tokenCount < 500) {
+        const timeoutPenalty = 20;
+        tierScore -= timeoutPenalty;
+        gameState.globalLifeScore -= timeoutPenalty;
+        console.log(`  \x1b[33m⏱ Pénalité pour temps de raisonnement excessif : ${Math.round(inferenceTimeMs/1000)}s pour ${tokenCount} tokens seulement — le modèle a dépassé les limites de temps imparties. -${timeoutPenalty} Points (Score: ${tierScore}, Santé: ${gameState.globalLifeScore})\x1b[0m`);
+        if (gameState.globalLifeScore <= -100) break;
+      }
 
       logger.exercise('response', {
         tierNum,
@@ -658,11 +675,7 @@ async function runTierAttempt({ tierNum, tierData, isMandatory, profileArg, cont
              }
               console.log(`  \x1b[32m✔ Succès ! +${pts}${_bonusTag} Points (Score: ${tierScore}, Santé: ${gameState.globalLifeScore})\x1b[0m`);
 
-             // Verbosité logic
-             if (studentCode && studentCode.length > 0 && rawResponse.length > studentCode.length * 4) {
-                 console.log(`  \x1b[33m⚠️ Surconsommation de tokens : Le modèle a produit une réponse ${Math.round(rawResponse.length/studentCode.length)}x plus longue que la solution attendue (gaspillage de tokens) - Non pénalisé\x1b[0m`);
-             }
-             passedInBatch.push(task.id);
+              passedInBatch.push(task.id);
           } else {
              taskRetryMap[task.id] = (taskRetryMap[task.id] || 0) + 1;
              const retryCount = taskRetryMap[task.id];
