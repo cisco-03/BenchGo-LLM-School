@@ -593,19 +593,12 @@ function buildLeaderboardHTML(entries) {
   const ecoleCounts = {};
   // Filtre Origine : local (LM Studio) vs cloud (OpenRouter, OpenAI, etc.).
   const originCounts = { local: 0, cloud: 0 };
-  // Filtre Provider : compte par provider cloud (openrouter, openai, ollama...)
-  // pour permettre de filtrer finement par provider dans le leaderboard HTML.
-  const providerCounts = {};
   entries.forEach((e, idx) => {
     const rank = idx + 1;
     catCounts[getCategory(e, rank).key]++;
     sizeCounts[getParamSize(e.model).key]++;
     if ((e.globalLifeScore || 0) >= 0) healthCounts.positif++; else healthCounts.negatif++;
     if (e.isCloud) originCounts.cloud++; else originCounts.local++;
-    if (e.isCloud) {
-      const pk = e.provider || 'cloud';
-      providerCounts[pk] = (providerCounts[pk] || 0) + 1;
-    }
     for (const ec of (e.ecoles || [])) {
       ecoleCounts[ec.ecole] = (ecoleCounts[ec.ecole] || 0) + 1;
     }
@@ -1468,10 +1461,6 @@ function buildLeaderboardHTML(entries) {
             <option value="all" selected>Toutes origines (${entries.length})</option>
             <option value="local">🏠 Local · LM Studio (${originCounts.local})</option>
             <option value="cloud">☁️ Cloud · API (${originCounts.cloud})</option>
-            ${Object.keys(providerCounts).sort().map(pk => {
-              const info = providerDisplay(pk, true);
-              return `<option value="prov:${esc(pk)}">${info.icon} ${esc(info.label)} (${providerCounts[pk]})</option>`;
-            }).join('')}
           </select>
         </div>
 
@@ -1730,11 +1719,6 @@ function renderCards() {
     if (activeOrigin !== 'all') {
       if (activeOrigin === 'cloud' && !m.isCloud) continue;
       if (activeOrigin === 'local' && m.isCloud) continue;
-      // Filtre par provider spécifique (valeur "prov:<provider>").
-      if (activeOrigin.indexOf('prov:') === 0) {
-        var provFilter = activeOrigin.slice(5);
-        if ((m.provider || (m.isCloud ? 'cloud' : 'local')) !== provFilter) continue;
-      }
     }
     if (q && m.model.toLowerCase().indexOf(q) === -1 && m.shortName.toLowerCase().indexOf(q) === -1) { skippedSearch++; continue; }
     shown++;

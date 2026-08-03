@@ -1,5 +1,29 @@
 # CHANGELOG - Carnet de Notes BenchGo
 
+## 2026-08-03 — fix(leaderboard): sélecteur Origine simplifié à Local/Cloud uniquement
+
+### Contexte
+Même bug que consolidate-leaderboard.js : le sélecteur "Origine" du leaderboard HTML
+générait une option par provider cloud (ex: "☁️ Cloud" + "🔀 OpenRouter"), créant des
+redondances et doublons. Les providers spécifiques sont déjà affichés via le badge sur
+chaque carte.
+
+### Correction
+- Suppression du bloc d options par provider dans le `<select id="originSelect">`.
+- Suppression de la branche de filtrage `prov:` dans `renderCards()`.
+- Suppression de la variable `providerCounts` devenue inutile.
+- Le sélecteur ne contient plus que : "Toutes origines", "🏠 Local · LM Studio", "☁️ Cloud · API".
+
+### Fichiers modifiés
+- `leaderboard.js` : sélecteur HTML, bloc de filtrage JS inline, comptage providerCounts.
+- `Docs/CHANGELOG.md` : présente entrée.
+
+### Vérifications
+- `node --check leaderboard.js` : OK
+- `node leaderboard.js` : génération sans erreur.
+- `node scripts/check-inline-js.js` : JS inline valide.
+- `node tests/run-tests.js` : 27/27 passés.
+
 ## 2026-08-03 — fix(consolidate-leaderboard): sélecteur Origine simplifié à Local/Cloud uniquement
 
 ### Contexte
