@@ -9769,7 +9769,7 @@
       "model": "ornith-1.0-9b@q5_k_m",
       "shortName": "ornith-1-0-9b-q5-k-m",
       "quantization": "Q5_K_M",
-      "modelUrl": null,
+      "modelUrl": "https://huggingface.co/deepreinforce-ai/Ornith-1.0-9B-GGUF",
       "note": null,
       "publisher": null,
       "provider": null,
@@ -10605,8 +10605,8 @@
       "ecoleNames": [
         "Primaire"
       ],
-      "pseudo": null,
-      "submittedAt": "2026-08-01T12:14:33.538Z",
+      "pseudo": "FlexoDiv",
+      "submittedAt": "2026-08-03T21:59:39.287Z",
       "contributors": 1,
       "allPct": [
         97
@@ -41431,6 +41431,6 @@
       ]
     }
   ],
-  "generatedAt": "2026-08-03T21:54:56.880Z",
+  "generatedAt": "2026-08-03T22:00:09.499Z",
   "totalSubmissions": 44
 }
