@@ -332,7 +332,7 @@ function aggregateLedger(ledger) {
     // déduit depuis l'école "Post-Doctorat" (profil FRONTIER = cloud) puis
     // via l'heuristique detectIsCloudFromLedger (slug :free, profil FRONTIER
     // dans les attempts, format org/model sans quantization).
-    provider: ledger.provider || null,
+    provider: ledger.provider || detectProviderFromLedger(ledger) || null,
     isCloud: (ledger.isCloud === true)
       || (ledger.provider && ledger.provider !== 'local')
       || ecoles.some(e => e.ecole === 'Post-Doctorat')
@@ -367,6 +367,21 @@ function detectIsCloudFromLedger(ledger) {
     }
   }
   return false;
+}
+
+// Heuristique de deduction du provider cloud pour les anciens carnets (antérieurs
+// au commit 40e0da9) qui ne stockent pas le champ provider. On utilise le meme
+// signal fort que detectIsCloudFromLedger : le suffixe OpenRouter ":free" est
+// exclusif aux modeles gratuits d OpenRouter (aucun autre provider ne l utilise).
+// Pour les modeles cloud payants sans suffixe :free et sans champ provider, on
+// ne peut pas deviner le provider de facon fiable -> on renvoie null (affichage
+// du fallback generique "Cloud").
+function detectProviderFromLedger(ledger) {
+  if (ledger.provider) return ledger.provider;
+  const model = (ledger.model || '').trim();
+  if (!model) return null;
+  if (/:free$/i.test(model)) return 'openrouter';
+  return null;
 }
 
 // Labels et métadonnées d'affichage par provider, pour le badge d'origine.

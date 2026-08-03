@@ -1,5 +1,35 @@
 # CHANGELOG - Carnet de Notes BenchGo
 
+## 2026-08-03 — fix(leaderboard): déduction du provider pour les anciens carnets cloud sans champ provider
+
+### Contexte
+Les carnets antérieurs au commit 40e0da9 ne stockent pas les champs `provider`/`isCloud`.
+L heuristique `detectIsCloudFromLedger` détectait bien le statut cloud (slug `:free` ou
+profil FRONTIER) mais laissait `provider: null`, donc `providerDisplay` affichait le
+fallback générique "☁️ Cloud" au lieu du vrai provider (ex: "🔀 OpenRouter"). Résultat :
+dans le classement CLI/HTML, `inclusionai/ling-3.0-flash:free` affichait "☁️ Cloud" tandis
+que `nvidia/nemotron-3-ultra-550b-a55b:free` (carnet récent) affichait "🔀 OpenRouter",
+alors qu ils proviennent tous deux d OpenRouter.
+
+### Correction
+- Ajout de `detectProviderFromLedger(ledger)` dans `leaderboard.js` : déduit le provider
+  depuis le slug `:free` (suffixe exclusif à OpenRouter). Renvoie `null` si indéterminable
+  (modèle cloud payant sans champ provider).
+- `aggregateLedger` utilise maintenant `ledger.provider || detectProviderFromLedger(ledger)`
+  au lieu de `ledger.provider || null`, ce qui propage le provider déduit vers le CLI
+  (`printCloudLeaderboard`, `printLeaderboardSection`) et le HTML (`modelsData` injecté
+  dans le JS inline navigateur).
+
+### Fichiers modifiés
+- `leaderboard.js` : nouvelle fonction `detectProviderFromLedger`, `aggregateLedger` mis à jour.
+- `Docs/CHANGELOG.md` : présente entrée.
+
+### Vérifications
+- `node --check leaderboard.js` : OK
+- `node leaderboard.js --cloud` : les 3 modèles cloud affichent désormais "openrouter" / "🔀 OpenRouter".
+- `node scripts/check-inline-js.js` : JS inline valide (classement.html + community-leaderboard.html).
+- `node tests/run-tests.js` : 27/27 passés.
+
 ## 2026-08-02 — feat(exercices): raisonnement Cloud + edge cases Local, inspires de CRUXEval et IFEval
 
 ### Contexte
