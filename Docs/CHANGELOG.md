@@ -1,5 +1,228 @@
 # CHANGELOG - Carnet de Notes BenchGo
 
+## 2026-08-04 — feat(agent NotebookLM): bandeau proéminent + modale de renseignement sur les modèles
+
+### Contexte
+BenchGo s'appuie sur un **agent NotebookLM** (Google) qui a ingéré l'ensemble
+des comptes rendus de tests de tous les modèles. C'est l'outil qui donne toute
+sa puissance à l'application : l'utilisateur peut poser des questions en
+langage naturel ("Lequel est le plus rapide en Q4 sous 3B ?", "Pourquoi X a
+échoué à DOCTORAT ?") et obtenir des réponses synthétiques. Jusqu'ici ce lien
+n'était mentionné nulle part dans l'interface — il fallait le connaître.
+
+### Approche
+- **NotebookLM bloque l'iframe** (`X-Frame-Options: DENY` + CSP `trusted-types`) :
+  impossible d'afficher le notebook dans une iframe embarquée (local ou en
+  ligne). Un proxy local serait fragile (SPA Google avec nonces CSP rotatifs)
+  et casserait le rendu.
+- Solution retenue : un **bandeau proéminent** dans l'en-tête des deux
+  classements (`leaderboard.js` + `consolidate-leaderboard.js`) + une **modale**
+  d'explication + une **bulle d'info périodique**.
+- Le lien s'ouvre dans un nouvel onglet (`target="_blank" rel="noopener"`).
+
+### Affichage
+- **Bandeau `.nb-banner`** placé juste sous le `<header class="hero">` : icône
+  🧠, titre "Agent NotebookLM", description courte, bouton "?" (ouvre la
+  modale) et bouton "🧠 Ouvrir l'agent" (lien direct).
+- **Modale `.nb-modal`** : présente les 4 usages (comparer, recommander,
+  analyser un échec, explications) + bouton CTA principal.
+- **Bulle `.nb-tip`** : s'affiche après 12 s à la 1re visite, puis toutes les
+  ~5 min tant que l'agent n'a pas été ouvert. Message court :
+  "Besoin de renseignements sur un modèle ? Contactez l'agent NotebookLM 🧠".
+- Mémorisation : `sessionStorage` (1re bulle) + `localStorage` (agent déjà
+  ouvert → plus de bulles).
+- Concerne les deux fichiers : `leaderboard.js` (classement local) ET
+  `consolidate-leaderboard.js` (classement communautaire en ligne GitHub Pages).
+
+### Fichiers touchés
+- `leaderboard.js` : constante `NOTEBOOKLM_URL`, CSS `.nb-*`, bandeau HTML,
+  modale HTML, JS inline (openNbModal/closeNbModal/bulle périodique).
+- `consolidate-leaderboard.js` : idem.
+- `Docs/CHANGELOG.md`, `AGENTS.md`, `Memories-BenchGo/README.md` :
+  documentation de la nouvelle fonctionnalité.
+
+### Lien
+L'agent NotebookLM public : `https://notebook.google.com/notebook/bd6cf971-b22a-460a-9892-419d1db02f9e`
+(changé en une seule constante `NOTEBOOKLM_URL` en haut de chaque fichier
+pour faciliter les futures mises à jour).
+
+## 2026-08-04 — feat(tarif cloud): estimation du coût $/€ des modèles cloud payants dans le classement
+
+### Contexte
+Sur le leaderboard local (`leaderboard.js`) ET le classement communautaire
+(`consolidate-leaderboard.js`), il n'y avait aucune information sur le coût
+d'utilisation des modèles cloud payants. L'utilisateur souhaitait voir,
+pour chaque modèle cloud, une **estimation** du tarif en dollars et euros,
+par école puis en cumul total, pour repérer les modèles les plus économiques.
+Les modèles locaux (LM Studio) ne sont pas concernés (gratuits, sur la machine).
+
+### Approche
+- **Estimation des tokens** : le code compte déjà les tokens produits
+  (completion). On a ajouté une estimation des **prompt tokens** à partir de
+  la longueur des prompts envoyés (≈ chars/4), cumulée par école dans le carnet
+  de scores. Ce sont des **approximations** (le vrai tokenizer diffère), pas
+  des valeurs exactes.
+- **Tarification** : nouveau module `pricing.js` hybride :
+  1. fetch asynchrone de l'endpoint public OpenRouter `/api/v1/models`
+     (champ `pricing.prompt`/`pricing.completion`, en $/token), avec cache
+     disque 24h (`.pricing-cache.json`) pour l'offline/CI.
+  2. fallback sur une table locale `PRICING_FALLBACK` pour les providers non
+     couverts par OpenRouter (OpenAI direct, Anthropic, Groq, DeepSeek,
+     Together, Mistral, Cohere).
+  3. fallback générique par provider si le modèle précis est inconnu.
+- Rétrocompatible avec les anciens carnets sans `promptTokens`/
+  `completionTokens` : on estime `promptTokens ≈ 3×completion`.
+
+### Affichage
+- **Carte du classement** : mini-stat « Coût ≈ » (USD) pour les modèles cloud
+  payants dont le prix est connu.
+- **Modale détaillée** : statBox « Coût ≈ » ($ / €) + nouvelle section
+  « 💰 Tarif estimé par école » avec tableau (tokens prompt/completion,
+  coût $ et € par école + ligne TOTAL) et mention explicite « estimation
+  indicative — non exacte ».
+- **Export Markdown** : colonne « Coût ≈ » dans le tableau principal + ligne
+  « Coût estimé » par modèle + colonne Coût par école (uniquement pour les
+  modèles cloud).
+- Aucune colonne/tarif pour les modèles locaux ou gratuits (prix = 0).
+
+### Fichiers modifiés
+- `pricing.js` (nouveau) — module de tarification hybride (OpenRouter + fallback local).
+- `runner.js` — cumul `tierPromptChars`/`schoolPromptChars`, injection de
+  `promptTokens`/`completionTokens` dans le résultat d'école sauvegardé au carnet.
+- `leaderboard.js` — agrégation des tokens estimés, calcul du coût via
+  `pricing.estimateModelCost()`, sérialisation vers le client, mini-stat Coût,
+  section tarif par école dans la modale, colonne Coût dans le Markdown.
+- `consolidate-leaderboard.js` — idem (agrégation, sérialisation, mini-stat,
+  section tarif par école dans la modale).
+
+### Résultat obtenu
+- `node leaderboard.js` et `node consolidate-leaderboard.js` génèrent les
+  classements avec le coût estimé pour les modèles cloud payants.
+- `node scripts/check-inline-js.js` : OK (JS inline valide).
+- `node tests/run-tests.js` : 27/27 passés.
+- Mention « estimation » présente partout (tooltip, titre, note de bas).
+
+### Notes
+- Les valeurs sont des **estimations**, pas des montants exacts. Le coût réel
+  dépend du tokenizer exact du modèle, du volume de raisonnement (thinking)
+  et de l'évolution des prix des providers.
+- Le taux de conversion $→€ est fixé à 0.92 (ajustable dans `pricing.js`).
+- `pricing.js` ne fait aucun appel bloquant : le rechargement OpenRouter est
+  asynchrone et le cache disque sert de repli immédiat.
+
+---
+
+## 2026-08-04 — fix(leaderboard+consolidate): sélecteur Origine maître (cloud vs local étanches)
+
+### Contexte
+Dans le classement local (`leaderboard.js`, 46 modèles) ET le classement
+communautaire (`consolidate-leaderboard.js`, 39 modèles), les sélecteurs
+Taille, Santé, École et Catégorie affichaient des compteurs statiques calculés
+sur l'ensemble des modèles (mélange local + cloud). Quand on cliquait sur
+« ☁️ Cloud · API », les cartes se filtraient bien mais les compteurs des autres
+sélecteurs restaient à 46 (ou 39) au lieu de ne compter que les modèles cloud
+frontière (4 ou 2). Les deux univers (local LM Studio et cloud API) étaient
+mélangés dans les compteurs alors qu'ils n'ont rien à voir.
+
+### Solution
+Le sélecteur **Origine** devient le sélecteur **maître** dans les deux fichiers :
+- Tous les compteurs (Taille, Santé, École, Catégorie, Origine) sont désormais
+  calculés **côté client** dans `renderCards()` à partir d'un ensemble
+  « contexte » = modèles filtrés par l'origine active (+ recherche), sans les
+  autres filtres. Chaque select affiche donc uniquement les modèles de
+  l'univers sélectionné (cloud ou local).
+- Les compteurs statiques côté serveur (`catCounts`, `sizeCounts`,
+  `healthCounts`, `originCounts`) ont été supprimés : les options HTML sont
+  écrites sans compteur, et `renderCards()` les remplit dynamiquement à chaque
+  changement.
+- Changer d'origine réinitialise les autres filtres (Catégorie, Taille, Santé,
+  École) à « all » pour éviter les combinaisons vides (ex: taille « petit »
+  inexistante chez les cloud).
+
+### Fichiers modifiés
+- `leaderboard.js` :
+  - Compteurs statiques serveur supprimés (lignes 587-605)
+  - Options HTML sans compteurs (catSelect, sizeSelect, healthSelect,
+    ecoleSelect, originSelect)
+  - `renderCards()` : nouveau bloc calculant `_originCtx`, `_sizeCounts`,
+    `_healthCounts`, `_ecoleCountsDyn`, `_originCounts` et mettant à jour
+    dynamiquement les `textContent` de toutes les options
+  - `addEventListener` du originSelect : réinitialise les autres filtres à
+    « all » puis appelle `renderCards()`
+- `consolidate-leaderboard.js` : mêmes modifications (structure identique)
+
+### Validation
+- `node --check leaderboard.js` / `node --check consolidate-leaderboard.js` → OK
+- `node leaderboard.js` / `node consolidate-leaderboard.js` → HTML régénérés
+- `node scripts/check-inline-js.js` → JS inline valide pour les 2 HTML
+- `node tests/run-tests.js` → 27/27 tests passés
+- Test fonctionnel (mock DOM) : origine=cloud → Taille (4), Santé (4),
+  École (4), Catégorie (4) au lieu de (46) ; community → (2) au lieu de (39)
+
+## 2026-08-04 — fix(leaderboard): bannière mise à jour impossible à fermer (race condition)
+
+### Contexte
+Dans le classement HTML (`classement.html`), la bannière « Mise à jour disponible »
+ne disparaissait pas quand on cliquait sur ✕ : elle restait affichée ou réapparaissait
+immédiatement.
+
+### Cause racine
+Race condition entre le `fetch` asynchrone vers l'API GitHub et le clic utilisateur.
+`showBanner()` était appelée quand le fetch se terminait, et forçait `banner.hidden = false`
+sans vérifier si l'utilisateur avait déjà masqué la bannière entre-temps.
+
+### Solution
+`showBanner()` lit maintenant le cache `dismissedAt` avant d'afficher la bannière.
+Si l'utilisateur a masqué l'avis récemment (< 1h, TTL du cache), la bannière reste
+cachée même si le fetch asynchrone se termine après le clic.
+
+### Fichiers modifiés
+- `leaderboard.js` — `showBanner()` : vérification `dismissedAt` avant `banner.hidden = false`
+
+### Validation
+- `node --check leaderboard.js` → OK
+- `node leaderboard.js` → classement.html régénéré
+- `node scripts/check-inline-js.js` → JS inline valide
+
+## 2026-08-04 — feat(leaderboard): commande --lmstudio pour le suivi complet LM Studio
+
+### Contexte
+Après un batch de nuit, le classement général affiche la liste des modèles cloud
+testés ET la liste des modèles LM Studio NON testés, mais il manquait une vue
+unifiée combinant les deux : les modèles LM Studio testés (triés chronologiquement,
+tests de la nuit en tête) ET les modèles LM Studio restant à tester. Sans cette
+vue, impossible de classer correctement les modèles pour générer les rapports et
+alimenter NotebookLM.
+
+### Solution
+Nouvelle commande CLI `node leaderboard.js --lmstudio` (alias `--lmstudio-status`).
+Vue unifiée en deux blocs :
+- **Bloc 1 — Modèles testés** : tous les modèles LM Studio ayant été exécutés,
+  tri strictement chronologique (du test le plus récent au plus ancien). Colonnes :
+  #, Modèle, Dernier Test (date/heure), Niveau (note + écoles), Score, Statut.
+- **Bloc 2 — Modèles non testés** : tous les modèles détectés dans LM Studio
+  mais absents des carnets, avec statut [NON TESTÉ] (réutilise printUntestedLmStudioModels).
+
+### Fichiers modifiés
+- `leaderboard.js` — `getLmStudioTestedEntries()`, `printLmStudioStatus()`,
+  branche `--lmstudio` / `--lmstudio-status` dans `main()`, export module.
+- `cli-help.js` — flag ajouté dans la section CLASSEMENT.
+- `Docs/Manuel-utilisateur/02-commandes.md` — commande documentée.
+- `AGENTS.md` — commande ajoutée dans la table des commandes essentielles.
+- `Memories-BenchGo/README.md` — section "Référence rapide des commandes" ajoutée
+  et mention du rapport LM Studio dans la section Leaderboard.
+
+### Résultat
+- `node leaderboard.js --lmstudio` → Bloc 1 (42 modèles testés, tri chrono) +
+  Bloc 2 (3 modèles non testés) dans une vue unifiée.
+- Aucun modèle cloud n'apparaît.
+
+### Validation
+- `node --check leaderboard.js` → OK
+- `node --check cli-help.js` → OK
+- `node leaderboard.js --lmstudio` → affichage correct (2 blocs)
+- `node tests/run-tests.js` → 27/27 passes
+
 ## 2026-08-03 — fix(leaderboard+consolidate): categories dynamiques + badge origine unifie
 
 ### Contexte

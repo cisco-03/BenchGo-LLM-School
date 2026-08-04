@@ -367,6 +367,12 @@ async function runTierAttempt({ tierNum, tierData, isMandatory, profileArg, cont
   // Permet de calculer la vitesse (tokens/s) par école puis globalement.
   let tierElapsedMs = 0;
   let tierTokens = 0;
+  // --- Estimation des tokens pour le tarif cloud (tâche 2026-08-04) ---
+  // On cumule la longueur (en caractères) des prompts envoyés au modèle pour
+  // estimer les promptTokens (≈ chars/4). Les completionTokens = tokens
+  // produits (déjà comptés via spinner.tokenCount). Permet d'afficher un
+  // coût ESTIMATIF ($/€) dans le leaderboard pour les modèles cloud payants.
+  let tierPromptChars = 0;
 
   // The total possible points based on randomized values
   const totalPossiblePoints = availableTasks.reduce((sum, t) => sum + t.points, 0);
@@ -396,6 +402,7 @@ async function runTierAttempt({ tierNum, tierData, isMandatory, profileArg, cont
         helpSpinner.stop(`Classe ${classNum} — Réponse du modèle reçue`);
         tierElapsedMs += Math.round(performance.now() - helpStart);
         tierTokens += (helpSpinner.tokenCount || 0);
+        tierPromptChars += (helpPrompt || '').length;
         const helpContent = (helpResponse && helpResponse.content) || '';
         const wantsHelp = /AIDE_OUI/i.test(helpContent) ||
           (!/AIDE_NON/i.test(helpContent) && /\b(?:oui|yes)\b/i.test(helpContent));
@@ -546,6 +553,7 @@ async function runTierAttempt({ tierNum, tierData, isMandatory, profileArg, cont
       // de l'appel courant, qui a reçu updateTokens pendant le streaming).
       tierElapsedMs += inferenceTimeMs;
       tierTokens += (tierSpinner.tokenCount || 0);
+      tierPromptChars += (dynamicPrompt || '').length;
       const rawResponse = responseData.content;
       rawResponseAll += '\n\n---\n' + rawResponse;
       if (!responseModelName) responseModelName = responseData.modelName;
@@ -984,6 +992,7 @@ async function runTierAttempt({ tierNum, tierData, isMandatory, profileArg, cont
     teacherCorrections: taskTeacherCorrections,
     tierElapsedMs,
     tierTokens,
+    tierPromptChars,
     carnetEntries
   };
 }
@@ -1878,6 +1887,8 @@ async function main() {
   const schoolStartMs = Date.now();
   let schoolTokens = 0;
   let schoolElapsedMs = 0;
+  // Cumul des chars de prompt pour estimer les promptTokens (tarif cloud).
+  let schoolPromptChars = 0;
 
   // --- Détection de doublon (modèle déjà testé sur cette école) ---
   // Vérifie le carnet de scores persistant : si une entrée existe déjà pour ce
@@ -1983,6 +1994,7 @@ async function main() {
       // Cumul chronométrie école (tokens + durée d'inférence du tier).
       schoolTokens += (bestResult.tierTokens || 0);
       schoolElapsedMs += (bestResult.tierElapsedMs || 0);
+      schoolPromptChars += (bestResult.tierPromptChars || 0);
       if (isMandatory) {
         globalScore.mandatoryPassed += bestResult.tierPassedCount;
         globalScore.mandatoryTotal += bestResult.tierTotalCount;
@@ -2152,6 +2164,7 @@ async function main() {
           // s'ajoutent à ceux du run principal de l'école).
           schoolTokens += (retryResult.tierTokens || 0);
           schoolElapsedMs += (retryResult.tierElapsedMs || 0);
+          schoolPromptChars += (retryResult.tierPromptChars || 0);
           if (retryResult.evalResults && retryResult.evalResults.length > 0) {
             for (const er of retryResult.evalResults) er._tierNum = tierNum;
             allEvalResults = allEvalResults.concat(retryResult.evalResults);
@@ -2514,7 +2527,14 @@ async function main() {
       tokens: schoolTokens,
       tokensPerSecond: schoolElapsedMs > 0
         ? Math.round((schoolTokens / (schoolElapsedMs / 1000)) * 100) / 100
-        : 0
+        : 0,
+      // --- Estimation tokens pour le tarif cloud (tâche 2026-08-04) ---
+      // promptTokens estimé depuis la longueur des prompts (≈ chars/4).
+      // completionTokens = tokens produits (content + reasoning). Ce sont des
+      // ESTIMATIONS (le vrai tokenizer diffère) servant à afficher un coût
+      // APPROXIMATIF ($/€) pour les modèles cloud payants dans le classement.
+      promptTokens: Math.round(schoolPromptChars / 4),
+      completionTokens: schoolTokens
     };
     const bilanMd = scoreLedger.saveAndBuildBilan(shortName, effectiveModel, ecoleResult, resolvedQuantization || null, isCloudMode ? resolvedProvider : 'local');
     if (bilanMd) globalReport += bilanMd;

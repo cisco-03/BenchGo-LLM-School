@@ -16,12 +16,21 @@ OS : Windows, PowerShell 5.1. Projet Node.js 18+ **sans `package.json`** (module
 | Tests unitaires | `node tests/run-tests.js` |
 | Classement HTML/MD | `node leaderboard.js` |
 | Classement modèles cloud uniquement | `node leaderboard.js --cloud` |
+| Rapport LM Studio (testés + non testés) | `node leaderboard.js --lmstudio` |
 | Marquer un carnet comme cloud | `node leaderboard.js --mark-cloud=<shortName>` |
 | Serveur classement interactif | `node leaderboard.js --serve` |
+| Serveur classement (port custom) | `node leaderboard.js --serve --port=3940` |
 | Classement communautaire en ligne (GitHub Pages) | `gh workflow run consolidate.yml -R cisco-03/BenchGo-LLM-School` puis `gh run watch -R cisco-03/BenchGo-LLM-School` |
 | Aide CLI | `node runner.js --help` |
+| Version | `node runner.js version` |
 | Dernier run & état | `node runner.js status` |
+| Liste des presets | `node runner.js --list-presets` |
+| Effacer une clé API mémorisée | `node runner.js --forget-key=<provider>` |
+| Lister les clés API mémorisées | `node runner.js --list-keys` |
+| Liste LM Studio triée par score local | `node night-batch.js --list-only` |
+| Isoler/désisoler un modèle LM Studio | `node night-batch.js --isoler=<numéro>` |
 | Vérifier syntaxe JS | `node --check <fichier>.js` |
+| Vérifier JS inline des classements | `node scripts/check-inline-js.js` |
 | Vérifier tiers | `node verify_tiers.js` |
 
 Options fréquentes : `--profile=`, `--provider=`, `--model=`, `--quantization=`, `--force` (non-TTY), `--dry-run`, `--preset=`, `--save-preset=`, `--hybrid`.
@@ -55,7 +64,7 @@ Tous les modules sont à la racine (pas de sous-dossiers pour les sources). Les 
 - **`lm-studio-client.js`** — client local LM Studio (streaming SSE).
 - **`teacher-client.js`** — professeur IA (correction via OpenRouter Free Router).
 - **`score-ledger.js`** — carnets persistants dans `Export-Rapports/.carnet/<shortName>.json`.
-- **`leaderboard.js`** — génération HTML/MD, serveur web (3622 lignes, JS inline côté client).
+- **`leaderboard.js`** — génération HTML/MD, serveur web (~4950 lignes, JS inline côté client).
 - **`tier-loader.js`** — charge les tiers JSON avec fallback : `FRONTIER → DOCTORAT → EXPERT → STANDARD → LIGHT`.
 - **`task-evaluator.js`** — moteur d'évaluation (exec/pattern/custom). Cache LRU intégré.
 - **`secrets.js`** — clés API en mémoire vive (session), jamais sur disque.
@@ -64,6 +73,7 @@ Tous les modules sont à la racine (pas de sous-dossiers pour les sources). Les 
 - **`http-middleware.js`** — timeout + retry backoff + fallback pour appels HTTP.
 - **`health-sentinels.js`** — vérifications sanitaires.
 - **`hybrid-mode.js`** — auto-soumission GitHub avec file d'attente persistante, seuil à 50%.
+- **`pricing.js`** — tarification cloud estimée (tâche 2026-08-04) : fetch OpenRouter `/api/v1/models` + table fallback locale, calcule coût $/€ des modèles cloud payants d'après les tokens consommés. Cache disque 24h (`.pricing-cache.json`).
 - **`consolidate-leaderboard.js`** — génère le HTML du classement communautaire. Lancé en local pour tester (`node consolidate-leaderboard.js` → `gh-pages-output/`), et en CI via GitHub Actions pour déployer sur `gh-pages`. Le workflow `consolidate.yml` lit les soumissions, régénère le HTML, commit sur `gh-pages`, GitHub Pages déploie.
 - **`tiers/`** — 18 fichiers `tier{N}_{profile}.json`.
 
@@ -130,6 +140,78 @@ Bug undici : `TypeError: Cannot assign to read only property 'name' of object 'E
 
 ### Écoles séquentielles
 Si modèle > 3B paramètres, le runner peut enchaîner LIGHT puis STANDARD dans le même run (même clé, auto-profilage partagé, santé réinitialisée).
+
+### Tarif cloud estimé (pricing.js — tâche 2026-08-04)
+
+**Fichiers touchés :** `pricing.js` (nouveau), `runner.js`, `leaderboard.js`, `consolidate-leaderboard.js`, `Docs/CHANGELOG.md`, `AGENTS.md`, `Memories-BenchGo/README.md`.
+
+**Principe :** `pricing.js` est un module autonome qui calcule un coût ESTIMATIF ($/€) pour les modèles cloud payants. Il ne fait **aucun appel bloquant** : le fetch OpenRouter `/api/v1/models` est asynchrone, le cache disque `.pricing-cache.json` (TTL 24h) sert de repli immédiat. Si le cache est périmé et le fetch échoue, la table locale `PRICING_FALLBACK` prend le relais.
+
+**Source des prix :**
+1. OpenRouter `/api/v1/models` (endpoint public, sans clé) → champ `pricing.prompt` / `pricing.completion` en $/token, converti en $/1M tokens.
+2. Table locale `PRICING_FALLBACK` dans `pricing.js` (OpenAI, Anthropic, Groq, DeepSeek, Together, Mistral, Cohere).
+3. Fallback générique par provider (moyenne approximative).
+
+**Estimation des tokens :**
+- `completionTokens` = `schoolTokens` (chunks SSE streamés, ≈ tokens produits).
+- `promptTokens` = `Math.round(schoolPromptChars / 4)` (chars du prompt / 4).
+- `schoolPromptChars` est cumulé dans `runner.js` via `tierPromptChars` (ajouté dans `runTierAttempt` : `dynamicPrompt.length` + `helpPrompt.length`), puis `schoolPromptChars` dans `runSchool`.
+- Les champs `promptTokens`/`completionTokens` sont stockés dans le carnet via `saveResult` (le `result` est poussé tel quel dans `entry.attempts`).
+- **Rétrocompatibilité :** si les champs sont absents (anciens carnets), `estimateModelCost()` estime `promptTokens ≈ 3 × completionTokens` (ratio moyen prompts longs / réponses courtes).
+
+**Affichage (leaderboard.js + consolidate-leaderboard.js) :**
+- Mini-stat « Coût ≈ » (USD) sur la carte → condition : `m.isCloud && m.cost`.
+- StatBox « Coût ≈ » ($ / €) dans la modale → idem.
+- Section « 💰 Tarif estimé par école » dans la modale → tableau tokens prompt/completion + $/€ par école + TOTAL.
+- Colonne « Coût ≈ » dans l'export Markdown.
+- **Toujours** mentionner « estimation indicative — non exacte » (tooltip, titre, note de bas).
+- Les modèles locaux (`isCloud === false`) ou sans prix connu (`cost === null`) n'affichent rien.
+
+**Données sérialisées vers le client :**
+- `cost` : `{ usd, eur, perEcole: [{ ecole, usd, eur }], isEstimate: true, pricePerMTok: { prompt, completion } }` ou `null`.
+- `promptTokens` / `completionTokens` : totaux cumulés.
+- Chaque école a `promptTokens` / `completionTokens` individuels.
+
+**Pour modifier/ajouter/corriger :**
+1. **Ajouter un provider** : éditer `PRICING_FALLBACK` dans `pricing.js` (format `{ prompt: $/1M, completion: $/1M }`).
+2. **Changer le taux $→€** : modifier `USD_TO_EUR` dans `pricing.js` (côté serveur) et `USD_TO_EUR_JS` dans le JS inline de `leaderboard.js` et `consolidate-leaderboard.js`.
+3. **Améliorer l'estimation des prompt tokens** : modifier le calcul `Math.round(schoolPromptChars / 4)` dans `runner.js` (ligne ~2520) ou le ratio de fallback `promptTokens ≈ 3×completion` dans `pricing.js` (`estimateModelCost`).
+4. **Capturer les vrais tokens API** (prompt_tokens/completion_tokens depuis le chunk `usage` du streaming) : modifier `cloud-client.js` pour activer `stream_options: { include_usage: true }` et parser le dernier chunk, puis stocker dans le résultat. C'est le seul moyen d'avoir des valeurs exactes.
+5. **Changer l'affichage** : modifier le JS inline dans `leaderboard.js` (fonctions `openModal`, `renderCards`, `buildLeaderboardMarkdown`) et `consolidate-leaderboard.js` (idem). Les fonctions `fmtCost`/`fmtCostEur` sont définies dans le JS inline des deux fichiers.
+6. **Tester** : `node leaderboard.js --cloud` puis `node scripts/check-inline-js.js` pour valider le JS inline. Vérifier qu'un modèle cloud payant affiche bien le coût (ex: `openai/gpt-4o-mini`).
+
+**Pièges :**
+- `pricing.estimateModelCost()` attend un objet avec `{ model, provider, isCloud, tokens, promptTokens, completionTokens, ecoles: [{ ecole, promptTokens, completionTokens, tokens }] }`. Si `ecoles` est vide ou sans tokens, le coût sera 0.
+- Le cache disque `.pricing-cache.json` peut être corrompu (écriture interrompue) → `pricing.js` le détecte et recharge depuis OpenRouter.
+- En CI (GitHub Actions), le fetch OpenRouter peut échouer (réseau) → le cache disque du dépôt doit être à jour. Si aucun cache et pas de réseau, `estimateModelCost()` retourne `null` (pas de coût affiché, pas de crash).
+- Les fonctions `fmtCost`/`fmtCostEur` existent en **deux exemplaires** : une fois côté serveur dans `pricing.js` (exportées), une fois côté client dans le JS inline de `leaderboard.js` et `consolidate-leaderboard.js`. Les modifier dans un seul fichier ne suffit pas.
+- Le taux `USD_TO_EUR_JS` (0.92) est dupliqué dans le JS inline des deux fichiers leaderboard. Si on change le taux serveur, il faut aussi changer les deux copies client.
+
+### Agent NotebookLM (tâche 2026-08-04)
+
+**Fichiers touchés :** `leaderboard.js`, `consolidate-leaderboard.js`, `Docs/CHANGELOG.md`, `AGENTS.md`, `Memories-BenchGo/README.md`.
+
+**Principe :** BenchGo s'appuie sur un agent **NotebookLM** (Google) qui a ingéré tous les comptes rendus de tests. C'est l'outil de renseignement central de l'application. Le lien est intégré dans les en-têtes des deux classements via un bandeau proéminent + modale + bulle d'info périodique.
+
+**Lien public :** `https://notebook.google.com/notebook/bd6cf971-b22a-460a-9892-419d1db02f9e`. Défini en une seule constante `NOTEBOOKLM_URL` en haut de `leaderboard.js` et `consolidate-leaderboard.js`. Pour le changer, modifier ces deux constantes.
+
+**Pourquoi pas d'iframe :** NotebookLM renvoie `X-Frame-Options: DENY` + CSP `trusted-types` → l'intégration en iframe est bloquée par Google (public ou non). Un proxy local serait fragile (SPA Google avec nonces CSP rotatifs). Solution retenue : ouverture dans un nouvel onglet (`target="_blank" rel="noopener"`).
+
+**Affichage :**
+- `.nb-banner` : bandeau sous l'en-tête `<header class="hero">` (icône 🧠 + titre + bouton "?" + bouton "Ouvrir l'agent").
+- `.nb-modal` (`#nbModal`) : modale d'explication des 4 usages + CTA principal.
+- `.nb-tip` (`#nbTip`) : bulle d'info fixe en bas, affichée après 12 s puis toutes les ~5 min.
+- JS inline : `openNbModal()`/`closeNbModal()` + bulle périodique + mémorisation `sessionStorage`/`localStorage`.
+
+**Pour modifier :**
+1. **Changer le lien NotebookLM** : éditer la constante `NOTEBOOKLM_URL` dans les deux fichiers (`leaderboard.js` + `consolidate-leaderboard.js`).
+2. **Changer le texte du bandeau/modale** : éditer le HTML dans le template literal (section `<div class="nb-banner">` et `<div id="nbModal">` des deux fichiers).
+3. **Changer le timing de la bulle** : modifier les valeurs `12000` (1re apparition) et `300000` (récurrence) dans le JS inline des deux fichiers.
+4. **Tester** : `node leaderboard.js` puis `node scripts/check-inline-js.js`.
+
+**Pièges :**
+- Le JS inline des deux fichiers est dupliqué (constante `NOTEBOOKLM_URL`, CSS `.nb-*`, HTML du bandeau/modale, fonctions `openNbModal`/`closeNbModal`). Modifier un seul fichier ne suffit pas.
+- `leaderboard.js` et `consolidate-leaderboard.js` ont des styles d'insertion légèrement différents (template literal `${NOTEBOOKLM_URL}` côté serveur, pas de backticks littéraux dans le JS inline de consolidate — contrainte existante).
 
 ---
 

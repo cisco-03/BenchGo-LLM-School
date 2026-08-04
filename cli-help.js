@@ -90,6 +90,11 @@ ${Object.entries(PROFILES).map(([k, p]) => `  \x1b[1m${k.padEnd(10)}\x1b[0m ${p.
 \x1b[1mCLASSEMENT\x1b[0m
   \x1b[1mnode leaderboard.js\x1b[0m            Génère classement.html + classement.md.
   \x1b[1mnode leaderboard.js --serve\x1b[0m     Lance le serveur interactif (port 3939 par défaut).
+  \x1b[1mnode leaderboard.js --cloud\x1b[0m     Classement des modèles frontière cloud uniquement.
+  \x1b[1mnode leaderboard.js --lmstudio\x1b[0m
+                           Rapport de suivi complet LM Studio : modèles testés
+                           (tri chrono, tests de la nuit en tête) + modèles non
+                           testés [NON TESTÉ] dans une vue unifiée.
   \x1b[1mnode night-batch.js\x1b[0m             Mode nuit : enchaîne plusieurs modèles.
 
 \x1b[90mDocumentation : Docs/Manuel-utilisateur/ (chapitres 01 à 07)\x1b[0m

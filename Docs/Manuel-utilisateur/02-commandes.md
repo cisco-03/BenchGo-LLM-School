@@ -159,6 +159,16 @@ node leaderboard.js
 
 # Mode interactif (serveur web sur http://localhost:3939)
 node leaderboard.js --serve
+
+# Classement des modèles frontière cloud uniquement (API distantes)
+node leaderboard.js --cloud
+
+# Rapport de suivi complet LM Studio (testés + non testés)
+# Vue unifiée : Bloc 1 = modèles testés (tri chrono, tests de la nuit en tête)
+#              Bloc 2 = modèles non testés [NON TESTÉ]
+node leaderboard.js --lmstudio
+# ou
+node leaderboard.js --lmstudio-status
 ```
 
 À chaque génération, le CLI affiche aussi la **liste des modèles LM Studio non

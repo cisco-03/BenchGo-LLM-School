@@ -11,6 +11,11 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+// Tarification cloud (tâche 2026-08-04) : estimation du coût $/€ des modèles
+// cloud payants d'après les tokens consommés (estimation) et les prix OpenRouter.
+const pricing = require('./pricing');
+
+const NOTEBOOKLM_URL = 'https://notebook.google.com/notebook/bd6cf971-b22a-460a-9892-419d1db02f9e';
 
 const SUBMISSIONS_DIR = path.join(__dirname, 'submissions');
 const OUTPUT_DIR = path.join(__dirname, 'gh-pages-output');
@@ -162,6 +167,9 @@ function aggregateCarnet(carnet) {
       elapsedMs: best.elapsedMs || 0,
       tokens: best.tokens || 0,
       tokensPerSecond: best.tokensPerSecond || 0,
+      // --- Estimation tokens pour le tarif cloud (tâche 2026-08-04) ---
+      promptTokens: best.promptTokens || 0,
+      completionTokens: best.completionTokens || best.tokens || 0,
       tiers: (best.tiers || []).map(t => ({
         tierNum: t.tierNum,
         tierTitle: t.tierTitle || '',
@@ -211,12 +219,19 @@ function aggregateCarnet(carnet) {
     mandatoryPassed, mandatoryTotal, mandatoryPct,
     helpCount, retriedCount,
     tokens: totalTokens, elapsedMs: totalElapsedMs, wallMs: totalWallMs, tokensPerSecond,
+    // --- Tarif cloud estimé (tâche 2026-08-04) ---
+    promptTokens: ecoles.reduce((s, e) => s + (e.promptTokens || 0), 0),
+    completionTokens: ecoles.reduce((s, e) => s + (e.completionTokens || 0), 0),
     ecoleCount,
     ecoles,
     ecoleNames: ecoles.map(e => e.ecole),
     pseudo: null,
     submittedAt: null
   };
+  // Calcul du coût via pricing.js (estimation). Pour les anciens carnets sans
+  // tokens détaillés, estimateModelCost gère le fallback (promptTokens ≈ 3×completion).
+  result.cost = pricing.estimateModelCost(result) || null;
+  return result;
 }
 
 // Normalise un nom de modèle pour la clé de dédoublonnage.
@@ -351,20 +366,11 @@ function buildConsolidatedHTML(entries) {
     return h + 'h' + String(min).padStart(2, '0') + 'm';
   }
 
-  // Compteurs par catégorie pour les filtres
-  const catCounts = { top: 0, recommande: 0, moyenne: 0, rattrapage: 0, catastrophe: 0 }
-  const sizeCounts = { petit: 0, standard: 0, expert: 0, doctorat: 0, inconnu: 0 }
-  const healthCounts = { positif: 0, negatif: 0 }
+  // Liste des écoles disponibles (pour générer les options du select École).
+  // Les compteurs sont désormais calculés côté client (renderCards) en fonction
+  // du sélecteur Origine actif : on ne garde ici que la liste triée des noms.
   const ecoleCounts = {}
-  // Filtre Origine : départage les modèles locaux (LM Studio) des modèles cloud
-  // (frontière API : OpenRouter, OpenAI, etc.). Les deux catégories n'ont rien à
-  // voir et ne doivent pas être mélangées dans le classement communautaire.
-  const originCounts = { local: 0, cloud: 0 }
-  entries.forEach((e, idx) => {
-    catCounts[getCategory(e.pct, idx + 1).key]++
-    sizeCounts[getParamSize(e.model).key]++
-    if ((e.globalLifeScore || 0) >= 0) healthCounts.positif++; else healthCounts.negatif++
-    if (e.isCloud) originCounts.cloud++; else originCounts.local++
+  entries.forEach((e) => {
     for (const ec of (e.ecoles || [])) {
       ecoleCounts[ec.ecole] = (ecoleCounts[ec.ecole] || 0) + 1
     }
@@ -451,6 +457,10 @@ function buildConsolidatedHTML(entries) {
       helpCount: e.helpCount || 0, retriedCount: e.retriedCount || 0,
       elapsedMs: e.elapsedMs || 0, wallMs: e.wallMs || 0,
       tokens: e.tokens || 0, tokensPerSecond: e.tokensPerSecond || 0,
+      // --- Tarif cloud estimé (tâche 2026-08-04) ---
+      cost: e.cost || null,
+      promptTokens: e.promptTokens || 0,
+      completionTokens: e.completionTokens || 0,
       contributors: e.contributors || 1, pseudo: e.pseudo,
       submittedAt: e.submittedAt || null,
       cat, paramSize: psize, verdict, args,
@@ -462,6 +472,7 @@ function buildConsolidatedHTML(entries) {
         calibrationIndex: ec.calibrationIndex != null ? ec.calibrationIndex : null,
         date: ec.date || '—',
         elapsedMs: ec.elapsedMs || 0, tokens: ec.tokens || 0, tokensPerSecond: ec.tokensPerSecond || 0,
+        promptTokens: ec.promptTokens || 0, completionTokens: ec.completionTokens || 0,
         attempts: [{
           n: 1, date: ec.date || '—', time: null, score: ec.score || 0, max: ec.max || 0,
           pct: ec.pct || 0, grade: gradeLetter(ec.pct || 0), optionalBonus: ec.optionalBonus || 0,
@@ -486,7 +497,7 @@ function buildConsolidatedHTML(entries) {
     }
   })))
 
-  const ecoleOptions = Object.keys(ecoleCounts).sort().map(ec => `<option value="${esc(ec)}">🏫 ${esc(ec)} (${ecoleCounts[ec]})</option>`).join('')
+  const ecoleOptions = Object.keys(ecoleCounts).sort().map(ec => `<option value="${esc(ec)}">🏫 ${esc(ec)}</option>`).join('')
 
   return `<!DOCTYPE html>
 <html lang="fr">
@@ -585,6 +596,82 @@ function buildConsolidatedHTML(entries) {
     -webkit-text-fill-color: transparent; letter-spacing: -0.02em;
   }
   header.hero .subtitle { color: var(--text-muted); margin-top: 6px; font-size: var(--fs-small); }
+
+  /* Bannière NotebookLM — agent IA de renseignement sur les modèles */
+  .nb-banner {
+    margin-block: var(--space-s) var(--space-m);
+    border: 1px solid rgba(188, 140, 255, 0.45);
+    border-radius: var(--r-md);
+    background: linear-gradient(135deg, rgba(188, 140, 255, 0.14), rgba(88, 166, 255, 0.06));
+    box-shadow: 0 2px 16px rgba(188, 140, 255, 0.20), var(--shadow-card);
+  }
+  .nb-banner-inner {
+    display: flex; align-items: center; gap: var(--space-s);
+    padding: var(--space-s) var(--space-m);
+  }
+  .nb-icon {
+    flex: 0 0 auto; width: 42px; height: 42px; border-radius: var(--r-md);
+    background: linear-gradient(135deg, var(--purple), var(--accent));
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.4em; box-shadow: 0 0 0 1px rgba(188,140,255,0.4), 0 4px 12px rgba(188,140,255,0.35);
+  }
+  .nb-content { flex: 1 1 auto; min-width: 0; }
+  .nb-title {
+    font-weight: 800; font-size: var(--fs-h3); color: var(--purple);
+    margin-bottom: 2px; letter-spacing: 0.2px;
+  }
+  .nb-desc { color: var(--text); font-size: var(--fs-small); line-height: 1.4; }
+  .nb-desc b { color: var(--accent); }
+  .nb-actions { flex: 0 0 auto; display: flex; gap: var(--space-xs); align-items: center; }
+  .nb-btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 8px 16px; border-radius: var(--r-pill);
+    border: 1px solid var(--purple); background: var(--purple);
+    color: #fff; font-weight: 700; font-size: var(--fs-small);
+    cursor: pointer; transition: all 0.18s ease; text-decoration: none;
+  }
+  .nb-btn:hover { background: var(--accent); border-color: var(--accent); transform: translateY(-1px); }
+  .nb-btn-info {
+    width: 26px; height: 26px; padding: 0; border-radius: 50%;
+    border: 1px solid var(--border); background: var(--bg-3);
+    color: var(--text-muted); font-weight: 700; font-size: 13px;
+    cursor: pointer; transition: all 0.18s ease;
+  }
+  .nb-btn-info:hover { color: var(--purple); border-color: var(--purple); }
+  .nb-tip {
+    position: fixed; bottom: 70px; left: 50%; transform: translateX(-50%) translateY(8px);
+    padding: 10px 18px; border-radius: var(--r-pill);
+    background: var(--purple); color: #fff; font-size: var(--fs-small); font-weight: 600;
+    box-shadow: var(--shadow-elev); opacity: 0; pointer-events: none;
+    transition: opacity 0.4s ease, transform 0.4s ease; z-index: 9998;
+  }
+  .nb-tip.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  .nb-tip::after {
+    content: ''; position: absolute; bottom: -6px; left: 50%; transform: translateX(-50%);
+    border: 6px solid transparent; border-top-color: var(--purple); border-bottom: 0;
+  }
+  @media (max-width: 560px) {
+    .nb-banner-inner { flex-wrap: wrap; }
+    .nb-actions { width: 100%; justify-content: flex-end; }
+  }
+
+  /* Modale NotebookLM */
+  .nb-modal { max-width: 640px; }
+  .nb-modal .modal-head { background: linear-gradient(135deg, rgba(188,140,255,0.18), rgba(88,166,255,0.10)); }
+  .nb-modal h2 { color: var(--purple) !important; }
+  .nb-modal-body { padding: var(--space-l); }
+  .nb-modal-body p { color: var(--text); font-size: var(--fs-small); line-height: 1.6; margin-bottom: var(--space-s); }
+  .nb-features { list-style: none; padding: 0; margin: var(--space-s) 0; display: grid; gap: var(--space-xs); }
+  .nb-features li {
+    display: flex; align-items: flex-start; gap: 10px;
+    padding: var(--space-xs) var(--space-s); border-radius: var(--r-sm);
+    background: var(--bg-3); font-size: var(--fs-small); color: var(--text);
+  }
+  .nb-features li .f-icon { flex: 0 0 auto; font-size: 1.1em; }
+  .nb-features li b { color: var(--accent); }
+  .nb-modal-cta {
+    display: flex; gap: var(--space-s); margin-top: var(--space-m); flex-wrap: wrap;
+  }
 
   .toolbar {
     display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-xs);
@@ -960,39 +1047,54 @@ function buildConsolidatedHTML(entries) {
     <p class="subtitle">Généré le ${esc(generatedAt)} — ${entries.length} modèle${entries.length > 1 ? 's' : ''} classé${entries.length > 1 ? 's' : ''} · ${totalSubmissions} soumission${totalSubmissions > 1 ? 's' : ''} de la communauté</p>
   </header>
 
+  <div class="nb-banner">
+    <div class="nb-banner-inner">
+      <div class="nb-icon" title="Agent NotebookLM">🧠</div>
+      <div class="nb-content">
+        <div class="nb-title">Agent NotebookLM</div>
+        <div class="nb-desc">Posez vos questions sur les modèles testés à l'<b>agent IA</b> — analyses, comparaisons, recommandations.</div>
+      </div>
+      <div class="nb-actions">
+        <button class="nb-btn-info" id="nbInfoBtn" title="Qu'est-ce que c'est ?">?</button>
+        <a class="nb-btn" href="${NOTEBOOKLM_URL}" target="_blank" rel="noopener noreferrer">🧠 Ouvrir l'agent</a>
+      </div>
+    </div>
+  </div>
+  <div class="nb-tip" id="nbTip">Besoin de renseignements sur un modèle ? Contactez l'agent NotebookLM 🧠</div>
+
   <div class="sticky-bar" id="stickyBar">
     <div class="toolbar" style="justify-content: space-between;">
       <div class="toolbar" style="margin-block: 0;">
         <label class="filter-label" for="catSelect">Catégorie</label>
         <div class="select-wrap">
           <select class="select" id="catSelect">
-            <option value="all" selected>Tous (${entries.length})</option>
-            <option value="top">🏆 Top du top (${catCounts.top})</option>
-            <option value="recommande">✅ Recommandés (${catCounts.recommande})</option>
-            <option value="moyenne">📊 Dans la moyenne (${catCounts.moyenne})</option>
-            <option value="rattrapage">⚠️ En rattrapage (${catCounts.rattrapage})</option>
-            <option value="catastrophe">💥 Échec total (${catCounts.catastrophe})</option>
+            <option value="all" selected>Tous</option>
+            <option value="top">🏆 Top du top</option>
+            <option value="recommande">✅ Recommandés</option>
+            <option value="moyenne">📊 Dans la moyenne</option>
+            <option value="rattrapage">⚠️ En rattrapage</option>
+            <option value="catastrophe">💥 Échec total</option>
           </select>
         </div>
 
         <label class="filter-label" for="sizeSelect" style="margin-left: var(--space-xs);">Taille</label>
         <div class="select-wrap">
           <select class="select" id="sizeSelect">
-            <option value="all" selected>Toutes tailles (${entries.length})</option>
-            <option value="petit">🐱 &lt; 3B (${sizeCounts.petit})</option>
-            <option value="standard">📦 3B–14B (${sizeCounts.standard})</option>
-            <option value="expert">🎓 14B–30B (${sizeCounts.expert})</option>
-            <option value="doctorat">🧠 &gt; 30B (${sizeCounts.doctorat})</option>
-            <option value="inconnu">❓ Inconnue (${sizeCounts.inconnu})</option>
+            <option value="all" selected>Toutes tailles</option>
+            <option value="petit">🐱 &lt; 3B</option>
+            <option value="standard">📦 3B–14B</option>
+            <option value="expert">🎓 14B–30B</option>
+            <option value="doctorat">🧠 &gt; 30B</option>
+            <option value="inconnu">❓ Inconnue</option>
           </select>
         </div>
 
         <label class="filter-label" for="healthSelect" style="margin-left: var(--space-xs);">Santé</label>
         <div class="select-wrap">
           <select class="select" id="healthSelect">
-            <option value="all" selected>Toutes (${entries.length})</option>
-            <option value="positif">💚 Saine (≥ 0 PV) (${healthCounts.positif})</option>
-            <option value="negatif">❤️‍🩹 En difficulté (&lt; 0 PV) (${healthCounts.negatif})</option>
+            <option value="all" selected>Toutes</option>
+            <option value="positif">💚 Saine (≥ 0 PV)</option>
+            <option value="negatif">❤️‍🩹 En difficulté (&lt; 0 PV)</option>
           </select>
         </div>
 
@@ -1007,9 +1109,9 @@ function buildConsolidatedHTML(entries) {
         <label class="filter-label" for="originSelect" style="margin-left: var(--space-xs);">Origine</label>
         <div class="select-wrap">
           <select class="select" id="originSelect">
-            <option value="all" selected>Toutes origines (${entries.length})</option>
-            <option value="local">🏠 Local · LM Studio (${originCounts.local})</option>
-            <option value="cloud">☁️ Cloud · API (${originCounts.cloud})</option>
+            <option value="all" selected>Toutes origines</option>
+            <option value="local">🏠 Local · LM Studio</option>
+            <option value="cloud">☁️ Cloud · API</option>
           </select>
         </div>
       </div>
@@ -1051,10 +1153,74 @@ function buildConsolidatedHTML(entries) {
   </div>
 </div>
 
+<div id="nbModal" class="modal-overlay">
+  <div class="modal nb-modal">
+    <div class="modal-head">
+      <div class="rank" style="background:linear-gradient(135deg,var(--purple),var(--accent))">🧠</div>
+      <div class="title">
+        <h2>Agent NotebookLM</h2>
+        <div class="tags"><span class="cat-tag">Renseignement sur les modèles</span></div>
+      </div>
+      <button class="modal-close" onclick="closeNbModal()" aria-label="Fermer">×</button>
+    </div>
+    <div class="modal-body nb-modal-body">
+      <p>L'<b>Agent NotebookLM</b> est un assistant IA Google qui connaît l'intégralité des résultats BenchGo. Posez-lui vos questions en langage naturel :</p>
+      <ul class="nb-features">
+        <li><span class="f-icon">📊</span><span><b>Comparer des modèles</b> — "Lequel est le plus rapide en Q4 sous 3B ?"</span></li>
+        <li><span class="f-icon">🎯</span><span><b>Recommandations</b> — "Quel modèle recommandes-tu pour la programmation ?"</span></li>
+        <li><span class="f-icon">🔍</span><span><b>Analyser un échec</b> — "Pourquoi X a échoué à l'école DOCTORAT ?"</span></li>
+        <li><span class="f-icon">💡</span><span><b>Explications</b> — synthèse des comptes rendus de chaque test</span></li>
+      </ul>
+      <p>Cliquez sur <b>"Ouvrir l'agent"</b> : il s'ouvre dans un nouvel onglet. Aucune installation, gratuit, accessible à tous.</p>
+      <div class="nb-modal-cta">
+        <a class="nb-btn" href="${NOTEBOOKLM_URL}" target="_blank" rel="noopener noreferrer">🧠 Ouvrir l'agent NotebookLM</a>
+        <button class="nb-btn-info" style="width:auto;padding:8px 16px;border-radius:var(--r-pill)" onclick="closeNbModal()">Fermer</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div id="toast" class="toast"></div>
 
 <script>
 var MODELS = ${modelsJson};
+
+// --- Agent NotebookLM (bandeau + modale + bulle d'info périodique) ---
+var NB_SEEN_KEY = 'benchgo_nb_seen';
+var NB_TIP = document.getElementById('nbTip');
+var NB_MODAL = document.getElementById('nbModal');
+function openNbModal() { NB_MODAL.classList.add('show'); document.body.style.overflow = 'hidden'; }
+function closeNbModal() { NB_MODAL.classList.remove('show'); document.body.style.overflow = ''; }
+document.getElementById('nbInfoBtn').addEventListener('click', openNbModal);
+NB_MODAL.addEventListener('click', function(e) { if (e.target === NB_MODAL) closeNbModal(); });
+document.addEventListener('keydown', function(e) { if (e.key === 'Escape' && NB_MODAL.classList.contains('show')) closeNbModal(); });
+// Bulle d'info périodique : s'affiche après 12s la 1re visite, puis toutes les ~5 min
+// si l'utilisateur n'a jamais cliqué. Disparait après 6 s.
+(function nbBubble() {
+  try {
+    var seen = sessionStorage.getItem(NB_SEEN_KEY);
+    if (seen) return;
+  } catch (e) {}
+  setTimeout(function() {
+    try {
+      NB_TIP.classList.add('show');
+      setTimeout(function() { NB_TIP.classList.remove('show'); }, 6000);
+      try { sessionStorage.setItem(NB_SEEN_KEY, '1'); } catch (e) {}
+    } catch (e) {}
+  }, 12000);
+})();
+// Re-affiche la bulle toutes les 5 min tant que l'agent n'a pas été ouvert
+setInterval(function() {
+  try { if (localStorage.getItem('benchgo_nb_opened')) return; } catch (e) {}
+  try {
+    NB_TIP.classList.add('show');
+    setTimeout(function() { NB_TIP.classList.remove('show'); }, 6000);
+  } catch (e) {}
+}, 300000);
+// Marque l'agent comme "ouvert" quand on clique sur le bouton principal
+document.querySelectorAll('.nb-btn[href]').forEach(function(a) {
+  a.addEventListener('click', function() { try { localStorage.setItem('benchgo_nb_opened', '1'); } catch (e) {} });
+});
 
 // --- Suivi de position (flèches ▲▼=) via localStorage ---
 // Le classement communautaire est un site statique (GitHub Pages) : impossible
@@ -1127,6 +1293,24 @@ function tpsColor(tps) {
 function esc(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
+// --- Formatage du tarif cloud estimé (tâche 2026-08-04) ---
+// IMPORTANT : valeurs estimatives (non exactes).
+var USD_TO_EUR_JS = 0.92;
+function fmtCost(usd) {
+  if (usd == null || !isFinite(usd)) return '—';
+  if (usd === 0) return '$0.00';
+  if (usd < 0.01) return '$' + usd.toFixed(4);
+  if (usd < 1) return '$' + usd.toFixed(3);
+  return '$' + usd.toFixed(2);
+}
+function fmtCostEur(usd) {
+  if (usd == null || !isFinite(usd)) return '—';
+  var eur = usd * USD_TO_EUR_JS;
+  if (eur === 0) return '€0.00';
+  if (eur < 0.01) return '€' + eur.toFixed(4);
+  if (eur < 1) return '€' + eur.toFixed(3);
+  return '€' + eur.toFixed(2);
+}
 
 // getCategory (replique de la version Node ligne 299) : calcule la categorie
 // d un modele en fonction de son rang (position) dans l ensemble affiche.
@@ -1197,6 +1381,49 @@ function renderCards() {
     _dynamicCats[dCat.key] = (_dynamicCats[dCat.key] || 0) + 1;
   }
 
+  // --- Sélecteur Origine = MAÎTRE ---
+  // L origine détermine le sous-ensemble de modèles visible : quand on choisit
+  // Cloud API, TOUS les autres sélecteurs (Taille, Santé, École, Catégorie) ne
+  // doivent compter que les modèles cloud frontière, jamais les locaux, et
+  // inversement pour Local. Les deux univers sont étanches.
+  // On calcule donc un ensemble « contexte » = modèles filtrés par l origine
+  // active (+ recherche), SANS appliquer les autres filtres, pour pouvoir
+  // remplir les compteurs de chaque select indépendamment.
+  var _originCtx = [];
+  for (var oi = 0; oi < MODELS.length; oi++) {
+    var om = MODELS[oi];
+    if (activeOrigin !== 'all') {
+      if (activeOrigin === 'cloud' && !om.isCloud) continue;
+      if (activeOrigin === 'local' && om.isCloud) continue;
+    }
+    if (q && om.model.toLowerCase().indexOf(q) === -1 && om.shortName.toLowerCase().indexOf(q) === -1) continue;
+    _originCtx.push(om);
+  }
+
+  // Compteurs Taille / Santé / École calculés sur le contexte d origine.
+  var _sizeCounts = { petit: 0, standard: 0, expert: 0, doctorat: 0, inconnu: 0 };
+  var _healthCounts = { positif: 0, negatif: 0 };
+  var _ecoleCountsDyn = {};
+  for (var ci2 = 0; ci2 < _originCtx.length; ci2++) {
+    var cm = _originCtx[ci2];
+    var cmSizeKey = (cm.paramSize && cm.paramSize.key) ? cm.paramSize.key : 'inconnu';
+    _sizeCounts[cmSizeKey] = (_sizeCounts[cmSizeKey] || 0) + 1;
+    if ((cm.globalLifeScore || 0) >= 0) _healthCounts.positif++; else _healthCounts.negatif++;
+    for (var ei = 0; ei < (cm.ecoleNames || []).length; ei++) {
+      var ecName = cm.ecoleNames[ei];
+      _ecoleCountsDyn[ecName] = (_ecoleCountsDyn[ecName] || 0) + 1;
+    }
+  }
+
+  // Compteurs Origine : calculés sur l ensemble complet (filtré par recherche
+  // uniquement) pour montrer le total local vs cloud disponibles.
+  var _originCounts = { local: 0, cloud: 0 };
+  for (var ri = 0; ri < MODELS.length; ri++) {
+    var rm = MODELS[ri];
+    if (q && rm.model.toLowerCase().indexOf(q) === -1 && rm.shortName.toLowerCase().indexOf(q) === -1) continue;
+    if (rm.isCloud) _originCounts.cloud++; else _originCounts.local++;
+  }
+
   // Mise a jour dynamique des compteurs affiches dans le select categorie.
   // Les labels de base sont stockes en dur (sans compteurs) pour eviter toute
   // accumulation de compteurs (44 (44 (4...)) quelque soit le nombre d appels.
@@ -1215,6 +1442,76 @@ function renderCards() {
     var val = opt.value;
     var cnt = val === 'all' ? _catCountTotal : (_dynamicCats[val] || 0);
     opt.textContent = _catLabels[val] + ' (' + cnt + ')';
+  }
+
+  // Mise a jour dynamique du select Taille (compteurs limites au contexte
+  // d origine active).
+  var _sizeLabels = {
+    all: 'Toutes tailles',
+    petit: '🐱 < 3B',
+    standard: '📦 3B–14B',
+    expert: '🎓 14B–30B',
+    doctorat: '🧠 > 30B',
+    inconnu: '❓ Inconnue'
+  };
+  var _sizeOpts = sizeSel.querySelectorAll('option');
+  for (var si = 0; si < _sizeOpts.length; si++) {
+    var sOpt = _sizeOpts[si];
+    var sVal = sOpt.value;
+    var sCnt = sVal === 'all' ? _originCtx.length : (_sizeCounts[sVal] || 0);
+    sOpt.textContent = _sizeLabels[sVal] + ' (' + sCnt + ')';
+  }
+
+  // Mise a jour dynamique du select Santé (compteurs limites au contexte
+  // d origine active).
+  if (healthSel) {
+    var _healthLabels = {
+      all: 'Toutes',
+      positif: '💚 Saine (≥ 0 PV)',
+      negatif: '❤️\u200d🩹 En difficulté (< 0 PV)'
+    };
+    var _healthOpts = healthSel.querySelectorAll('option');
+    for (var hi = 0; hi < _healthOpts.length; hi++) {
+      var hOpt = _healthOpts[hi];
+      var hVal = hOpt.value;
+      var hCnt = hVal === 'all' ? _originCtx.length : (_healthCounts[hVal] || 0);
+      hOpt.textContent = _healthLabels[hVal] + ' (' + hCnt + ')';
+    }
+  }
+
+  // Mise a jour dynamique du select École (compteurs limites au contexte
+  // d origine active). Les écoles sans modèle dans le contexte sont marquées
+  // (0) mais conservées pour éviter de perdre l option selectionnee.
+  if (ecoleSel) {
+    var _ecoleOpts = ecoleSel.querySelectorAll('option');
+    for (var ei2 = 0; ei2 < _ecoleOpts.length; ei2++) {
+      var eOpt = _ecoleOpts[ei2];
+      var eVal = eOpt.value;
+      if (eVal === 'all') {
+        eOpt.textContent = 'Toutes écoles (' + _originCtx.length + ')';
+      } else {
+        var eCnt = _ecoleCountsDyn[eVal] || 0;
+        // Préfixe emoji + nom d école déjà présent, on rajoute juste le compteur.
+        eOpt.textContent = '🏫 ' + eVal + ' (' + eCnt + ')';
+      }
+    }
+  }
+
+  // Mise a jour dynamique du select Origine (compteurs globaux local vs cloud).
+  if (originSel) {
+    var _originLabels = {
+      all: 'Toutes origines',
+      local: '🏠 Local · LM Studio',
+      cloud: '☁️ Cloud · API'
+    };
+    var _originOpts = originSel.querySelectorAll('option');
+    var _originTotal = _originCounts.local + _originCounts.cloud;
+    for (var oi2 = 0; oi2 < _originOpts.length; oi2++) {
+      var oOpt = _originOpts[oi2];
+      var oVal = oOpt.value;
+      var oCnt = oVal === 'all' ? _originTotal : (_originCounts[oVal] || 0);
+      oOpt.textContent = _originLabels[oVal] + ' (' + oCnt + ')';
+    }
   }
 
   for (var fi = 0; fi < _preFiltered.length; fi++) {
@@ -1267,6 +1564,9 @@ function renderCards() {
           '<div class="mini-stat"><span class="lbl">Oblig.</span><span class="val">' + (m.mandatoryTotal > 0 ? m.mandatoryPct + '%' : '—') + '</span></div>' +
           '<div class="mini-stat"><span class="lbl">Aide/Rat.</span><span class="val" style="font-size:var(--fs-tiny)">' + esc(helpStr) + '</span></div>' +
           '<div class="mini-stat"><span class="lbl">' + vitesseLbl + '</span><span class="val" style="color:' + tpsC + ';font-size:var(--fs-tiny)">' + esc(vitesseVal) + '</span></div>' +
+          (m.isCloud && m.cost
+            ? '<div class="mini-stat" title="Coût estimé (non exact) — voir détail dans la modale"><span class="lbl">Coût ≈</span><span class="val" style="color:#bc8cff;font-size:var(--fs-tiny)">' + fmtCost(m.cost.usd) + '</span></div>'
+            : '') +
         '</div>' +
         '<div class="card-actions">' +
           '<button class="kebab" onclick="event.stopPropagation();toggleKebab(this,' + i + ')" aria-label="Actions">⋮</button>' +
@@ -1335,6 +1635,10 @@ function openModal(idx) {
     body += statBox('Tokens', m.tokens > 0 ? m.tokens : '—');
     body += statBox('Vitesse', m.tokensPerSecond > 0 ? '<span style="color:' + tpsColor(m.tokensPerSecond) + '">' + m.tokensPerSecond + ' t/s</span>' : '—');
     body += statBox('Temps réel', fmtDurJS(m.wallMs));
+  }
+  // --- Tarif cloud estimé (tâche 2026-08-04) ---
+  if (m.isCloud && m.cost) {
+    body += statBox('Coût ≈', '<span style="color:#bc8cff" title="Estimation indicative (non exacte). Le coût réel dépend du tokenizer et des tarifs en vigueur.">' + fmtCost(m.cost.usd) + ' / ' + fmtCostEur(m.cost.eur) + '</span>');
   }
   body += '</div>';
 
@@ -1429,6 +1733,39 @@ function openModal(idx) {
     }
   }
   body += '</tbody></table>';
+
+  // --- Tarif cloud estimé par école (tâche 2026-08-04) ---
+  if (m.isCloud && m.cost) {
+    body += '<h3>💰 Tarif estimé par école <span style="font-size:var(--fs-small);color:var(--text-dim);font-weight:400">(estimation indicative — non exacte)</span></h3>';
+    body += '<table class="ecoles-table"><thead><tr>' +
+      '<th>École</th><th class="num">Tokens prompt ≈</th><th class="num">Tokens compl. ≈</th>' +
+      '<th class="num">Coût ≈ ($)</th><th class="num">Coût ≈ (€)</th>' +
+      '</tr></thead><tbody>';
+    for (var e of m.ecoles) {
+      var ecCost = null;
+      if (m.cost.pricePerMTok && (e.promptTokens || e.completionTokens)) {
+        var p = e.promptTokens || 0;
+        var c = e.completionTokens || 0;
+        ecCost = (p / 1e6) * m.cost.pricePerMTok.prompt + (c / 1e6) * m.cost.pricePerMTok.completion;
+      }
+      body += '<tr>' +
+        '<td>' + esc(e.ecole) + '</td>' +
+        '<td class="num">' + (e.promptTokens || 0).toLocaleString('fr-FR') + '</td>' +
+        '<td class="num">' + (e.completionTokens || 0).toLocaleString('fr-FR') + '</td>' +
+        '<td class="num">' + (ecCost != null ? fmtCost(ecCost) : '—') + '</td>' +
+        '<td class="num">' + (ecCost != null ? fmtCostEur(ecCost) : '—') + '</td>' +
+        '</tr>';
+    }
+    body += '<tr style="font-weight:700;border-top:2px solid var(--border)">' +
+      '<td>TOTAL</td>' +
+      '<td class="num">' + (m.promptTokens || 0).toLocaleString('fr-FR') + '</td>' +
+      '<td class="num">' + (m.completionTokens || 0).toLocaleString('fr-FR') + '</td>' +
+      '<td class="num">' + fmtCost(m.cost.usd) + '</td>' +
+      '<td class="num">' + fmtCostEur(m.cost.eur) + '</td>' +
+      '</tr>';
+    body += '</tbody></table>';
+    body += '<p style="color:var(--text-dim);font-size:var(--fs-small);margin-top:var(--space-s);">⚠ Estimation indicative basée sur les tokens produits (approximation) et les tarifs publics OpenRouter ou une table locale de fallback. Le coût réel varie selon le tokenizer exact du modèle, le volume de raisonnement et l\\'évolution des prix.</p>';
+  }
 
   body += '<h3>📋 Rapport intégral (comportement & raisonnement)</h3>';
   body += '<div class="report-actions">';
@@ -1567,7 +1904,17 @@ if (_healthSel) _healthSel.addEventListener('change', renderCards);
 var _ecoleSel = document.getElementById('ecoleSelect');
 if (_ecoleSel) _ecoleSel.addEventListener('change', renderCards);
 var _originSel = document.getElementById('originSelect');
-if (_originSel) _originSel.addEventListener('change', renderCards);
+if (_originSel) _originSel.addEventListener('change', function() {
+  // Origine = sélecteur maître : changer d origine réinitialise les autres
+  // filtres (Catégorie, Taille, Santé, École) à « all » pour éviter les
+  // combinaisons vides (ex: taille « petit » inexistante chez les cloud).
+  // L utilisateur repart de l ensemble complet du nouvel univers et affine.
+  var _c = document.getElementById('catSelect'); if (_c) _c.value = 'all';
+  var _s = document.getElementById('sizeSelect'); if (_s) _s.value = 'all';
+  var _h = document.getElementById('healthSelect'); if (_h) _h.value = 'all';
+  var _e = document.getElementById('ecoleSelect'); if (_e) _e.value = 'all';
+  renderCards();
+});
 
 document.addEventListener('click', function(e) {
   var openMenu = document.querySelector('.kebab-menu.show');

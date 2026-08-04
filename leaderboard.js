@@ -43,7 +43,11 @@ const cliTable = require('./cli-table');
 const communitySync = require('./community-sync');
 const updateChecker = require('./update-checker');
 const nightBatch = require('./night-batch');
+const NOTEBOOKLM_URL = 'https://notebook.google.com/notebook/bd6cf971-b22a-460a-9892-419d1db02f9e';
 const dashboard = require('./dashboard');
+// Tarification cloud (tâche 2026-08-04) : estimation du coût $/€ des modèles
+// cloud payants d'après les tokens consommés (estimation) et les prix OpenRouter.
+const pricing = require('./pricing');
 
 const LEDGER_DIR = path.join(__dirname, 'Export-Rapports', '.carnet');
 const EXPORT_DIR = path.join(__dirname, 'Export-Rapports');
@@ -276,7 +280,12 @@ function aggregateLedger(ledger) {
       elapsedMs: best.elapsedMs || 0,
       wallMs: best.wallMs || 0,
       tokens: best.tokens || 0,
-      tokensPerSecond: best.tokensPerSecond || 0
+      tokensPerSecond: best.tokensPerSecond || 0,
+      // --- Estimation tokens pour le tarif cloud (tâche 2026-08-04) ---
+      // Rétrocompatible : si les champs manquent (anciens carnets), on
+      // estime promptTokens à 0 et completionTokens = tokens.
+      promptTokens: best.promptTokens || 0,
+      completionTokens: best.completionTokens || best.tokens || 0
     });
   }
 
@@ -309,7 +318,18 @@ function aggregateLedger(ledger) {
     };
   }
 
-  return {
+  // --- Tarif cloud estimé (tâche 2026-08-04) ---
+  // On calcule le coût total ($/€) et par école pour les modèles cloud payants.
+  // Pour les modèles locaux ou gratuits, le coût est nul. Les valeurs sont des
+  // ESTIMATIONS (cf. pricing.js). Rétrocompatible avec les anciens carnets sans
+  // promptTokens/completionTokens : on estime promptTokens ≈ 3×completion.
+  let totalPromptTokens = 0;
+  let totalCompletionTokens = 0;
+  for (const ec of ecoles) {
+    totalPromptTokens += ec.promptTokens || 0;
+    totalCompletionTokens += ec.completionTokens || 0;
+  }
+  const agg = {
     model: ledger.model || ledger.shortName || 'modèle_inconnu',
     shortName: ledger.shortName || shortenModelName(ledger.model || 'inconnu'),
     quantization: ledger.quantization || null,
@@ -336,8 +356,18 @@ function aggregateLedger(ledger) {
     isCloud: (ledger.isCloud === true)
       || (ledger.provider && ledger.provider !== 'local')
       || ecoles.some(e => e.ecole === 'Post-Doctorat')
-      || (ledger.provider ? false : detectIsCloudFromLedger(ledger))
+      || (ledger.provider ? false : detectIsCloudFromLedger(ledger)),
+    // --- Tarif cloud estimé (tâche 2026-08-04) ---
+    // Les tokens estimés servent au calcul du coût. Si les champs détaillés
+    // sont absents (anciens carnets), on estime promptTokens ≈ 3×completion
+    // (les prompts BenchGo sont longs, les réponses plus courtes).
+    promptTokens: totalPromptTokens,
+    completionTokens: totalCompletionTokens
   };
+  // Calcul du coût via pricing.js. Pour les anciens carnets sans tokens
+  // détaillés, estimateModelCost gère le fallback (promptTokens ≈ 3×completion).
+  agg.cost = pricing.estimateModelCost(agg) || null;
+  return agg;
 }
 
 // Heuristique de detection de l origine (cloud vs local) d un modele, pour
@@ -584,21 +614,11 @@ function buildLeaderboardHTML(entries) {
   // s'affiche pas (comparaison impossible).
   const localSha = updateChecker.getLocalCommitSha();
 
-  // Compteurs par catégorie pour les filtres
-  const catCounts = { top: 0, recommande: 0, moyenne: 0, rattrapage: 0, catastrophe: 0 };
-  const sizeCounts = { petit: 0, standard: 0, expert: 0, doctorat: 0, inconnu: 0 };
-  // Filtre Santé (§3 UI/Ludisme) : positif (≥ 0 PV) vs négatif (< 0 PV).
-  const healthCounts = { positif: 0, negatif: 0 };
-  // Filtre École : compte combien de modèles ont été testés sur chaque école.
+  // Liste des écoles disponibles (pour générer les options du select École).
+  // Les compteurs sont désormais calculés côté client (renderCards) en fonction
+  // du sélecteur Origine actif : on ne garde ici que la liste triée des noms.
   const ecoleCounts = {};
-  // Filtre Origine : local (LM Studio) vs cloud (OpenRouter, OpenAI, etc.).
-  const originCounts = { local: 0, cloud: 0 };
-  entries.forEach((e, idx) => {
-    const rank = idx + 1;
-    catCounts[getCategory(e, rank).key]++;
-    sizeCounts[getParamSize(e.model).key]++;
-    if ((e.globalLifeScore || 0) >= 0) healthCounts.positif++; else healthCounts.negatif++;
-    if (e.isCloud) originCounts.cloud++; else originCounts.local++;
+  entries.forEach((e) => {
     for (const ec of (e.ecoles || [])) {
       ecoleCounts[ec.ecole] = (ecoleCounts[ec.ecole] || 0) + 1;
     }
@@ -656,6 +676,12 @@ function buildLeaderboardHTML(entries) {
       // Origine du modèle (local vs cloud) pour le filtre d'origine.
       isCloud: !!e.isCloud,
       provider: e.provider || (e.isCloud ? 'cloud' : 'local'),
+      // --- Tarif cloud estimé (tâche 2026-08-04) ---
+      // Coût total ($/€) et détail par école. NULL pour les modèles locaux
+      // ou dont le prix est introuvable. Voir pricing.js.
+      cost: e.cost || null,
+      promptTokens: e.promptTokens || 0,
+      completionTokens: e.completionTokens || 0,
       verdict,
       cat,
       paramSize: psize,
@@ -688,6 +714,9 @@ function buildLeaderboardHTML(entries) {
           wallMs: ec.wallMs || 0,
           tokens: ec.tokens || 0,
           tokensPerSecond: ec.tokensPerSecond || 0,
+          // Estimation tokens pour le tarif cloud (tâche 2026-08-04).
+          promptTokens: ec.promptTokens || 0,
+          completionTokens: ec.completionTokens || ec.tokens || 0,
           tiers: tiers.map(t => ({
             tierNum: t.tierNum,
             tierTitle: t.tierTitle,
@@ -1365,6 +1394,82 @@ function buildLeaderboardHTML(entries) {
     .update-close { margin-left: auto; }
   }
 
+  /* Bannière NotebookLM — agent IA de renseignement sur les modèles */
+  .nb-banner {
+    margin-block: var(--space-s) var(--space-m);
+    border: 1px solid rgba(188, 140, 255, 0.45);
+    border-radius: var(--r-md);
+    background: linear-gradient(135deg, rgba(188, 140, 255, 0.14), rgba(88, 166, 255, 0.06));
+    box-shadow: 0 2px 16px rgba(188, 140, 255, 0.20), var(--shadow-card);
+  }
+  .nb-banner-inner {
+    display: flex; align-items: center; gap: var(--space-s);
+    padding: var(--space-s) var(--space-m);
+  }
+  .nb-icon {
+    flex: 0 0 auto; width: 42px; height: 42px; border-radius: var(--r-md);
+    background: linear-gradient(135deg, var(--purple), var(--accent));
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.4em; box-shadow: 0 0 0 1px rgba(188,140,255,0.4), 0 4px 12px rgba(188,140,255,0.35);
+  }
+  .nb-content { flex: 1 1 auto; min-width: 0; }
+  .nb-title {
+    font-weight: 800; font-size: var(--fs-h3); color: var(--purple);
+    margin-bottom: 2px; letter-spacing: 0.2px;
+  }
+  .nb-desc { color: var(--text); font-size: var(--fs-small); line-height: 1.4; }
+  .nb-desc b { color: var(--accent); }
+  .nb-actions { flex: 0 0 auto; display: flex; gap: var(--space-xs); align-items: center; }
+  .nb-btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 8px 16px; border-radius: var(--r-pill);
+    border: 1px solid var(--purple); background: var(--purple);
+    color: #fff; font-weight: 700; font-size: var(--fs-small);
+    cursor: pointer; transition: all 0.18s ease; text-decoration: none;
+  }
+  .nb-btn:hover { background: var(--accent); border-color: var(--accent); transform: translateY(-1px); }
+  .nb-btn-info {
+    width: 26px; height: 26px; padding: 0; border-radius: 50%;
+    border: 1px solid var(--border); background: var(--bg-3);
+    color: var(--text-muted); font-weight: 700; font-size: 13px;
+    cursor: pointer; transition: all 0.18s ease;
+  }
+  .nb-btn-info:hover { color: var(--purple); border-color: var(--purple); }
+  .nb-tip {
+    position: fixed; bottom: 70px; left: 50%; transform: translateX(-50%) translateY(8px);
+    padding: 10px 18px; border-radius: var(--r-pill);
+    background: var(--purple); color: #fff; font-size: var(--fs-small); font-weight: 600;
+    box-shadow: var(--shadow-elev); opacity: 0; pointer-events: none;
+    transition: opacity 0.4s ease, transform 0.4s ease; z-index: 9998;
+  }
+  .nb-tip.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  .nb-tip::after {
+    content: ''; position: absolute; bottom: -6px; left: 50%; transform: translateX(-50%);
+    border: 6px solid transparent; border-top-color: var(--purple); border-bottom: 0;
+  }
+  @media (max-width: 560px) {
+    .nb-banner-inner { flex-wrap: wrap; }
+    .nb-actions { width: 100%; justify-content: flex-end; }
+  }
+
+  /* Modale NotebookLM */
+  .nb-modal { max-width: 640px; }
+  .nb-modal .modal-head { background: linear-gradient(135deg, rgba(188,140,255,0.18), rgba(88,166,255,0.10)); }
+  .nb-modal h2 { color: var(--purple) !important; }
+  .nb-modal-body { padding: var(--space-l); }
+  .nb-modal-body p { color: var(--text); font-size: var(--fs-small); line-height: 1.6; margin-bottom: var(--space-s); }
+  .nb-features { list-style: none; padding: 0; margin: var(--space-s) 0; display: grid; gap: var(--space-xs); }
+  .nb-features li {
+    display: flex; align-items: flex-start; gap: 10px;
+    padding: var(--space-xs) var(--space-s); border-radius: var(--r-sm);
+    background: var(--bg-3); font-size: var(--fs-small); color: var(--text);
+  }
+  .nb-features li .f-icon { flex: 0 0 auto; font-size: 1.1em; }
+  .nb-features li b { color: var(--accent); }
+  .nb-modal-cta {
+    display: flex; gap: var(--space-s); margin-top: var(--space-m); flex-wrap: wrap;
+  }
+
   /* --- Animations d'entrée au scroll (§3 UI/Ludisme) --- */
   /* Les cartes apparaissent avec un fondu + translation quand elles entrent
      dans le viewport. Géré par IntersectionObserver qui ajoute .visible. */
@@ -1398,6 +1503,21 @@ function buildLeaderboardHTML(entries) {
     <p class="subtitle">Généré le ${esc(now)} — ${entries.length} modèle${entries.length > 1 ? 's' : ''} classé${entries.length > 1 ? 's' : ''} du meilleur au pire</p>
   </header>
 
+  <div class="nb-banner">
+    <div class="nb-banner-inner">
+      <div class="nb-icon" title="Agent NotebookLM">🧠</div>
+      <div class="nb-content">
+        <div class="nb-title">Agent NotebookLM</div>
+        <div class="nb-desc">Posez vos questions sur les modèles testés à l'<b>agent IA</b> — analyses, comparaisons, recommandations.</div>
+      </div>
+      <div class="nb-actions">
+        <button class="nb-btn-info" id="nbInfoBtn" title="Qu'est-ce que c'est ?">?</button>
+        <a class="nb-btn" href="${NOTEBOOKLM_URL}" target="_blank" rel="noopener noreferrer">🧠 Ouvrir l'agent</a>
+      </div>
+    </div>
+  </div>
+  <div class="nb-tip" id="nbTip">Besoin de renseignements sur un modèle ? Contactez l'agent NotebookLM 🧠</div>
+
   <div id="updateBanner" class="update-banner" hidden>
     <div class="update-banner-inner">
       <span class="update-icon">⬆️</span>
@@ -1417,33 +1537,33 @@ function buildLeaderboardHTML(entries) {
         <label class="filter-label" for="catSelect">Catégorie</label>
         <div class="select-wrap">
           <select class="select" id="catSelect">
-            <option value="all" selected>Tous (${entries.length})</option>
-            <option value="top">🏆 Top du top (${catCounts.top})</option>
-            <option value="recommande">✅ Recommandés (${catCounts.recommande})</option>
-            <option value="moyenne">📊 Dans la moyenne (${catCounts.moyenne})</option>
-            <option value="rattrapage">⚠️ En rattrapage (${catCounts.rattrapage})</option>
-            <option value="catastrophe">💥 Échec total (${catCounts.catastrophe})</option>
+            <option value="all" selected>Tous</option>
+            <option value="top">🏆 Top du top</option>
+            <option value="recommande">✅ Recommandés</option>
+            <option value="moyenne">📊 Dans la moyenne</option>
+            <option value="rattrapage">⚠️ En rattrapage</option>
+            <option value="catastrophe">💥 Échec total</option>
           </select>
         </div>
 
         <label class="filter-label" for="sizeSelect" style="margin-left: var(--space-xs);">Taille</label>
         <div class="select-wrap">
           <select class="select" id="sizeSelect">
-            <option value="all" selected>Toutes tailles (${entries.length})</option>
-            <option value="petit">🐱 &lt; 3B (${sizeCounts.petit})</option>
-            <option value="standard">📦 3B–14B (${sizeCounts.standard})</option>
-            <option value="expert">🎓 14B–30B (${sizeCounts.expert})</option>
-            <option value="doctorat">🧠 &gt; 30B (${sizeCounts.doctorat})</option>
-            <option value="inconnu">❓ Inconnue (${sizeCounts.inconnu})</option>
+            <option value="all" selected>Toutes tailles</option>
+            <option value="petit">🐱 &lt; 3B</option>
+            <option value="standard">📦 3B–14B</option>
+            <option value="expert">🎓 14B–30B</option>
+            <option value="doctorat">🧠 &gt; 30B</option>
+            <option value="inconnu">❓ Inconnue</option>
           </select>
         </div>
 
         <label class="filter-label" for="healthSelect" style="margin-left: var(--space-xs);">Santé</label>
         <div class="select-wrap">
           <select class="select" id="healthSelect">
-            <option value="all" selected>Toutes (${entries.length})</option>
-            <option value="positif">💚 Saine (≥ 0 PV) (${healthCounts.positif})</option>
-            <option value="negatif">❤️‍🩹 En difficulté (&lt; 0 PV) (${healthCounts.negatif})</option>
+            <option value="all" selected>Toutes</option>
+            <option value="positif">💚 Saine (≥ 0 PV)</option>
+            <option value="negatif">❤️‍🩹 En difficulté (&lt; 0 PV)</option>
           </select>
         </div>
 
@@ -1451,16 +1571,16 @@ function buildLeaderboardHTML(entries) {
         <div class="select-wrap">
           <select class="select" id="ecoleSelect">
             <option value="all" selected>Toutes écoles</option>
-            ${Object.keys(ecoleCounts).sort().map(ec => `<option value="${esc(ec)}">🏫 ${esc(ec)} (${ecoleCounts[ec]})</option>`).join('')}
+            ${Object.keys(ecoleCounts).sort().map(ec => `<option value="${esc(ec)}">🏫 ${esc(ec)}</option>`).join('')}
           </select>
         </div>
 
         <label class="filter-label" for="originSelect" style="margin-left: var(--space-xs);">Origine</label>
         <div class="select-wrap">
           <select class="select" id="originSelect">
-            <option value="all" selected>Toutes origines (${entries.length})</option>
-            <option value="local">🏠 Local · LM Studio (${originCounts.local})</option>
-            <option value="cloud">☁️ Cloud · API (${originCounts.cloud})</option>
+            <option value="all" selected>Toutes origines</option>
+            <option value="local">🏠 Local · LM Studio</option>
+            <option value="cloud">☁️ Cloud · API</option>
           </select>
         </div>
 
@@ -1503,12 +1623,76 @@ function buildLeaderboardHTML(entries) {
   </div>
 </div>
 
+<div id="nbModal" class="modal-overlay">
+  <div class="modal nb-modal">
+    <div class="modal-head">
+      <div class="rank" style="background:linear-gradient(135deg,var(--purple),var(--accent))">🧠</div>
+      <div class="title">
+        <h2>Agent NotebookLM</h2>
+        <div class="tags"><span class="cat-tag">Renseignement sur les modèles</span></div>
+      </div>
+      <button class="modal-close" onclick="closeNbModal()" aria-label="Fermer">×</button>
+    </div>
+    <div class="modal-body nb-modal-body">
+      <p>L'<b>Agent NotebookLM</b> est un assistant IA Google qui connaît l'intégralité des résultats BenchGo. Posez-lui vos questions en langage naturel :</p>
+      <ul class="nb-features">
+        <li><span class="f-icon">📊</span><span><b>Comparer des modèles</b> — "Lequel est le plus rapide en Q4 sous 3B ?"</span></li>
+        <li><span class="f-icon">🎯</span><span><b>Recommandations</b> — "Quel modèle recommandes-tu pour la programmation ?"</span></li>
+        <li><span class="f-icon">🔍</span><span><b>Analyser un échec</b> — "Pourquoi X a échoué à l'école DOCTORAT ?"</span></li>
+        <li><span class="f-icon">💡</span><span><b>Explications</b> — synthèse des comptes rendus de chaque test</span></li>
+      </ul>
+      <p>Cliquez sur <b>"Ouvrir l'agent"</b> : il s'ouvre dans un nouvel onglet. Aucune installation, gratuit, accessible à tous.</p>
+      <div class="nb-modal-cta">
+        <a class="nb-btn" href="${NOTEBOOKLM_URL}" target="_blank" rel="noopener noreferrer">🧠 Ouvrir l'agent NotebookLM</a>
+        <button class="nb-btn-info" style="width:auto;padding:8px 16px;border-radius:var(--r-pill)" onclick="closeNbModal()">Fermer</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div id="toast" class="toast"></div>
 
 <script>
 var MODELS = ${JSON.stringify(modelsData)};
 var LOCAL_SHA = ${JSON.stringify(localSha)};
 var REMOTE_REPO = ${JSON.stringify(updateChecker.COMMUNITY_REPO)};
+
+// --- Agent NotebookLM (bandeau + modale + bulle d'info périodique) ---
+var NB_SEEN_KEY = 'benchgo_nb_seen';
+var NB_TIP = document.getElementById('nbTip');
+var NB_MODAL = document.getElementById('nbModal');
+function openNbModal() { NB_MODAL.classList.add('show'); document.body.style.overflow = 'hidden'; }
+function closeNbModal() { NB_MODAL.classList.remove('show'); document.body.style.overflow = ''; }
+document.getElementById('nbInfoBtn').addEventListener('click', openNbModal);
+NB_MODAL.addEventListener('click', function(e) { if (e.target === NB_MODAL) closeNbModal(); });
+document.addEventListener('keydown', function(e) { if (e.key === 'Escape' && NB_MODAL.classList.contains('show')) closeNbModal(); });
+// Bulle d'info périodique : s'affiche après 12s la 1re visite, puis toutes les ~5 min
+// si l'utilisateur n'a jamais cliqué. Disparait après 6 s.
+(function nbBubble() {
+  try {
+    var seen = sessionStorage.getItem(NB_SEEN_KEY);
+    if (seen) return;
+  } catch (e) {}
+  setTimeout(function() {
+    try {
+      NB_TIP.classList.add('show');
+      setTimeout(function() { NB_TIP.classList.remove('show'); }, 6000);
+      try { sessionStorage.setItem(NB_SEEN_KEY, '1'); } catch (e) {}
+    } catch (e) {}
+  }, 12000);
+})();
+// Re-affiche la bulle toutes les 5 min tant que l'agent n'a pas été ouvert
+setInterval(function() {
+  try { if (localStorage.getItem('benchgo_nb_opened')) return; } catch (e) {}
+  try {
+    NB_TIP.classList.add('show');
+    setTimeout(function() { NB_TIP.classList.remove('show'); }, 6000);
+  } catch (e) {}
+}, 300000);
+// Marque l'agent comme "ouvert" quand on clique sur le bouton principal
+document.querySelectorAll('.nb-btn[href]').forEach(function(a) {
+  a.addEventListener('click', function() { try { localStorage.setItem('benchgo_nb_opened', '1'); } catch (e) {} });
+});
 
 // --- Tri par date de dernier test (toggle "🕒 Récents") ---
 // MODELS_SORTED_BY_DATE = copie de MODELS triée par lastUpdated décroissant.
@@ -1652,6 +1836,25 @@ function tpsColor(tps) {
 function esc(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
+// --- Formatage du tarif cloud estimé (tâche 2026-08-04) ---
+// Affichage compact : $0.0012 / $12.34. Pour les très petits montants (<0.01),
+// on garde 4 décimales pour rester lisible. IMPORTANT : ce sont des estimations.
+var USD_TO_EUR_JS = 0.92;
+function fmtCost(usd) {
+  if (usd == null || !isFinite(usd)) return '—';
+  if (usd === 0) return '$0.00';
+  if (usd < 0.01) return '$' + usd.toFixed(4);
+  if (usd < 1) return '$' + usd.toFixed(3);
+  return '$' + usd.toFixed(2);
+}
+function fmtCostEur(usd) {
+  if (usd == null || !isFinite(usd)) return '—';
+  var eur = usd * USD_TO_EUR_JS;
+  if (eur === 0) return '€0.00';
+  if (eur < 0.01) return '€' + eur.toFixed(4);
+  if (eur < 1) return '€' + eur.toFixed(3);
+  return '€' + eur.toFixed(2);
+}
 
 // --- Flèche de mouvement de position (delta de rang entre 2 générations) ---
 //   delta < 0 : le modèle a MONTÉ (rang diminué) → ▲ vert
@@ -1773,6 +1976,118 @@ function renderCards() {
     opt.textContent = _catLabels[val] + ' (' + cnt + ')';
   }
 
+  // --- Sélecteur Origine = MAÎTRE ---
+  // L origine détermine le sous-ensemble de modèles visible : quand on choisit
+  // Cloud API, TOUS les autres sélecteurs (Taille, Santé, École, Catégorie) ne
+  // doivent compter que les modèles cloud frontière, jamais les locaux, et
+  // inversement pour Local. Les deux univers sont étanches.
+  // On calcule un ensemble « contexte » = modèles filtrés par l origine active
+  // (+ recherche), SANS appliquer les autres filtres, pour remplir les
+  // compteurs de chaque select indépendamment.
+  var _originCtx = [];
+  for (var oi = 0; oi < MODELS.length; oi++) {
+    var om = MODELS[oi];
+    if (activeOrigin !== 'all') {
+      if (activeOrigin === 'cloud' && !om.isCloud) continue;
+      if (activeOrigin === 'local' && om.isCloud) continue;
+    }
+    if (q && om.model.toLowerCase().indexOf(q) === -1 && om.shortName.toLowerCase().indexOf(q) === -1 && (om.quantization || '').toLowerCase().indexOf(q) === -1) continue;
+    _originCtx.push(om);
+  }
+
+  // Compteurs Taille / Santé / École calculés sur le contexte d origine.
+  var _sizeCounts = { petit: 0, standard: 0, expert: 0, doctorat: 0, inconnu: 0 };
+  var _healthCounts = { positif: 0, negatif: 0 };
+  var _ecoleCountsDyn = {};
+  for (var ci2 = 0; ci2 < _originCtx.length; ci2++) {
+    var cm = _originCtx[ci2];
+    var cmSizeKey = (cm.paramSize && cm.paramSize.key) ? cm.paramSize.key : 'inconnu';
+    _sizeCounts[cmSizeKey] = (_sizeCounts[cmSizeKey] || 0) + 1;
+    if ((cm.globalLifeScore || 0) >= 0) _healthCounts.positif++; else _healthCounts.negatif++;
+    for (var ei = 0; ei < (cm.ecoleNames || []).length; ei++) {
+      var ecName = cm.ecoleNames[ei];
+      _ecoleCountsDyn[ecName] = (_ecoleCountsDyn[ecName] || 0) + 1;
+    }
+  }
+
+  // Compteurs Origine : calculés sur l ensemble complet (filtré par recherche
+  // uniquement) pour montrer le total local vs cloud disponibles.
+  var _originCounts = { local: 0, cloud: 0 };
+  for (var ri = 0; ri < MODELS.length; ri++) {
+    var rm = MODELS[ri];
+    if (q && rm.model.toLowerCase().indexOf(q) === -1 && rm.shortName.toLowerCase().indexOf(q) === -1 && (rm.quantization || '').toLowerCase().indexOf(q) === -1) continue;
+    if (rm.isCloud) _originCounts.cloud++; else _originCounts.local++;
+  }
+
+  // Mise a jour dynamique du select Taille (compteurs limites au contexte
+  // d origine active).
+  var _sizeLabels = {
+    all: 'Toutes tailles',
+    petit: '🐱 < 3B',
+    standard: '📦 3B–14B',
+    expert: '🎓 14B–30B',
+    doctorat: '🧠 > 30B',
+    inconnu: '❓ Inconnue'
+  };
+  var _sizeOpts = sizeSel.querySelectorAll('option');
+  for (var si = 0; si < _sizeOpts.length; si++) {
+    var sOpt = _sizeOpts[si];
+    var sVal = sOpt.value;
+    var sCnt = sVal === 'all' ? _originCtx.length : (_sizeCounts[sVal] || 0);
+    sOpt.textContent = _sizeLabels[sVal] + ' (' + sCnt + ')';
+  }
+
+  // Mise a jour dynamique du select Santé (compteurs limites au contexte
+  // d origine active).
+  if (healthSel) {
+    var _healthLabels = {
+      all: 'Toutes',
+      positif: '💚 Saine (≥ 0 PV)',
+      negatif: '❤️\u200d🩹 En difficulté (< 0 PV)'
+    };
+    var _healthOpts = healthSel.querySelectorAll('option');
+    for (var hi = 0; hi < _healthOpts.length; hi++) {
+      var hOpt = _healthOpts[hi];
+      var hVal = hOpt.value;
+      var hCnt = hVal === 'all' ? _originCtx.length : (_healthCounts[hVal] || 0);
+      hOpt.textContent = _healthLabels[hVal] + ' (' + hCnt + ')';
+    }
+  }
+
+  // Mise a jour dynamique du select École (compteurs limites au contexte
+  // d origine active). Les écoles sans modèle dans le contexte sont marquées
+  // (0) mais conservées pour éviter de perdre l option selectionnee.
+  if (ecoleSel) {
+    var _ecoleOpts = ecoleSel.querySelectorAll('option');
+    for (var ei2 = 0; ei2 < _ecoleOpts.length; ei2++) {
+      var eOpt = _ecoleOpts[ei2];
+      var eVal = eOpt.value;
+      if (eVal === 'all') {
+        eOpt.textContent = 'Toutes écoles (' + _originCtx.length + ')';
+      } else {
+        var eCnt = _ecoleCountsDyn[eVal] || 0;
+        eOpt.textContent = '🏫 ' + eVal + ' (' + eCnt + ')';
+      }
+    }
+  }
+
+  // Mise a jour dynamique du select Origine (compteurs globaux local vs cloud).
+  if (originSel) {
+    var _originLabels = {
+      all: 'Toutes origines',
+      local: '🏠 Local · LM Studio',
+      cloud: '☁️ Cloud · API'
+    };
+    var _originOpts = originSel.querySelectorAll('option');
+    var _originTotal = _originCounts.local + _originCounts.cloud;
+    for (var oi2 = 0; oi2 < _originOpts.length; oi2++) {
+      var oOpt = _originOpts[oi2];
+      var oVal = oOpt.value;
+      var oCnt = oVal === 'all' ? _originTotal : (_originCounts[oVal] || 0);
+      oOpt.textContent = _originLabels[oVal] + ' (' + oCnt + ')';
+    }
+  }
+
   for (var fi = 0; fi < _preFiltered.length; fi++) {
     var m = _preFiltered[fi];
     var i = MODELS.indexOf(m);
@@ -1860,6 +2175,9 @@ function renderCards() {
           '<div class="mini-stat"><span class="lbl">Oblig.</span><span class="val">' + (m.mandatoryTotal > 0 ? m.mandatoryPct + '%' : '—') + '</span></div>' +
           '<div class="mini-stat"><span class="lbl">Aide/Rat.</span><span class="val" style="font-size:var(--fs-tiny)">' + esc(helpStr) + '</span></div>' +
           '<div class="mini-stat"><span class="lbl">' + vitesseLbl + '</span><span class="val" style="color:' + tpsC + ';font-size:var(--fs-tiny)">' + esc(vitesseVal) + '</span></div>' +
+          (m.isCloud && m.cost
+            ? '<div class="mini-stat" title="Coût estimé (non exact) — voir détail dans la modale"><span class="lbl">Coût ≈</span><span class="val" style="color:#bc8cff;font-size:var(--fs-tiny)">' + fmtCost(m.cost.usd) + '</span></div>'
+            : '') +
         '</div>' +
         '<div class="card-actions">' +
           '<button class="kebab" onclick="event.stopPropagation();toggleKebab(this,' + i + ')" aria-label="Actions">⋮</button>' +
@@ -1943,6 +2261,12 @@ function openModal(idx) {
       ? '<span style="color:' + tpsColor(m.tokensPerSecond) + '">' + m.tokensPerSecond + ' t/s</span>'
       : '—');
     body += statBox('Temps réel', fmtDurJS(m.wallMs));
+  }
+  // --- Tarif cloud estimé (tâche 2026-08-04) ---
+  // Affiché uniquement pour les modèles cloud payants dont le prix est connu.
+  // Les valeurs sont des ESTIMATIONS (cf. mention "≈" et tooltip).
+  if (m.isCloud && m.cost) {
+    body += statBox('Coût ≈', '<span style="color:#bc8cff" title="Estimation indicative (non exacte). Le coût réel dépend du tokenizer et des tarifs en vigueur.">' + fmtCost(m.cost.usd) + ' / ' + fmtCostEur(m.cost.eur) + '</span>');
   }
   body += '</div>';
 
@@ -2136,6 +2460,44 @@ function openModal(idx) {
     }
   }
   body += '</tbody></table>';
+
+  // --- Tarif cloud estimé par école (tâche 2026-08-04) ---
+  // Affiché uniquement pour les modèles cloud payants. Les valeurs sont des
+  // ESTIMATIONS (cf. pricing.js) : le coût réel dépend du tokenizer et des
+  // tarifs en vigueur. On affiche $ et € par école + le total.
+  if (m.isCloud && m.cost) {
+    body += '<h3>💰 Tarif estimé par école <span style="font-size:var(--fs-small);color:var(--text-dim);font-weight:400">(estimation indicative — non exacte)</span></h3>';
+    body += '<table class="ecoles-table"><thead><tr>' +
+      '<th>École</th><th class="num">Tokens prompt ≈</th><th class="num">Tokens compl. ≈</th>' +
+      '<th class="num">Coût ≈ ($)</th><th class="num">Coût ≈ (€)</th>' +
+      '</tr></thead><tbody>';
+    for (var e of m.ecoles) {
+      var ecCost = null;
+      // Calcule le coût par école avec le même prix que le modèle.
+      if (m.cost.pricePerMTok && (e.promptTokens || e.completionTokens)) {
+        var p = e.promptTokens || 0;
+        var c = e.completionTokens || 0;
+        var u = (p / 1e6) * m.cost.pricePerMTok.prompt + (c / 1e6) * m.cost.pricePerMTok.completion;
+        ecCost = u;
+      }
+      body += '<tr>' +
+        '<td>' + esc(e.ecole) + '</td>' +
+        '<td class="num">' + (e.promptTokens || 0).toLocaleString('fr-FR') + '</td>' +
+        '<td class="num">' + (e.completionTokens || 0).toLocaleString('fr-FR') + '</td>' +
+        '<td class="num">' + (ecCost != null ? fmtCost(ecCost) : '—') + '</td>' +
+        '<td class="num">' + (ecCost != null ? fmtCostEur(ecCost) : '—') + '</td>' +
+        '</tr>';
+    }
+    body += '<tr style="font-weight:700;border-top:2px solid var(--border)">' +
+      '<td>TOTAL</td>' +
+      '<td class="num">' + (m.promptTokens || 0).toLocaleString('fr-FR') + '</td>' +
+      '<td class="num">' + (m.completionTokens || 0).toLocaleString('fr-FR') + '</td>' +
+      '<td class="num">' + fmtCost(m.cost.usd) + '</td>' +
+      '<td class="num">' + fmtCostEur(m.cost.eur) + '</td>' +
+      '</tr>';
+    body += '</tbody></table>';
+    body += '<p style="color:var(--text-dim);font-size:var(--fs-small);margin-top:var(--space-s);">⚠ Estimation indicative basée sur les tokens produits (approximation) et les tarifs publics OpenRouter ou une table locale de fallback. Le coût réel varie selon le tokenizer exact du modèle, le volume de raisonnement et l&#39;évolution des prix. Modèle ' + esc(m.provider) + ' — tarif ≈ ' + fmtCost(m.cost.pricePerMTok ? m.cost.pricePerMTok.prompt : 0) + ' / ' + fmtCost(m.cost.pricePerMTok ? m.cost.pricePerMTok.completion : 0) + ' par million de tokens (prompt / completion).</p>';
+  }
 
   // --- Rapport intégral : tiers, exercices, code, raisonnement, corrections
   body += '<h3>📋 Rapport intégral (comportement & raisonnement)</h3>';
@@ -2745,7 +3107,17 @@ if (_healthSel) _healthSel.addEventListener('change', renderCards);
 var _ecoleSel = document.getElementById('ecoleSelect');
 if (_ecoleSel) _ecoleSel.addEventListener('change', renderCards);
 var _originSel = document.getElementById('originSelect');
-if (_originSel) _originSel.addEventListener('change', renderCards);
+if (_originSel) _originSel.addEventListener('change', function() {
+  // Origine = sélecteur maître : changer d origine réinitialise les autres
+  // filtres (Catégorie, Taille, Santé, École) à « all » pour éviter les
+  // combinaisons vides (ex: taille « petit » inexistante chez les cloud).
+  // L utilisateur repart de l ensemble complet du nouvel univers et affine.
+  var _c = document.getElementById('catSelect'); if (_c) _c.value = 'all';
+  var _s = document.getElementById('sizeSelect'); if (_s) _s.value = 'all';
+  var _h = document.getElementById('healthSelect'); if (_h) _h.value = 'all';
+  var _e = document.getElementById('ecoleSelect'); if (_e) _e.value = 'all';
+  renderCards();
+});
 var _recentBtn = document.getElementById('btnRecentSort');
 if (_recentBtn) _recentBtn.addEventListener('click', toggleRecentSort);
 
@@ -3360,6 +3732,8 @@ renderCards();
   });
 
   function showBanner(commits) {
+    var c = readCache();
+    if (c && c.dismissedAt && (Date.now() - c.dismissedAt) < TTL_MS) return;
     if (commits && commits.length && commitsList) {
       commitsList.innerHTML = '';
       commits.forEach(function(c) {
@@ -3395,8 +3769,8 @@ renderCards();
 function buildLeaderboardMarkdown(entries) {
   let md = `# 🏇 Classement BenchGo V3\n\n`;
   md += `> Généré le ${new Date().toLocaleString('fr-FR')} — ${entries.length} modèle(s) classé(s)\n\n`;
-  md += `| Rang | Modèle | Quantif. | Points | % | Note | Mvt | Oblig. | Santé | Bonus | Aide | Rat. | Écoles | Temps | Vitesse | Verdict | Forces & Faiblesses |\n`;
-  md += `|---:|---|:---:|---|---:|:---:|:---:|---:|---:|---:|---:|---:|---:|---|---|---|---|\n`;
+  md += `| Rang | Modèle | Quantif. | Points | % | Note | Mvt | Oblig. | Santé | Bonus | Aide | Rat. | Écoles | Temps | Vitesse | Coût ≈ | Verdict | Forces & Faiblesses |\n`;
+  md += `|---:|---|:---:|---|---:|:---:|:---:|---:|---:|---:|---:|---:|---:|---|---|---:|---|---|\n`;
 
   for (let i = 0; i < entries.length; i++) {
     const e = entries[i];
@@ -3408,6 +3782,9 @@ function buildLeaderboardMarkdown(entries) {
     const quant = e.quantization || '—';
     const temps = e.elapsedMs > 0 ? formatDuration(e.elapsedMs) : '—';
     const vit = e.tokensPerSecond > 0 ? (e.tokensPerSecond + ' t/s') : '—';
+    // Tarif cloud estimé (tâche 2026-08-04). "—" pour les modèles locaux ou
+    // dont le prix est introuvable.
+    const cout = (e.isCloud && e.cost) ? (pricing.formatUsd(e.cost.usd) + ' / ' + pricing.formatEur(e.cost.usd)) : '—';
     // Flèche de mouvement de position (delta de rang vs snapshot précédent).
     let mvt;
     if (e.positionDelta == null) {
@@ -3424,7 +3801,7 @@ function buildLeaderboardMarkdown(entries) {
     if (args.faiblesses.length > 0) argsText.push('**Faiblesses :** ' + args.faiblesses.join(', '));
     if (args.notes.length > 0) argsText.push('*' + args.notes.join(', ') + '*');
 
-    md += `| ${medal} | ${e.model} | ${quant} | ${e.score}/${e.max} | ${e.pct}% | ${grade.grade} | ${mvt} | ${e.mandatoryTotal > 0 ? e.mandatoryPct + '%' : '—'} | ${e.globalLifeScore} | ${e.optionalBonus > 0 ? '+' + e.optionalBonus : '—'} | ${e.helpCount || '—'} | ${e.retriedCount || '—'} | ${e.ecoleCount} | ${temps} | ${vit} | ${verdict.label} | ${argsText.join(' · ')} |\n`;
+    md += `| ${medal} | ${e.model} | ${quant} | ${e.score}/${e.max} | ${e.pct}% | ${grade.grade} | ${mvt} | ${e.mandatoryTotal > 0 ? e.mandatoryPct + '%' : '—'} | ${e.globalLifeScore} | ${e.optionalBonus > 0 ? '+' + e.optionalBonus : '—'} | ${e.helpCount || '—'} | ${e.retriedCount || '—'} | ${e.ecoleCount} | ${temps} | ${vit} | ${cout} | ${verdict.label} | ${argsText.join(' · ')} |\n`;
   }
 
   md += `\n---\n\n## Détail par modèle\n\n`;
@@ -3442,16 +3819,38 @@ function buildLeaderboardMarkdown(entries) {
     if (e.elapsedMs > 0 || e.tokens > 0) {
       md += `- **Temps d'inférence :** ${formatDuration(e.elapsedMs)} | **Tokens :** ${e.tokens} | **Vitesse :** ${e.tokensPerSecond > 0 ? e.tokensPerSecond + ' t/s' : '—'} | **Temps réel :** ${formatDuration(e.wallMs)}\n`;
     }
+    // --- Tarif cloud estimé (tâche 2026-08-04) ---
+    if (e.isCloud && e.cost) {
+      md += `- **Coût estimé :** ${pricing.formatUsd(e.cost.usd)} / ${pricing.formatEur(e.cost.usd)} (≈ ${(e.promptTokens || 0).toLocaleString('fr-FR')} prompt + ${(e.completionTokens || 0).toLocaleString('fr-FR')} completion tokens) — *estimation indicative, non exacte*\n`;
+    }
     if (args.forces.length > 0) md += `- **Forces :** ${args.forces.join(', ')}\n`;
     if (args.faiblesses.length > 0) md += `- **Faiblesses :** ${args.faiblesses.join(', ')}\n`;
     if (args.notes.length > 0) md += `- *${args.notes.join(', ')}*\n`;
-    md += `\n| École | Points | % | Note | Bonus | Santé | Temps | Vitesse |\n`;
-    md += `|---|---|---:|:---:|---:|---:|---|---|\n`;
-    for (const ecole of e.ecoles) {
-      const g = letterGrade(ecole.pct);
-      const temps = ecole.elapsedMs > 0 ? formatDuration(ecole.elapsedMs) : '—';
-      const vit = ecole.tokensPerSecond > 0 ? (ecole.tokensPerSecond + ' t/s') : '—';
-      md += `| ${ecole.ecole} | ${ecole.score}/${ecole.max} | ${ecole.pct}% | ${g.grade} | +${ecole.optionalBonus} | ${ecole.globalLifeScore} | ${temps} | ${vit} |\n`;
+    if (e.isCloud && e.cost) {
+      md += `\n| École | Points | % | Note | Bonus | Santé | Temps | Vitesse | Coût ≈ |\n`;
+      md += `|---|---|---:|:---:|---:|---:|---|---|---:|\n`;
+      for (const ecole of e.ecoles) {
+        const g = letterGrade(ecole.pct);
+        const temps = ecole.elapsedMs > 0 ? formatDuration(ecole.elapsedMs) : '—';
+        const vit = ecole.tokensPerSecond > 0 ? (ecole.tokensPerSecond + ' t/s') : '—';
+        let ecCostStr = '—';
+        if (e.cost.pricePerMTok && (ecole.promptTokens || ecole.completionTokens)) {
+          const p = ecole.promptTokens || 0;
+          const c = ecole.completionTokens || 0;
+          const u = (p / 1e6) * e.cost.pricePerMTok.prompt + (c / 1e6) * e.cost.pricePerMTok.completion;
+          ecCostStr = pricing.formatUsd(u) + ' / ' + pricing.formatEur(u);
+        }
+        md += `| ${ecole.ecole} | ${ecole.score}/${ecole.max} | ${ecole.pct}% | ${g.grade} | +${ecole.optionalBonus} | ${ecole.globalLifeScore} | ${temps} | ${vit} | ${ecCostStr} |\n`;
+      }
+    } else {
+      md += `\n| École | Points | % | Note | Bonus | Santé | Temps | Vitesse |\n`;
+      md += `|---|---|---:|:---:|---:|---:|---|---|\n`;
+      for (const ecole of e.ecoles) {
+        const g = letterGrade(ecole.pct);
+        const temps = ecole.elapsedMs > 0 ? formatDuration(ecole.elapsedMs) : '—';
+        const vit = ecole.tokensPerSecond > 0 ? (ecole.tokensPerSecond + ' t/s') : '—';
+        md += `| ${ecole.ecole} | ${ecole.score}/${ecole.max} | ${ecole.pct}% | ${g.grade} | +${ecole.optionalBonus} | ${ecole.globalLifeScore} | ${temps} | ${vit} |\n`;
+      }
     }
     md += `\n`;
   });
@@ -3827,6 +4226,154 @@ function printCloudLeaderboard() {
   console.log('');
   console.log('  \x1b[90mAstuce : node frontier-batch.js --provider=openrouter pour tester de nouveaux modèles cloud.\x1b[0m');
   console.log('  \x1b[90mAstuce : node leaderboard.js (sans --cloud) pour le classement complet (local + cloud séparés).\x1b[0m');
+  console.log('');
+}
+
+// Rapport de suivi complet pour LM Studio : combine en une vue unifiée les
+// modèles LM Studio déjà testés (Bloc 1, tri chronologique inversé) et les
+// modèles LM Studio détectés mais non encore testés (Bloc 2, avec statut
+// [NON TESTÉ]). Appelé par le flag --lmstudio / --lmstudio-status.
+//
+// Bloc 1 — Modèles testés :
+//   Filtre isCloud = false + au moins une école avec max > 0.
+//   Tri strictement chronologique : du test le plus récent au plus ancien
+//   (les tests de la nuit en tête de liste). Le timestamp du dernier test
+//   est le plus récent parmi toutes les tentatives de toutes les écoles
+//   (timestampMs → timestampIso → date+time → lastUpdated du carnet).
+//
+// Bloc 2 — Modèles non testés :
+//   Appelle printUntestedLmStudioModels() qui interroge LM Studio (lms ls)
+//   et croise avec les carnets existants pour lister les modèles jamais
+//   testés, partiels ou en échec.
+function getLmStudioTestedEntries() {
+  const ledgers = loadAllLedgers();
+  if (ledgers.length === 0) return [];
+  const entries = ledgers
+    .map(aggregateLedger)
+    .filter(Boolean)
+    .filter(e => !e.isCloud)
+    .filter(e => e.ecoles.some(ec => ec.max > 0));
+  for (const e of entries) {
+    let bestTs = 0;
+    for (const ec of e.ecoles) {
+      for (const a of (ec.attempts || [])) {
+        let ts = 0;
+        if (a.timestampMs) ts = Number(a.timestampMs);
+        else if (a.timestampIso) ts = Date.parse(a.timestampIso);
+        else if (a.date) {
+          const ds = (a.date || '') + ' ' + (a.time || '');
+          const parsed = Date.parse(ds.replace(/(\d{2})\/(\d{2})\/(\d{4})/, '$3-$2-$1'));
+          if (!isNaN(parsed)) ts = parsed;
+        }
+        if (ts > bestTs) bestTs = ts;
+      }
+    }
+    if (bestTs === 0 && e.lastUpdated) bestTs = Date.parse(e.lastUpdated) || 0;
+    e.lastTestTs = bestTs;
+  }
+  return entries;
+}
+
+function printLmStudioStatus() {
+  const allEntries = getLmStudioTestedEntries();
+
+  // Croise les carnets avec la liste réelle des modèles présents dans LM Studio.
+  // Sans ce croisement, le Bloc 1 afficherait aussi les carnets des modèles
+  // supprimés de LM Studio depuis (42 carnets vs 12 modèles réellement présents).
+  // On n affiche donc dans le Bloc 1 que les modèles testés ENCORE présents
+  // dans LM Studio. Si lms est indisponible (daemon inactif), on garde tous
+  // les carnets (repli, comme pour printUntestedLmStudioModels).
+  let lmsModelKeys = null;
+  try {
+    const result = nightBatch.listLlmModels();
+    if (result.ok && Array.isArray(result.models)) {
+      lmsModelKeys = new Set(
+        result.models
+          .map(m => nightBatch.normalizeForMatch(m.modelKey))
+          .filter(Boolean)
+      );
+    }
+  } catch (e) {
+    logger.warn('listLlmModels indisponible pour --lmstudio : ' + e.message);
+  }
+
+  let entries;
+  let hiddenLmsCount = 0;
+  if (lmsModelKeys) {
+    entries = allEntries.filter(e => {
+      const nm = nightBatch.normalizeForMatch(e.model);
+      const ns = nightBatch.normalizeForMatch(e.shortName);
+      // Un carnet correspond si son model OU son shortName normalisé matche
+      // un modelKey de LM Studio.
+      return (nm && lmsModelKeys.has(nm)) || (ns && lmsModelKeys.has(ns));
+    });
+    hiddenLmsCount = allEntries.length - entries.length;
+  } else {
+    // lms indisponible : on garde tous les carnets (repli).
+    entries = allEntries.slice();
+  }
+
+  entries.sort((a, b) => (b.lastTestTs || 0) - (a.lastTestTs || 0));
+
+  console.log('');
+  console.log('  \x1b[1;36m━━━ RAPPORT LM STUDIO · SUIVI COMPLET ━━━\x1b[0m');
+
+  // --- Bloc 1 : Modèles testés ET présents dans LM Studio (tri chrono inversé) ---
+  if (entries.length === 0) {
+    console.log('  \x1b[33mAucun modèle LM Studio testé trouvé dans les carnets.\x1b[0m');
+    console.log('  \x1b[90mLancez d abord un benchmark local : node runner.js all --profile=LIGHT\x1b[0m');
+  } else {
+    console.log(`  \x1b[1;32mBLOC 1 — MODÈLES TESTÉS (${entries.length})\x1b[0m`);
+    console.log(`  \x1b[90mModèles présents dans LM Studio et déjà évalués — tri du test le plus récent au plus ancien.\x1b[0m`);
+
+    const headers = ['#', 'Modèle LM Studio', 'Dernier Test', 'Niveau', 'Score', 'Statut'];
+    const aligns = ['left', 'left', 'left', 'center', 'right', 'left'];
+    const rows = [];
+    for (let i = 0; i < entries.length; i++) {
+      const e = entries[i];
+      const verdict = getVerdict(e, i + 1);
+      const cat = getCategory(e, i + 1);
+      const grade = letterGrade(e.pct);
+      const vColor = verdict.rank === 0 ? '\x1b[93m' : verdict.rank === 1 ? '\x1b[32m' : verdict.rank === 2 ? '\x1b[36m' : verdict.rank === 3 ? '\x1b[33m' : '\x1b[31m';
+      let dateLabel = '\x1b[90m—\x1b[0m';
+      if (e.lastTestTs > 0) {
+        try {
+          const d = new Date(e.lastTestTs);
+          dateLabel = d.toLocaleString('fr-FR', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+        } catch (_) {
+          dateLabel = '\x1b[90m?\x1b[0m';
+        }
+      }
+      const niveauLabel = (e.ecoles || []).map(ec => ec.ecole).join(', ') || '\x1b[90m—\x1b[0m';
+      const scoreLabel = `${e.score}/${e.max} (${e.pct}%)`;
+      rows.push([
+        (i + 1) + '.',
+        e.model,
+        dateLabel,
+        `${grade.color}${grade.grade}\x1b[0m ${niveauLabel}`,
+        scoreLabel,
+        `${vColor}${verdict.label}\x1b[0m \x1b[90m${cat.icon}\x1b[0m`,
+      ]);
+    }
+
+    const res = cliTable.table(headers, rows, { colAligns: aligns, separator: '  ' });
+    console.log(`  \x1b[90m    ${res.lines[0]}\x1b[0m`);
+    console.log(`  \x1b[90m    ${res.sepLine}\x1b[0m`);
+    for (let i = 0; i < rows.length; i++) {
+      console.log(`  ${res.lines[i + 2]}`);
+    }
+    if (hiddenLmsCount > 0) {
+      console.log(`  \x1b[90m${hiddenLmsCount} carnet(s) de modèles testés mais supprimés de LM Studio (masqué(s) du rapport).\x1b[0m`);
+    }
+  }
+
+  // --- Bloc 2 : Modèles non testés (détectés dans LM Studio, absents des carnets) ---
+  console.log('');
+  printUntestedLmStudioModels();
+
+  console.log('');
+  console.log('  \x1b[90mAstuce : node leaderboard.js pour le classement complet (local + cloud).\x1b[0m');
+  console.log('  \x1b[90mAstuce : node leaderboard.js --cloud pour le classement des modèles frontière cloud.\x1b[0m');
   console.log('');
 }
 
@@ -4781,13 +5328,15 @@ module.exports = {
   buildDashboardHTML,
   printCloudLeaderboard,
   markCloudModel,
-  detectIsCloudFromLedger
+  detectIsCloudFromLedger,
+  printLmStudioStatus
 };
 
 if (require.main === module) {
   const args = process.argv.slice(2);
   const serveMode = args.includes('--serve') || args.includes('-s');
   const cloudMode = args.includes('--cloud');
+  const lmstudioMode = args.includes('--lmstudio') || args.includes('--lmstudio-status');
   const markCloudArg = args.find(a => a.startsWith('--mark-cloud='));
   const portArg = args.find(a => a.startsWith('--port='));
   const port = portArg ? parseInt(portArg.split('=')[1], 10) : 3939;
@@ -4797,6 +5346,15 @@ if (require.main === module) {
   if (markCloudArg) {
     const shortName = markCloudArg.slice('--mark-cloud='.length);
     markCloudModel(shortName);
+    process.exit(0);
+  }
+
+  // --lmstudio / --lmstudio-status : rapport de suivi complet pour LM Studio.
+  // Combine en une vue unifiée les modèles LM Studio déjà testés (Bloc 1, tri
+  // chronologique inversé) et les modèles LM Studio détectés mais non encore
+  // testés (Bloc 2, statut [NON TESTÉ]). Sort après affichage (pas de génération HTML).
+  if (lmstudioMode) {
+    printLmStudioStatus();
     process.exit(0);
   }
 
@@ -4821,5 +5379,6 @@ if (require.main === module) {
     }
     console.log('\x1b[90mAstuce : node leaderboard.js --serve pour le mode interactif (boutons supprimer dans le navigateur).\x1b[0m');
     console.log('\x1b[90mAstuce : node leaderboard.js --cloud pour le classement des modèles frontière cloud uniquement.\x1b[0m');
+    console.log('\x1b[90mAstuce : node leaderboard.js --lmstudio pour le rapport LM Studio (testés + non testés).\x1b[0m');
   }
 }
