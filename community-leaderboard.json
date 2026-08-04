@@ -23,6 +23,8 @@
       "elapsedMs": 2504272,
       "wallMs": 2516665,
       "tokensPerSecond": 6.04,
+      "promptTokens": 0,
+      "completionTokens": 15133,
       "ecoleCount": 1,
       "ecoles": [
         {
@@ -38,6 +40,8 @@
           "elapsedMs": 2504272,
           "tokens": 15133,
           "tokensPerSecond": 6.04,
+          "promptTokens": 0,
+          "completionTokens": 15133,
           "tiers": [
             {
               "tierNum": 0,
@@ -987,6 +991,8 @@
       "elapsedMs": 5067053,
       "wallMs": 5074491,
       "tokensPerSecond": 6.87,
+      "promptTokens": 0,
+      "completionTokens": 34807,
       "ecoleCount": 2,
       "ecoles": [
         {
@@ -1002,6 +1008,8 @@
           "elapsedMs": 3404266,
           "tokens": 23769,
           "tokensPerSecond": 6.98,
+          "promptTokens": 0,
+          "completionTokens": 23769,
           "tiers": [
             {
               "tierNum": 0,
@@ -1930,6 +1938,8 @@
           "elapsedMs": 1662787,
           "tokens": 11038,
           "tokensPerSecond": 6.64,
+          "promptTokens": 0,
+          "completionTokens": 11038,
           "tiers": [
             {
               "tierNum": 0,
@@ -2765,6 +2775,8 @@
       "elapsedMs": 4217057,
       "wallMs": 4315550,
       "tokensPerSecond": 6.14,
+      "promptTokens": 0,
+      "completionTokens": 25883,
       "ecoleCount": 2,
       "ecoles": [
         {
@@ -2780,6 +2792,8 @@
           "elapsedMs": 2496396,
           "tokens": 15766,
           "tokensPerSecond": 6.32,
+          "promptTokens": 0,
+          "completionTokens": 15766,
           "tiers": [
             {
               "tierNum": 0,
@@ -3708,6 +3722,8 @@
           "elapsedMs": 1720661,
           "tokens": 10117,
           "tokensPerSecond": 5.88,
+          "promptTokens": 0,
+          "completionTokens": 10117,
           "tiers": [
             {
               "tierNum": 0,
@@ -4541,6 +4557,8 @@
       "elapsedMs": 8587934,
       "wallMs": 8641228,
       "tokensPerSecond": 4.03,
+      "promptTokens": 0,
+      "completionTokens": 34577,
       "ecoleCount": 1,
       "ecoles": [
         {
@@ -4556,6 +4574,8 @@
           "elapsedMs": 8587934,
           "tokens": 34577,
           "tokensPerSecond": 4.03,
+          "promptTokens": 0,
+          "completionTokens": 34577,
           "tiers": [
             {
               "tierNum": 0,
@@ -5505,6 +5525,8 @@
       "elapsedMs": 1797563,
       "wallMs": 1800923,
       "tokensPerSecond": 11,
+      "promptTokens": 0,
+      "completionTokens": 19779,
       "ecoleCount": 1,
       "ecoles": [
         {
@@ -5520,6 +5542,8 @@
           "elapsedMs": 1797563,
           "tokens": 19779,
           "tokensPerSecond": 11,
+          "promptTokens": 0,
+          "completionTokens": 19779,
           "tiers": [
             {
               "tierNum": 0,
@@ -6469,6 +6493,8 @@
       "elapsedMs": 0,
       "wallMs": 0,
       "tokensPerSecond": 0,
+      "promptTokens": 0,
+      "completionTokens": 0,
       "ecoleCount": 2,
       "ecoles": [
         {
@@ -6484,6 +6510,8 @@
           "elapsedMs": 0,
           "tokens": 0,
           "tokensPerSecond": 0,
+          "promptTokens": 0,
+          "completionTokens": 0,
           "tiers": [
             {
               "tierNum": 0,
@@ -7295,6 +7323,8 @@
           "elapsedMs": 0,
           "tokens": 0,
           "tokensPerSecond": 0,
+          "promptTokens": 0,
+          "completionTokens": 0,
           "tiers": [
             {
               "tierNum": 0,
@@ -8128,6 +8158,8 @@
       "elapsedMs": 839543,
       "wallMs": 842565,
       "tokensPerSecond": 4.78,
+      "promptTokens": 0,
+      "completionTokens": 4009,
       "ecoleCount": 1,
       "ecoles": [
         {
@@ -8143,6 +8175,8 @@
           "elapsedMs": 839543,
           "tokens": 4009,
           "tokensPerSecond": 4.78,
+          "promptTokens": 0,
+          "completionTokens": 4009,
           "tiers": [
             {
               "tierNum": 0,
@@ -8976,6 +9010,8 @@
       "elapsedMs": 1618941,
       "wallMs": 1663727,
       "tokensPerSecond": 6.58,
+      "promptTokens": 0,
+      "completionTokens": 10652,
       "ecoleCount": 2,
       "ecoles": [
         {
@@ -8991,6 +9027,8 @@
           "elapsedMs": 583644,
           "tokens": 3815,
           "tokensPerSecond": 6.54,
+          "promptTokens": 0,
+          "completionTokens": 3815,
           "tiers": [
             {
               "tierNum": 0,
@@ -9802,6 +9840,8 @@
           "elapsedMs": 1035297,
           "tokens": 6837,
           "tokensPerSecond": 6.6,
+          "promptTokens": 0,
+          "completionTokens": 6837,
           "tiers": [
             {
               "tierNum": 0,
@@ -10752,6 +10792,8 @@
       "elapsedMs": 904552,
       "wallMs": 942023,
       "tokensPerSecond": 8.84,
+      "promptTokens": 0,
+      "completionTokens": 7997,
       "ecoleCount": 1,
       "ecoles": [
         {
@@ -10767,6 +10809,8 @@
           "elapsedMs": 904552,
           "tokens": 7997,
           "tokensPerSecond": 8.84,
+          "promptTokens": 0,
+          "completionTokens": 7997,
           "tiers": [
             {
               "tierNum": 0,
@@ -11599,6 +11643,8 @@
       "elapsedMs": 800075,
       "wallMs": 878557,
       "tokensPerSecond": 9.45,
+      "promptTokens": 0,
+      "completionTokens": 7560,
       "ecoleCount": 1,
       "ecoles": [
         {
@@ -11614,6 +11660,8 @@
           "elapsedMs": 800075,
           "tokens": 7560,
           "tokensPerSecond": 9.45,
+          "promptTokens": 0,
+          "completionTokens": 7560,
           "tiers": [
             {
               "tierNum": 0,
@@ -12446,6 +12494,8 @@
       "elapsedMs": 950658,
       "wallMs": 1003054,
       "tokensPerSecond": 9.82,
+      "promptTokens": 0,
+      "completionTokens": 9339,
       "ecoleCount": 2,
       "ecoles": [
         {
@@ -12461,6 +12511,8 @@
           "elapsedMs": 626808,
           "tokens": 6160,
           "tokensPerSecond": 9.83,
+          "promptTokens": 0,
+          "completionTokens": 6160,
           "tiers": [
             {
               "tierNum": 0,
@@ -13389,6 +13441,8 @@
           "elapsedMs": 323850,
           "tokens": 3179,
           "tokensPerSecond": 9.82,
+          "promptTokens": 0,
+          "completionTokens": 3179,
           "tiers": [
             {
               "tierNum": 0,
@@ -14222,6 +14276,8 @@
       "elapsedMs": 0,
       "wallMs": 0,
       "tokensPerSecond": 0,
+      "promptTokens": 0,
+      "completionTokens": 0,
       "ecoleCount": 2,
       "ecoles": [
         {
@@ -14237,6 +14293,8 @@
           "elapsedMs": 0,
           "tokens": 0,
           "tokensPerSecond": 0,
+          "promptTokens": 0,
+          "completionTokens": 0,
           "tiers": [
             {
               "tierNum": 0,
@@ -15044,6 +15102,8 @@
           "elapsedMs": 0,
           "tokens": 0,
           "tokensPerSecond": 0,
+          "promptTokens": 0,
+          "completionTokens": 0,
           "tiers": [
             {
               "tierNum": 0,
@@ -15873,6 +15933,8 @@
       "elapsedMs": 0,
       "wallMs": 0,
       "tokensPerSecond": 0,
+      "promptTokens": 0,
+      "completionTokens": 0,
       "ecoleCount": 2,
       "ecoles": [
         {
@@ -15888,6 +15950,8 @@
           "elapsedMs": 0,
           "tokens": 0,
           "tokensPerSecond": 0,
+          "promptTokens": 0,
+          "completionTokens": 0,
           "tiers": [
             {
               "tierNum": 0,
@@ -16711,6 +16775,8 @@
           "elapsedMs": 0,
           "tokens": 0,
           "tokensPerSecond": 0,
+          "promptTokens": 0,
+          "completionTokens": 0,
           "tiers": [
             {
               "tierNum": 0,
@@ -17544,6 +17610,8 @@
       "elapsedMs": 1215257,
       "wallMs": 1885017,
       "tokensPerSecond": 10.81,
+      "promptTokens": 0,
+      "completionTokens": 13141,
       "ecoleCount": 1,
       "ecoles": [
         {
@@ -17559,6 +17627,8 @@
           "elapsedMs": 1215257,
           "tokens": 13141,
           "tokensPerSecond": 10.81,
+          "promptTokens": 0,
+          "completionTokens": 13141,
           "tiers": [
             {
               "tierNum": 0,
@@ -18508,6 +18578,8 @@
       "elapsedMs": 0,
       "wallMs": 0,
       "tokensPerSecond": 0,
+      "promptTokens": 0,
+      "completionTokens": 0,
       "ecoleCount": 2,
       "ecoles": [
         {
@@ -18523,6 +18595,8 @@
           "elapsedMs": 0,
           "tokens": 0,
           "tokensPerSecond": 0,
+          "promptTokens": 0,
+          "completionTokens": 0,
           "tiers": [],
           "selfProfile": null
         },
@@ -18539,6 +18613,8 @@
           "elapsedMs": 0,
           "tokens": 0,
           "tokensPerSecond": 0,
+          "promptTokens": 0,
+          "completionTokens": 0,
           "tiers": [],
           "selfProfile": null
         }
@@ -18577,6 +18653,8 @@
       "elapsedMs": 183679,
       "wallMs": 333893,
       "tokensPerSecond": 25.54,
+      "promptTokens": 0,
+      "completionTokens": 4691,
       "ecoleCount": 2,
       "ecoles": [
         {
@@ -18592,6 +18670,8 @@
           "elapsedMs": 21695,
           "tokens": 1218,
           "tokensPerSecond": 56.14,
+          "promptTokens": 0,
+          "completionTokens": 1218,
           "tiers": [
             {
               "tierNum": 0,
@@ -19403,6 +19483,8 @@
           "elapsedMs": 161984,
           "tokens": 3473,
           "tokensPerSecond": 21.44,
+          "promptTokens": 0,
+          "completionTokens": 3473,
           "tiers": [
             {
               "tierNum": 0,
@@ -20272,6 +20354,8 @@
       "elapsedMs": 0,
       "wallMs": 0,
       "tokensPerSecond": 0,
+      "promptTokens": 0,
+      "completionTokens": 0,
       "ecoleCount": 2,
       "ecoles": [
         {
@@ -20287,6 +20371,8 @@
           "elapsedMs": 0,
           "tokens": 0,
           "tokensPerSecond": 0,
+          "promptTokens": 0,
+          "completionTokens": 0,
           "tiers": [
             {
               "tierNum": 0,
@@ -21094,6 +21180,8 @@
           "elapsedMs": 0,
           "tokens": 0,
           "tokensPerSecond": 0,
+          "promptTokens": 0,
+          "completionTokens": 0,
           "tiers": [
             {
               "tierNum": 0,
@@ -21923,6 +22011,8 @@
       "elapsedMs": 1855405,
       "wallMs": 2010427,
       "tokensPerSecond": 3.19,
+      "promptTokens": 0,
+      "completionTokens": 5923,
       "ecoleCount": 1,
       "ecoles": [
         {
@@ -21938,6 +22028,8 @@
           "elapsedMs": 1855405,
           "tokens": 5923,
           "tokensPerSecond": 3.19,
+          "promptTokens": 0,
+          "completionTokens": 5923,
           "tiers": [
             {
               "tierNum": 0,
@@ -22887,6 +22979,8 @@
       "elapsedMs": 5436376,
       "wallMs": 5440058,
       "tokensPerSecond": 4.92,
+      "promptTokens": 0,
+      "completionTokens": 26720,
       "ecoleCount": 1,
       "ecoles": [
         {
@@ -22902,6 +22996,8 @@
           "elapsedMs": 5436376,
           "tokens": 26720,
           "tokensPerSecond": 4.92,
+          "promptTokens": 0,
+          "completionTokens": 26720,
           "tiers": [
             {
               "tierNum": 0,
@@ -23852,6 +23948,8 @@
       "elapsedMs": 1793603,
       "wallMs": 1821534,
       "tokensPerSecond": 6.09,
+      "promptTokens": 0,
+      "completionTokens": 10926,
       "ecoleCount": 2,
       "ecoles": [
         {
@@ -23867,6 +23965,8 @@
           "elapsedMs": 1141476,
           "tokens": 6994,
           "tokensPerSecond": 6.13,
+          "promptTokens": 0,
+          "completionTokens": 6994,
           "tiers": [
             {
               "tierNum": 0,
@@ -24924,6 +25024,8 @@
           "elapsedMs": 652127,
           "tokens": 3932,
           "tokensPerSecond": 6.03,
+          "promptTokens": 0,
+          "completionTokens": 3932,
           "tiers": [
             {
               "tierNum": 0,
@@ -25757,6 +25859,8 @@
       "elapsedMs": 0,
       "wallMs": 0,
       "tokensPerSecond": 0,
+      "promptTokens": 0,
+      "completionTokens": 0,
       "ecoleCount": 2,
       "ecoles": [
         {
@@ -25772,6 +25876,8 @@
           "elapsedMs": 0,
           "tokens": 0,
           "tokensPerSecond": 0,
+          "promptTokens": 0,
+          "completionTokens": 0,
           "tiers": [
             {
               "tierNum": 0,
@@ -26563,6 +26669,8 @@
           "elapsedMs": 0,
           "tokens": 0,
           "tokensPerSecond": 0,
+          "promptTokens": 0,
+          "completionTokens": 0,
           "tiers": [],
           "selfProfile": null
         }
@@ -26603,6 +26711,8 @@
       "elapsedMs": 2189779,
       "wallMs": 2299579,
       "tokensPerSecond": 3.29,
+      "promptTokens": 0,
+      "completionTokens": 7213,
       "ecoleCount": 1,
       "ecoles": [
         {
@@ -26618,6 +26728,8 @@
           "elapsedMs": 2189779,
           "tokens": 7213,
           "tokensPerSecond": 3.29,
+          "promptTokens": 0,
+          "completionTokens": 7213,
           "tiers": [
             {
               "tierNum": 0,
@@ -27567,6 +27679,8 @@
       "elapsedMs": 2486034,
       "wallMs": 3417632,
       "tokensPerSecond": 10.71,
+      "promptTokens": 0,
+      "completionTokens": 26624,
       "ecoleCount": 1,
       "ecoles": [
         {
@@ -27582,6 +27696,8 @@
           "elapsedMs": 2486034,
           "tokens": 26624,
           "tokensPerSecond": 10.71,
+          "promptTokens": 0,
+          "completionTokens": 26624,
           "tiers": [
             {
               "tierNum": 0,
@@ -28531,6 +28647,8 @@
       "elapsedMs": 0,
       "wallMs": 0,
       "tokensPerSecond": 0,
+      "promptTokens": 0,
+      "completionTokens": 0,
       "ecoleCount": 2,
       "ecoles": [
         {
@@ -28546,6 +28664,8 @@
           "elapsedMs": 0,
           "tokens": 0,
           "tokensPerSecond": 0,
+          "promptTokens": 0,
+          "completionTokens": 0,
           "tiers": [],
           "selfProfile": null
         },
@@ -28562,6 +28682,8 @@
           "elapsedMs": 0,
           "tokens": 0,
           "tokensPerSecond": 0,
+          "promptTokens": 0,
+          "completionTokens": 0,
           "tiers": [],
           "selfProfile": null
         }
@@ -28600,6 +28722,8 @@
       "elapsedMs": 0,
       "wallMs": 0,
       "tokensPerSecond": 0,
+      "promptTokens": 0,
+      "completionTokens": 0,
       "ecoleCount": 1,
       "ecoles": [
         {
@@ -28615,6 +28739,8 @@
           "elapsedMs": 0,
           "tokens": 0,
           "tokensPerSecond": 0,
+          "promptTokens": 0,
+          "completionTokens": 0,
           "tiers": [
             {
               "tierNum": 0,
@@ -29447,6 +29573,8 @@
       "elapsedMs": 1735885,
       "wallMs": 1865753,
       "tokensPerSecond": 17.19,
+      "promptTokens": 0,
+      "completionTokens": 29843,
       "ecoleCount": 1,
       "ecoles": [
         {
@@ -29462,6 +29590,8 @@
           "elapsedMs": 1735885,
           "tokens": 29843,
           "tokensPerSecond": 17.19,
+          "promptTokens": 0,
+          "completionTokens": 29843,
           "tiers": [
             {
               "tierNum": 0,
@@ -30411,6 +30541,8 @@
       "elapsedMs": 3535926,
       "wallMs": 3975888,
       "tokensPerSecond": 7.1,
+      "promptTokens": 0,
+      "completionTokens": 25089,
       "ecoleCount": 1,
       "ecoles": [
         {
@@ -30426,6 +30558,8 @@
           "elapsedMs": 3535926,
           "tokens": 25089,
           "tokensPerSecond": 7.1,
+          "promptTokens": 0,
+          "completionTokens": 25089,
           "tiers": [
             {
               "tierNum": 0,
@@ -31375,6 +31509,8 @@
       "elapsedMs": 8915703,
       "wallMs": 9121853,
       "tokensPerSecond": 19.41,
+      "promptTokens": 0,
+      "completionTokens": 173085,
       "ecoleCount": 2,
       "ecoles": [
         {
@@ -31390,6 +31526,8 @@
           "elapsedMs": 3758056,
           "tokens": 71924,
           "tokensPerSecond": 19.14,
+          "promptTokens": 0,
+          "completionTokens": 71924,
           "tiers": [
             {
               "tierNum": 0,
@@ -32314,6 +32452,8 @@
           "elapsedMs": 5157647,
           "tokens": 101161,
           "tokensPerSecond": 19.61,
+          "promptTokens": 0,
+          "completionTokens": 101161,
           "tiers": [
             {
               "tierNum": 0,
@@ -33159,6 +33299,8 @@
       "elapsedMs": 2523715,
       "wallMs": 3292763,
       "tokensPerSecond": 6.28,
+      "promptTokens": 0,
+      "completionTokens": 15850,
       "ecoleCount": 1,
       "ecoles": [
         {
@@ -33174,6 +33316,8 @@
           "elapsedMs": 2523715,
           "tokens": 15850,
           "tokensPerSecond": 6.28,
+          "promptTokens": 0,
+          "completionTokens": 15850,
           "tiers": [
             {
               "tierNum": 0,
@@ -34123,6 +34267,8 @@
       "elapsedMs": 5491514,
       "wallMs": 5576007,
       "tokensPerSecond": 2.14,
+      "promptTokens": 0,
+      "completionTokens": 11748,
       "ecoleCount": 1,
       "ecoles": [
         {
@@ -34138,6 +34284,8 @@
           "elapsedMs": 5491514,
           "tokens": 11748,
           "tokensPerSecond": 2.14,
+          "promptTokens": 0,
+          "completionTokens": 11748,
           "tiers": [
             {
               "tierNum": 0,
@@ -35006,6 +35154,8 @@
       "elapsedMs": 1527376,
       "wallMs": 2515264,
       "tokensPerSecond": 9.41,
+      "promptTokens": 0,
+      "completionTokens": 14368,
       "ecoleCount": 1,
       "ecoles": [
         {
@@ -35021,6 +35171,8 @@
           "elapsedMs": 1527376,
           "tokens": 14368,
           "tokensPerSecond": 9.41,
+          "promptTokens": 0,
+          "completionTokens": 14368,
           "tiers": [
             {
               "tierNum": 0,
@@ -35889,6 +36041,8 @@
       "elapsedMs": 1173002,
       "wallMs": 3559640,
       "tokensPerSecond": 17.86,
+      "promptTokens": 0,
+      "completionTokens": 20951,
       "ecoleCount": 1,
       "ecoles": [
         {
@@ -35904,6 +36058,8 @@
           "elapsedMs": 1173002,
           "tokens": 20951,
           "tokensPerSecond": 17.86,
+          "promptTokens": 0,
+          "completionTokens": 20951,
           "tiers": [
             {
               "tierNum": 0,
@@ -36853,6 +37009,8 @@
       "elapsedMs": 916325,
       "wallMs": 1981518,
       "tokensPerSecond": 16.32,
+      "promptTokens": 0,
+      "completionTokens": 14955,
       "ecoleCount": 1,
       "ecoles": [
         {
@@ -36868,6 +37026,8 @@
           "elapsedMs": 916325,
           "tokens": 14955,
           "tokensPerSecond": 16.32,
+          "promptTokens": 0,
+          "completionTokens": 14955,
           "tiers": [
             {
               "tierNum": 0,
@@ -37817,6 +37977,8 @@
       "elapsedMs": 632637,
       "wallMs": 788402,
       "tokensPerSecond": 17.01,
+      "promptTokens": 0,
+      "completionTokens": 10758,
       "ecoleCount": 1,
       "ecoles": [
         {
@@ -37832,6 +37994,8 @@
           "elapsedMs": 632637,
           "tokens": 10758,
           "tokensPerSecond": 17.01,
+          "promptTokens": 0,
+          "completionTokens": 10758,
           "tiers": [
             {
               "tierNum": 0,
@@ -38535,6 +38699,8 @@
       "elapsedMs": 0,
       "wallMs": 0,
       "tokensPerSecond": 0,
+      "promptTokens": 0,
+      "completionTokens": 0,
       "ecoleCount": 1,
       "ecoles": [
         {
@@ -38550,6 +38716,8 @@
           "elapsedMs": 0,
           "tokens": 0,
           "tokensPerSecond": 0,
+          "promptTokens": 0,
+          "completionTokens": 0,
           "tiers": [
             {
               "tierNum": 0,
@@ -38737,6 +38905,8 @@
       "elapsedMs": 0,
       "wallMs": 0,
       "tokensPerSecond": 0,
+      "promptTokens": 0,
+      "completionTokens": 0,
       "ecoleCount": 1,
       "ecoles": [
         {
@@ -38752,6 +38922,8 @@
           "elapsedMs": 0,
           "tokens": 0,
           "tokensPerSecond": 0,
+          "promptTokens": 0,
+          "completionTokens": 0,
           "tiers": [
             {
               "tierNum": 0,
@@ -39068,6 +39240,8 @@
       "elapsedMs": 0,
       "wallMs": 9711,
       "tokensPerSecond": 0,
+      "promptTokens": 0,
+      "completionTokens": 0,
       "ecoleCount": 1,
       "ecoles": [
         {
@@ -39083,6 +39257,8 @@
           "elapsedMs": 0,
           "tokens": 0,
           "tokensPerSecond": 0,
+          "promptTokens": 0,
+          "completionTokens": 0,
           "tiers": [],
           "selfProfile": null
         }
@@ -39120,6 +39296,8 @@
       "elapsedMs": 146414,
       "wallMs": 191820,
       "tokensPerSecond": 41.08,
+      "promptTokens": 0,
+      "completionTokens": 6014,
       "ecoleCount": 1,
       "ecoles": [
         {
@@ -39135,6 +39313,8 @@
           "elapsedMs": 146414,
           "tokens": 6014,
           "tokensPerSecond": 41.08,
+          "promptTokens": 0,
+          "completionTokens": 6014,
           "tiers": [
             {
               "tierNum": 0,
@@ -39967,6 +40147,8 @@
       "elapsedMs": 157185,
       "wallMs": 157625,
       "tokensPerSecond": 5.76,
+      "promptTokens": 0,
+      "completionTokens": 906,
       "ecoleCount": 1,
       "ecoles": [
         {
@@ -39982,6 +40164,8 @@
           "elapsedMs": 157185,
           "tokens": 906,
           "tokensPerSecond": 5.76,
+          "promptTokens": 0,
+          "completionTokens": 906,
           "tiers": [
             {
               "tierNum": 0,
@@ -40185,6 +40369,8 @@
       "elapsedMs": 5788839,
       "wallMs": 5790141,
       "tokensPerSecond": 10.44,
+      "promptTokens": 0,
+      "completionTokens": 60412,
       "ecoleCount": 1,
       "ecoles": [
         {
@@ -40200,6 +40386,8 @@
           "elapsedMs": 5788839,
           "tokens": 60412,
           "tokensPerSecond": 10.44,
+          "promptTokens": 0,
+          "completionTokens": 60412,
           "tiers": [
             {
               "tierNum": 0,
@@ -40613,6 +40801,8 @@
       "elapsedMs": 485650,
       "wallMs": 557475,
       "tokensPerSecond": 25.66,
+      "promptTokens": 0,
+      "completionTokens": 12463,
       "ecoleCount": 1,
       "ecoles": [
         {
@@ -40628,6 +40818,8 @@
           "elapsedMs": 485650,
           "tokens": 12463,
           "tokensPerSecond": 25.66,
+          "promptTokens": 0,
+          "completionTokens": 12463,
           "tiers": [
             {
               "tierNum": 0,
@@ -41460,6 +41652,8 @@
       "elapsedMs": 127157,
       "wallMs": 169899,
       "tokensPerSecond": 45.75,
+      "promptTokens": 0,
+      "completionTokens": 5818,
       "ecoleCount": 1,
       "ecoles": [
         {
@@ -41475,6 +41669,8 @@
           "elapsedMs": 127157,
           "tokens": 5818,
           "tokensPerSecond": 45.75,
+          "promptTokens": 0,
+          "completionTokens": 5818,
           "tiers": [
             {
               "tierNum": 0,
@@ -42424,6 +42620,8 @@
       "elapsedMs": 8651327,
       "wallMs": 8657626,
       "tokensPerSecond": 6.43,
+      "promptTokens": 0,
+      "completionTokens": 55641,
       "ecoleCount": 2,
       "ecoles": [
         {
@@ -42439,6 +42637,8 @@
           "elapsedMs": 5286813,
           "tokens": 34025,
           "tokensPerSecond": 6.44,
+          "promptTokens": 0,
+          "completionTokens": 34025,
           "tiers": [
             {
               "tierNum": 0,
@@ -43250,6 +43450,8 @@
           "elapsedMs": 3364514,
           "tokens": 21616,
           "tokensPerSecond": 6.42,
+          "promptTokens": 0,
+          "completionTokens": 21616,
           "tiers": [
             {
               "tierNum": 0,
@@ -44178,6 +44380,6 @@
       ]
     }
   ],
-  "generatedAt": "2026-08-04T14:54:16.702Z",
+  "generatedAt": "2026-08-04T15:56:14.728Z",
   "totalSubmissions": 49
 }
