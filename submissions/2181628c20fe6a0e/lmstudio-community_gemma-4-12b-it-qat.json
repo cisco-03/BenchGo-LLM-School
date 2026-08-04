@@ -3,8 +3,8 @@
   "benchgoVersion": "V3",
   "userId": "2181628c20fe6a0e",
   "pseudo": "FlexoDiv",
-  "submittedAt": "2026-07-29T07:16:22.110Z",
-  "integrityHash": "b47153797ca16848",
+  "submittedAt": "2026-08-04T14:53:53.185Z",
+  "integrityHash": "eac1a06fd46a7d04",
   "carnet": {
     "model": "lmstudio-community/gemma-4-12b-it-qat",
     "shortName": "lmstudio-community_gemma-4-12b-it-qat",
@@ -3594,6 +3594,8 @@
         ]
       }
     },
-    "lastUpdated": "2026-07-28T23:49:35.058Z"
+    "lastUpdated": "2026-08-04T14:50:34.429Z",
+    "paramSize": 12,
+    "quantization": "Q4_K_M"
   }
 }
