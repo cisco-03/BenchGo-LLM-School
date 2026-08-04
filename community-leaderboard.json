@@ -10734,7 +10734,7 @@
       "shortName": "ornith-1-0-9b-q5-k-m",
       "quantization": "Q5_K_M",
       "modelUrl": "https://huggingface.co/deepreinforce-ai/Ornith-1.0-9B-GGUF",
-      "note": null,
+      "note": "https://huggingface.co/models?other=base_model:quantized:deepreinforce-ai/Ornith-1.0-9B",
       "publisher": null,
       "provider": null,
       "isCloud": false,
@@ -11570,7 +11570,7 @@
         "Primaire"
       ],
       "pseudo": "FlexoDiv",
-      "submittedAt": "2026-08-03T21:59:39.287Z",
+      "submittedAt": "2026-08-04T14:36:37.745Z",
       "contributors": 1,
       "allPct": [
         97
@@ -11580,8 +11580,8 @@
       "model": "deepreinforce-ai_ornith-1.0-9b",
       "shortName": "deepreinforce-ai-ornith-1-0-9b",
       "quantization": "Q4_K_S",
-      "modelUrl": null,
-      "note": null,
+      "modelUrl": "https://huggingface.co/collections/deepreinforce-ai/ornith-10",
+      "note": "https://huggingface.co/models?other=base_model:quantized:deepreinforce-ai/Ornith-1.0-9B",
       "publisher": null,
       "provider": "local",
       "isCloud": false,
@@ -12417,7 +12417,7 @@
         "Primaire"
       ],
       "pseudo": "FlexoDiv",
-      "submittedAt": "2026-08-04T06:08:24.481Z",
+      "submittedAt": "2026-08-04T14:36:43.897Z",
       "contributors": 1,
       "allPct": [
         97
@@ -44178,6 +44178,6 @@
       ]
     }
   ],
-  "generatedAt": "2026-08-04T14:37:04.087Z",
+  "generatedAt": "2026-08-04T14:37:24.233Z",
   "totalSubmissions": 49
 }
