@@ -4,8 +4,8 @@
       "model": "kai-os_grug-12b@q5_k_s",
       "shortName": "kai-os-grug-12b-q5-k-s",
       "quantization": "Q5_K_S",
-      "modelUrl": null,
-      "note": null,
+      "modelUrl": "https://huggingface.co/bartowski/kai-os_Grug-12B-GGUF",
+      "note": "kai-os_Grug-12B-Q5_K_S.gguf",
       "publisher": null,
       "provider": "local",
       "isCloud": false,
@@ -958,7 +958,7 @@
         "College-Lycee"
       ],
       "pseudo": "FlexoDiv",
-      "submittedAt": "2026-08-04T06:08:19.077Z",
+      "submittedAt": "2026-08-04T14:36:31.476Z",
       "contributors": 1,
       "allPct": [
         100
@@ -44178,6 +44178,6 @@
       ]
     }
   ],
-  "generatedAt": "2026-08-04T06:08:58.013Z",
+  "generatedAt": "2026-08-04T14:37:04.087Z",
   "totalSubmissions": 49
 }
