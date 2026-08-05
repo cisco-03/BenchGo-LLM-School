@@ -208,6 +208,11 @@ function aggregateCarnet(carnet) {
 
   return {
     model: carnet.model || carnet.shortName || 'Inconnu',
+    // Nom d affichage personnalise (corrige par l utilisateur dans le
+    // leaderboard local via /api/model-displayname, puis soumis avec le
+    // carnet). Permet de distinguer deux modeles au meme nom mais
+    // quantifications/parametres differents.
+    displayName: carnet.displayName || null,
     shortName: carnet.shortName || (carnet.model || 'inconnu').toLowerCase().replace(/[^a-z0-9]/g, '-'),
     quantization: carnet.quantization || null,
     modelUrl: carnet.modelUrl || guessModelUrl(carnet.model, carnet.publisher) || null,
@@ -462,7 +467,7 @@ function buildConsolidatedHTML(entries) {
     const args = buildArguments(e)
     const provInfo = providerDisplay(e.provider, e.isCloud)
     return {
-      rank, model: e.model, shortName: e.shortName,
+      rank, model: e.model, displayName: e.displayName || null, shortName: e.shortName,
       quantization: e.quantization, modelUrl: e.modelUrl || null,
       note: e.note || null,
       provider: e.provider || null, isCloud: Boolean(e.isCloud),
@@ -1399,7 +1404,7 @@ function renderCards() {
       if (activeOrigin === 'cloud' && !pm.isCloud) continue;
       if (activeOrigin === 'local' && pm.isCloud) continue;
     }
-    if (q && pm.model.toLowerCase().indexOf(q) === -1 && pm.shortName.toLowerCase().indexOf(q) === -1) continue;
+    if (q && pm.model.toLowerCase().indexOf(q) === -1 && (pm.displayName || '').toLowerCase().indexOf(q) === -1 && pm.shortName.toLowerCase().indexOf(q) === -1) continue;
     _preFiltered.push(pm);
   }
 
@@ -1429,7 +1434,7 @@ function renderCards() {
       if (activeOrigin === 'cloud' && !om.isCloud) continue;
       if (activeOrigin === 'local' && om.isCloud) continue;
     }
-    if (q && om.model.toLowerCase().indexOf(q) === -1 && om.shortName.toLowerCase().indexOf(q) === -1) continue;
+    if (q && om.model.toLowerCase().indexOf(q) === -1 && (om.displayName || '').toLowerCase().indexOf(q) === -1 && om.shortName.toLowerCase().indexOf(q) === -1) continue;
     _originCtx.push(om);
   }
 
@@ -1453,7 +1458,7 @@ function renderCards() {
   var _originCounts = { local: 0, cloud: 0 };
   for (var ri = 0; ri < MODELS.length; ri++) {
     var rm = MODELS[ri];
-    if (q && rm.model.toLowerCase().indexOf(q) === -1 && rm.shortName.toLowerCase().indexOf(q) === -1) continue;
+    if (q && rm.model.toLowerCase().indexOf(q) === -1 && (rm.displayName || '').toLowerCase().indexOf(q) === -1 && rm.shortName.toLowerCase().indexOf(q) === -1) continue;
     if (rm.isCloud) _originCounts.cloud++; else _originCounts.local++;
   }
 
@@ -1587,7 +1592,7 @@ function renderCards() {
       '<div class="card-row">' +
         '<div class="rank">' + rankDisp + '</div>' +
         '<div class="model-name">' +
-          '<div class="name-line"><span class="cat-icon">' + dynCat.icon + '</span>' + esc(m.model) + posArrow + '</div>' +
+          '<div class="name-line"><span class="cat-icon">' + dynCat.icon + '</span>' + esc(m.displayName || m.model) + posArrow + '</div>' +
           '<div class="badges">' + szBadge + ' ' + originBadge + ' ' + quantBadge + ' ' + noteBadge + ' ' + contribBadge + ' ' + pseudoBadge + '</div>' +
         '</div>' +
         '<div class="mini-stats">' +
@@ -1639,7 +1644,7 @@ function openModal(idx) {
   var m = MODELS[idx];
   if (!m) return;
   document.getElementById('mRank').innerHTML = (idx < 3 ? '<span class="medal">' + (idx === 0 ? '🥇' : idx === 1 ? '🥈' : '🥉') + '</span>' : (idx + 1));
-  document.getElementById('mTitle').innerHTML = esc(m.model) + positionArrow(m.positionDelta);
+  document.getElementById('mTitle').innerHTML = esc(m.displayName || m.model) + positionArrow(m.positionDelta);
   var vb = document.getElementById('mVerdict');
   vb.textContent = m.verdict.label;
   vb.style.background = m.verdict.color;
@@ -2001,7 +2006,7 @@ function fallbackCopy(text) {
 
 function exportReport(idx) {
   var m = MODELS[idx];
-  var md = '# Rapport intégral — ' + m.model + '\\n\\n';
+  var md = '# Rapport intégral — ' + (m.displayName || m.model) + '\\n\\n';
   md += '**Nom court :** ' + m.shortName + '\\n';
   md += '- Score global : ' + m.score + '/' + m.max + ' (' + m.pct + '%) — Note ' + m.grade + '\\n';
   md += '- Quantification : ' + (m.quantization || '—') + '\\n\\n';
@@ -2084,7 +2089,7 @@ function exportCsv() {
     var m = MODELS[i];
     rows.push([
       String(i + 1),
-      csvCell(m.model),
+      csvCell(m.displayName || m.model),
       csvCell(m.quantization || ''),
       String(m.score),
       String(m.max),
@@ -2117,7 +2122,7 @@ function exportMd() {
     var temps = m.elapsedMs > 0 ? fmtDurJS(m.elapsedMs) : '—';
     var oblig = m.mandatoryTotal > 0 ? (m.mandatoryPct + '%') : '—';
     var lien = m.modelUrl ? '[Voir](' + m.modelUrl + ')' : '—';
-    lines.push('| ' + medal + ' | ' + mdCell(m.model) + ' | ' + mdCell(m.quantization || '—') + ' | ' + m.score + '/' + m.max + ' | ' + dispPct(m.pct) + '% | ' + m.grade + ' | ' + oblig + ' | ' + m.globalLifeScore + ' PV | ' + (m.optionalBonus > 0 ? '+' + m.optionalBonus : '—') + ' | ' + m.ecoleCount + ' | ' + vit + ' | ' + temps + ' | ' + lien + ' |');
+    lines.push('| ' + medal + ' | ' + mdCell(m.displayName || m.model) + ' | ' + mdCell(m.quantization || '—') + ' | ' + m.score + '/' + m.max + ' | ' + dispPct(m.pct) + '% | ' + m.grade + ' | ' + oblig + ' | ' + m.globalLifeScore + ' PV | ' + (m.optionalBonus > 0 ? '+' + m.optionalBonus : '—') + ' | ' + m.ecoleCount + ' | ' + vit + ' | ' + temps + ' | ' + lien + ' |');
   }
   downloadTextFile(lines.join('\\n'), 'classement_communautaire_' + new Date().toISOString().slice(0,10) + '.md', 'text/markdown;charset=utf-8');
   showToast('Markdown exporté (' + MODELS.length + ' modèles)', true);
@@ -2160,7 +2165,7 @@ function copyLeaderboard() {
       if (activeOrigin === 'cloud' && !pm.isCloud) continue;
       if (activeOrigin === 'local' && pm.isCloud) continue;
     }
-    if (q && pm.model.toLowerCase().indexOf(q) === -1 && pm.shortName.toLowerCase().indexOf(q) === -1) continue;
+    if (q && pm.model.toLowerCase().indexOf(q) === -1 && (pm.displayName || '').toLowerCase().indexOf(q) === -1 && pm.shortName.toLowerCase().indexOf(q) === -1) continue;
     _preF.push(pm);
   }
   var _mc = {};
@@ -2187,12 +2192,12 @@ function copyLeaderboard() {
       if (activeOrigin === 'cloud' && !m.isCloud) continue;
       if (activeOrigin === 'local' && m.isCloud) continue;
     }
-    if (q && m.model.toLowerCase().indexOf(q) === -1 && m.shortName.toLowerCase().indexOf(q) === -1) continue;
+    if (q && m.model.toLowerCase().indexOf(q) === -1 && (m.displayName || '').toLowerCase().indexOf(q) === -1 && m.shortName.toLowerCase().indexOf(q) === -1) continue;
     var rank = copied < 3 ? ['🥇','🥈','🥉'][copied] : ('' + (copied + 1));
     var temps = m.elapsedMs > 0 ? fmtDurJS(m.elapsedMs) : '—';
     var vit = m.tokensPerSecond > 0 ? (m.tokensPerSecond + ' t/s') : '—';
     var oblig = m.mandatoryTotal > 0 ? m.mandatoryPct + '%' : '—';
-    lines.push(rank + ' | ' + m.model + ' | ' + (m.quantization || '—') + ' | ' + m.score + '/' + m.max + ' | ' + m.pct + '% | ' + m.grade + ' | ' + oblig + ' | ' + m.globalLifeScore + ' PV | ' + m.ecoleCount + ' | ' + temps + ' | ' + vit + ' | ' + m.verdict.label);
+    lines.push(rank + ' | ' + (m.displayName || m.model) + ' | ' + (m.quantization || '—') + ' | ' + m.score + '/' + m.max + ' | ' + m.pct + '% | ' + m.grade + ' | ' + oblig + ' | ' + m.globalLifeScore + ' PV | ' + m.ecoleCount + ' | ' + temps + ' | ' + vit + ' | ' + m.verdict.label);
     copied++;
   }
   lines.push('');

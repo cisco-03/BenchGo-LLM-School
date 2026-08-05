@@ -331,6 +331,12 @@ function aggregateLedger(ledger) {
   }
   const agg = {
     model: ledger.model || ledger.shortName || 'modèle_inconnu',
+    // Nom d affichage personnalise (corrige par l utilisateur dans la modale).
+    // Priorite : displayName manuel > model brute > shortName. Permet de
+    // distinguer deux modeles au meme nom mais quantifications differentes
+    // (ex: "Kai Os Grug 12B Q4_K_S" vs "Kai Os Grug 12B Q5_K_L") quand LM
+    // Studio ne fournit que le nom de base sans quantif ni taille.
+    displayName: ledger.displayName || null,
     shortName: ledger.shortName || shortenModelName(ledger.model || 'inconnu'),
     quantization: ledger.quantization || null,
     score, max, pct,
@@ -674,7 +680,11 @@ function buildLeaderboardHTML(entries) {
 
     return {
       shortName: e.shortName,
+      // model reste le nom brute (pour les URL/rapprochements) ; displayName est
+      // le nom personnalise affiche sur la carte et dans la modale. S il n y a
+      // pas de displayName manuel, on retombe sur model (comportement historique).
       model: e.model,
+      displayName: ledger.displayName || e.model,
       quantization: e.quantization || null,
       modelUrl: ledger.modelUrl || guessModelUrl(e.model, ledger.publisher) || null,
       note: ledger.note || null,
@@ -1306,6 +1316,12 @@ function buildLeaderboardHTML(entries) {
   .model-note-display::-webkit-scrollbar { display: none; }
   .model-note-value { display: block; }
   .model-note-edit { display: flex; flex-direction: column; gap: var(--space-xs); }
+  /* Section nom affiché (modale) — même ergonomie que les autres sections */
+  .model-displayname-section { display: flex; flex-direction: column; gap: var(--space-xs); }
+  .model-displayname-display { display: inline-flex; align-items: center; gap: 6px; }
+  .model-displayname-value { font-weight: 700; color: var(--accent); font-size: var(--fs-small); word-break: break-word; }
+  .model-displayname-edit { display: flex; flex-direction: column; gap: var(--space-xs); }
+  .model-displayname-edit input { width: 100%; }
   .btn-sm { padding: 4px 12px; font-size: var(--fs-small); border-radius: var(--r-sm); }
 
   /* Rapport intégral (modale) — sections repliables par école/tier */
@@ -1980,7 +1996,7 @@ function renderCards() {
       if (activeOrigin === 'cloud' && !pm.isCloud) continue;
       if (activeOrigin === 'local' && pm.isCloud) continue;
     }
-    if (q && pm.model.toLowerCase().indexOf(q) === -1 && pm.shortName.toLowerCase().indexOf(q) === -1 && (pm.quantization || '').toLowerCase().indexOf(q) === -1) continue;
+    if (q && pm.model.toLowerCase().indexOf(q) === -1 && (pm.displayName || '').toLowerCase().indexOf(q) === -1 && pm.shortName.toLowerCase().indexOf(q) === -1 && (pm.quantization || '').toLowerCase().indexOf(q) === -1) continue;
     _preFiltered.push(pm);
   }
 
@@ -2030,7 +2046,7 @@ function renderCards() {
       if (activeOrigin === 'cloud' && !om.isCloud) continue;
       if (activeOrigin === 'local' && om.isCloud) continue;
     }
-    if (q && om.model.toLowerCase().indexOf(q) === -1 && om.shortName.toLowerCase().indexOf(q) === -1 && (om.quantization || '').toLowerCase().indexOf(q) === -1) continue;
+    if (q && om.model.toLowerCase().indexOf(q) === -1 && (om.displayName || '').toLowerCase().indexOf(q) === -1 && om.shortName.toLowerCase().indexOf(q) === -1 && (om.quantization || '').toLowerCase().indexOf(q) === -1) continue;
     _originCtx.push(om);
   }
 
@@ -2054,7 +2070,7 @@ function renderCards() {
   var _originCounts = { local: 0, cloud: 0 };
   for (var ri = 0; ri < MODELS.length; ri++) {
     var rm = MODELS[ri];
-    if (q && rm.model.toLowerCase().indexOf(q) === -1 && rm.shortName.toLowerCase().indexOf(q) === -1 && (rm.quantization || '').toLowerCase().indexOf(q) === -1) continue;
+    if (q && rm.model.toLowerCase().indexOf(q) === -1 && (rm.displayName || '').toLowerCase().indexOf(q) === -1 && rm.shortName.toLowerCase().indexOf(q) === -1 && (rm.quantization || '').toLowerCase().indexOf(q) === -1) continue;
     if (rm.isCloud) _originCounts.cloud++; else _originCounts.local++;
   }
 
@@ -2200,11 +2216,15 @@ function renderCards() {
       }
     }
 
+    // Nom affiché : displayName (personnalisé) sinon model (brut). Permet à
+    // l utilisateur de corriger le titre quand LM Studio ne donne que le nom
+    // de base, pour distinguer les quantifications/paramètres différents.
+    var shownName = m.displayName || m.model;
     var html = '<div class="card ' + cardClass + '" onclick="openModal(' + i + ')">' +
       '<div class="card-row">' +
         '<div class="rank">' + rankDisp + '</div>' +
         '<div class="model-name">' +
-          '<div class="name-line"><span class="cat-icon">' + dynCat.icon + '</span>' + esc(m.model) + posArrow + '</div>' +
+          '<div class="name-line"><span class="cat-icon">' + dynCat.icon + '</span>' + esc(shownName) + posArrow + '</div>' +
           '<div class="badges">' + szBadge + originBadge + ' ' + quantBadge + ' ' + noteBadge + ' ' + trendBadge + exportedBadge + dateBadge + '</div>' +
         '</div>' +
         '<div class="mini-stats">' +
@@ -2267,7 +2287,7 @@ function openModal(idx) {
   var posArrowHtml = positionArrow(m.positionDelta);
   var gr = m.globalRank || (idx + 1);
   document.getElementById('mRank').innerHTML = (gr <= 3 ? '<span class="medal">' + (gr === 1 ? '🥇' : gr === 2 ? '🥈' : '🥉') + '</span>' : gr) + posArrowHtml;
-  document.getElementById('mTitle').textContent = m.model;
+  document.getElementById('mTitle').textContent = m.displayName || m.model;
   var vb = document.getElementById('mVerdict');
   vb.textContent = m.verdict.label;
   vb.style.background = m.verdict.color;
@@ -2390,6 +2410,22 @@ function openModal(idx) {
   }
   if (!hasInvalid) {
     body += '<p style="color:var(--text-muted);font-size:var(--fs-small);">Toutes les écoles sont adaptées au nombre de paramètres du modèle.</p>';
+  }
+  body += '</div></div></div>';
+  // Colonne 5 : Nom affiché (corriger le titre quand LM Studio ne donne que
+  // le nom de base). Permet de distinguer deux modèles au même nom mais
+  // quantifications/paramètres différents (ex: "Kai Os Grug 12B Q4_K_S").
+  body += '<div class="action-card">';
+  body += '<h4>🏷️ Nom affiché</h4>';
+  body += '<p>Corriger le titre pour distinguer les modèles au même nom (quantif/paramètres différents).</p>';
+  body += '<div class="card-content"><div class="model-displayname-section" id="modelDisplayNameSection">';
+  var currentDisplayName = m.displayName && m.displayName !== m.model ? m.displayName : '';
+  if (currentDisplayName) {
+    body += '<div class="model-displayname-display"><span class="model-displayname-value">🏷️ ' + esc(currentDisplayName) + '</span></div>';
+    body += '<button class="btn btn-primary btn-sm" onclick="editModelDisplayName(' + idx + ')">✎ Modifier</button>';
+  } else {
+    body += '<p style="color:var(--text-muted);font-size:var(--fs-small);">Nom brut : <code>' + esc(m.model) + '</code>. Cliquez sur « Ajouter » pour personnaliser le titre affiché.</p>';
+    body += '<button class="btn btn-primary btn-sm" onclick="editModelDisplayName(' + idx + ')">+ Ajouter</button>';
   }
   body += '</div></div></div>';
   body += '</div>';
@@ -3139,6 +3175,115 @@ function _saveModelParamSizeFallback(idx, val) {
   renderCards();
   showToast(val ? 'Paramètres enregistrés localement (localStorage — lancez --serve pour persister dans le carnet)' : 'Paramètres effacés (local)', true);
 }
+
+// --- Gestion du nom d'affichage personnalisé (modale) ---
+// Même architecture que le lien/quantification/note : persistance double
+// (serveur → carnet JSON, ou localStorage en fallback). Permet de corriger
+// le titre affiché quand LM Studio ne fournit que le nom de base (ex: "Phi 4"
+// au lieu de "Phi 4 15B Q5_K_L"), pour distinguer plusieurs modèles au même
+// nom mais quantifications/paramètres différents dans le leaderboard.
+var MODEL_DISPLAYNAME_LS_KEY = 'benchgo_model_displaynames';
+function _getModelDisplayNameLocal(shortName) {
+  try {
+    var map = JSON.parse(localStorage.getItem(MODEL_DISPLAYNAME_LS_KEY) || '{}');
+    return map[shortName] || null;
+  } catch (e) { return null; }
+}
+function _setModelDisplayNameLocal(shortName, name) {
+  try {
+    var map = JSON.parse(localStorage.getItem(MODEL_DISPLAYNAME_LS_KEY) || '{}');
+    if (name) map[shortName] = name; else delete map[shortName];
+    localStorage.setItem(MODEL_DISPLAYNAME_LS_KEY, JSON.stringify(map));
+  } catch (e) {}
+}
+
+// Ouvre un champ d'édition inline (input) pour le nom affiché du modèle.
+// Pré-rempli avec le displayName actuel, ou une suggestion basée sur le nom
+// brute + quantification si disponible.
+function editModelDisplayName(idx) {
+  var m = MODELS[idx];
+  var section = document.getElementById('modelDisplayNameSection');
+  if (!section) return;
+  var current = m.displayName || _getModelDisplayNameLocal(m.shortName) || '';
+  // Suggestion : nom brute + quantification si pas déjà présent.
+  var suggestion = '';
+  if (!current) {
+    var base = m.model || '';
+    var q = m.quantization || '';
+    if (q && base.toLowerCase().indexOf(q.toLowerCase()) === -1) {
+      suggestion = base + ' ' + q;
+    } else {
+      suggestion = base;
+    }
+  }
+  var html = '<div class="model-displayname-edit">';
+  html += '<input type="text" id="modelDisplayNameInput" class="search" style="width:100%" value="' + esc(current || suggestion) + '" placeholder="Ex: Kai Os Grug 12B Q4_K_S" maxlength="120" />';
+  html += '<span style="font-size:var(--fs-tiny);color:var(--text-muted);">Nom brut : <code>' + esc(m.model) + '</code> — laisser vide pour revenir au nom brut.</span>';
+  html += '<div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;">';
+  html += '<button class="btn btn-primary btn-sm" onclick="saveModelDisplayName(' + idx + ')">💾 Enregistrer</button>';
+  if (current) html += '<button class="btn btn-sm" onclick="saveModelDisplayName(' + idx + ',true)" style="background:var(--bg-3);color:var(--red);">🗑 Effacer</button>';
+  html += '<button class="btn btn-sm" onclick="cancelEditModelDisplayName(' + idx + ')" style="background:var(--bg-3);color:var(--text-muted);">Annuler</button>';
+  html += '</div></div>';
+  section.innerHTML = html;
+  var input = document.getElementById('modelDisplayNameInput');
+  if (input) { input.focus(); input.select(); }
+}
+
+// Annule l'édition et restaure l'affichage normal du nom.
+function cancelEditModelDisplayName(idx) {
+  var m = MODELS[idx];
+  var section = document.getElementById('modelDisplayNameSection');
+  if (!section) return;
+  var name = m.displayName || _getModelDisplayNameLocal(m.shortName);
+  var html = '';
+  if (name && name !== m.model) {
+    html += '<div class="model-displayname-display"><span class="model-displayname-value">🏷️ ' + esc(name) + '</span></div>';
+    html += '<button class="btn btn-primary btn-sm" onclick="editModelDisplayName(' + idx + ')">✎ Modifier</button>';
+  } else {
+    html += '<p style="color:var(--text-muted);font-size:var(--fs-small);">Nom brut : <code>' + esc(m.model) + '</code>. Cliquez sur « Ajouter » pour personnaliser le titre affiché.</p>';
+    html += '<button class="btn btn-primary btn-sm" onclick="editModelDisplayName(' + idx + ')">+ Ajouter</button>';
+  }
+  section.innerHTML = html;
+}
+
+// Sauvegarde le nom affiché (serveur → carnet JSON, ou localStorage en fallback).
+// Met à jour m.displayName et le titre de la modale + la carte immédiatement.
+function saveModelDisplayName(idx, erase) {
+  var m = MODELS[idx];
+  var input = document.getElementById('modelDisplayNameInput');
+  var name = erase ? '' : (input ? input.value.trim() : '');
+  fetch('/api/model-displayname?shortName=' + encodeURIComponent(m.shortName), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ displayName: name })
+  }).then(function(r) { return r.ok ? r.json() : null; }).then(function(data) {
+    if (data && data.ok) {
+      m.displayName = name || null;
+      _setModelDisplayNameLocal(m.shortName, name || null);
+      var titleEl = document.getElementById('mTitle');
+      if (titleEl) titleEl.textContent = name || m.model;
+      cancelEditModelDisplayName(idx);
+      renderCards();
+      showToast(name ? 'Nom affichage enregistré (carnet)' : 'Nom réinitialisé au nom brut', true);
+    } else {
+      _saveModelDisplayNameFallback(idx, name);
+    }
+  }).catch(function() {
+    _saveModelDisplayNameFallback(idx, name);
+  });
+}
+
+// Fallback hors-serveur : localStorage uniquement.
+function _saveModelDisplayNameFallback(idx, name) {
+  var m = MODELS[idx];
+  _setModelDisplayNameLocal(m.shortName, name || null);
+  m.displayName = name || null;
+  var titleEl = document.getElementById('mTitle');
+  if (titleEl) titleEl.textContent = name || m.model;
+  cancelEditModelDisplayName(idx);
+  renderCards();
+  showToast(name ? 'Nom affichage enregistré localement (localStorage — lancez --serve pour persister dans le carnet)' : 'Nom réinitialisé (local)', true);
+}
 function toggleHistory(el) {
   var mainRow = el.closest('tr.ecole-main');
   if (!mainRow) return;
@@ -3510,7 +3655,7 @@ function copyLeaderboard() {
     var m = MODELS[i];
     if (activeCat !== 'all' && m.cat.key !== activeCat) continue;
     if (activeSize !== 'all' && m.paramSize.key !== activeSize) continue;
-    if (q && m.model.toLowerCase().indexOf(q) === -1 && m.shortName.toLowerCase().indexOf(q) === -1 && (m.quantization || '').toLowerCase().indexOf(q) === -1) continue;
+    if (q && m.model.toLowerCase().indexOf(q) === -1 && (m.displayName || '').toLowerCase().indexOf(q) === -1 && m.shortName.toLowerCase().indexOf(q) === -1 && (m.quantization || '').toLowerCase().indexOf(q) === -1) continue;
     var rank = copied < 3 ? ['🥇','🥈','🥉'][copied] : ('' + (copied + 1));
     var temps = m.elapsedMs > 0 ? fmtDurJS(m.elapsedMs) : '—';
     var vit = m.tokensPerSecond > 0 ? (m.tokensPerSecond + ' t/s') : '—';
@@ -3888,7 +4033,7 @@ function buildLeaderboardMarkdown(entries) {
     if (args.faiblesses.length > 0) argsText.push('**Faiblesses :** ' + args.faiblesses.join(', '));
     if (args.notes.length > 0) argsText.push('*' + args.notes.join(', ') + '*');
 
-    md += `| ${medal} | ${e.model} | ${quant} | ${e.score}/${e.max} | ${e.pct}% | ${grade.grade} | ${mvt} | ${e.mandatoryTotal > 0 ? e.mandatoryPct + '%' : '—'} | ${e.globalLifeScore} | ${e.optionalBonus > 0 ? '+' + e.optionalBonus : '—'} | ${e.helpCount || '—'} | ${e.retriedCount || '—'} | ${e.ecoleCount} | ${temps} | ${vit} | ${cout} | ${verdict.label} | ${argsText.join(' · ')} |\n`;
+    md += `| ${medal} | ${e.displayName || e.model} | ${quant} | ${e.score}/${e.max} | ${e.pct}% | ${grade.grade} | ${mvt} | ${e.mandatoryTotal > 0 ? e.mandatoryPct + '%' : '—'} | ${e.globalLifeScore} | ${e.optionalBonus > 0 ? '+' + e.optionalBonus : '—'} | ${e.helpCount || '—'} | ${e.retriedCount || '—'} | ${e.ecoleCount} | ${temps} | ${vit} | ${cout} | ${verdict.label} | ${argsText.join(' · ')} |\n`;
   }
 
   md += `\n---\n\n## Détail par modèle\n\n`;
@@ -3896,7 +4041,7 @@ function buildLeaderboardMarkdown(entries) {
     const verdict = getVerdict(e, idx + 1);
     const grade = letterGrade(e.pct);
     const args = buildArguments(e);
-    md += `### ${e.model}\n\n`;
+    md += `### ${e.displayName || e.model}\n\n`;
     md += `- **Quantification :** ${e.quantization || '—'}\n`;
     md += `- **Score global :** ${e.score}/${e.max} (${e.pct}%) — Note ${grade.grade}\n`;
     md += `- **Obligatoire :** ${e.mandatoryTotal > 0 ? e.mandatoryPassed + '/' + e.mandatoryTotal + ' (' + e.mandatoryPct + '%)' : 'N/A'}\n`;
@@ -5055,6 +5200,55 @@ function startServer(port) {
           logger.info('API: Paramètres de ' + shortName + ' mis à jour — ' + (paramSize || '(effacé)'));
           res.writeHead(200, securityHeaders);
           res.end(JSON.stringify({ ok: true, paramSize: paramSize || null }));
+        } catch (e) {
+          res.writeHead(200, securityHeaders);
+          res.end(JSON.stringify({ ok: false, error: e.message }));
+        }
+        return;
+      }
+    }
+
+    // API : nom d'affichage personnalisé d'un modèle (saisie depuis la modale).
+    // GET  /api/model-displayname?shortName=... → { ok, displayName }
+    // POST /api/model-displayname?shortName=... (body: { displayName }) → carnet.
+    // Permet de corriger le titre affiché quand LM Studio ne fournit que le nom
+    // de base (ex: "Phi 4" au lieu de "Phi 4 15B Q5_K_L"). Indispensable pour
+    // distinguer plusieurs modèles au même nom mais quantifications/paramètres
+    // différents dans le leaderboard.
+    if (url.pathname === '/api/model-displayname') {
+      const shortName = url.searchParams.get('shortName');
+      if (!shortName) {
+        res.writeHead(400, securityHeaders);
+        res.end(JSON.stringify({ ok: false, error: 'shortName manquant' }));
+        return;
+      }
+      const { loadLedger } = require('./score-ledger');
+      if (req.method === 'GET') {
+        const ledger = loadLedger(shortName);
+        res.writeHead(200, securityHeaders);
+        res.end(JSON.stringify({ ok: true, displayName: ledger.displayName || null, model: ledger.model || null }));
+        return;
+      }
+      if (req.method === 'POST') {
+        let body;
+        try { body = await readJsonBody(req); } catch (e) {
+          res.writeHead(400, securityHeaders);
+          res.end(JSON.stringify({ ok: false, error: e.message }));
+          return;
+        }
+        const name = (body.displayName || '').trim();
+        try {
+          const ledger = loadLedger(shortName);
+          if (name) {
+            ledger.displayName = name;
+          } else {
+            delete ledger.displayName;
+          }
+          const { saveLedger } = require('./score-ledger');
+          saveLedger(ledger);
+          logger.info('API: Nom d affichage de ' + shortName + ' mis à jour — ' + (name || '(effacé, retour au nom brute)'));
+          res.writeHead(200, securityHeaders);
+          res.end(JSON.stringify({ ok: true, displayName: name || null }));
         } catch (e) {
           res.writeHead(200, securityHeaders);
           res.end(JSON.stringify({ ok: false, error: e.message }));

@@ -1,5 +1,117 @@
 # CHANGELOG - Carnet de Notes BenchGo
 
+## 2026-08-05 — feat(leaderboard): édition du nom affiché pour distinguer les modèles au même nom
+
+### Contexte
+Quand LM Studio ne fournit que le nom de base (ex: "Phi 4", "Kai Os Grug 12B")
+sans la quantification ni le nombre de paramètres dans le titre, plusieurs
+modèles différents (quantifs/paramètres différents) apparaissent avec le même
+nom dans le leaderboard → confusion. L'utilisateur ne sait plus quelle
+quantif correspond à quelle entrée.
+
+### Approche
+Nouvelle colonne « 🏷️ Nom affiché » dans la modale (5e action-card) qui permet
+de corriger le titre affiché. Le nom personnalisé est stocké dans
+`ledger.displayName` et persisté dans le carnet JSON (endpoint
+`/api/model-displayname`). À l'affichage, `displayName` prime sur `model`
+(brut) partout : carte, titre de modale, exports Markdown/CSV, classement
+communautaire, titres de PR GitHub. Le nom brut reste utilisé pour les
+rapprochements (URL Hugging Face, matchLedger) — il n'est jamais modifié.
+
+### Fichiers modifiés
+- `leaderboard.js` — `aggregateLedger` (expose `displayName`), `buildLeaderboardHTML`
+  (carte + modale + colonne 5), `editModelDisplayName`/`saveModelDisplayName`/
+  `cancelEditModelDisplayName` (JS inline), CSS `.model-displayname-*`,
+  endpoint `/api/model-displayname` (GET/POST), filtres de recherche,
+  `buildLeaderboardMarkdown`.
+- `consolidate-leaderboard.js` — `aggregateCarnet` (expose `displayName`),
+  carte + modale + exports Markdown/CSV + rapport intégral + filtres recherche.
+- `community-sync.js` — titre/body de PR utilise `displayName` si présent.
+- `Docs/CHANGELOG.md`, `AGENTS.md`, `Memories-BenchGo/INSTRUCTIONS.md`.
+
+### Résultat
+- L'utilisateur clique sur « + Ajouter » dans la colonne « Nom affiché » de la
+  modale, saisit "Kai Os Grug 12B Q4_K_S", et la carte affiche ce titre au lieu
+  de "kai-os_grug-12b". Effacer revient au nom brut.
+- Suggestion automatique : nom brut + quantification si le champ est vide.
+- Le nom personnalisé est soumis avec le carnet (champ `carnet.displayName`)
+  et affiché dans le classement communautaire.
+- `node tests/run-tests.js` → 27/27 ; `node scripts/check-inline-js.js` → OK.
+
+---
+
+## 2026-08-05 — fix(night-batch): modèles quantifiés jamais apparus dans le leaderboard (carnet orphelin absorbant)
+
+### Contexte
+Plusieurs modèles testés en night-batch n'apparaissaient jamais dans le classement.
+Cas typique : Kai Os Grug 12B testé en Q4_K_S et Q5_K_L — aucun carnet dédié
+n'existait. Un carnet orphelin `kai-os_grug-12b.json` (sans quantif, datant de
+juillet, avant le fix du 1er août) absorbait toutes les quantifs via `matchLedger`,
+empêchant la création de carnets distincts et masquant les quantifs dans
+`--list-only` (affichées COMPLET/99% sur l'orphelin au lieu de JAMAIS TESTÉ).
+
+### Cause racine
+`matchLedger()` (night-batch.js) :
+1. `quantMatches()` traitait les carnets sans quantif dans le shortName comme
+   « sans préférence » (matche tout) → l'orphelin matchait Q4_K_S, Q5_K_L, etc.
+2. `normalizeForMatch("kai-os_grug-12b@q5_k_s")` supprime la quantif → le modelKey
+   normalisé égalait `model` de l'orphelin.
+3. Le `fallback` accumulait l'orphelin même quand `quantMatches` disait non.
+
+### Solution
+`night-batch.js` — `matchLedger()` / `quantMatches()` :
+- `quantMatches()` teste deux sources (suffixe shortName `_q4_k_s` + champ
+  `ledger.quantization`) ; un carnet sans AUCUNE quantif ne matche plus une
+  requête quantifiée.
+- Fallback désactivé quand une quantif est demandée (`wantQuant` défini) :
+  retour `null` plutôt que l'orphelin → le modèle apparaît JAMAIS TESTÉ /
+  ÉCHEC dans `--list-only`, incitant à le tester et créer un carnet dédié.
+
+### Fichiers modifiés
+- `night-batch.js` — `matchLedger()`, `quantMatches()`, logique de fallback.
+- `Memories-BenchGo/issues-fixes/2026-08-05-carnet-orphelin-absorbe-quantifs.md`
+- `Docs/CHANGELOG.md`
+
+### Résultat
+- `matchLedger` : Q4_K_S et Q5_K_L → `NULL` (avant : orphelin) ; Q5_K_S et
+  Q6_K_L → carnets dédiés (inchangé) ; modelKey sans quantif → orphelin (inchangé).
+- `node night-batch.js --list-only` : Q4_K_S et Q5_K_L affichent ÉCHEC (tentés,
+  pas de carnet) au lieu de COMPLET/99% (orphelin).
+- `node tests/run-tests.js` → 27/27 ; `node scripts/check-inline-js.js` → OK.
+- `node leaderboard.js` → 46 cartes (l'orphelin reste visible via `loadAllLedgers`).
+
+---
+
+## 2026-08-05 — fix(night-batch): Phi 4 affichait « Doct » en école manquante à tort
+
+### Contexte
+Dans le tableau `night-batch.js --list-only`, le modèle Phi 4 (15B, Q5_K_L)
+s'affichait en PARTIEL avec la colonne « Ecoles manquantes » = `Doct`, alors
+qu'un 15B n'a pas à passer Doctorat (> 30B). Le carnet contient pourtant
+Primaire, College-Lycee et Universite.
+
+### Cause racine
+`schoolForModel()` (night-batch.js) détecte la taille depuis le nom, puis en
+fallback depuis `m.params`. Or elle est appelée dans `listLlmModels()` sur
+l'entrée brute de `lms ls --json`, qui expose `paramsString` mais pas `params`.
+La détection échouait → `school` = null → toutes les écoles considérées
+pertinentes → Doctorat listé comme manquant.
+
+### Solution
+Le fallback de `schoolForModel()` lit désormais `m.params` **ou** `m.paramsString`,
+couvrant à la fois l'entrée brute (`lms ls`) et l'objet enrichi.
+
+### Fichiers modifiés
+- `night-batch.js` — `schoolForModel()`, fallback paramsString/params.
+- `Memories-BenchGo/issues-fixes/2026-08-05-phi-4-ecole-manquante-doctorat.md`
+- `Docs/CHANGELOG.md`
+
+### Résultat
+- `node night-batch.js --list-only` → Phi 4 affiche **COMPLET**, plus de `Doct`.
+- `node tests/run-tests.js` → 27/27 passés.
+
+---
+
 ## 2026-08-05 — feat(sécurité paramètres): validation école vs paramètres + suppression école invalide
 
 ### Contexte

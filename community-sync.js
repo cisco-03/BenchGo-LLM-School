@@ -488,12 +488,13 @@ async function submitResults(shortName, ledger, token, options) {
   await putFile(token, branchName, filePath, contentBase64, commitMsg);
 
   // Étape 4 : PR
-  const prTitle = `[Communauté] Résultats ${ledger.model || safeShortName}`;
+  const modelDisplay = ledger.displayName || ledger.model || safeShortName;
+  const prTitle = `[Communauté] Résultats ${modelDisplay}`;
   const pseudoDisplay = options.pseudo ? ` (par **${options.pseudo}**)` : '';
   const prBody = [
     '## Soumission communautaire BenchGo',
     '',
-    `**Modèle :** ${ledger.model || safeShortName}`,
+    `**Modèle :** ${modelDisplay}`,
     `**Utilisateur :** ${safeUserId}${pseudoDisplay}`,
     `**Date :** ${payload.submittedAt}`,
     `**Hash d'intégrité :** \`${payload.integrityHash}\``,

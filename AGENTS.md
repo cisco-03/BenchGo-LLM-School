@@ -213,6 +213,32 @@ Si modèle > 3B paramètres, le runner peut enchaîner LIGHT puis STANDARD dans 
 - Le JS inline des deux fichiers est dupliqué (constante `NOTEBOOKLM_URL`, CSS `.nb-*`, HTML du bandeau/modale, fonctions `openNbModal`/`closeNbModal`). Modifier un seul fichier ne suffit pas.
 - `leaderboard.js` et `consolidate-leaderboard.js` ont des styles d'insertion légèrement différents (template literal `${NOTEBOOKLM_URL}` côté serveur, pas de backticks littéraux dans le JS inline de consolidate — contrainte existante).
 
+### Nom d'affichage personnalisé (tâche 2026-08-05)
+
+**Fichiers touchés :** `leaderboard.js`, `consolidate-leaderboard.js`, `community-sync.js`, `Docs/CHANGELOG.md`, `AGENTS.md`, `Memories-BenchGo/INSTRUCTIONS.md`.
+
+**Principe :** Permet à l'utilisateur de corriger le titre affiché d'un modèle dans la modale du leaderboard, pour distinguer plusieurs modèles au même nom de base mais quantifications/paramètres différents (ex: LM Studio fournit "Phi 4" au lieu de "Phi 4 15B Q5_K_L"). Le nom personnalisé est stocké dans `ledger.displayName`, persisté dans le carnet JSON, et affiché partout à la place de `ledger.model` (brut).
+
+**Affichage :** 5e colonne « 🏷️ Nom affiché » dans la grille d'actions de la modale (`leaderboard.js` uniquement — le consolidate est en lecture seule). Bouton « + Ajouter » si vide, « ✎ Modifier » sinon. Suggestion automatique : nom brut + quantification si le champ est vide.
+
+**Données :**
+- `ledger.displayName` : string ou absent (null = comportement historique, affiche `model`).
+- Endpoint `/api/model-displayname?shortName=...` (GET/POST) dans `leaderboard.js`.
+- Fallback localStorage (`benchgo_model_displaynames`) hors-serveur.
+- Soumis avec le carnet (`carnet.displayName`) via `community-sync.js`.
+
+**Pour modifier :**
+1. **Changer le comportement d'affichage** : éditer `m.displayName || m.model` dans `leaderboard.js` (carte, modale, Markdown) et `consolidate-leaderboard.js` (carte, modale, exports Markdown/CSV, rapport intégral, copyLeaderboard).
+2. **Changer la suggestion automatique** : éditer la logique dans `editModelDisplayName()` (JS inline de `leaderboard.js`).
+3. **Changer le CSS** : éditer `.model-displayname-*` dans `leaderboard.js`.
+4. **Tester** : `node leaderboard.js --serve`, ouvrir la modale, cliquer « + Ajouter » dans « Nom affiché », saisir un titre, vérifier la carte. Puis `node scripts/check-inline-js.js`.
+
+**Pièges :**
+- `displayName` est affiché mais `model` (brut) reste utilisé pour les rapprochements (`matchLedger`, `guessModelUrl`) — ne jamais éditer `model`.
+- `displayName` est exposé au client via `aggregateLedger` (leaderboard.js) ET `aggregateCarnet` (consolidate-leaderboard.js). Les deux doivent l'inclure.
+- Les filtres de recherche testent désormais `displayName` en plus de `model`/`shortName`/`quantization` dans les deux fichiers.
+- Le `displayName` est soumis avec le carnet (`carnet: ledger` dans `buildSubmissionPayload`) — aucune modification spécifique needed côté community-sync pour la soumission, mais le titre/body de PR l'utilise.
+
 ---
 
 ## Vérifications après modification

@@ -253,32 +253,49 @@ function matchLedger(modelKey, ledgers) {
   const nk = normalizeForMatch(modelKey);
   if (!nk) return null;
   const wantQuant = normalizeQuant(quantFromModelKey(modelKey));
-  // Indique si un carnet porte une quantification dans son shortName et si elle
-  // correspond a celle du modelKey. Les anciens carnets (sans quantif dans le
-  // shortName) sont considerees comme "sans preference".
+  // Indique si la quantification d'un carnet correspond a celle demandee par le
+  // modelKey. On teste deux sources : le suffixe du shortName (format recent,
+  // ex: "kai-os_grug-12b_q4_k_s") ET le champ quantification du carnet (ex:
+  // "Q4_K_M"). Les anciens carnets sans AUCUNE quantif connue (ni dans le
+  // shortName ni dans le champ) ne matchent PAS une requete quantifiee : sinon un
+  // carnet orphelin pre-fix absorbe toutes les quantifs d'un meme modele et
+  // empeche la creation de carnets distincts (Q4_K_S, Q5_K_L... n'apparaissent
+  // jamais dans le leaderboard). Si aucune quantif n'est demandee (modelKey sans
+  // @quant), tout carnet matche (comportement historique).
   function quantMatches(l) {
     if (!wantQuant) return true;
-    // Extrait la quantif en fin de shortName AVANT normalisation (les underscores
-    // seraient sinon transformes en tirets et casseraient la detection).
-    // Le shortName a la forme "<base>_<quant_norm>" ou quant_norm = q4_k_s, q5_k_l...
+    // Source 1 : suffixe du shortName (ex: "..._q4_k_s").
     const sn = String(l.shortName || '').toLowerCase();
-    const m = sn.match(/_?(q[0-9][a-z0-9_]*)$/);
-    if (!m) return true; // pas de quantif dans le shortName -> ancien format
-    return normalizeQuant(m[1]) === wantQuant;
+    const mSn = sn.match(/_?(q[0-9][a-z0-9_]*)$/);
+    // Source 2 : champ quantization du carnet (ex: "Q4_K_M").
+    const qField = l.quantization ? normalizeQuant(l.quantization) : '';
+    if (!mSn && !qField) return false; // carnet sans aucune quantif connue
+    const snQuant = mSn ? normalizeQuant(mSn[1]) : '';
+    // Match si l'une des deux sources correspond a la quantif demandee.
+    if (snQuant && snQuant === wantQuant) return true;
+    if (qField && qField === wantQuant) return true;
+    // Si le carnet porte une quantif mais differente, pas de match.
+    return false;
   }
   // 1) Egalite normalisee stricte sur model (avec preference quantif).
+  // Quand une quantif est demandee (wantQuant), on ne retient AUCUN fallback :
+  // un carnet orphelin NO-QUANT ne doit pas absorber une requete quantifiee
+  // (Q4_K_S, Q5_K_L...) sinon ces quantifs n'ont jamais de carnet propre et
+  // n'apparaissent jamais dans le leaderboard. Le modele sera affiche JAMAIS
+  // TESTE, ce qui incite a le tester et cree un carnet dedie.
   let fallback = null;
+  const allowFallback = !wantQuant;
   for (const l of ledgers) {
     if (normalizeForMatch(l.model) === nk) {
       if (quantMatches(l)) return l;
-      if (!fallback) fallback = l;
+      if (allowFallback && !fallback) fallback = l;
     }
   }
   // 2) Egalite normalisee stricte sur shortName.
   for (const l of ledgers) {
     if (normalizeForMatch(l.shortName) === nk) {
       if (quantMatches(l)) return l;
-      if (!fallback) fallback = l;
+      if (allowFallback && !fallback) fallback = l;
     }
   }
   // 3) Dernier segment du modelKey inclus dans model/shortName (et reciproque).
@@ -290,7 +307,7 @@ function matchLedger(modelKey, ledgers) {
       if ((nm && (nm.includes(seg) || seg.includes(nm))) ||
           (ns && (ns.includes(seg) || seg.includes(ns)))) {
         if (quantMatches(l)) return l;
-        if (!fallback) fallback = l;
+        if (allowFallback && !fallback) fallback = l;
       }
     }
   }
@@ -1049,10 +1066,14 @@ function schoolForModel(m) {
   if (!detected && m.modelKey) {
     detected = detectProfileFromModelName(m.modelKey).detected;
   }
-  // 3) Fallback : depuis paramsString (ex: "14B", "3B", "26B-A4B"). Le runner LM
-  //    Studio fournit une taille fiable ici même quand le nom ne l'indique pas.
-  if (!detected && m.params) {
-    const sizeMatch = String(m.params).match(/([\d]+[.,]?[\d]*)\s*b/i);
+  // 3) Fallback : depuis paramsString/params (ex: "14B", "3B", "26B-A4B"). Le
+  //    runner LM Studio fournit une taille fiable ici même quand le nom ne
+  //    l'indique pas. On teste m.params (objet enrichi) ET m.paramsString
+  //    (entrée brute de lms ls --json) car schoolForModel est appelé sur les
+  //    deux types d'objets (listLlmModels travaille sur l'entrée brute avant
+  //    de l'enrichir).
+  if (!detected && (m.params || m.paramsString)) {
+    const sizeMatch = String(m.params || m.paramsString).match(/([\d]+[.,]?[\d]*)\s*b/i);
     if (sizeMatch) {
       const sz = parseFloat(sizeMatch[1].replace(',', '.'));
       if (sz < 3) detected = 'LIGHT';
