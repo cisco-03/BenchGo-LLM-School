@@ -330,6 +330,23 @@ function buildConsolidatedHTML(entries) {
     return { key: 'doctorat', icon: '🧠', label: '> 30B', short: size + 'B' };
   }
 
+  function validateSchoolForParamSize(paramSize, ecoleName) {
+    if (paramSize == null) return { valid: true, reason: null };
+    var thresholds = {
+      'Primaire': 0,
+      'College-Lycee': 3,
+      'Universite': 15,
+      'Doctorat-These': 30,
+      'Post-Doctorat': 0
+    };
+    var minParams = thresholds[ecoleName];
+    if (minParams == null) return { valid: true, reason: null };
+    if (paramSize < minParams) {
+      return { valid: false, reason: 'Modèle ' + paramSize + 'B paramètres — école ' + ecoleName + ' requiert minimum ' + minParams + 'B. Résultat pénalisé par un test inadapté.' };
+    }
+    return { valid: true, reason: null };
+  }
+
   function gradeLetter(pct) {
     if (pct >= 90) return 'A';
     if (pct >= 80) return 'B';
@@ -464,35 +481,41 @@ function buildConsolidatedHTML(entries) {
       contributors: e.contributors || 1, pseudo: e.pseudo,
       submittedAt: e.submittedAt || null,
       cat, paramSize: psize, verdict, args,
-      ecoles: (e.ecoles || []).map(ec => ({
-        ecole: ec.ecole,
-        score: ec.score, max: ec.max, pct: ec.pct, grade: gradeLetter(ec.pct),
-        optionalBonus: ec.optionalBonus || 0, globalLifeScore: ec.globalLifeScore || 0,
-        helpCount: ec.helpCount || 0, retriedCount: ec.retriedCount || 0,
-        calibrationIndex: ec.calibrationIndex != null ? ec.calibrationIndex : null,
-        date: ec.date || '—',
-        elapsedMs: ec.elapsedMs || 0, tokens: ec.tokens || 0, tokensPerSecond: ec.tokensPerSecond || 0,
-        promptTokens: ec.promptTokens || 0, completionTokens: ec.completionTokens || 0,
-        attempts: [{
-          n: 1, date: ec.date || '—', time: null, score: ec.score || 0, max: ec.max || 0,
-          pct: ec.pct || 0, grade: gradeLetter(ec.pct || 0), optionalBonus: ec.optionalBonus || 0,
-          globalLifeScore: ec.globalLifeScore || 0, helpCount: ec.helpCount || 0, retriedCount: ec.retriedCount || 0,
+      ecoles: (e.ecoles || []).map(ec => {
+        var pSizeNum = psize && psize.short ? parseFloat(psize.short) : null;
+        var pv = validateSchoolForParamSize(pSizeNum, ec.ecole);
+        return {
+          ecole: ec.ecole,
+          score: ec.score, max: ec.max, pct: ec.pct, grade: gradeLetter(ec.pct),
+          optionalBonus: ec.optionalBonus || 0, globalLifeScore: ec.globalLifeScore || 0,
+          helpCount: ec.helpCount || 0, retriedCount: ec.retriedCount || 0,
           calibrationIndex: ec.calibrationIndex != null ? ec.calibrationIndex : null,
-          elapsedMs: ec.elapsedMs || 0, tokens: ec.tokens || 0, tokensPerSecond: ec.tokensPerSecond || 0
-        }],
-        selfProfile: ec.selfProfile || null,
-        tiers: (ec.tiers || []).map(t => ({
-          tierNum: t.tierNum, tierTitle: t.tierTitle || '', className: t.className || '',
-          isMandatory: !!t.isMandatory, rawResponse: t.rawResponse || null,
-          evalResults: (t.evalResults || []).map(r => ({
-            id: r.id, taskType: r.taskType || null, status: r.status,
-            points: r.points || 0, maxPoints: r.maxPoints || 0,
-            helpUsed: !!r.helpUsed, retried: !!r.retried,
-            code: r.code || null, failureExplanation: r.failureExplanation || null,
-            teacherCorrection: r.teacherCorrection || null
+          date: ec.date || '—',
+          elapsedMs: ec.elapsedMs || 0, tokens: ec.tokens || 0, tokensPerSecond: ec.tokensPerSecond || 0,
+          promptTokens: ec.promptTokens || 0, completionTokens: ec.completionTokens || 0,
+          paramValid: pv.valid,
+          paramValidReason: pv.reason,
+          attempts: [{
+            n: 1, date: ec.date || '—', time: null, score: ec.score || 0, max: ec.max || 0,
+            pct: ec.pct || 0, grade: gradeLetter(ec.pct || 0), optionalBonus: ec.optionalBonus || 0,
+            globalLifeScore: ec.globalLifeScore || 0, helpCount: ec.helpCount || 0, retriedCount: ec.retriedCount || 0,
+            calibrationIndex: ec.calibrationIndex != null ? ec.calibrationIndex : null,
+            elapsedMs: ec.elapsedMs || 0, tokens: ec.tokens || 0, tokensPerSecond: ec.tokensPerSecond || 0
+          }],
+          selfProfile: ec.selfProfile || null,
+          tiers: (ec.tiers || []).map(t => ({
+            tierNum: t.tierNum, tierTitle: t.tierTitle || '', className: t.className || '',
+            isMandatory: !!t.isMandatory, rawResponse: t.rawResponse || null,
+            evalResults: (t.evalResults || []).map(r => ({
+              id: r.id, taskType: r.taskType || null, status: r.status,
+              points: r.points || 0, maxPoints: r.maxPoints || 0,
+              helpUsed: !!r.helpUsed, retried: !!r.retried,
+              code: r.code || null, failureExplanation: r.failureExplanation || null,
+              teacherCorrection: r.teacherCorrection || null
+            }))
           }))
-        }))
-      })),
+        };
+      }),
       ecoleNames: e.ecoleNames || []
     }
   })))
@@ -727,6 +750,16 @@ function buildConsolidatedHTML(entries) {
   .btn-primary:hover { background: linear-gradient(135deg, var(--accent-2), var(--accent)); color: #fff; box-shadow: 0 3px 12px rgba(31,111,235,0.4); }
   .btn-primary:active { transform: scale(0.97); }
   .btn-primary.done { background: var(--green); border-color: var(--green); color: #fff; }
+  .btn-danger {
+    padding: 6px 12px; border-color: var(--red);
+    background: linear-gradient(135deg, rgba(248,81,73,0.18), rgba(248,81,73,0.10));
+    color: var(--red); font-size: var(--fs-tiny); cursor: pointer;
+    border-radius: var(--r-sm); border: 1px solid; display: inline-flex; align-items: center; gap: 4px; white-space: nowrap;
+  }
+  .btn-danger:hover { background: linear-gradient(135deg, var(--red), #da3633); color: #fff; box-shadow: 0 3px 12px rgba(248,81,73,0.4); }
+  .btn-danger:active { transform: scale(0.97); }
+  .btn-danger:disabled { opacity: 0.5; cursor: not-allowed; }
+  .param-warn { cursor: help; font-size: 1.1em; vertical-align: middle; }
 
   .search-wrap { display: flex; align-items: center; gap: var(--space-xs); flex: 0 0 auto; }
   .search {
@@ -1676,6 +1709,9 @@ function openModal(idx) {
     var attempts = e.attempts || [];
     var hasHistory = attempts.length > 1;
     var ecoleCell = esc(e.ecole);
+    if (e.paramValid === false) {
+      ecoleCell += ' <span class="param-warn" title="' + esc(e.paramValidReason || 'École trop avancée pour ce modèle') + '">⚠️</span>';
+    }
     var eTpsC = tpsColor(e.tokensPerSecond);
     var eTemps = e.elapsedMs > 0 ? fmtDurJS(e.elapsedMs) : '—';
     var eVitesse = e.tokensPerSecond > 0 ? '<span style="color:' + eTpsC + '">' + e.tokensPerSecond + ' t/s</span>' : '—';

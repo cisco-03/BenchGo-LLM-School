@@ -1,5 +1,44 @@
 # CHANGELOG - Carnet de Notes BenchGo
 
+## 2026-08-05 — feat(sécurité paramètres): validation école vs paramètres + suppression école invalide
+
+### Contexte
+Le modèle Phi-4 Q5_K_L (14.7B paramètres, profil STANDARD) a été testé sur
+Université (profil EXPERT, minimum 15B requis) à cause d'une erreur de
+configuration. Résultat : score pénalisé (Université à -190/567) et classement
+faussé. Il fallait une sécurité pour empêcher qu'une école trop avancée pour
+le nombre de paramètres d'un modèle ne le pénalise artificiellement.
+
+### Approche
+1. **Validation côté serveur** : nouvelle fonction `validateSchoolForParamSize()`
+   qui compare le nombre de paramètres du modèle au seuil minimum de chaque école
+   (Primaire: 0B, College-Lycee: 3B, Universite: 15B, Doctorat-These: 30B).
+2. **Badge d'avertissement** : dans la modale, les écoles invalides sont marquées
+   d'un ⚠️ avec tooltip explicatif.
+3. **Bouton de suppression** : 4e colonne dans la grille d'actions de la modale
+   (« Écoles ») avec bouton rouge « 🗑 Suppr. » pour supprimer l'école du carnet.
+4. **API serveur** : nouvel endpoint `POST /api/delete-ecole?shortName=...&ecole=...`
+   qui supprime l'école du carnet JSON et régénère le classement.
+5. **Mêmes protections dans consolidate-leaderboard.js** : validation + badge ⚠️
+   dans le classement communautaire.
+
+### Fichiers modifiés
+- `leaderboard.js` (validateSchoolForParamSize, paramValid dans buildLeaderboardHTML,
+  badge ⚠️ + colonne Écoles dans openModal, deleteEcole client, deleteEcoleFromLedger,
+  endpoint /api/delete-ecole, CSS .btn-danger/.param-warn)
+- `consolidate-leaderboard.js` (validateSchoolForParamSize, paramValid dans modelsJson,
+  badge ⚠️ dans openModal, CSS .btn-danger/.param-warn)
+- `Docs/CHANGELOG.md`
+
+### Résultat
+- Un modèle 14.7B testé sur Université voit désormais un ⚠️ rouge dans la modale
+  avec la mention « Modèle 14.7B paramètres — école Universite requiert minimum
+  15B. Résultat pénalisé par un test inadapté. »
+- L'utilisateur peut supprimer l'école invalide en un clic → le carnet est mis à
+  jour et le classement régénéré sans l'école problématique.
+- Le classement communautaire (consolidate-leaderboard.js) bénéficie des mêmes
+  validations et badges d'avertissement.
+
 ## 2026-08-04 — feat(agent NotebookLM): bandeau proéminent + modale de renseignement sur les modèles
 
 ### Contexte

@@ -565,6 +565,32 @@ function getParamSize(modelName) {
   return                 { key: 'doctorat', label: 'Doctorat (> 30B)',   short: paramSize + 'B', icon: '🧠', paramSize, detected };
 }
 
+// Valide qu'une école est adaptée au nombre de paramètres d'un modèle.
+// Chaque école correspond à un profil avec un seuil minimum de paramètres :
+//   - Primaire      : LIGHT     (< 3B)  → pas de minimum
+//   - College-Lycee : STANDARD  (3B–15B) → min 3B
+//   - Universite    : EXPERT    (15B–30B) → min 15B
+//   - Doctorat-These: DOCTORAT  (> 30B)  → min 30B
+//   - Post-Doctorat : FRONTIER  (cloud)  → pas de validation param
+// Retourne { valid: bool, reason: string|null }.
+// Si paramSize est null (inconnu), on considère valide (pas de faux positif).
+function validateSchoolForParamSize(paramSize, ecoleName) {
+  if (paramSize == null) return { valid: true, reason: null };
+  const thresholds = {
+    'Primaire': 0,
+    'College-Lycee': 3,
+    'Universite': 15,
+    'Doctorat-These': 30,
+    'Post-Doctorat': 0
+  };
+  const minParams = thresholds[ecoleName];
+  if (minParams == null) return { valid: true, reason: null };
+  if (paramSize < minParams) {
+    return { valid: false, reason: 'Modèle ' + paramSize + 'B paramètres — école ' + ecoleName + ' requiert minimum ' + minParams + 'B. Résultat pénalisé par un test inadapté.' };
+  }
+  return { valid: true, reason: null };
+}
+
 // Construit un objet paramSize à partir d'une valeur numérique explicite
 // (saisie manuelle stockée dans le carnet via ledger.paramSize).
 function getParamSizeFromValue(val) {
@@ -693,6 +719,7 @@ function buildLeaderboardHTML(entries) {
           ? normalizeEcoleEntryLb(ledger.ecoles[ec.ecole]).best
           : null;
         const tiers = (ecoleEntry && ecoleEntry.tiers) || [];
+        const paramValidity = validateSchoolForParamSize(psize.paramSize, ec.ecole);
         return {
           ecole: ec.ecole,
           score: ec.score,
@@ -709,6 +736,8 @@ function buildLeaderboardHTML(entries) {
           attempts: ec.attempts,
           trend: ec.trend || null,
           selfProfile: (ecoleEntry && ecoleEntry.selfProfile) || null,
+          paramValid: paramValidity.valid,
+          paramValidReason: paramValidity.reason,
           // Chronométrie par école.
           elapsedMs: ec.elapsedMs || 0,
           wallMs: ec.wallMs || 0,
@@ -939,6 +968,16 @@ function buildLeaderboardHTML(entries) {
   .btn-primary:active { transform: scale(0.97); }
   .btn-primary.done { background: var(--green); border-color: var(--green); color: #fff; }
   .btn-primary.active { background: linear-gradient(135deg, var(--accent-2), var(--accent)); color: #fff; box-shadow: 0 3px 12px rgba(31,111,235,0.4); }
+  .btn-danger {
+    padding: 6px 12px; border-color: var(--red);
+    background: linear-gradient(135deg, rgba(248,81,73,0.18), rgba(248,81,73,0.10));
+    color: var(--red); font-size: var(--fs-tiny); cursor: pointer;
+    border-radius: var(--r-sm); border: 1px solid; display: inline-flex; align-items: center; gap: 4px; white-space: nowrap;
+  }
+  .btn-danger:hover { background: linear-gradient(135deg, var(--red), #da3633); color: #fff; box-shadow: 0 3px 12px rgba(248,81,73,0.4); }
+  .btn-danger:active { transform: scale(0.97); }
+  .btn-danger:disabled { opacity: 0.5; cursor: not-allowed; }
+  .param-warn { cursor: help; font-size: 1.1em; vertical-align: middle; }
   .date-badge { display: inline-flex; align-items: center; gap: 3px; padding: 2px 7px; border-radius: var(--r-sm); background: rgba(56,139,253,0.12); color: var(--accent-2); font-size: var(--fs-tiny); border: 1px solid rgba(56,139,253,0.25); }
 
   .btn-community {
@@ -2332,6 +2371,27 @@ function openModal(idx) {
     body += '<button class="btn btn-primary btn-sm" onclick="editModelNote(' + idx + ')">+ Ajouter</button>';
   }
   body += '</div></div></div>';
+  // Colonne 4 : Écoles (supprimer une école invalide)
+  body += '<div class="action-card">';
+  body += '<h4>🏫 Écoles</h4>';
+  body += '<p>Supprimer une école inadaptée au nombre de paramètres du modèle.</p>';
+  body += '<div class="card-content"><div class="model-ecoles-section" id="modelEcolesSection">';
+  var hasInvalid = false;
+  for (var ei = 0; ei < m.ecoles.length; ei++) {
+    var ec = m.ecoles[ei];
+    if (ec.paramValid === false) {
+      hasInvalid = true;
+      body += '<div class="ecole-delete-item" style="margin-bottom:var(--space-xs);padding:var(--space-xs);background:var(--bg-3);border-radius:var(--r-sm);border:1px solid var(--red);">';
+      body += '<div style="display:flex;align-items:center;justify-content:space-between;gap:var(--space-xs);">';
+      body += '<span style="color:var(--red);font-size:var(--fs-small);">⚠️ ' + esc(ec.ecole) + ' — ' + esc(ec.paramValidReason || 'Trop avancée') + '</span>';
+      body += '<button class="btn btn-danger btn-sm" onclick="deleteEcole(' + idx + ',' + ei + ',this)" title="Supprimer cette école du carnet">🗑 Suppr.</button>';
+      body += '</div></div>';
+    }
+  }
+  if (!hasInvalid) {
+    body += '<p style="color:var(--text-muted);font-size:var(--fs-small);">Toutes les écoles sont adaptées au nombre de paramètres du modèle.</p>';
+  }
+  body += '</div></div></div>';
   body += '</div>';
 
   // --- Section Tendance (progression / régression / redoublement) ---
@@ -2406,8 +2466,12 @@ function openModal(idx) {
         trendCell = '<span style="color:#8b949e" title="Stable">═</span>';
       }
     }
+    var paramWarn = '';
+    if (e.paramValid === false) {
+      paramWarn = ' <span class="param-warn" title="' + esc(e.paramValidReason || 'École trop avancée pour ce modèle') + '">⚠️</span>';
+    }
     body += '<tr' + (hasHistory ? ' class="ecole-main"' : '') + '>' +
-      '<td>' + ecoleCell + '</td>' +
+      '<td>' + ecoleCell + paramWarn + '</td>' +
       '<td class="num">' + e.score + '/' + e.max + '</td>' +
       '<td style="color:' + epc + '">' + e.pct + '%</td>' +
       '<td class="grade" style="color:' + egc + '">' + e.grade + '</td>' +
@@ -3175,6 +3239,29 @@ function deleteModel(idx, btn) {
       showToast(msg, false);
       btn.disabled = false;
       btn.textContent = '🗑';
+    });
+}
+
+function deleteEcole(idx, ecoleIdx, btn) {
+  var m = MODELS[idx];
+  var ecoleName = m.ecoles[ecoleIdx].ecole;
+  if (!confirm('Supprimer l\u2019\u00e9cole "' + ecoleName + '" du carnet de "' + m.shortName + '" ?\\nLes r\u00e9sultats de cette \u00e9cole seront d\u00e9finitivement supprim\u00e9s.')) return;
+  btn.disabled = true;
+  btn.textContent = '…';
+  fetch('/api/delete-ecole?shortName=' + encodeURIComponent(m.shortName) + '&ecole=' + encodeURIComponent(ecoleName), { method: 'POST' })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (data.ok) { showToast('École "' + ecoleName + '" supprimée — classement régénéré', true); setTimeout(function(){ location.reload(); }, 800); }
+      else { showToast('Erreur : ' + (data.error || 'inconnue'), false); btn.disabled = false; btn.textContent = '🗑 Suppr.'; }
+    })
+    .catch(function(err) {
+      var isFileProtocol = (location.protocol === 'file:');
+      var msg = isFileProtocol
+        ? 'Suppression impossible : ouvrez le classement via le serveur (node leaderboard.js --serve).'
+        : 'Erreur réseau : serveur injoignable. Relancez node leaderboard.js --serve.';
+      showToast(msg, false);
+      btn.disabled = false;
+      btn.textContent = '🗑 Suppr.';
     });
 }
 
@@ -4670,6 +4757,45 @@ function deleteLedger(shortName) {
   return { ok: true };
 }
 
+// Supprime une école spécifique du carnet d'un modèle, puis régénère le classement.
+// Utile quand un modèle a été testé sur une école trop avancée pour son nombre
+// de paramètres (ex: Phi-4 14.7B testé sur Université qui requiert 15B min).
+function deleteEcoleFromLedger(shortName, ecoleName) {
+  if (!shortName || typeof shortName !== 'string') {
+    return { ok: false, error: 'shortName manquant ou invalide' };
+  }
+  if (!ecoleName || typeof ecoleName !== 'string') {
+    return { ok: false, error: 'ecoleName manquant ou invalide' };
+  }
+  if (/[\/\\]/.test(shortName) || shortName === '..' || shortName.includes('..')) {
+    return { ok: false, error: 'shortName invalide (caractères interdits)' };
+  }
+  const safeName = shortName.replace(/[^a-zA-Z0-9._-]/g, '_');
+  const file = path.join(LEDGER_DIR, safeName + '.json');
+  const resolvedFile = path.resolve(file);
+  const resolvedDir = path.resolve(LEDGER_DIR);
+  if (!resolvedFile.startsWith(resolvedDir + path.sep)) {
+    return { ok: false, error: 'Chemin de fichier hors du dossier autorisé' };
+  }
+  if (!fs.existsSync(file)) {
+    return { ok: false, error: 'Carnet introuvable : ' + shortName };
+  }
+  try {
+    const ledger = JSON.parse(fs.readFileSync(file, 'utf8'));
+    if (!ledger.ecoles || !ledger.ecoles[ecoleName]) {
+      return { ok: false, error: 'École "' + ecoleName + '" introuvable dans le carnet de ' + shortName };
+    }
+    delete ledger.ecoles[ecoleName];
+    fs.writeFileSync(file, JSON.stringify(ledger, null, 2) + '\n', 'utf8');
+    logger.info('École "' + ecoleName + '" supprimée du carnet de ' + safeName);
+    generateLeaderboard();
+    return { ok: true };
+  } catch (e) {
+    logger.error('Erreur lors de la suppression de l\'école : ' + e.message);
+    return { ok: false, error: e.message };
+  }
+}
+
 // Démarre un mini-serveur HTTP servant le classement HTML + l'API de suppression
 // + l'API d'export du rapport intégral d'un modèle (téléchargement Markdown).
 //
@@ -4770,6 +4896,28 @@ function startServer(port) {
         return;
       }
       const result = deleteLedger(shortName);
+      res.writeHead(200, securityHeaders);
+      res.end(JSON.stringify(result));
+      return;
+    }
+
+    // API : suppression d'une école spécifique d'un carnet
+    // POST /api/delete-ecole?shortName=...&ecole=... → supprime l'école du carnet.
+    // Permet de retirer une école trop avancée pour le nombre de paramètres du modèle.
+    if (url.pathname === '/api/delete-ecole' && req.method === 'POST') {
+      const shortName = url.searchParams.get('shortName');
+      const ecole = url.searchParams.get('ecole');
+      if (!shortName) {
+        res.writeHead(400, securityHeaders);
+        res.end(JSON.stringify({ ok: false, error: 'shortName manquant' }));
+        return;
+      }
+      if (!ecole) {
+        res.writeHead(400, securityHeaders);
+        res.end(JSON.stringify({ ok: false, error: 'ecole manquant' }));
+        return;
+      }
+      const result = deleteEcoleFromLedger(shortName, ecole);
       res.writeHead(200, securityHeaders);
       res.end(JSON.stringify(result));
       return;
