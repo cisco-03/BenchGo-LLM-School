@@ -1,5 +1,45 @@
 # CHANGELOG - Carnet de Notes BenchGo
 
+## 2026-08-06 — fix(web): chemins de rapports normalisés en slashs universels (/)
+
+### Contexte
+Le champ `reportFile` du carnet JSON (chemin relatif du rapport Markdown)
+était généré via `path.relative()` qui produit des antislashs (`\`) sous
+Windows. Sérialisé tel quel dans `classement.html` (`var MODELS = ...`),
+ce chemin cassait le chargement/les liens sur le web (404, liens
+inutilisables), conformément au diagnostic de `Memories-BenchGo/Tasks1.md`.
+
+### Solution
+- `runner.js:2431` : `path.relative(__dirname, outputPath)` est désormais
+  normalisé en slashs universels via `.split(path.sep).join('/')`. Les
+  nouveaux runs stockent des chemins web-compatibles.
+- Migration des carnets existants : 49 fichiers sur 50 dans
+  `Export-Rapports/.carnet/*.json` ont vu leur `reportFile` corrigé
+  (`\\` → `/`). 1 carnet n'avait pas de `reportFile`.
+- `logRelPath` (affichage console local uniquement) n'est pas concerné :
+  il reste OS-natif, non sérialisé pour le web.
+
+### Fichiers modifiés
+- `runner.js` (ligne 2431) : normalisation du chemin `relPath`.
+- `Export-Rapports/.carnet/*.json` (49 fichiers) : `reportFile` migré
+  antislashs → slashs.
+- `Export-Rapports/classement.html` : régénéré, 0 chemin antislash.
+- `Docs/CHANGELOG.md`, `AGENTS.md`, `Memories-BenchGo/README.md` :
+  documentation.
+
+### Résultat obtenu
+`classement.html` ne contient plus aucun chemin `Export-Rapports\...`
+avec antislash. Les chemins sont désormais `Export-Rapports/...` (slashs
+universels), conformes aux standards web.
+
+### Validation
+- `node --check runner.js` → OK.
+- `node scripts/check-inline-js.js` → JS inline valide.
+- `node tests/run-tests.js` → 27/27 passés.
+- Vérif HTML : `Select-String -Path classement.html -Pattern 'Export-Rapports\\'` → 0 hit.
+
+---
+
 ## 2026-08-06 — fix(cli): displayName utilisé dans les sections CLI (printLeaderboardSection + rapport --lmstudio)
 
 ### Contexte

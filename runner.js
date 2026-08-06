@@ -2428,7 +2428,7 @@ async function main() {
 
   fs.mkdirSync(targetDir, { recursive: true });
   const outputPath = path.join(targetDir, filename);
-  const relPath = path.relative(__dirname, outputPath);
+  const relPath = path.relative(__dirname, outputPath).split(path.sep).join('/');
 
   // --- Modèle effectif (résolu dès maintenant pour usage aval : rapport externe + carnet) ---
   const effectiveModel = (modelName !== "Modele_En_Attente") ? modelName : (resolvedCloudModel || null);

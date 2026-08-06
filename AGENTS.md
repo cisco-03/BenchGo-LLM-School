@@ -142,6 +142,9 @@ Seuls LIGHT et STANDARD sont éligibles. EXPERT, DOCTORAT, FRONTIER ne le sont p
 ### Path des exports
 Rapports : `Export-Rapports/<AAAA-MM-JJ>/<ÉCOLE>/<CLASSE>/rapport_v3_*.md` (timestamp local, pas UTC). `Export-Rapports/.carnet/` : carnets JSON. Classement : `Export-Rapports/classement.html` et `classement.md` (écrasés à chaque run).
 
+### Chemins web-compatibles dans le carnet (reportFile)
+Le champ `reportFile` du carnet JSON est sérialisé dans `classement.html` (`var MODELS = ...`) et consulté sur le web. Il DOIT utiliser des slashs universels (`/`), jamais d'antislashs Windows (`\`). `runner.js` (ligne ~2431) normalise via `.split(path.sep).join('/')`. Les carnets existants ont été migrés (2026-08-06). Pour réparer d'anciens carnets : remplacer `Export-Rapports\\` par `Export-Rapports/` dans `Export-Rapports/.carnet/*.json`.
+
 ### Problème Node.js 24.x
 Bug undici : `TypeError: Cannot assign to read only property 'name' of object 'Error: socket idle timeout'`. Intercepté globalement dans `runner.js` (ligne 11). L'erreur est loggée, le fetch échoue proprement, le runner continue.
 
