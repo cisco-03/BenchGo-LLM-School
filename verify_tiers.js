@@ -70,7 +70,7 @@ const SOLUTIONS = {
   math_t3: 'const resoudreEquation = (a, b) => a === 0 ? null : -b / a;',
   francais_t3: 'const compterVoyelles = (p) => (p.match(/[aeiouy]/gi) || []).length;',
   histoire_t3: 'const trierAnnees = (a) => [...a].sort((x, y) => x - y);',
-  svt_t3: 'const estADN = (c) => /^[ATCG]*$/.test(c);',
+  svt_t3: 'const estADN = (c) => /^[ATCG]+$/.test(c);',
   info_t3: 'const bonsEleves = (e) => e.filter(x => x.moyenne >= 10).map(x => x.nom);',
   // Tier 3 expert
   tache_3b_expert: 'function remplirMatrice(grille, x, y, nv) { const ancien = grille[y][x]; if (ancien === nv) return; const pile = [[x, y]]; while (pile.length) { const [cx, cy] = pile.pop(); if (grille[cy] && grille[cy][cx] === ancien) { grille[cy][cx] = nv; pile.push([cx+1,cy],[cx-1,cy],[cx,cy+1],[cx,cy-1]); } } }',
@@ -113,6 +113,16 @@ const SOLUTIONS = {
   algo_moyen_1: 'const somme1aN = (n) => { let s=0; for(let i=1;i<=n;i++)s+=i; return s; };',
   algo_difficile_1: 'const inverserChaine = (s) => s.split("").reverse().join("");',
   algo_defi: 'const valeurMax = (t) => Math.max(...t)',
+  // Tier 0 — contrainte négative
+  contrainte_negative_0: 'const sansLettreE = (c) => !c.toLowerCase().includes("e");',
+  // Tier 1 — contrainte stricte
+  contrainte_negative_1: 'const exactementNMots = (p, n) => p.trim().split(/\\s+/).filter(Boolean).length === n;',
+  // Tier 2 — contrainte négative (pas de Markdown)
+  contrainte_negative_2: 'const sansMarkdown = (c) => !/[#*_`[]/.test(c);',
+  // Tier 3 — contrainte stricte (mot banni + nombre de phrases)
+  contrainte_stricte_3: 'const validerContraintes = (t, motBanni, nbPhrases) => { const phrases = t.split(".").filter(s => s.trim() !== ""); if (phrases.length !== nbPhrases) return false; return !t.toLowerCase().includes(motBanni.toLowerCase()); };',
+  // Tier 5 — contexte long (extraction de code)
+  contexte_long_5: 'const extraireCode = (d) => { const m = d.match(/CODE_ACCES:\\s*([A-Za-z0-9]+)/); return m ? m[1] : null; };',
   // algo tier 1
   algo_facile_1_t1: 'const estMultipleDe = (n, m) => m !== 0 && n % m === 0;',
   algo_facile_2_t1: 'const puissance = (b, e) => Math.pow(b, e);',

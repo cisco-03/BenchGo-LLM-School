@@ -74,6 +74,7 @@ Tous les modules sont à la racine (pas de sous-dossiers pour les sources). Les 
 - **`leaderboard.js`** — génération HTML/MD, serveur web (~4950 lignes, JS inline côté client).
 - **`tier-loader.js`** — charge les tiers JSON avec fallback : `FRONTIER → DOCTORAT → EXPERT → STANDARD → LIGHT`.
 - **`task-evaluator.js`** — moteur d'évaluation (exec/pattern/custom). Cache LRU intégré.
+- **`custom-evaluators.js`** — 14 évaluateurs custom pour exercices avancés : GeoJSON RFC 7946, React Hook, Flood Fill, PowerShell rollback, Python limiter, async (partial errors, sequential, retry, concurrency), Cloudflare middleware, code tracing, instruction following (IFEval), prompt injection resistance, long context retrieval.
 - **`secrets.js`** — clés API en mémoire vive (session), jamais sur disque.
 - **`presets.js`** — `.presets.json` pour rejouer une config (ne stocke JAMAIS de clé API).
 - **`api-keys-store.js`** — stockage persistant optionnel dans `.api-keys.json`.

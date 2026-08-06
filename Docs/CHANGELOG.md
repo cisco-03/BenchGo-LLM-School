@@ -1,5 +1,77 @@
 # CHANGELOG - Carnet de Notes BenchGo
 
+## 2026-08-06 — feat(exercices): 5 améliorations des jeux d'exercices (standards industrie)
+
+### Contexte
+Suite aux suggestions de `Memories-BenchGo/Tasks1.md`, les exercices ont été
+enrichis pour se rapprocher des standards de l'industrie (IFEval, injection
+de prompt, cas limites, contexte long, validation déterministe).
+
+### 5 suggestions implémentées
+
+**1. Contraintes négatives et formatage strict (IFEval-style) — tiers 1-3**
+- Tier 0 : `sansLettreE()` — bannir une lettre (insensible à la casse).
+- Tier 1 : `exactementNMots()` — nombre exact de mots (off-by-one = échec).
+- Tier 2 : `sansMarkdown()` — bannir les marqueurs Markdown (#, *, _, `, [).
+- Tier 3 : `validerContraintes()` — mot banni + nombre exact de phrases
+  simultanément.
+Tous 100% déterministes (exec), sans modèle juge.
+
+**2. Vérification déterministe pour les bas tiers (0-2)**
+- Tous les nouveaux exercices de contrainte utilisent des évaluations `exec`
+  (assertions exactes), pas de `custom` ni de modèle juge.
+- Ajout de cas limites déterministes : tableaux vides, chaînes vides,
+  tableaux à un élément, très grands entiers.
+
+**3. Résistance au détournement et respect du prompt système (tiers 4-6)**
+- Tier 4 : `filtrerCommentaires()` — filtrer les injections de prompt dans
+  des commentaires utilisateurs (évaluateur custom
+  `evaluatePromptInjectionResistance`). Patterns réalistes : "ignore
+  instructions", "[SYSTEM] override", "oublie tes consignes".
+- Tier 6 : `calcul_robuste` enrichi avec 2 cas limites supplémentaires
+  (somme avec zéro, nombres négatifs) en plus du test d'injection existant.
+
+**4. Cas limites sur les exercices de code (tiers 0-5)**
+- Tableaux vides, tableaux à un élément, chaînes vides, très grands entiers
+  (2×10⁹), nombres négatifs, longueur 0 pour fibonacci, ADN vide.
+- Tier 5 : `sousTableauMax` avec tableau vide et tous négatifs.
+
+**5. Recherche d'information en contexte long (tiers 4-5)**
+- Tier 4 : `extraireInfoSecrete()` — évaluateur custom
+  `evaluateLongContextRetrieval` qui génère un document de ~3000 mots avec
+  l'info cachée à 3 positions (début, milieu, fin).
+- Tier 5 : `extraireCode()` — extraction d'un code d'accès dans un long
+  texte via le marker `CODE_ACCES:` (exec, 2 positions testées).
+
+### Fichiers modifiés
+- `tiers/tier0_light.json` — cas limites `valeurMax` + ex `contrainte_negative_0`.
+- `tiers/tier1_light.json` — cas limite `sommePaires` + ex `contrainte_negative_1`.
+- `tiers/tier2_light.json` — cas limites `sontAnagrammes` + ex `contrainte_negative_2`.
+- `tiers/tier3_standard.json` — cas limites (voyelles, tri, ADN, fibonacci) + ex `contrainte_stricte_3`.
+- `tiers/tier4_frontier.json` — ex `tache_4i` (injection) + `tache_4j` (contexte long).
+- `tiers/tier5_standard.json` — cas limites `sousTableauMax` + ex `contexte_long_5`.
+- `tiers/tier6_master.json` — `calcul_robuste` enrichi (2 cas limites).
+- `custom-evaluators.js` — 2 nouveaux évaluateurs : `evaluatePromptInjectionResistance`, `evaluateLongContextRetrieval`.
+- `verify_tiers.js` — solutions canoniques pour les 7 nouveaux exercices + correction `estADN` (`*` → `+`).
+- `Docs/CHANGELOG.md`, `AGENTS.md`, `Memories-BenchGo/README.md`.
+
+### Résultat obtenu
+- 376 exec OK / 396 testés (0 problème), 20 skip (évaluations custom non-exec).
+- Les évaluateurs custom `evaluatePromptInjectionResistance` et
+  `evaluateLongContextRetrieval` validés avec solutions canoniques.
+- BenchGo couvre désormais 5 dimensions supplémentaires alignées avec les
+  benchmarks industriels (IFEval, prompt injection, edge cases, long context).
+
+### Validation
+- `node --check custom-evaluators.js` → OK.
+- `node --check verify_tiers.js` → OK.
+- `node verify_tiers.js` → 376/376 exec OK, 0 problème.
+- `node tests/run-tests.js` → 27/27 passés.
+- `node scripts/check-inline-js.js` → JS inline valide.
+- Évaluateurs custom testés avec solutions canoniques → OK.
+
+---
+
 ## 2026-08-06 — fix(web): chemins de rapports normalisés en slashs universels (/)
 
 ### Contexte

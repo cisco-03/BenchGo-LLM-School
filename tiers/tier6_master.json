@@ -61,6 +61,20 @@
           "setup": "",
           "call": "calculerSomme(12, 18)",
           "assert": "result === 30"
+        },
+        {
+          "type": "exec",
+          "description": "Cas limite — somme avec zéro",
+          "setup": "",
+          "call": "calculerSomme(0, 0)",
+          "assert": "result === 0"
+        },
+        {
+          "type": "exec",
+          "description": "Cas limite — nombres négatifs",
+          "setup": "",
+          "call": "calculerSomme(-5, -10)",
+          "assert": "result === -15"
         }
       ],
       "points": 25
