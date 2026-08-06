@@ -1,5 +1,152 @@
 # CHANGELOG - Carnet de Notes BenchGo
 
+## 2026-08-06 — feat(cli): système --help pour tous les entrypoints + rappels soumission communautaire multi-touch + visibilité participation
+
+### Contexte
+1. `leaderboard.js`, `night-batch.js`, `community-stats.js`,
+   `consolidate-leaderboard.js` n'avaient pas de `--help` : l'utilisateur qui
+   tapait `node <fichier>.js --help` ne voyait rien. Seul `runner.js` avait une
+   aide centralisée (via `cli-help.js`), et `frontier-batch.js` avait une aide
+   maison non cohérente.
+2. Le rappel de soumission communautaire n'existait qu'en fin de run
+   interactif (`proposeCommunitySubmission`) — absent du démarrage, de
+   `night-batch.js` (batch silencieux) et de `leaderboard.js` (là où
+   l'utilisateur voit ses résultats).
+3. Le propriétaire du dépôt n'avait aucune visibilité sur les tentatives de
+   soumission échouées chez les utilisateurs (un échec avant PR ne crée ni
+   fichier ni PR côté dépôt). `community-stats.js` montrait les succès mergés
+   et les PRs en attente, mais sans interprétation ni ratio d'adoption.
+
+### Approche
+1. **Système `--help` cohérent** : nouvelle fonction partagée
+   `printEntryHelp(title, subtitle, commands, tips)` + utilitaire `wantsHelp()`
+   dans `cli-help.js`. Tous les entrypoints secondaires détectent `--help` /
+   `help` / `-h` et affichent un encadré ANSI cyan avec la liste exhaustive de
+   leurs commandes/flags réellement supportés.
+   - `leaderboard.js` : nouvelle `printLeaderboardHelp()` (serve, cloud,
+     lmstudio, mark-cloud, port).
+   - `night-batch.js` : détection en début de `main()` (list-only, models,
+     schools, no-teacher, isolation interactive `!N`/`!!N`).
+   - `frontier-batch.js` : refactor de l'aide maison vers `printEntryHelp`
+     (cohérence + support de `help`).
+   - `community-stats.js` : aide marquant l'outil comme propriétaire (token
+     droits push requis).
+   - `consolidate-leaderboard.js` : aide détaillant usage local + déploiement
+     GitHub Pages (workflow `consolidate.yml`).
+2. **Rappels soumission communautaire multi-touch** :
+   - **Démarrage runner** : bannière cyan « COMMUNAUTÉ BENCHGO » avant le
+     questionnaire (désactivée si `--no-telemetry`).
+   - **Fin de run runner** : `proposeCommunitySubmission` enrichie (ligne
+     « classement public visible par tous » + log en mode batch +
+     rappel re-soumission `node runner.js --submit` après succès).
+   - **Bilan night-batch** : bloc « COMMUNAUTÉ » adapté au mode `--hybrid`
+     (auto-soumission confirmée) ou manuel (commande CLI rappelée).
+   - **leaderboard.js** : encadré console en fin de `generateLeaderboard()` +
+     bandeau HTML `.community-banner` dans le serveur interactif (sous le hero,
+     à côté du bandeau NotebookLM) avec bouton « Copier la commande ».
+3. **Visibilité participation** :
+   - `community-sync.js` `submitResults()` : log structuré
+     `[COMMUNITY-SUBMIT] result=success|failure|merge_failed model=... userId=...
+     pseudo=... prNumber=... reason=...` à chaque tentative (succès, merge
+     échoué, échec avant PR).
+   - `community-stats.js` `printDashboard()` : ratio « Taux de participation »
+     (soumissions mergées / clones uniques 14j), alerte si 0 PR en attente,
+     section « INTERPRÉTATION » documentant la limite de visibilité des échecs.
+
+### Fichiers modifiés
+- `cli-help.js` — ajout `printEntryHelp()` + `wantsHelp()` (exportés).
+- `leaderboard.js` — `printLeaderboardHelp()`, détection `--help`, encadré
+  console communauté, bandeau HTML `.community-banner` + JS inline copie.
+- `night-batch.js` — détection `--help`, `hybridFlag` dans `parseArgs()`, bloc
+  « COMMUNAUTÉ » dans le bilan.
+- `frontier-batch.js` — refactor `printFrontierHelp()` via `printEntryHelp`,
+  support de `help`.
+- `community-stats.js` — détection `--help`, ratio participation, section
+  « INTERPRÉTATION ».
+- `consolidate-leaderboard.js` — détection `--help` (usage local + CI).
+- `community-sync.js` — log structuré `[COMMUNITY-SUBMIT]` dans `submitResults()`.
+- `runner.js` — bannière communauté au démarrage, enrichissement de
+  `proposeCommunitySubmission()` (log batch + rappel re-soumission).
+- `AGENTS.md`, `Memories-BenchGo/README.md` — tableau de commandes mis à jour.
+
+### Résultat obtenu
+- `node leaderboard.js --help` → encadré exhaustif, exit 0.
+- `node night-batch.js --help` / `frontier-batch.js --help` /
+  `community-stats.js --help` / `consolidate-leaderboard.js --help` → idem.
+- `node runner.js all --dry-run` → bannière communauté visible au démarrage.
+- `node leaderboard.js` → encadré « COMMUNAUTÉ BENCHGO » en console.
+- `node leaderboard.js --serve` → bandeau `.community-banner` + bouton copier.
+- `node community-stats.js --token=...` → ratio participation + section
+  interprétation + alerte visibilité échecs.
+- `node scripts/check-inline-js.js` → OK. `node tests/run-tests.js` → OK.
+
+### Décisions
+- Signalement de bug côté utilisateurs : **abandonné** (hors périmètre, le
+  propriétaire garde ses outils perso).
+- Visibilité des échecs de soumission chez les utilisateurs : techniquement
+  impossible sans token valide chez eux ou service tiers de comptage. La limite
+  est documentée dans le dashboard `community-stats.js` (section interprétation).
+- `--no-telemetry` désactive le ping mais PAS le rappel de fin de run (la
+  soumission est une action explicite, indépendante de la télémétrie passive).
+
+---
+
+## 2026-08-06 — feat(leaderboard+night-batch): démarcation rapport LM Studio + quantification bilan de nuit + suggestions de retest
+
+### Contexte
+1. Dans `node leaderboard.js --lmstudio` (Bloc 1), tous les modèles testés
+   apparaissaient dans une seule liste sans séparation visuelle entre les tests
+   récents (cette nuit) et les tests antérieurs.
+2. Dans le bilan de session de nuit (`night-batch.js`), quand plusieurs
+   quantifications du même modèle étaient testées, le bilan répétait le
+   `displayName` sans préciser la quantification → confusion.
+3. Aucune suggestion de retest : l'utilisateur devait deviner quels modèles
+   avaient des écoles manquantes et quelles écoles reprogrammer.
+
+### Approche
+1. **leaderboard.js** `printLmStudioStatus()` : lignes de démarcation avec
+   titres colorés + aération (ligne vide) entre modèles récents (24h) et
+   antérieurs.
+2. **night-batch.js** bilan de session : `quantTag` (quantification en magenta)
+   après le `displayName` dans le détail des runs.
+3. **leaderboard.js** `printLmStudioStatus()` Bloc 3 — suggestions de retest :
+   pour chaque modèle testé présent dans LM Studio, détection de l'école max
+   pertinente (`detectProfileFromModelName`), calcul des écoles attendues
+   (LIGHT→école max), comparaison avec les écoles du carnet. Les modèles avec
+   écoles manquantes sont listés avec une commande `night-batch.js` prête à
+   copier-coller (`--models=... --schools=...`). Une commande globale regroupe
+   tous les modèles suggérés.
+
+### Fichiers modifiés
+- `leaderboard.js` — `printLmStudioStatus()` : démarcation Bloc 1 + Bloc 3
+  (suggestions de retest avec commandes night-batch prêtes).
+- `night-batch.js` — boucle de bilan : `quantTag` magenta après le nom.
+
+### Résultat obtenu
+Rapport LM Studio — Bloc 3 :
+```
+  ━━━ SUGGESTIONS DE RETEST (3) ━━━
+  ornith-1.0-9b@q5_k_m    Q5_K_M  College-Lycee  node night-batch.js --models=... --schools=STANDARD
+  kai-os_grug-12b@q5_k_s  Q5_K_S  Primaire       node night-batch.js --models=... --schools=LIGHT
+  kai-os_grug-12b@q6_k_l  Q6_K_L  Primaire       node night-batch.js --models=... --schools=LIGHT
+
+  ⚠ Vous avez 3 modèle(s) avec des écoles manquantes.
+  Pour tester tous les modèles suggérés d'un coup :
+  node night-batch.js --models=ornith-1.0-9b@q5_k_m,kai-os_grug-12b@q5_k_s,kai-os_grug-12b@q6_k_l --schools=STANDARD,LIGHT
+```
+
+Bilan de nuit :
+```
+  OK Kai Os Grug 12B              Q5_K_L [LIGHT] 2.4 min
+  OK Kai Os Grug 12B              Q4_K_S [STANDARD] 21.1 min
+```
+
+### Validation
+- `node --check leaderboard.js` → OK
+- `node --check night-batch.js` → OK
+- `node scripts/check-inline-js.js` → OK
+- `node leaderboard.js --lmstudio` → démarcation + aération + suggestions affichées
+
 ## 2026-08-05 — feat(leaderboard): édition du nom affiché pour distinguer les modèles au même nom
 
 ### Contexte

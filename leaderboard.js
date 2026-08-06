@@ -40,6 +40,7 @@ const { shortenModelName } = require('./report-generator');
 const { detectProfileFromModelName } = require('./config');
 const { formatDuration } = require('./score-ledger');
 const cliTable = require('./cli-table');
+const { printEntryHelp, wantsHelp } = require('./cli-help');
 const communitySync = require('./community-sync');
 const updateChecker = require('./update-checker');
 const nightBatch = require('./night-batch');
@@ -1507,6 +1508,48 @@ function buildLeaderboardHTML(entries) {
     .nb-actions { width: 100%; justify-content: flex-end; }
   }
 
+  /* Bannière Communauté — rappel soumission des carnets vers le classement public */
+  .community-banner {
+    margin-block: var(--space-s) var(--space-m);
+    border: 1px solid rgba(34, 197, 94, 0.40);
+    border-radius: var(--r-md);
+    background: linear-gradient(135deg, rgba(34, 197, 94, 0.12), rgba(56, 189, 248, 0.05));
+    box-shadow: 0 2px 12px rgba(34, 197, 94, 0.16), var(--shadow-card);
+  }
+  .community-banner-inner {
+    display: flex; align-items: center; gap: var(--space-s);
+    padding: var(--space-xs) var(--space-m);
+  }
+  .community-icon {
+    flex: 0 0 auto; width: 38px; height: 38px; border-radius: var(--r-md);
+    background: linear-gradient(135deg, var(--green, #22c55e), var(--accent));
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.2em;
+    box-shadow: 0 0 0 1px rgba(34,197,94,0.35), 0 3px 10px rgba(34,197,94,0.28);
+  }
+  .community-content { flex: 1 1 auto; min-width: 0; }
+  .community-title { font-weight: 700; font-size: var(--fs-small); color: #16a34a; margin-bottom: 1px; }
+  .community-desc { color: var(--text-muted); font-size: 0.82em; line-height: 1.4; }
+  .community-desc code {
+    background: var(--bg-3); padding: 1px 6px; border-radius: var(--r-sm);
+    color: var(--accent); font-weight: 600; cursor: text; user-select: all;
+  }
+  .community-actions { flex: 0 0 auto; }
+  .community-btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 6px 14px; border-radius: var(--r-pill);
+    border: 1px solid #16a34a; background: #16a34a; color: #fff;
+    font-weight: 600; font-size: var(--fs-small);
+    cursor: pointer; transition: all 0.18s ease;
+  }
+  .community-btn:hover { background: #15803d; border-color: #15803d; }
+  .community-copy-tip { font-size: 0.72em; color: var(--green, #22c55e); margin-left: 6px; opacity: 0; transition: opacity 0.3s; }
+  .community-copy-tip.show { opacity: 1; }
+  @media (max-width: 560px) {
+    .community-banner-inner { flex-wrap: wrap; }
+    .community-actions { width: 100%; justify-content: flex-end; }
+  }
+
   /* Modale NotebookLM */
   .nb-modal { max-width: 640px; }
   .nb-modal .modal-head { background: linear-gradient(135deg, rgba(188,140,255,0.18), rgba(88,166,255,0.10)); }
@@ -1572,6 +1615,19 @@ function buildLeaderboardHTML(entries) {
     </div>
   </div>
   <div class="nb-tip" id="nbTip">Besoin de renseignements sur un modèle ? Contactez l'agent NotebookLM 🧠</div>
+
+  <div class="community-banner">
+    <div class="community-banner-inner">
+      <div class="community-icon" title="Classement communautaire">🌐</div>
+      <div class="community-content">
+        <div class="community-title">Classement communautaire</div>
+        <div class="community-desc">Vos carnets peuvent alimenter le classement public visible par tous les utilisateurs. Soumettez-les depuis le terminal : <code>node runner.js --submit</code><span class="community-copy-tip" id="communityCopyTip">copié ✓</span></div>
+      </div>
+      <div class="community-actions">
+        <button class="community-btn" id="communityCopyBtn" title="Copier la commande de soumission">Copier la commande</button>
+      </div>
+    </div>
+  </div>
 
   <div id="updateBanner" class="update-banner" hidden>
     <div class="update-banner-inner">
@@ -1721,6 +1777,42 @@ function closeNbModal() { NB_MODAL.classList.remove('show'); document.body.style
 document.getElementById('nbInfoBtn').addEventListener('click', openNbModal);
 NB_MODAL.addEventListener('click', function(e) { if (e.target === NB_MODAL) closeNbModal(); });
 document.addEventListener('keydown', function(e) { if (e.key === 'Escape' && NB_MODAL.classList.contains('show')) closeNbModal(); });
+
+// --- Bannière Communauté : bouton « Copier la commande » ---
+// Copie la commande de soumission (node runner.js --submit) dans le presse-papier
+// pour que l'utilisateur puisse la coller dans son terminal. Le serveur est local,
+// la soumission se fait depuis le CLI (pas depuis le navigateur, par sécurité du token).
+(function communityCopySetup() {
+  var btn = document.getElementById('communityCopyBtn');
+  var tip = document.getElementById('communityCopyTip');
+  if (!btn || !tip) return;
+  btn.addEventListener('click', function() {
+    var cmd = 'node runner.js --submit';
+    var done = function() {
+      tip.classList.add('show');
+      setTimeout(function() { tip.classList.remove('show'); }, 1800);
+    };
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(cmd).then(done).catch(function() {
+          fallbackCopy(cmd); done();
+        });
+      } else {
+        fallbackCopy(cmd); done();
+      }
+    } catch (e) {
+      fallbackCopy(cmd); done();
+    }
+  });
+  function fallbackCopy(text) {
+    try {
+      var ta = document.createElement('textarea');
+      ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+      document.body.appendChild(ta); ta.select();
+      document.execCommand('copy'); document.body.removeChild(ta);
+    } catch (e) {}
+  }
+})();
 // Bulle d'info périodique : s'affiche après 12s la 1re visite, puis toutes les ~5 min
 // si l'utilisateur n'a jamais cliqué. Disparait après 6 s.
 (function nbBubble() {
@@ -4591,7 +4683,38 @@ function printLmStudioStatus() {
     const res = cliTable.table(headers, rows, { colAligns: aligns, separator: '  ' });
     console.log(`  \x1b[90m    ${res.lines[0]}\x1b[0m`);
     console.log(`  \x1b[90m    ${res.sepLine}\x1b[0m`);
+
+    // Ligne de démarcation : sépare les modèles testés récemment (cette nuit /
+    // dernières 24h) des modèles déjà testés depuis plus longtemps. Les entrées
+    // sont triées par lastTestTs décroissant (plus récent d'abord), donc il
+    // suffit de trouver le premier index dont le test est plus ancien que le
+    // seuil et d'insérer une ligne de séparation visuelle juste avant.
+    const RECENT_THRESHOLD_MS = 24 * 60 * 60 * 1000; // 24 heures
+    const nowMs = Date.now();
+    let recentCount = 0;
+    for (let i = 0; i < entries.length; i++) {
+      const ts = entries[i].lastTestTs || 0;
+      if (ts > 0 && (nowMs - ts) < RECENT_THRESHOLD_MS) recentCount++;
+      else break;
+    }
+
+    // Titre de la première sous-section (modèles récents), affiché juste avant
+    // le premier modèle s'il y en a au moins un de récent.
+    if (recentCount > 0) {
+      console.log(`  \x1b[1;32m━━━ MODÈLES TESTÉS RÉCEMMENT (cette nuit) ━━━\x1b[0m`);
+      console.log('');
+      console.log(`  \x1b[90m    ${res.sepLine}\x1b[0m`);
+    }
+
     for (let i = 0; i < rows.length; i++) {
+      // Insère le séparateur entre les modèles récents et les anciens. On ne
+      // l'affiche que s'il y a au moins un modèle de chaque côté.
+      if (i === recentCount && recentCount > 0 && recentCount < rows.length) {
+        console.log('');
+        console.log(`  \x1b[1;36m━━━ MODÈLES DÉJÀ TESTÉS (antérieurs) ━━━\x1b[0m`);
+        console.log('');
+        console.log(`  \x1b[90m    ${res.sepLine}\x1b[0m`);
+      }
       console.log(`  ${res.lines[i + 2]}`);
     }
     if (hiddenLmsCount > 0) {
@@ -4602,6 +4725,84 @@ function printLmStudioStatus() {
   // --- Bloc 2 : Modèles non testés (détectés dans LM Studio, absents des carnets) ---
   console.log('');
   printUntestedLmStudioModels();
+
+  // --- Bloc 3 : Suggestions de retest (modèles testés mais écoles manquantes) ---
+  // Pour chaque modèle déjà testé et présent dans LM Studio, on détermine
+  // l'école max pertinente selon sa taille de paramètres (via
+  // detectProfileFromModelName), on liste les écoles attendues (de LIGHT à
+  // l'école max) et on compare avec les écoles déjà présentes dans le carnet.
+  // Les modèles avec au moins une école manquante sont suggérés pour la nuit
+  // suivante, avec le détail des écoles à (re)passer.
+  const SCHOOL_ORDER = ['LIGHT', 'STANDARD', 'EXPERT', 'DOCTORAT'];
+  const SCHOOL_NAME = {
+    LIGHT: 'Primaire',
+    STANDARD: 'College-Lycee',
+    EXPERT: 'Universite',
+    DOCTORAT: 'Doctorat-These'
+  };
+  const suggestions = [];
+  for (const e of entries) {
+    // Détecte l'école max pertinente depuis le nom du modèle (model ou shortName).
+    const probe = e.model || e.shortName || '';
+    const { detected } = detectProfileFromModelName(probe);
+    if (!detected) continue;
+    const maxIdx = SCHOOL_ORDER.indexOf(detected);
+    if (maxIdx < 0) continue;
+    // Écoles attendues (de LIGHT jusqu'à l'école max détectée).
+    const expectedKeys = SCHOOL_ORDER.slice(0, maxIdx + 1);
+    // Écoles déjà testées (noms humains -> clés SCHOOL).
+    const testedNames = new Set((e.ecoles || []).map(ec => ec.ecole));
+    const testedKeys = new Set();
+    for (const name of testedNames) {
+      for (const k of SCHOOL_ORDER) {
+        if (SCHOOL_NAME[k] === name) testedKeys.add(k);
+      }
+    }
+    // Écoles manquantes = attendues mais non testées.
+    const missing = expectedKeys.filter(k => !testedKeys.has(k));
+    if (missing.length > 0) {
+      suggestions.push({
+        model: e.model,
+        displayName: e.displayName || e.model,
+        quantization: e.quantization,
+        missing,
+        missingLabels: missing.map(k => SCHOOL_NAME[k])
+      });
+    }
+  }
+
+  if (suggestions.length > 0) {
+    console.log('');
+    console.log(`  \x1b[1;33m━━━ SUGGESTIONS DE RETEST (${suggestions.length}) ━━━\x1b[0m`);
+    console.log(`  \x1b[90mModèles testés mais avec des écoles manquantes — à programmer pour la nuit suivante.\x1b[0m`);
+
+    const sugHeaders = ['Modèle', 'Quant', 'Écoles manquantes', 'Commande suggérée'];
+    const sugAligns = ['left', 'left', 'left', 'left'];
+    const sugRows = [];
+    for (const s of suggestions) {
+      const name = s.displayName || s.model;
+      const quant = s.quantization || '—';
+      const missingLabel = s.missingLabels.join(', ');
+      // Commande night-batch : --models=<modelKey> --schools=<clés>,...
+      // On utilise le model brut (modelKey du carnet) pour --models.
+      const schoolsArg = s.missing.join(',');
+      const cmd = `node night-batch.js --models=${s.model} --schools=${schoolsArg}`;
+      sugRows.push([name, quant, missingLabel, `\x1b[36m${cmd}\x1b[0m`]);
+    }
+    const sugRes = cliTable.table(sugHeaders, sugRows, { colAligns: sugAligns, separator: '  ' });
+    console.log(`  \x1b[90m    ${sugRes.lines[0]}\x1b[0m`);
+    console.log(`  \x1b[90m    ${sugRes.sepLine}\x1b[0m`);
+    for (let i = 0; i < sugRows.length; i++) {
+      console.log(`  ${sugRes.lines[i + 2]}`);
+    }
+    console.log('');
+    console.log(`  \x1b[33m⚠ Vous avez ${suggestions.length} modèle(s) avec des écoles manquantes.\x1b[0m`);
+    console.log(`  \x1b[33mVous pouvez retester la nuit suivante les modèles ci-dessus avec les écoles indiquées.\x1b[0m`);
+    console.log('');
+    console.log(`  \x1b[90mPour tester tous les modèles suggérés d'un coup :\x1b[0m`);
+    console.log(`  \x1b[36m  node night-batch.js --models=${suggestions.map(s => s.model).join(',')} --schools=${[...new Set(suggestions.flatMap(s => s.missing))].join(',')}\x1b[0m`);
+    console.log(`  \x1b[90m  (chaque modèle passera les écoles listées dans sa ligne)\x1b[0m`);
+  }
 
   console.log('');
   console.log('  \x1b[90mAstuce : node leaderboard.js pour le classement complet (local + cloud).\x1b[0m');
@@ -4812,6 +5013,9 @@ function generateLeaderboard() {
   console.log(`  \x1b[36mRaisonnement modèles  : ${relReasoning}\x1b[0m`);
   console.log(`  \x1b[90m  (destiné à NotebookLM via Gemini)\x1b[0m`);
   console.log('');
+  console.log('  \x1b[1;36m━━━ COMMUNAUTÉ BENCHGO ━━━\x1b[0m');
+  console.log('  \x1b[90mVos carnets peuvent alimenter le classement public visible par tous les utilisateurs.\x1b[0m');
+  console.log('  \x1b[90mSoumettez vos résultats : \x1b[1;36mnode runner.js --submit\x1b[0m\n');
 
   return { htmlPath, mdPath, reasoningPath, entries };
 }
@@ -5674,8 +5878,33 @@ module.exports = {
   printLmStudioStatus
 };
 
+// Aide normalisée pour leaderboard.js. Liste exhaustive des commandes/flags
+// réellement supportés. Affichée par --help / help / -h avant tout traitement.
+function printLeaderboardHelp() {
+  printEntryHelp('leaderboard.js', 'Génération du classement HTML/MD + serveur interactif', [
+    { cmd: 'node leaderboard.js', desc: 'Génère classement.html + classement.md (local + cloud séparés).' },
+    { cmd: 'node leaderboard.js --serve', desc: 'Serveur interactif (boutons supprimer, modale, édition liens/quantif/nom affiché/note).' },
+    { cmd: 'node leaderboard.js --serve --port=3940', desc: 'Port custom (défaut 3939).' },
+    { cmd: 'node leaderboard.js --cloud', desc: 'Classement des modèles frontière cloud (API) uniquement.' },
+    { cmd: 'node leaderboard.js --lmstudio', desc: 'Rapport LM Studio : modèles testés + non testés (alias --lmstudio-status).' },
+    { cmd: 'node leaderboard.js --mark-cloud=<shortName>', desc: 'Marque manuellement un carnet comme cloud frontière (migration ancien carnet).' },
+    { cmd: 'node leaderboard.js --help  |  help  |  -h', desc: 'Affiche cette aide.' }
+  ], [
+    'node leaderboard.js --serve pour le mode interactif (suppression dans le navigateur).',
+    'node leaderboard.js --cloud pour le classement des modèles frontière cloud uniquement.',
+    'node leaderboard.js --lmstudio pour le rapport LM Studio (testés + non testés).',
+    'Classement communautaire : soumettez vos carnets avec : node runner.js --submit'
+  ]);
+}
+
 if (require.main === module) {
   const args = process.argv.slice(2);
+  // --help / help / -h : affiche l aide exhaustive puis quitte (avant tout
+  // traitement : mark-cloud, lmstudio, cloud, serve). Non journalisé.
+  if (wantsHelp(args)) {
+    printLeaderboardHelp();
+    process.exit(0);
+  }
   const serveMode = args.includes('--serve') || args.includes('-s');
   const cloudMode = args.includes('--cloud');
   const lmstudioMode = args.includes('--lmstudio') || args.includes('--lmstudio-status');

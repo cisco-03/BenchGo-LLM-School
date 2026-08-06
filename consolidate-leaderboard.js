@@ -14,6 +14,7 @@ const crypto = require('crypto');
 // Tarification cloud (tâche 2026-08-04) : estimation du coût $/€ des modèles
 // cloud payants d'après les tokens consommés (estimation) et les prix OpenRouter.
 const pricing = require('./pricing');
+const { printEntryHelp, wantsHelp } = require('./cli-help');
 
 const NOTEBOOKLM_URL = 'https://notebook.google.com/notebook/bd6cf971-b22a-460a-9892-419d1db02f9e';
 
@@ -2275,6 +2276,21 @@ function main() {
   }, null, 2), 'utf8');
 
   console.log(`Classement consolidé généré : ${path.basename(OUTPUT_HTML)}`);
+}
+
+// --- CLI ---
+// consolidate-leaderboard.js est lancé en local (génération de gh-pages-output/)
+// ET en CI via le workflow consolidate.yml (déploiement GitHub Pages).
+if (wantsHelp(process.argv.slice(2))) {
+  printEntryHelp('consolidate-leaderboard.js', 'Classement communautaire consolidé (GitHub Pages)', [
+    { cmd: 'node consolidate-leaderboard.js', desc: 'Génère gh-pages-output/community-leaderboard.html + .json (lecture de submissions/).' },
+    { cmd: 'node consolidate-leaderboard.js --help  |  help  |  -h', desc: 'Affiche cette aide.' }
+  ], [
+    'DÉPLOIEMENT EN LIGNE : (1) git push sur origin/main, (2) gh workflow run consolidate.yml -R cisco-03/BenchGo-LLM-School, (3) gh run watch -R cisco-03/BenchGo-LLM-School.',
+    'Le workflow commit sur la branche gh-pages et GitHub Pages déploie. Hard refresh (Ctrl+Shift+R) sur la page en ligne.',
+    'Lecture des soumissions : dossier submissions/<userId>/<shortName>.json (créé par node runner.js --submit).'
+  ]);
+  process.exit(0);
 }
 
 main();

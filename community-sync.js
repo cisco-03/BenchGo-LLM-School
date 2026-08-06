@@ -467,6 +467,22 @@ async function submitResults(shortName, ledger, token, options) {
 
   options = options || {};
   const userId = options.userId || getOrCreateUserId();
+  const pseudoDisplay = options.pseudo || 'anonyme';
+  // Log structuré exploitable (côté utilisateur, dans logs/benchgo_*.log) :
+  // permet au propriétaire de retracer les tentatives de soumission (succès,
+  // échec, merge échoué) si l'utilisateur partage son log. Aucune donnée
+  // personnelle (userId = hash aléatoire local, déjà envoyé dans le ping).
+  const logSubmit = (result, prNumber, reason) => {
+    logger.info('[COMMUNITY-SUBMIT] result=' + result
+      + ' model=' + shortName
+      + ' userId=' + userId
+      + ' pseudo=' + pseudoDisplay
+      + ' prNumber=' + (prNumber == null ? 'null' : prNumber)
+      + ' reason=' + (reason == null ? 'null' : reason));
+  };
+
+  let result;
+  try {
   const payload = buildSubmissionPayload(shortName, ledger, options);
 
   // Nom de branche et chemin de fichier sanitizés.
@@ -521,11 +537,13 @@ async function submitResults(shortName, ledger, token, options) {
   // manuellement. On signale juste le statut dans le retour.
   if (!mergeResult.merged) {
     logger.warn('community-sync: merge auto échoué pour PR #' + prNumber + ' — ' + (mergeResult.message || 'raison inconnue'));
+    logSubmit('merge_failed', prNumber, mergeResult.message || 'merge auto indisponible');
   } else {
     logger.info('community-sync: PR #' + prNumber + ' mergée automatiquement');
+    logSubmit('success', prNumber, null);
   }
 
-  return {
+  result = {
     ok: true,
     prUrl: pr.html_url,
     prNumber: prNumber,
@@ -534,6 +552,15 @@ async function submitResults(shortName, ledger, token, options) {
     branch: branchName,
     filePath: filePath
   };
+  } catch (err) {
+    // Échec avant création de PR (réseau, token invalide, API GitHub...) :
+    // aucune PR n'est créée côté dépôt, donc invisible pour le propriétaire.
+    // On logge l'échec localement pour permettre un diagnostic si l'utilisateur
+    // partage son log (seul canal disponible sans token valide chez l'utilisateur).
+    logSubmit('failure', null, err && err.message ? err.message : String(err));
+    throw err;
+  }
+  return result;
 }
 
 // Vérifie qu'un token GitHub est valide en interrogeant l'API /user.

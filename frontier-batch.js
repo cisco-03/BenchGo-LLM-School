@@ -38,6 +38,7 @@ const RUNNER = path.join(PROJECT_ROOT, 'runner.js');
 // d'école selon la taille du modèle cloud (un petit 12B ne passera jamais le
 // Post-Doctorat — il faut le tester en Collège/Lycée, voire Primaire).
 const { PROFILES, detectProfileFromModelName } = require('./config');
+const { printEntryHelp, wantsHelp } = require('./cli-help');
 
 // Profils d'école sélectionnables pour les modèles cloud. FRONTIER (Post-Doctorat)
 // reste le défaut pour les gros modèles, mais les petits modèles cloud (< 15B)
@@ -106,48 +107,32 @@ function parseCliArgs() {
     else if (a.startsWith('--endpoint=')) opts.endpoint = a.slice('--endpoint='.length);
     else if (a.startsWith('--profile=')) opts.profile = a.slice('--profile='.length).toUpperCase();
     else if (a === '--no-teacher') opts.noTeacher = true;
-    else if (a === '--help' || a === '-h') {
-      printHelp();
+    else if (wantsHelp([a])) {
+      printFrontierHelp();
       process.exit(0);
     }
   }
   return opts;
 }
 
-function printHelp() {
-  console.log(`
-${C.bold}frontier-batch.js${C.reset} - Mode batch pour modeles cloud (frontiere)
-
-${C.bold}Usage :${C.reset}
-  node frontier-batch.js                              # interactif (provider + modeles + niveau)
-  node frontier-batch.js --provider=openrouter        # provider fixe
-  node frontier-batch.js --models=m1,m2,m3            # modeles sans saisie
-  node frontier-batch.js --provider=openrouter --models=m1,m2
-  node frontier-batch.js --profile=STANDARD            # niveau Collège/Lycée (petits modèles < 15B)
-  node frontier-batch.js --profile=LIGHT              # niveau Primaire (très petits modèles < 3B)
-  node frontier-batch.js --no-teacher                 # desactive le professeur IA
-  node frontier-batch.js --api-key=sk-...             # cle API fournie
-  node frontier-batch.js --provider=ollama --endpoint=https://...  # endpoint custom
-
-${C.bold}Options :${C.reset}
-  --provider=<name>   Provider cloud (openrouter, openai, anthropic, groq, together,
-                      mistral, deepseek, cohere, ollama, lmstudio, custom)
-  --models=<list>     Liste de modeles separes par virgules
-  --profile=<level>   Niveau d ecole (LIGHT, STANDARD, EXPERT, DOCTORAT, FRONTIER).
-                      Defaut : FRONTIER (Post-Doctorat). Pour les petits modèles cloud
-                      (< 15B), utiliser STANDARD (Collège/Lycée) ou LIGHT (Primaire).
-  --api-key=<key>     Cle API pour le provider (sinon recuperee depuis .api-keys.json ou saisie)
-  --endpoint=<url>    Base URL du provider (ollama/lmstudio/custom, ou override d un provider)
-  --no-teacher        Desactive le professeur IA (correcteur externe)
-  --help, -h          Affiche cette aide
-
-${C.bold}Comportement :${C.reset}
-  - Par defaut, chaque modele est teste avec --profile=FRONTIER (Post-Doctorat).
-  - --profile=<level> permet de tester un petit modele cloud a un niveau adapté :
-    LIGHT (Primaire, < 3B), STANDARD (Collège/Lycée, 3-15B), EXPERT (Université, 15-30B).
-  - --force est passe au runner pour neutraliser les confirmations en mode non-TTY.
-  - Le niveau est appliqué a TOUS les modeles de la liste (meme profil pour tous).
-`);
+function printFrontierHelp() {
+  printEntryHelp('frontier-batch.js', 'Mode batch pour modèles cloud (frontière)', [
+    { cmd: 'node frontier-batch.js', desc: 'Interactif (provider + modèles + niveau).' },
+    { cmd: 'node frontier-batch.js --provider=openrouter', desc: 'Provider cloud fixe.' },
+    { cmd: 'node frontier-batch.js --models=m1,m2,m3', desc: 'Modèles à tester sans saisie.' },
+    { cmd: 'node frontier-batch.js --provider=openrouter --models=m1,m2', desc: 'Provider + modèles combinés.' },
+    { cmd: 'node frontier-batch.js --profile=STANDARD', desc: 'Niveau Collège/Lycée (petits modèles < 15B).' },
+    { cmd: 'node frontier-batch.js --profile=LIGHT', desc: 'Niveau Primaire (très petits modèles < 3B).' },
+    { cmd: 'node frontier-batch.js --no-teacher', desc: 'Désactive le professeur IA (correcteur externe).' },
+    { cmd: 'node frontier-batch.js --api-key=sk-...', desc: 'Clé API fournie (sinon .api-keys.json ou saisie).' },
+    { cmd: 'node frontier-batch.js --provider=ollama --endpoint=https://...', desc: 'Endpoint custom (ollama/lmstudio/custom).' },
+    { cmd: 'node frontier-batch.js --help  |  help  |  -h', desc: 'Affiche cette aide.' }
+  ], [
+    'Défaut : --profile=FRONTIER (Post-Doctorat). Pour un petit modèle cloud (< 15B), utiliser STANDARD ou LIGHT.',
+    '--force est transmis au runner (neutralise les confirmations en mode non-TTY).',
+    '--submit, --github-token et --hybrid sont transmis au runner (cf. node runner.js --help).',
+    'Classement communautaire : soumettez vos carnets avec : node runner.js --submit'
+  ]);
 }
 
 // Recupere la cle API memorisee pour un provider depuis .api-keys.json.

@@ -36,6 +36,7 @@ const readline = require('readline');
 const fs = require('fs');
 const path = require('path');
 const { PROFILES, detectProfileFromModelName } = require('./config');
+const { printEntryHelp, wantsHelp } = require('./cli-help');
 
 const PROJECT_ROOT = __dirname;
 const RUNNER = path.join(PROJECT_ROOT, 'runner.js');
@@ -1248,10 +1249,12 @@ function parseArgs() {
   const modelsArg = (() => { const a = raw.find(r => r.startsWith('--models=')); return a ? a.split('=').slice(1).join('=') : null; })();
   const schoolsArg = (() => { const a = raw.find(r => r.startsWith('--schools=')); return a ? a.split('=').slice(1).join('=') : null; })();
   const noTeacher = raw.includes('--no-teacher');
+  const hybridFlag = raw.includes('--hybrid');
   const listOnly = raw.includes('--list-only');
   const extraRunnerArgs = [];
   if (noTeacher) extraRunnerArgs.push('--no-teacher');
-  return { modelsArg, schoolsArg, noTeacher, listOnly, extraRunnerArgs };
+  if (hybridFlag) extraRunnerArgs.push('--hybrid');
+  return { modelsArg, schoolsArg, noTeacher, listOnly, hybridFlag, extraRunnerArgs };
 }
 
 function resolveSchoolsFromArg(schoolsArg) {
@@ -1265,12 +1268,31 @@ function resolveSchoolsFromArg(schoolsArg) {
 }
 
 async function main() {
+  // --help / help / -h : affiche l aide exhaustive puis quitte (avant la
+  // verification du daemon LM Studio). Non bloquant en mode batch.
+  if (wantsHelp(process.argv.slice(2))) {
+    printEntryHelp('night-batch.js', 'Mode nuit (batch) — enchaîne les modèles LM Studio', [
+      { cmd: 'node night-batch.js', desc: 'Mode interactif : sélection des modèles et écoles (TTY).' },
+      { cmd: 'node night-batch.js --list-only', desc: 'Liste les modèles LM Studio triés par score local, puis quitte (debug).' },
+      { cmd: 'node night-batch.js --models=key1,key2', desc: 'Modèles à tester sans sélection interactive (modelKeys).' },
+      { cmd: 'node night-batch.js --schools=STANDARD,EXPERT', desc: 'Écoles à tester sans sélection interactive (clés SCHOOLS).' },
+      { cmd: 'node night-batch.js --no-teacher', desc: 'Désactive le professeur IA (correcteur externe).' },
+      { cmd: 'Pendant la sélection : !<num>  /  !!<num>', desc: 'Isoler (!) ou désisoler (!!) un modèle de la liste noire manuelle.' },
+      { cmd: 'node night-batch.js --help  |  help  |  -h', desc: 'Affiche cette aide.' }
+    ], [
+      '--force, --profile= et --hybrid sont transmis au runner sous-jacent (cf. node runner.js --help).',
+      'Les rapports vont dans Export-Rapports/<date>/<ecole>/<niveau>/rapport_v3_*.md',
+      'Classement communautaire : soumettez vos carnets avec : node runner.js --submit'
+    ]);
+    process.exit(0);
+  }
+
   console.log(`\n${C.bold}${C.cyan}==================================================${C.reset}`);
   console.log(`${C.bold}${C.cyan}          BENCHGO V3 - MODE NUIT (BATCH)           ${C.reset}`);
   console.log(`${C.bold}${C.cyan}   File d'attente automatique de modeles LM Studio   ${C.reset}`);
   console.log(`${C.bold}${C.cyan}==================================================${C.reset}\n`);
 
-  const { modelsArg, schoolsArg, listOnly, extraRunnerArgs } = parseArgs();
+  const { modelsArg, schoolsArg, listOnly, hybridFlag, extraRunnerArgs } = parseArgs();
 
   console.log(`  ${C.gray}[${nowClock()}] Verification du daemon LM Studio...${C.reset}`);
   if (!isDaemonUp()) {
@@ -1544,12 +1566,31 @@ async function main() {
     const icon = r.ok ? `${C.green}OK${C.reset}` : `${C.red}KO${C.reset}`;
     const reason = r.reason ? ` ${C.gray}(${r.reason})${C.reset}` : '';
     const schoolTag = r.school ? ` ${C.gray}[${r.school}]${C.reset}` : '';
-    console.log(`  ${icon} ${r.model.displayName.padEnd(28)}${schoolTag} ${C.gray}${mins} min${C.reset}${reason}`);
+    // Quantification affichée si disponible (ex: Q5_K_L). Indispensable quand
+    // plusieurs quantifs du même modèle sont testées : sans elle, le bilan
+    // répète le même displayName sans préciser quelle quantif a été évaluée.
+    const quantTag = r.model.quant && r.model.quant !== '?' ? ` ${C.magenta}${r.model.quant}${C.reset}` : '';
+    console.log(`  ${icon} ${r.model.displayName.padEnd(28)}${quantTag}${schoolTag} ${C.gray}${mins} min${C.reset}${reason}`);
   }
 
   console.log(`\n  ${C.gray}Rapports : Export-Rapports/<date>/<ecole>/<niveau>/rapport_v3_*.md${C.reset}`);
   console.log(`  ${C.gray}Classement : Export-Rapports/classement.html (et classement.md)${C.reset}`);
   console.log(`  ${C.gray}Logs : logs/benchgo_*.log${C.reset}\n`);
+
+  // --- Rappel soumission communautaire (multi-touch) ---
+  // Les carnets générés pendant la nuit peuvent alimenter le classement public.
+  // En mode --hybrid, l'auto-soumission est déjà gérée par hybrid-mode.js via le
+  // runner sous-jacent : on ne duplique pas, on confirme juste le principe.
+  console.log(`  ${C.bold}${C.cyan}COMMUNAUTÉ${C.reset}`);
+  if (hybridFlag) {
+    console.log(`  ${C.gray}Mode --hybrid actif : l'auto-soumission GitHub a été tentée par le runner${C.reset}`);
+    console.log(`  ${C.gray}pour chaque modèle dont le seuil a été atteint. Consultez les logs ci-dessus${C.reset}`);
+    console.log(`  ${C.gray}pour le détail des soumissions réussies/échouées.${C.reset}`);
+  } else {
+    console.log(`  ${C.gray}Les carnets générés cette nuit peuvent alimenter le classement public.${C.reset}`);
+    console.log(`  ${C.gray}Soumission manuelle post-batch :${C.reset} ${C.cyan}node runner.js --submit${C.reset}`);
+  }
+  console.log('');
 
   process.exit(0);
 }

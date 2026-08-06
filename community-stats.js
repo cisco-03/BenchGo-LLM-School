@@ -16,6 +16,7 @@
 const fs = require('fs');
 const path = require('path');
 const { COMMUNITY_REPO } = require('./community-sync');
+const { printEntryHelp, wantsHelp } = require('./cli-help');
 
 const GITHUB_API = 'https://api.github.com';
 
@@ -181,6 +182,38 @@ async function printDashboard(token) {
     console.log(`  \x1b[33m⚠ PRs : ${prs.error}\x1b[0m`);
   }
   console.log('');
+
+  // --- Ratio de conversion participation ---
+  // Soumissions réussies / clones uniques (14j) = taux de participation active.
+  // Si ≈ 0 %, cela confirme que personne ne soumet malgré le clonage.
+  const clonesUniques = (traffic && traffic.clones && typeof traffic.clones.uniques === 'number') ? traffic.clones.uniques : null;
+  const subCount = (submissions && !submissions.error && typeof submissions.count === 'number') ? submissions.count : null;
+  if (clonesUniques != null && subCount != null) {
+    const ratio = clonesUniques > 0 ? ((subCount / clonesUniques) * 100) : 0;
+    const ratioStr = ratio.toFixed(1) + '%';
+    const rc = ratio === 0 ? '\x1b[33m' : (ratio < 5 ? '\x1b[36m' : '\x1b[32m');
+    console.log(`  \x1b[1m📊 Taux de participation\x1b[0m : ${rc}${ratioStr}\x1b[0m  \x1b[90m(soumissions mergées / clones uniques 14j)\x1b[0m`);
+    if (ratio === 0) {
+      console.log(`  \x1b[33m⚠ Aucune soumission malgré des clones — les utilisateurs clonent mais ne soumettent pas.\x1b[0m`);
+    }
+    console.log('');
+  }
+
+  // --- PRs en attente = 0 + note sur la visibilité des échecs ---
+  if (prs && !prs.error && prs.count === 0) {
+    console.log(`  \x1b[33m⚠ Aucune PR en attente — si vous attendiez des soumissions communautaires,\x1b[0m`);
+    console.log(`  \x1b[33m  elles ont peut-être échoué chez les utilisateurs (non visible sans token valide chez eux).\x1b[0m\n`);
+  }
+
+  // --- Section interprétation ---
+  console.log(`  \x1b[1;36m━━━ INTERPRÉTATION ━━━\x1b[0m`);
+  console.log(`  \x1b[90m• Les soumissions mergées sont visibles ici (dossier submissions/).\x1b[0m`);
+  console.log(`  \x1b[90m• Les tentatives échouées NE sont PAS visibles (un échec ne crée pas de\x1b[0m`);
+  console.log(`  \x1b[90m  fichier/PR). Pour savoir si quelqu'un essaie sans succès, le propriétaire\x1b[0m`);
+  console.log(`  \x1b[90m  doit demander les logs à l'utilisateur (logs/benchgo_*.log).\x1b[0m`);
+  console.log(`  \x1b[90m• Comparez le nombre de clones uniques (adoption) au nombre de soumissions\x1b[0m`);
+  console.log(`  \x1b[90m  réussies (participation active) pour estimer le ratio de conversion.\x1b[0m`);
+  console.log('');
 }
 
 module.exports = {
@@ -194,6 +227,19 @@ module.exports = {
 // --- CLI ---
 if (require.main === module) {
   const args = process.argv.slice(2);
+  // --help / help / -h : affiche l aide puis quitte. Outil propriétaire.
+  if (wantsHelp(args)) {
+    printEntryHelp('community-stats.js', 'Tableau de bord communautaire (côté propriétaire)', [
+      { cmd: 'node community-stats.js --token=ghp_xxx', desc: 'Affiche le dashboard (clones, vues, PRs, soumissions mergées).' },
+      { cmd: 'set GITHUB_TOKEN=ghp_xxx && node community-stats.js', desc: 'Via la variable d environnement GITHUB_TOKEN (ou GH_TOKEN).' },
+      { cmd: 'node community-stats.js --help  |  help  |  -h', desc: 'Affiche cette aide.' }
+    ], [
+      'OUTIL PROPRIÉTAIRE : nécessite un token GitHub avec droits push sur le dépôt communautaire.',
+      'Le token doit avoir le scope repo (traffic) — idéalement read:org pour une organisation.',
+      'Récupération rapide du token : gh auth token'
+    ]);
+    process.exit(0);
+  }
   const tokenArg = args.find(a => a.startsWith('--token='));
   const token = tokenArg ? tokenArg.split('=').slice(1).join('=') : (process.env.GITHUB_TOKEN || process.env.GH_TOKEN);
 

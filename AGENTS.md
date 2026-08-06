@@ -21,14 +21,21 @@ OS : Windows, PowerShell 5.1. Projet Node.js 18+ **sans `package.json`** (module
 | Serveur classement interactif | `node leaderboard.js --serve` |
 | Serveur classement (port custom) | `node leaderboard.js --serve --port=3940` |
 | Classement communautaire en ligne (GitHub Pages) | `gh workflow run consolidate.yml -R cisco-03/BenchGo-LLM-School` puis `gh run watch -R cisco-03/BenchGo-LLM-School` |
-| Aide CLI | `node runner.js --help` |
+| Classement communautaire local (test) | `node consolidate-leaderboard.js` (→ `gh-pages-output/`) |
+| Aide CLI (runner) | `node runner.js --help` (ou `help` / `-h`) |
+| Aide CLI (leaderboard) | `node leaderboard.js --help` |
+| Aide CLI (night-batch) | `node night-batch.js --help` |
+| Aide CLI (frontier-batch) | `node frontier-batch.js --help` |
+| Aide CLI (community-stats) | `node community-stats.js --help` |
+| Aide CLI (consolidate-leaderboard) | `node consolidate-leaderboard.js --help` |
 | Version | `node runner.js version` |
 | Dernier run & état | `node runner.js status` |
 | Liste des presets | `node runner.js --list-presets` |
 | Effacer une clé API mémorisée | `node runner.js --forget-key=<provider>` |
 | Lister les clés API mémorisées | `node runner.js --list-keys` |
 | Liste LM Studio triée par score local | `node night-batch.js --list-only` |
-| Isoler/désisoler un modèle LM Studio | `node night-batch.js --isoler=<numéro>` |
+| Isoler/désisoler un modèle LM Studio | Interaction `!<num>` / `!!<num>` pendant la sélection `night-batch.js` |
+| Stats communautaires (propriétaire) | `node community-stats.js --token=ghp_...` (ou `GITHUB_TOKEN` env) |
 | Vérifier syntaxe JS | `node --check <fichier>.js` |
 | Vérifier JS inline des classements | `node scripts/check-inline-js.js` |
 | Vérifier tiers | `node verify_tiers.js` |

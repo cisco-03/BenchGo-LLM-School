@@ -324,11 +324,61 @@ function saveLastRun(summary) {
   }
 }
 
+// ============================================================
+// printEntryHelp — aide normalisée pour les entrypoints CLI secondaires
+// ============================================================
+//
+// Affiche un encadré ANSI façon « /help » d un bot : titre du fichier + liste
+// exhaustive des commandes/flags réellement supportés. Utilisé par
+// leaderboard.js, night-batch.js, frontier-batch.js, community-stats.js et
+// consolidate-leaderboard.js pour offrir une aide cohérente sans dupliquer la
+// mise en forme (encadré cyan, sections USAGE / COMMANDES / ASTUCES).
+//
+// @param {string} title  - Titre court affiché dans l encadré (ex: "leaderboard.js").
+// @param {string} subtitle - Sous-titre descriptif (ex: "Génération du classement").
+// @param {Array<{cmd:string, desc:string}>} commands - Liste des commandes/flags.
+// @param {Array<string>} [tips] - Section astuces optionnelle (lignes libres).
+function printEntryHelp(title, subtitle, commands, tips) {
+  const line = '\x1b[1;36m' + '━'.repeat(73) + '\x1b[0m';
+  console.log('');
+  console.log(line);
+  console.log('\x1b[1;36m  ' + title + '\x1b[0m' + (subtitle ? ' — ' + subtitle : ''));
+  console.log(line);
+  console.log('');
+  console.log('\x1b[1mUSAGE\x1b[0m');
+  console.log('  node ' + title + ' [options]');
+  console.log('');
+  console.log('\x1b[1mCOMMANDES & OPTIONS\x1b[0m');
+  for (const c of commands) {
+    console.log('  \x1b[1m' + c.cmd + '\x1b[0m');
+    if (c.desc) console.log('      \x1b[90m' + c.desc + '\x1b[0m');
+  }
+  if (Array.isArray(tips) && tips.length > 0) {
+    console.log('');
+    console.log('\x1b[1mASTUCES\x1b[0m');
+    for (const t of tips) console.log('  \x1b[90m' + t + '\x1b[0m');
+  }
+  console.log('');
+  console.log('\x1b[90mAide aussi disponible : node runner.js --help\x1b[0m');
+  console.log('');
+}
+
+// Détecte --help / help / -h dans les argv bruts. Renvoie true si l aide a été
+// demandée (l appelant doit alors afficher son aide puis exit). Utilitaire
+// partagé pour les entrypoints secondaires qui ne passent pas par
+// handleSingleAction (réservé à runner.js).
+function wantsHelp(args) {
+  return args.includes('--help') || args.includes('-h') ||
+    args.some(a => a === 'help');
+}
+
 module.exports = {
   printHelp,
   printStatus,
   printVersion,
   handleSingleAction,
+  printEntryHelp,
+  wantsHelp,
   BenchgoError,
   ERROR_CODES,
   saveLastRun,

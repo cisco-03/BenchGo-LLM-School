@@ -1006,8 +1006,14 @@ async function proposeCommunitySubmission(shortName, options) {
   options = options || {};
   const { submitFlag, cliGithubToken } = options;
 
-  // En mode non-interactif sans --submit, on ne propose rien.
-  if (!submitFlag && (!process.stdin.isTTY || !process.stdout.isTTY)) return;
+  // En mode non-interactif sans --submit, on ne propose rien mais on logge
+  // pour permettre au propriétaire de voir (via les logs) qu'un run batch
+  // s'est terminé sans soumission. Utile pour night-batch qui a son propre
+  // rappel (cf. Tâche 5 du plan).
+  if (!submitFlag && (!process.stdin.isTTY || !process.stdout.isTTY)) {
+    logger.info('Rappel soumission communautaire non proposé (mode batch) — carnet=' + shortName);
+    return;
+  }
 
   // Si --submit n'est pas forcé, on demande confirmation.
   if (!submitFlag) {
@@ -1015,6 +1021,7 @@ async function proposeCommunitySubmission(shortName, options) {
     console.log('  \x1b[90mEnvoyez vos résultats sur le dépôt communautaire pour alimenter le classement\x1b[0m');
     console.log('  \x1b[90mconsolidé visible par tous. Votre carnet sera soumis via une Pull Request GitHub\x1b[0m');
     console.log('  \x1b[90mqui sera mergée automatiquement (résultats JSON, pas de code à valider).\x1b[0m');
+    console.log('  \x1b[90mVotre carnet alimente le classement public visible par tous les utilisateurs de BenchGo.\x1b[0m');
     const wantsSubmit = await askYesNo('  Envoyer vos résultats sur le classement communautaire ?', true);
     if (!wantsSubmit) {
       console.log('  \x1b[90mSoumission ignorée. Vous pouvez le faire plus tard avec : node runner.js --submit\x1b[0m');
@@ -1087,7 +1094,8 @@ async function proposeCommunitySubmission(shortName, options) {
       console.log(`  \x1b[33mMerge auto impossible : ${result.mergeMessage || 'raison inconnue'}\x1b[0m`);
       console.log('  \x1b[90mLe propriétaire du dépôt validera votre PR manuellement.\x1b[0m');
     }
-    console.log('  \x1b[90mMerci pour votre participation !\x1b[0m\n');
+    console.log('  \x1b[90mMerci pour votre participation !\x1b[0m');
+    console.log('  \x1b[90mPour renvoyer un carnet mis à jour : node runner.js --submit\x1b[0m\n');
   } catch (e) {
     console.log(`\n  \x1b[31mÉchec de la soumission : ${e.message}\x1b[0m`);
     console.log('  \x1b[33mVérifiez votre token GitHub et vos droits sur le dépôt.\x1b[0m');
@@ -1223,9 +1231,22 @@ async function main() {
         console.log('  \x1b[1;36mPour mettre à jour : \x1b[1;36mgit pull\x1b[0m');
         console.log('  \x1b[90m(Puis relancez node runner.js)\x1b[0m\n');
       }
-    } catch (e) {
-      // Échec silencieux — ne jamais bloquer le runner.
+  } catch (e) {
+    // Échec silencieux — ne jamais bloquer le runner.
     }
+  }
+
+  // --- Rappel soumission communautaire au démarrage ---
+  // Rappel multi-touch : on affiche une bannière cyan discrète AVANT le
+  // questionnaire pour informer que les résultats peuvent alimenter le classement
+  // public. Non répétée si --no-telemetry (cohérence : l'utilisateur a déjà
+  // refusé la dimension communautaire passive). Le rappel de FIN de run reste
+  // actif (c'est l'endroit le plus pertinent, indépendant de la télémétrie).
+  if (!noTelemetryFlag) {
+    console.log('  \x1b[1;36m━━━ COMMUNAUTÉ BENCHGO ━━━\x1b[0m');
+    console.log('  \x1b[90mVos résultats peuvent alimenter le classement public visible par tous les\x1b[0m');
+    console.log('  \x1b[90mutilisateurs de BenchGo. À la fin du run, il vous sera proposé d\'envoyer\x1b[0m');
+    console.log('  \x1b[90mvotre carnet via une Pull Request GitHub (ou : \x1b[1;36mnode runner.js --submit\x1b[0m\x1b[90m).\x1b[0m\n');
   }
 
   // --- Questionnaire interactif au démarrage ---
