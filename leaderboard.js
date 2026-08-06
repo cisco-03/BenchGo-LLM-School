@@ -4601,6 +4601,24 @@ function getLmStudioTestedEntries() {
 function printLmStudioStatus() {
   const allEntries = getLmStudioTestedEntries();
 
+  // Rang global local (cohérent avec le classement général CLI) : on trie
+  // tous les modèles locaux testés par % décroissant — même tri que
+  // generateLeaderboard — et on map shortName -> rang (1-indexé). Le rapport
+  // --lmstudio est trié par date, pas par score : utiliser l index de boucle
+  // comme rang donnerait "TOP DU TOP" aux 3 modèles les plus récents quel
+  // que soit leur score réel (incohérence avec le classement général).
+  const globalLocalRank = new Map();
+  {
+    const ledgers = loadAllLedgers();
+    const loc = ledgers.map(aggregateLedger).filter(Boolean).filter(e => !e.isCloud);
+    loc.sort((a, b) => {
+      if (b.pct !== a.pct) return b.pct - a.pct;
+      if (b.score !== a.score) return b.score - a.score;
+      return b.globalLifeScore - a.globalLifeScore;
+    });
+    for (let i = 0; i < loc.length; i++) globalLocalRank.set(loc[i].shortName, i + 1);
+  }
+
   // Croise les carnets avec la liste réelle des modèles présents dans LM Studio.
   // Sans ce croisement, le Bloc 1 afficherait aussi les carnets des modèles
   // supprimés de LM Studio depuis (42 carnets vs 12 modèles réellement présents).
@@ -4655,8 +4673,12 @@ function printLmStudioStatus() {
     const rows = [];
     for (let i = 0; i < entries.length; i++) {
       const e = entries[i];
-      const verdict = getVerdict(e, i + 1);
-      const cat = getCategory(e, i + 1);
+      // Rang global local (calculé plus haut par tri par %), PAS l index de la
+      // liste filtrée triée par date. Les médailles du podium se basent aussi
+      // sur ce rang global pour rester cohérentes avec le classement général.
+      const grank = globalLocalRank.get(e.shortName) || (i + 1);
+      const verdict = getVerdict(e, grank);
+      const cat = getCategory(e, grank);
       const grade = letterGrade(e.pct);
       const vColor = verdict.rank === 0 ? '\x1b[93m' : verdict.rank === 1 ? '\x1b[32m' : verdict.rank === 2 ? '\x1b[36m' : verdict.rank === 3 ? '\x1b[33m' : '\x1b[31m';
       let dateLabel = '\x1b[90m—\x1b[0m';
@@ -4672,7 +4694,7 @@ function printLmStudioStatus() {
       const scoreLabel = `${e.score}/${e.max} (${e.pct}%)`;
       rows.push([
         (i + 1) + '.',
-        e.model,
+        e.displayName || e.model,
         dateLabel,
         `${grade.color}${grade.grade}\x1b[0m ${niveauLabel}`,
         scoreLabel,
@@ -4912,7 +4934,7 @@ function printLeaderboardSection(title, sectionEntries) {
     }
     lbRows.push([
       (i + 1) + '.',
-      e.model,
+      e.displayName || e.model,
       provCell,
       quant,
       temps,

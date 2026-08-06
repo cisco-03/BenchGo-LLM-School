@@ -1,5 +1,77 @@
 # CHANGELOG - Carnet de Notes BenchGo
 
+## 2026-08-06 — fix(cli): displayName utilisé dans les sections CLI (printLeaderboardSection + rapport --lmstudio)
+
+### Contexte
+Les sections CLI du classement général et du rapport `--lmstudio` affichaient
+`e.model` (nom brut) au lieu du `displayName` personnalisé, même quand
+l'utilisateur avait défini un nom affiché plus court. Exemple visible :
+`yuxinlu1/gemma-4-12b-agentic-fable5-composer2.5-v2-3.5x-tau2-gguf/gemma4-v2-q8_0.gguf`
+s'affichait en plein alors qu'un `displayName` plus court existait.
+
+### Solution
+`printLeaderboardSection()` (classement général CLI) et `printLmStudioStatus()`
+Bloc 1 utilisent désormais `e.displayName || e.model` pour la colonne modèle,
+cohérent avec l'HTML, le Markdown et le CSV qui utilisaient déjà le
+displayName. Le carnet `yuxinlu1_..._gemma4-v2-q8_0.json` a vu son
+`displayName` mis à jour en `yuxinlu1/gemma4-v2-q8_0.gguf` (version
+raccourcie demandée).
+
+### Fichiers modifiés
+- `leaderboard.js` : `printLeaderboardSection()` + `printLmStudioStatus()`
+  Bloc 1 — colonne modèle → `e.displayName || e.model`.
+- `Export-Rapports/.carnet/yuxinlu1_..._gemma4-v2-q8_0.json` : `displayName`
+  mis à jour.
+
+### Résultat obtenu
+La ligne 6 du classement général CLI affiche désormais
+`yuxinlu1/gemma4-v2-q8_0.gguf` au lieu du nom long.
+
+### Validation
+- `node --check leaderboard.js` → OK.
+- `node scripts/check-inline-js.js` → JS inline valide.
+- `node tests/run-tests.js` → 27/27 passés.
+- `node leaderboard.js` + `node leaderboard.js --lmstudio` → noms raccourcis
+  affichés.
+
+## 2026-08-06 — fix(lmstudio): statuts du rapport --lmstudio basés sur le rang global local, plus l index chronologique
+
+### Contexte
+Le rapport `node leaderboard.js --lmstudio` affichait des statuts (verdict +
+catégorie) incohérents avec le classement général (`node leaderboard.js`).
+Les 3 modèles testés le plus récemment obtenaient « TOP DU TOP 🏆 » quel que
+soit leur score réel (ex : `gemma-4-12b-it-qat-heretic-ud-k-xl` 95% et
+`kai-os_grug-12b@q5_k_l` 96% marqués TOP DU TOP alors qu'ils sont rang 13 et 10
+en classement général → RECOMMANDÉ).
+
+### Cause racine
+`printLmStudioStatus()` trie `entries` par date décroissante (chronologique)
+pour le Bloc 1, mais passait `i + 1` (index dans la liste filtrée triée par
+date) comme rang à `getVerdict()` / `getCategory()`. Or ces fonctions réservent
+« TOP DU TOP » au rang 1-3. Les 3 premiers modèles chronologiques étaient donc
+automatiquement classés TOP DU TOP indépendamment de leur score.
+
+### Solution
+Calcul d'une `Map<shortName, rang>` depuis le même tri que `generateLeaderboard`
+(% décroissant, puis score, puis santé) sur les modèles locaux. Le rang global
+local est passé à `getVerdict()` / `getCategory()` au lieu de l index de
+boucle. Le rapport reste trié par date (comportement voulu pour le suivi), seul
+le statut reflète désormais le rang réel dans le classement local.
+
+### Fichiers modifiés
+- `leaderboard.js` : `printLmStudioStatus()` — ajout du calcul
+  `globalLocalRank` + utilisation dans la boucle Bloc 1.
+
+### Résultat obtenu
+Les statuts du rapport `--lmstudio` sont désormais identiques à ceux du
+classement général pour les mêmes modèles (TOP DU TOP réservé aux rangs 1-3).
+
+### Validation
+- `node --check leaderboard.js` → OK
+- `node leaderboard.js --lmstudio` → statuts cohérents (les 3 modèles récents
+  à 94-96% affichent RECOMMANDÉ, les vrais podiums à 99-100% affichent TOP DU
+  TOP).
+
 ## 2026-08-06 — feat(cli): système --help pour tous les entrypoints + rappels soumission communautaire multi-touch + visibilité participation
 
 ### Contexte
