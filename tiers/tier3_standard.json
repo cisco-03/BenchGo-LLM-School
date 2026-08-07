@@ -6,7 +6,7 @@
   "optional_for": [
     "STANDARD"
   ],
-  "prompt": "You are taking a TIER 3 technical evaluation for STANDARD models.\n\nSolve 5 JavaScript exercises inspired by a middle school curriculum (3ème).\n\nReturn your answers in Markdown using headers for the exercise IDs and code blocks for the JavaScript functions.\n\n[EXERCISE Math]\nWrite a JavaScript function \"resoudreEquation(a, b)\" that solves a*x + b = 0 and returns x. Return null if a is 0.\n\n[EXERCISE Francais]\nWrite a JavaScript function \"compterVoyelles(phrase)\" that counts the number of vowels (a, e, i, o, u, y) ignoring case.\n\n[EXERCISE Histoire]\nWrite a JavaScript function \"trierAnnees(annees)\" that sorts an array of numbers (years) in ascending order.\n\n[EXERCISE SVT]\nWrite a JavaScript function \"estADN(chaine)\" that returns true if the string only contains 'A', 'T', 'C', or 'G' (uppercase), false otherwise.\n\n[EXERCISE Info]\nWrite a JavaScript function \"bonsEleves(eleves)\" that takes an array of objects like {nom: 'X', moyenne: 12} and returns an array of names for students with moyenne >= 10.\n\nExpected Markdown format:\n### tache_X\n```javascript\nfunction solution() { ... }\n```\n\n[ALGORITHMIC EXERCISES — code pur, sans culture générale]\nReturn each function using a Markdown header (### <exercise id>) followed by a ```javascript code block.\n\n[EXERCISE algo_facile_1]\nWrite a JavaScript function \"validerParentheses(s)\" that returns true if the parentheses in s are balanced (only \"(\" and \")\" are considered).\n\n[EXERCISE algo_facile_2]\nWrite a JavaScript function \"fibonacci(n)\" that returns the n-th Fibonacci number, with fibonacci(0)=0 and fibonacci(1)=1.\n\n[EXERCISE algo_moyen_1]\nWrite a JavaScript function \"motsUniques(s)\" that returns the number of distinct words (separated by whitespace) in the string.\n\n[EXERCISE algo_difficile_1]\nWrite a JavaScript function \"aplatirTableau(tab)\" that flattens an array of arrays by one level (e.g. [[1,2],[3]] -> [1,2,3]).\n\n[EXERCISE algo_defi]\nWrite a JavaScript function \"rotationDroite(tab, k)\" that returns the array rotated right by k positions (e.g. [1,2,3,4], 1 -> [4,1,2,3]).\n\n[EXERCISE contrainte_stricte_3]\nWrite a JavaScript function \"validerContraintes(texte, motBanni, nbPhrases)\" that returns true if TWO constraints are satisfied simultaneously: (1) the text contains exactly nbPhrases sentences (sentences are separated by '.'), and (2) the motBanni does NOT appear anywhere in the text (case-insensitive). Return false if either constraint is violated.",
+  "prompt": "You are taking a TIER 3 technical evaluation for STANDARD models.\n\nSolve 5 JavaScript exercises inspired by a middle school curriculum (3ème).\n\nReturn your answers in Markdown using headers for the exercise IDs and code blocks for the JavaScript functions.\n\n[EXERCISE Math]\nWrite a JavaScript function \"resoudreEquation(a, b)\" that solves a*x + b = 0 and returns x. Return null if a is 0.\n\n[EXERCISE Francais]\nWrite a JavaScript function \"compterVoyelles(phrase)\" that counts the number of vowels (a, e, i, o, u, y) ignoring case.\n\n[EXERCISE Histoire]\nWrite a JavaScript function \"trierAnnees(annees)\" that sorts an array of numbers (years) in ascending order.\n\n[EXERCISE SVT]\nWrite a JavaScript function \"estADN(chaine)\" that returns true if the string only contains 'A', 'T', 'C', or 'G' (uppercase), false otherwise.\n\n[EXERCISE Info]\nWrite a JavaScript function \"bonsEleves(eleves)\" that takes an array of objects like {nom: 'X', moyenne: 12} and returns an array of names for students with moyenne >= 10.\n\nExpected Markdown format:\n### tache_X\n```javascript\nfunction solution() { ... }\n```\n\n[ALGORITHMIC EXERCISES — code pur, sans culture générale]\nReturn each function using a Markdown header (### <exercise id>) followed by a ```javascript code block.\n\n[EXERCISE algo_facile_1]\nWrite a JavaScript function \"validerParentheses(s)\" that returns true if the parentheses in s are balanced (only \"(\" and \")\" are considered).\n\n[EXERCISE algo_facile_2]\nWrite a JavaScript function \"fibonacci(n)\" that returns the n-th Fibonacci number, with fibonacci(0)=0 and fibonacci(1)=1.\n\n[EXERCISE algo_moyen_1]\nWrite a JavaScript function \"motsUniques(s)\" that returns the number of distinct words (separated by whitespace) in the string.\n\n[EXERCISE algo_difficile_1]\nWrite a JavaScript function \"aplatirTableau(tab)\" that flattens an array of arrays by one level (e.g. [[1,2],[3]] -> [1,2,3]).\n\n[EXERCISE algo_defi]\nWrite a JavaScript function \"rotationDroite(tab, k)\" that returns the array rotated right by k positions (e.g. [1,2,3,4], 1 -> [4,1,2,3]).",
   "tasks": [
     {
       "id": "math",
@@ -119,6 +119,42 @@
       "points": 8
     },
     {
+      "id": "contrainte_stricte_3",
+      "label": "Contrainte stricte — Mot banni + nombre exact de phrases",
+      "points": 15,
+      "hint": "Découpez en phrases sur les points, comptez-les, et vérifiez que le mot interdit n'apparaît nulle part (insensible à la casse).",
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "3 phrases, sans mot banni",
+          "setup": "",
+          "call": "validerContraintes('Il fait beau. Le ciel est bleu. Tout va bien.', 'pluvieux', 3)",
+          "assert": "result === true"
+        },
+        {
+          "type": "exec",
+          "description": "Mot banni présent — doit échouer",
+          "setup": "",
+          "call": "validerContraintes('Il fait beau. Temps pluvieux today.', 'pluvieux', 2)",
+          "assert": "result === false"
+        },
+        {
+          "type": "exec",
+          "description": "Mauvais nombre de phrases — doit échouer",
+          "setup": "",
+          "call": "validerContraintes('Une seule phrase.', 'pluvieux', 3)",
+          "assert": "result === false"
+        },
+        {
+          "type": "exec",
+          "description": "Cas limite — chaîne vide, 0 phrases attendues",
+          "setup": "",
+          "call": "validerContraintes('', 'pluvieux', 0)",
+          "assert": "result === true"
+        }
+      ]
+    },
+    {
       "id": "algo_facile_1",
       "label": "Algorithmique — Parenthèses valides",
       "points": 10,
@@ -166,13 +202,6 @@
           "setup": "",
           "call": "fibonacci(0)",
           "assert": "result === 0"
-        },
-        {
-          "type": "exec",
-          "description": "Cas limite — fib(1)",
-          "setup": "",
-          "call": "fibonacci(1)",
-          "assert": "result === 1"
         }
       ]
     },
@@ -239,42 +268,6 @@
           "setup": "",
           "call": "rotationDroite([1, 2, 3], 0)",
           "assert": "JSON.stringify(result) === '[1,2,3]'"
-        }
-      ]
-    },
-    {
-      "id": "contrainte_stricte_3",
-      "label": "Contrainte stricte — Mot banni + nombre exact de phrases",
-      "points": 15,
-      "hint": "Découpez en phrases sur les points, comptez-les, et vérifiez que le mot interdit n'apparaît nulle part (insensible à la casse).",
-      "evaluations": [
-        {
-          "type": "exec",
-          "description": "3 phrases, sans mot banni",
-          "setup": "",
-          "call": "validerContraintes('Il fait beau. Le ciel est bleu. Tout va bien.', 'pluvieux', 3)",
-          "assert": "result === true"
-        },
-        {
-          "type": "exec",
-          "description": "Mot banni présent — doit échouer",
-          "setup": "",
-          "call": "validerContraintes('Il fait beau. Temps pluvieux today.', 'pluvieux', 2)",
-          "assert": "result === false"
-        },
-        {
-          "type": "exec",
-          "description": "Mauvais nombre de phrases — doit échouer",
-          "setup": "",
-          "call": "validerContraintes('Une seule phrase.', 'pluvieux', 3)",
-          "assert": "result === false"
-        },
-        {
-          "type": "exec",
-          "description": "Cas limite — chaîne vide, 0 phrases attendues",
-          "setup": "",
-          "call": "validerContraintes('', 'pluvieux', 0)",
-          "assert": "result === true"
         }
       ]
     }

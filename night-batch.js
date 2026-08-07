@@ -653,7 +653,19 @@ function listLlmModels() {
       return allSchoolKeys.slice(0, idx + 1);
     }
     // Filtre les fichiers MTP : ils ne sont pas des modeles testables seuls.
-    const testable = arr.filter(m => !isMtpModel(m));
+    // Un fichier MTP n'a de sens que s'il peut etre associe a un modele
+    // principal (via --speculative-draft-mtp). Si un modele "mtp" est orphelin
+    // (seul dans son dossier, aucun modele principal candidat), c'est en
+    // realite un modele principal complet (ex: Qwen3.6-27B-...-MTP qui est un
+    // LLM de 17 Go, pas un module MTP accessoire). On garde donc les MTP
+    // orphelins dans la liste des modeles testables.
+    const associatedMtpKeys = new Set(mtpAssociations.values());
+    const orphanMtpKeys = new Set(
+      arr.filter(m => isMtpModel(m))
+         .map(m => m.modelKey)
+         .filter(k => !associatedMtpKeys.has(k))
+    );
+    const testable = arr.filter(m => !isMtpModel(m) || orphanMtpKeys.has(m.modelKey));
     // Charge la liste noire persistante (modèles isolés manuellement).
     const blacklist = loadBlacklist();
     // Charge l'historique des runs pour distinguer JAMAIS TESTE d'un échec réel.

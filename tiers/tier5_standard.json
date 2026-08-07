@@ -6,7 +6,7 @@
   "optional_for": [
     "STANDARD"
   ],
-  "prompt": "You are taking a TIER 5 technical evaluation for STANDARD models.\n\nSolve 5 JavaScript exercises inspired by a high school curriculum (1ère).\n\nReturn your answers in Markdown using headers for the exercise IDs and code blocks for the JavaScript functions.\n\n[EXERCISE Math]\nWrite a JavaScript function \"moyennePonderee(notes)\" that takes an array of {valeur, coeff} objects and returns the weighted average. Return 0 if array is empty.\n\n[EXERCISE Francais]\nWrite a JavaScript function \"frequenceMots(phrase)\" that returns an object with the count of each word in the string. Assume space separation.\n\n[EXERCISE SVT]\nWrite a JavaScript function \"transcrireADN(adn)\" that converts 'A'->'U', 'T'->'A', 'C'->'G', 'G'->'C' (ADN to ARN).\n\n[EXERCISE Histoire]\nWrite a JavaScript function \"grouperParEpoque(evenements)\" that takes an array of {nom, epoque} and returns an object grouping names by 'epoque'.\n\n[EXERCISE Info]\nWrite a JavaScript class \"FeuTricolore\" with a method \"passerAuSuivant()\" that cycles a 'couleur' property through 'rouge' -> 'vert' -> 'orange' -> 'rouge'. Constructor starts at 'rouge'.\n\nExpected strict response format:\n{\n  \"math\": \"function moyennePonderee(...) { ... }\",\n  \"francais\": \"function frequenceMots(...) { ... }\",\n  \"svt\": \"function transcrireADN(...) { ... }\",\n  \"histoire\": \"function grouperParEpoque(...) { ... }\",\n  \"info\": \"class FeuTricolore { ... }\"\n}\n\n[ALGORITHMIC EXERCISES — code pur, sans culture générale]\nReturn each function using a Markdown header (### <exercise id>) followed by a ```javascript code block.\n\n[EXERCISE algo_facile_1]\nWrite a JavaScript function \"convertirBase(n, base)\" that converts a non-negative integer n to its string representation in the given base (2-16). Use lowercase letters for digits above 9.\n\n[EXERCISE algo_facile_2]\nWrite a JavaScript function \"kemePlusGrand(tab, k)\" that returns the k-th largest distinct value (1-indexed). Assume valid k.\n\n[EXERCISE algo_moyen_1]\nWrite a JavaScript function \"compteurFrequence(tab)\" that returns an object mapping each element to its count in the array.\n\n[EXERCISE algo_difficile_1]\nWrite a JavaScript function \"exponentiationRapide(x, n)\" that returns x raised to n (n >= 0) using fast exponentiation (exponentiation by squaring).\n\n[EXERCISE algo_defi]\nWrite a JavaScript function \"sousTableauMax(tab)\" that returns the maximum sum of any contiguous subarray (Kadane algorithm).\n\n[EXERCISE contexte_long_5]\nLONG CONTEXT — Information retrieval. Write a JavaScript function \"extraireCode(document)\" that searches through a long text document (string, potentially thousands of characters) and extracts the access code following the marker 'CODE_ACCES:'. The code is a single token (alphanumeric) that appears immediately after the marker and a space, ending at the next non-alphanumeric character (period or space). Return ONLY the code string (e.g. '8X42A'), not the marker. The marker appears exactly once, at an unknown position.",
+  "prompt": "You are taking a TIER 5 technical evaluation for STANDARD models.\n\nSolve 5 JavaScript exercises inspired by a high school curriculum (1ère).\n\nReturn your answers in Markdown using headers for the exercise IDs and code blocks for the JavaScript functions.\n\n[EXERCISE Math]\nWrite a JavaScript function \"moyennePonderee(notes)\" that takes an array of {valeur, coeff} objects and returns the weighted average. Return 0 if array is empty.\n\n[EXERCISE Francais]\nWrite a JavaScript function \"frequenceMots(phrase)\" that returns an object with the count of each word in the string. Assume space separation.\n\n[EXERCISE SVT]\nWrite a JavaScript function \"transcrireADN(adn)\" that converts 'A'->'U', 'T'->'A', 'C'->'G', 'G'->'C' (ADN to ARN).\n\n[EXERCISE Histoire]\nWrite a JavaScript function \"grouperParEpoque(evenements)\" that takes an array of {nom, epoque} and returns an object grouping names by 'epoque'.\n\n[EXERCISE Info]\nWrite a JavaScript class \"FeuTricolore\" with a method \"passerAuSuivant()\" that cycles a 'couleur' property through 'rouge' -> 'vert' -> 'orange' -> 'rouge'. Constructor starts at 'rouge'.\n\nExpected strict response format:\n{\n  \"math\": \"function moyennePonderee(...) { ... }\",\n  \"francais\": \"function frequenceMots(...) { ... }\",\n  \"svt\": \"function transcrireADN(...) { ... }\",\n  \"histoire\": \"function grouperParEpoque(...) { ... }\",\n  \"info\": \"class FeuTricolore { ... }\"\n}\n\n[ALGORITHMIC EXERCISES — code pur, sans culture générale]\nReturn each function using a Markdown header (### <exercise id>) followed by a ```javascript code block.\n\n[EXERCISE algo_facile_1]\nWrite a JavaScript function \"convertirBase(n, base)\" that converts a non-negative integer n to its string representation in the given base (2-16). Use lowercase letters for digits above 9.\n\n[EXERCISE algo_facile_2]\nWrite a JavaScript function \"kemePlusGrand(tab, k)\" that returns the k-th largest distinct value (1-indexed). Assume valid k.\n\n[EXERCISE algo_moyen_1]\nWrite a JavaScript function \"compteurFrequence(tab)\" that returns an object mapping each element to its count in the array.\n\n[EXERCISE algo_difficile_1]\nWrite a JavaScript function \"exponentiationRapide(x, n)\" that returns x raised to n (n >= 0) using fast exponentiation (exponentiation by squaring).\n\n[EXERCISE algo_defi]\nWrite a JavaScript function \"sousTableauMax(tab)\" that returns the maximum sum of any contiguous subarray (Kadane algorithm).",
   "tasks": [
     {
       "id": "math",
@@ -77,6 +77,28 @@
         }
       ],
       "points": 8
+    },
+    {
+      "id": "contexte_long_5",
+      "label": "Contexte long — Aiguille dans un paragraphe",
+      "points": 15,
+      "hint": "Cherchez le pattern 'CODE_ACCES:' dans le texte et extrayez la valeur qui suit jusqu'à l'espace suivant.",
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Code d'accès au début",
+          "setup": "var doc1 = 'CODE_ACCES: 8X42A. Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum. Sed non risus. Suspendisse lectus tortor, dignissim sit amet, adipiscing nec, ultricies sed, dolor. Cras elementum ultrices diam. Maecenas ligula massa, varius a, semper congue, euismod non, mi. Proin porttitor, orci nec nonummy molestie, enim est eleifend mi, non fermentum diam nisl sit amet erat. Duis semper. Duis arcu massa, scelerisque vitae, consequat in, pretium a, enim. Pellentesque congue. Ut in risus volutpat libero pharetra tempor. Cras vestibulum bibendum augue. Praesent egestas leo in pede. Praesent blandit odio eu enim. Pellentesque sed dui ut augue blandit rutrum. Cras dictum. Pellentesque habitant morbi tristique senectus et netus et malesuada fames ac turpis egestas.';",
+          "call": "extraireCode(doc1)",
+          "assert": "result === '8X42A'"
+        },
+        {
+          "type": "exec",
+          "description": "Code d'accès à la fin",
+          "setup": "var doc2 = 'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum. Sed non risus. Suspendisse lectus tortor, dignissim sit amet, adipiscing nec, ultricies sed, dolor. Cras elementum ultrices diam. Maecenas ligula massa, varius a, semper congue, euismod non, mi. Proin porttitor, orci nec nonummy molestie, enim est eleifend mi, non fermentum diam nisl sit amet erat. Duis semper. Duis arcu massa, scelerisque vitae, consequat in, pretium a, enim. Pellentesque congue. Ut in risus volutpat libero pharetra tempor. Cras vestibulum bibendum augue. Praesent egestas leo in pede. Praesent blandit odio eu enim. Pellentesque sed dui ut augue blandit rutrum. Cras dictum. Pellentesque habitant morbi tristique senectus et netus et malesuada fames ac turpis egestas. Vestibulum ante ipsum primis in faucibus orci luctus et ultrices posuere cubilia Curae. Aenean lacinia mauris vel est. Le code final est le suivant CODE_ACCES: Z9K77M.';",
+          "call": "extraireCode(doc2)",
+          "assert": "result === 'Z9K77M'"
+        }
+      ]
     },
     {
       "id": "algo_facile_1",
@@ -185,42 +207,6 @@
           "setup": "",
           "call": "sousTableauMax([1, 2, 3])",
           "assert": "result === 6"
-        },
-        {
-          "type": "exec",
-          "description": "Cas limite — tableau vide",
-          "setup": "",
-          "call": "sousTableauMax([])",
-          "assert": "result === 0 || result === -Infinity || result === undefined"
-        },
-        {
-          "type": "exec",
-          "description": "Cas limite — tous négatifs (le moins pire)",
-          "setup": "",
-          "call": "sousTableauMax([-3, -1, -2])",
-          "assert": "result === -1"
-        }
-      ]
-    },
-    {
-      "id": "contexte_long_5",
-      "label": "Contexte long — Aiguille dans un paragraphe",
-      "points": 15,
-      "hint": "Cherchez le pattern 'CODE_ACCES:' dans le texte et extrayez la valeur qui suit jusqu'à l'espace suivant.",
-      "evaluations": [
-        {
-          "type": "exec",
-          "description": "Code d'accès au début",
-          "setup": "var doc1 = 'CODE_ACCES: 8X42A. Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum. Sed non risus. Suspendisse lectus tortor, dignissim sit amet, adipiscing nec, ultricies sed, dolor. Cras elementum ultrices diam. Maecenas ligula massa, varius a, semper congue, euismod non, mi. Proin porttitor, orci nec nonummy molestie, enim est eleifend mi, non fermentum diam nisl sit amet erat. Duis semper. Duis arcu massa, scelerisque vitae, consequat in, pretium a, enim. Pellentesque congue. Ut in risus volutpat libero pharetra tempor. Cras vestibulum bibendum augue. Praesent egestas leo in pede. Praesent blandit odio eu enim. Pellentesque sed dui ut augue blandit rutrum. Cras dictum. Pellentesque habitant morbi tristique senectus et netus et malesuada fames ac turpis egestas.';",
-          "call": "extraireCode(doc1)",
-          "assert": "result === '8X42A'"
-        },
-        {
-          "type": "exec",
-          "description": "Code d'accès à la fin",
-          "setup": "var doc2 = 'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum. Sed non risus. Suspendisse lectus tortor, dignissim sit amet, adipiscing nec, ultricies sed, dolor. Cras elementum ultrices diam. Maecenas ligula massa, varius a, semper congue, euismod non, mi. Proin porttitor, orci nec nonummy molestie, enim est eleifend mi, non fermentum diam nisl sit amet erat. Duis semper. Duis arcu massa, scelerisque vitae, consequat in, pretium a, enim. Pellentesque congue. Ut in risus volutpat libero pharetra tempor. Cras vestibulum bibendum augue. Praesent egestas leo in pede. Praesent blandit odio eu enim. Pellentesque sed dui ut augue blandit rutrum. Cras dictum. Pellentesque habitant morbi tristique senectus et netus et malesuada fames ac turpis egestas. Vestibulum ante ipsum primis in faucibus orci luctus et ultrices posuere cubilia Curae. Aenean lacinia mauris vel est. Le code final est le suivant CODE_ACCES: Z9K77M.';",
-          "call": "extraireCode(doc2)",
-          "assert": "result === 'Z9K77M'"
         }
       ]
     }

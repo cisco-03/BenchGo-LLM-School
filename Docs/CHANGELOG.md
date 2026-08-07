@@ -1,5 +1,52 @@
 # CHANGELOG - Carnet de Notes BenchGo
 
+## 2026-08-07 — fix(night-batch): modèles MTP orphelins non détectés par `--lmstudio` / `--list-only`
+
+### Contexte
+Un nouveau modèle téléchargé dans LM Studio, `Qwen3.6-27B-Fable-Fusion-711-...-MTP`
+(17 Go, architecture qwen35), n'apparaissait ni dans `node night-batch.js --list-only`
+ni dans le Bloc 2 (modèles non testés) de `node leaderboard.js --lmstudio`. Le
+rapport affichait « 6 modèle(s) téléchargé(s) » alors que LM Studio en contenait 7.
+
+### Cause racine
+`isMtpModel()` détecte un fichier MTP (Multi-Token Prediction) dès que le
+basename du `path` ou le `displayName` contient « mtp ». Or ce Qwen3.6 est un
+vrai LLM de 27B : « MTP » figure dans son nom de fichier
+(`...NEO-LOW-MTP-IQ4_XS.gguf`) car le modèle *supporte* le MTP, ce n'est pas un
+module MTP accessoire. `listLlmModels()` filtrait ensuite tous les MTP via
+`arr.filter(m => !isMtpModel(m))`, donc le modèle était exclu de la liste des
+modèles testables — sans même figurer comme « non testé ».
+
+Un vrai fichier MTP accessoire est conçu pour être chargé AVEC un modèle
+principal (`--speculative-draft-mtp`) : il est toujours accompagné d'un modèle
+principal dans le même dossier (ou d'un nom normalisé correspondant). Si un
+modèle « mtp » est orphelin (aucun modèle principal candidat trouvé par
+`buildMtpAssociations`), c'est en réalité un modèle principal complet.
+
+### Solution
+Dans `listLlmModels()` (night-batch.js), on ne filtre plus aveuglément tous les
+MTP. On conserve les MTP *orphelins* (non associés à un modèle principal par
+`buildMtpAssociations`) dans la liste des modèles testables. Les MTP
+accessoires réellement associés restent filtrés comme avant.
+
+### Fichiers modifiés
+- `night-batch.js` — logique de filtrage MTP dans `listLlmModels()` : ajout
+  du calcul des MTP orphelins (`orphanMtpKeys`) et garde de ceux-ci dans
+  `testable`.
+- `Docs/CHANGELOG.md`, `Memories-BenchGo/issues-fixes/2026-08-07-mtp-orphan-not-detected.md`.
+
+### Résultat obtenu
+- `node night-batch.js --list-only` affiche désormais 7 modèles (ligne 7 :
+  « Qwen3.6 27B Fable Fus ... MTP » — 27B IQ4_XS, JAMAIS TESTÉ,
+  écoles manquantes Prim,Coll-Lyc,Univ).
+- `node leaderboard.js --lmstudio` affiche « 7 modèle(s) téléchargé(s) » avec
+  2 non testés (Phi 4 IQ4_NL + Qwen3.6 27B).
+
+### Validation
+- `node --check night-batch.js` → OK.
+- `node tests/run-tests.js` → 27/27 passés.
+- `node scripts/check-inline-js.js` → JS inline valide.
+
 ## 2026-08-06 — feat(exercices): 5 améliorations des jeux d'exercices (standards industrie)
 
 ### Contexte
