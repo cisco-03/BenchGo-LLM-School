@@ -1,5 +1,63 @@
 # CHANGELOG - Carnet de Notes BenchGo
 
+## 2026-08-07 — fix(détection): borne 15B et affichage de la quantification dans le rapport --lmstudio
+
+### Contexte
+Deux incohérences dans la détection des modèles LM Studio :
+
+1. **Quantification invisible dans le Bloc 1 du rapport `--lmstudio`.** Le
+   modèle `phi-4` (carnet `phi-4_q5_k_l.json`, testé à 84%) s'affichait comme
+   « phi-4 » sans sa quantification Q5_K_L, alors que d'autres modèles la
+   montraient dans leur modelKey (`kai-os_grug-12b@q5_k_s`). Impossible de
+   distinguer le Phi 4 Q5_K_L du Phi 4 IQ4_NL dans le rapport.
+
+2. **Écoles manquantes incorrectes pour un 15B.** Le Phi 4 IQ4_NL (15B, jamais
+   testé) n'affichait que « Prim,Coll-Lyc » manquantes, omettant Université.
+   Pourtant le Phi 4 Q5_K_L avait bien passé Université (84%). La borne de
+   détection `paramSize <= 15` classait les 15B en `STANDARD` (Primaire +
+   Collège-Lycée), excluant l'Université (EXPERT). Or le label de EXPERT est
+   « Université (15B - 30B) » : un 15B doit donc être EXPERT, pas STANDARD.
+
+### Cause racine
+1. `printLmStudioStatus()` (leaderboard.js) affichait `e.displayName || e.model`
+   pour le nom. Le carnet Phi 4 n'ayant pas de `displayName`, on retombait sur
+   `e.model` = « phi-4 » (brut, sans quantification). Le `shortName` contient
+   la quantif mais n'était pas utilisé pour l'affichage lisible.
+2. `detectProfileFromModelName()` (config.js:291) et `schoolForModel()`
+   (night-batch.js:1093) utilisaient `<= 15` pour la borne STANDARD, au lieu
+   de `< 15`. Un 15B tombait donc en STANDARD (sans Université), en
+   contradiction avec le label « EXPERT — Université (15B – 30B) ».
+
+### Solution
+1. Ajout de `modelDisplayLabel(entry)` (leaderboard.js) : affiche `displayName`
+   ou, à défaut, `model` + ` (quantification)` si la quantif n'est pas déjà
+   dans le nom. Utilisé dans le Bloc 1 du rapport `--lmstudio`. Le classement
+   général conserve sa colonne `Quant` séparée (pas de changement).
+2. Borne corrigée : `<= 15` → `< 15` dans `config.js` (PROFILES et
+   `detectProfileFromModelName`) et `night-batch.js` (`schoolForModel`,
+   label SCHOOLS). Un 15B est désormais EXPERT (Université incluse).
+   Label STANDARD mis à jour : « 3B – <15B ».
+
+### Fichiers modifiés
+- `config.js` — borne `detectProfileFromModelName` (`<= 15` → `< 15`), label PROFILES.STANDARD.
+- `night-batch.js` — borne `schoolForModel` (`<= 15` → `< 15`), label SCHOOLS.STANDARD.
+- `leaderboard.js` — nouvelle fonction `modelDisplayLabel(entry)`, utilisée dans le Bloc 1 de `printLmStudioStatus`.
+- `Docs/CHANGELOG.md`, `Memories-BenchGo/issues-fixes/2026-08-07-borne-15b-quantif-rapport.md`.
+
+### Résultat obtenu
+- Bloc 1 `--lmstudio` : « phi-4 (Q5_K_L) », « gemma-4-12b-it-qat (Q4_K_XL) »,
+  « ornith-1.0-9b (Q4_K_M) » affichent leur quantification.
+- Bloc 2 `--lmstudio` et `--list-only` : Phi 4 IQ4_NL affiche
+  « Prim,Coll-Lyc,Univ » manquantes (cohérent avec 15B → EXPERT).
+- Le Phi 4 Q5_K_L (déjà testé sur Université) ne figure plus dans les
+  suggestions de retest (plus aucune école manquante).
+- 7/7 modèles LM Studio détectés dans `--list-only` et `--lmstudio`.
+
+### Validation
+- `node --check config.js`, `node --check night-batch.js`, `node --check leaderboard.js` → OK.
+- `node tests/run-tests.js` → 27/27 passés.
+- `node scripts/check-inline-js.js` → JS inline valide.
+
 ## 2026-08-07 — fix(night-batch): modèles MTP orphelins non détectés par `--lmstudio` / `--list-only`
 
 ### Contexte

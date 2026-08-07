@@ -57,7 +57,7 @@ for (const k of Object.keys(PROFILES)) {
 // 'auto' = laisser le runner detecter le profil depuis le nom du modele (1 ecole).
 const SCHOOLS = [
   { key: 'LIGHT',    label: 'Primaire (< 3B)',            cli: 'LIGHT' },
-  { key: 'STANDARD', label: 'College-Lycee (3B - 15B)',   cli: 'STANDARD' },
+  { key: 'STANDARD', label: 'College-Lycee (3B - <15B)',  cli: 'STANDARD' },
   { key: 'EXPERT',   label: 'Universite (15B - 30B)',     cli: 'EXPERT' },
   { key: 'DOCTORAT', label: 'These (> 30B)',               cli: 'DOCTORAT' },
   { key: 'auto',     label: 'Auto-detection (1 ecole)',   cli: null },
@@ -1090,7 +1090,7 @@ function schoolForModel(m) {
     if (sizeMatch) {
       const sz = parseFloat(sizeMatch[1].replace(',', '.'));
       if (sz < 3) detected = 'LIGHT';
-      else if (sz <= 15) detected = 'STANDARD';
+      else if (sz < 15) detected = 'STANDARD';
       else if (sz <= 30) detected = 'EXPERT';
       else detected = 'DOCTORAT';
     }

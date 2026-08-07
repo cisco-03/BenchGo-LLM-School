@@ -523,6 +523,22 @@ function buildArguments(entry) {
 }
 
 // Détermine le verdict du modèle — aligné sur les 5 catégories de getCategory.
+// Nom d'affichage lisible d'un modèle agrégé, incluant la quantification quand
+// elle n'est pas déjà présente dans le nom. Priorité : displayName manuel >
+// model + quantif > model > shortName. Permet de distinguer deux modèles au
+// même nom de base mais quantifications différentes (ex: "phi-4" + "Q5_K_L" ->
+// "phi-4 (Q5_K_L)") dans le rapport --lmstudio et le classement CLI, là où le
+// shortName (ex: "phi-4_q5_k_l") est moins lisible. Inscensible à la casse et
+// aux séparateurs pour éviter "phi-4 (Q5_K_L) (Q5_K_L)".
+function modelDisplayLabel(entry) {
+  const name = (entry.displayName || entry.model || entry.shortName || '').trim();
+  const quant = (entry.quantization || '').trim();
+  if (!quant) return name;
+  const norm = (s) => String(s).toLowerCase().replace(/[^a-z0-9]+/g, '');
+  if (norm(name).includes(norm(quant))) return name;
+  return `${name} (${quant})`;
+}
+
 // Utilise le % global (pct), comme getCategory, et non mandatoryPct qui
 // pouvait afficher "RECOMMANDÉ" pour un modèle faible globalement (ex: 32%
 // mais 80% sur l'obligatoire). Le rang n'est connu qu'en contexte trié ; on
@@ -4694,7 +4710,7 @@ function printLmStudioStatus() {
       const scoreLabel = `${e.score}/${e.max} (${e.pct}%)`;
       rows.push([
         (i + 1) + '.',
-        e.displayName || e.model,
+        modelDisplayLabel(e),
         dateLabel,
         `${grade.color}${grade.grade}\x1b[0m ${niveauLabel}`,
         scoreLabel,
