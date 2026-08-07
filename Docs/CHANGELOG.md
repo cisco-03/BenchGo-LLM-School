@@ -1,5 +1,63 @@
 # CHANGELOG - Carnet de Notes BenchGo
 
+## 2026-08-07 — fix(détection): suggestions de retest ignorent les modèles dont le nom n'a pas de taille
+
+### Contexte
+Dans `node leaderboard.js --lmstudio`, le Bloc 3 (suggestions de retest)
+détermine les écoles attendues via `detectProfileFromModelName(e.model)`. Cette
+fonction détecte la taille depuis le nom du modèle. Pour les modèles dont le
+nom de carnet ne contient pas la taille (ex: `phi-4`, sans « 15B »), la
+détection renvoie `null` et le modèle est ignoré des suggestions — même s'il a
+des écoles manquantes. Incohérent avec le Bloc 2 (non testés) qui utilise
+`night-batch.listLlmModels()` et donc `paramsString="15B"` depuis LM Studio.
+
+### Cause racine
+Deux sources de vérité pour la taille d'un modèle :
+- **Bloc 2** (non testés) : `night-batch.listLlmModels()` → `paramsString`
+  fiable depuis LM Studio (ex: "15B").
+- **Bloc 3** (suggestions) : `detectProfileFromModelName(e.model)` sur le nom
+  du carnet → `null` si le nom n'a pas la taille (ex: "phi-4").
+
+Le Bloc 3 ne croisait pas avec LM Studio, donc les modèles à nom sans taille
+étaient ignorés.
+
+### Solution
+`printLmStudioStatus()` construit désormais une map `lmsParamsByModelKey`
+(modelKey normalisé → paramsString) depuis `night-batch.listLlmModels()`. Les
+suggestions de retest utilisent `detectProfileFromModelName` en première
+intention, puis retombent sur `paramsString` de LM Studio (même logique de
+borne corrigée : `< 15` → STANDARD, `<= 30` → EXPERT). Les deux blocs sont
+désormais cohérents.
+
+### Fichiers modifiés
+- `leaderboard.js` — `printLmStudioStatus()` : construction de
+  `lmsParamsByModelKey`, fallback dans la boucle des suggestions. Nouvelle
+  fonction `modelKeyDisplayLabel()` pour le Bloc 2 et la section non-LLM.
+- `Docs/CHANGELOG.md`, `Memories-BenchGo/issues-fixes/2026-08-07-borne-15b-quantif-rapport.md`.
+
+### Résultat obtenu
+- Les modèles présents dans LM Studio dont le nom de carnet n'a pas la taille
+  (ex: `phi-4`) sont désormais évalués pour les suggestions de retest via
+  `paramsString` (15B → EXPERT → Primaire + Collège-Lycée + Université).
+- Le Phi 4 Q5_K_L (déjà testé sur les 3 écoles) ne figure pas dans les
+  suggestions (plus aucune manquante). Comportement correct.
+- Cohérence Bloc 2 / Bloc 3 : même source de vérité (LM Studio) pour la
+  taille quand le nom ne suffit pas.
+- **Bloc 2 (non testés) et section non-LLM** : le nom affiché inclut
+  désormais la quantification (`Phi 4 (IQ4_NL)` au lieu de `Phi 4` seul),
+  via `modelKeyDisplayLabel()`. Cohérent avec le Bloc 1
+  (`phi-4 (Q5_K_L)`).
+
+### Validation
+- `node --check leaderboard.js` → OK.
+- `node tests/run-tests.js` → 27/27 passés.
+- `node scripts/check-inline-js.js` → JS inline valide.
+- `node leaderboard.js --lmstudio` → Bloc 1 : `phi-4 (Q5_K_L)` (84%, 3 écoles).
+  Bloc 2 : `Phi 4 (IQ4_NL)` (15B, Prim,Coll-Lyc,Univ manquantes).
+  Section non-LLM : quantif dans le nom via `modelKeyDisplayLabel`.
+- Vérification exhaustive de tous les blocs : Bloc 1, Bloc 2, Bloc 3
+  (suggestions), section non-LLM — quantification visible partout.
+
 ## 2026-08-07 — fix(détection): borne 15B et affichage de la quantification dans le rapport --lmstudio
 
 ### Contexte

@@ -539,6 +539,19 @@ function modelDisplayLabel(entry) {
   return `${name} (${quant})`;
 }
 
+// Variante pour les modèles night-batch (Bloc 2 : non testés). Même logique
+// que modelDisplayLabel mais adaptée aux champs des entrées listLlmModels()
+// (displayName, modelKey, quant). Le displayName de LM Studio (ex: "Phi 4")
+// ne contient généralement pas la quantification — on l'ajoute en suffixe.
+function modelKeyDisplayLabel(m) {
+  const name = (m.displayName || m.modelKey || '').trim();
+  const quant = (m.quant && m.quant !== '?' ? m.quant : '').trim();
+  if (!quant) return name;
+  const norm = (s) => String(s).toLowerCase().replace(/[^a-z0-9]+/g, '');
+  if (norm(name).includes(norm(quant))) return name;
+  return `${name} (${quant})`;
+}
+
 // Utilise le % global (pct), comme getCategory, et non mandatoryPct qui
 // pouvait afficher "RECOMMANDÉ" pour un modèle faible globalement (ex: 32%
 // mais 80% sur l'obligatoire). Le rang n'est connu qu'en contexte trié ; on
@@ -4417,13 +4430,13 @@ function printUntestedLmStudioModels() {
 
     for (const m of neverTested) {
       const badge = nightBatch.statusBadge(m.status);
-      rows.push([m.displayName || m.modelKey, m.params || '?', m.quant || '?', badge.label, nightBatch.missingSchoolsLabel(m.status) || '—']);
+      rows.push([modelKeyDisplayLabel(m), m.params || '?', m.quant || '?', badge.label, nightBatch.missingSchoolsLabel(m.status) || '—']);
     }
     for (const m of failed) {
       const badge = nightBatch.statusBadge(m.status);
       // Affiche la raison d'échec plutôt que les écoles manquantes (on les a tentées).
       const reason = m.status.reason || 'Échec';
-      rows.push([m.displayName || m.modelKey, m.params || '?', m.quant || '?', badge.label, reason]);
+      rows.push([modelKeyDisplayLabel(m), m.params || '?', m.quant || '?', badge.label, reason]);
     }
     for (const m of partial) {
       const badge = nightBatch.statusBadge(m.status);
@@ -4432,7 +4445,7 @@ function printUntestedLmStudioModels() {
       if (m.status.failedSchool) {
         missing = '⚠ ' + m.status.failedSchool + ' : échec run';
       }
-      rows.push([m.displayName || m.modelKey, m.params || '?', m.quant || '?', badge.label, missing]);
+      rows.push([modelKeyDisplayLabel(m), m.params || '?', m.quant || '?', badge.label, missing]);
     }
 
     const res = cliTable.table(headers, rows, { colAligns: aligns, separator: '  ' });
@@ -4460,7 +4473,7 @@ function printUntestedLmStudioModels() {
     for (const m of nonLlm) {
       const badge = nightBatch.statusBadge(m.status);
       const reason = m.status.reason || (m.nonLlm ? 'Non-LLM détecté' : (m.blacklisted ? 'Isolé manuellement' : '—'));
-      rows.push([m.displayName || m.modelKey, m.params || '?', m.quant || '?', badge.label, reason]);
+      rows.push([modelKeyDisplayLabel(m), m.params || '?', m.quant || '?', badge.label, reason]);
     }
     const res = cliTable.table(headers, rows, { colAligns: aligns, separator: '  ' });
     console.log(`  \x1b[90m    ${res.lines[0]}\x1b[0m`);
@@ -4641,7 +4654,15 @@ function printLmStudioStatus() {
   // On n affiche donc dans le Bloc 1 que les modèles testés ENCORE présents
   // dans LM Studio. Si lms est indisponible (daemon inactif), on garde tous
   // les carnets (repli, comme pour printUntestedLmStudioModels).
+  //
+  // On profite aussi de listLlmModels() pour construire une map des tailles
+  // (paramsString) par modelKey. Les suggestions de retest (Bloc 3) en ont
+  // besoin pour déterminer les écoles attendues : la détection par nom
+  // (detectProfileFromModelName) échoue quand le nom du carnet ne contient
+  // pas la taille (ex: "phi-4" sans "15B"), alors que LM Studio fournit
+  // paramsString="15B" de façon fiable.
   let lmsModelKeys = null;
+  let lmsParamsByModelKey = null;
   try {
     const result = nightBatch.listLlmModels();
     if (result.ok && Array.isArray(result.models)) {
@@ -4650,6 +4671,10 @@ function printLmStudioStatus() {
           .map(m => nightBatch.normalizeForMatch(m.modelKey))
           .filter(Boolean)
       );
+      lmsParamsByModelKey = new Map();
+      for (const m of result.models) {
+        lmsParamsByModelKey.set(nightBatch.normalizeForMatch(m.modelKey), m.params || m.paramsString || null);
+      }
     }
   } catch (e) {
     logger.warn('listLlmModels indisponible pour --lmstudio : ' + e.message);
@@ -4781,8 +4806,31 @@ function printLmStudioStatus() {
   const suggestions = [];
   for (const e of entries) {
     // Détecte l'école max pertinente depuis le nom du modèle (model ou shortName).
+    // La détection par nom (detectProfileFromModelName) échoue quand le nom du
+    // carnet ne contient pas la taille (ex: "phi-4" sans "15B"). On retombe
+    // alors sur paramsString fourni par LM Studio (lmsParamsByModelKey), qui
+    // contient la taille de façon fiable (ex: "15B"). Cohérent avec le Bloc 2
+    // (non testés) qui utilise la même source via night-batch.
+    let detected = null;
     const probe = e.model || e.shortName || '';
-    const { detected } = detectProfileFromModelName(probe);
+    const probeRes = detectProfileFromModelName(probe);
+    if (probeRes && probeRes.detected) {
+      detected = probeRes.detected;
+    } else if (lmsParamsByModelKey) {
+      const nm = nightBatch.normalizeForMatch(e.model);
+      const ns = nightBatch.normalizeForMatch(e.shortName);
+      const paramsStr = (nm && lmsParamsByModelKey.get(nm)) || (ns && lmsParamsByModelKey.get(ns)) || null;
+      if (paramsStr) {
+        const sizeMatch = String(paramsStr).match(/([\d]+[.,]?[\d]*)\s*b/i);
+        if (sizeMatch) {
+          const sz = parseFloat(sizeMatch[1].replace(',', '.'));
+          if (sz < 3) detected = 'LIGHT';
+          else if (sz < 15) detected = 'STANDARD';
+          else if (sz <= 30) detected = 'EXPERT';
+          else detected = 'DOCTORAT';
+        }
+      }
+    }
     if (!detected) continue;
     const maxIdx = SCHOOL_ORDER.indexOf(detected);
     if (maxIdx < 0) continue;
