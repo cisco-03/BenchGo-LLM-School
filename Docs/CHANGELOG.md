@@ -1,5 +1,149 @@
 # CHANGELOG - Carnet de Notes BenchGo
 
+## 2026-08-08 — feat(classements): GGUF Tracker intégré + bandeaux transformés en badges dans l'en-tête
+
+### Contexte
+L'outil `GGUF-Tracker-update.html` (codé par Gemini, autonome) traque les
+nouveaux modèles GGUF sur Hugging Face via l'API publique paginée. Il était
+jusqu'ici un fichier isolé à la racine, utilisant Tailwind CDN avec des
+classes `slate-*`/`blue-*` hors charte graphique BenchGo. Il fallait le
+ranger, l'intégrer aux classements, et transformer les bandeaux existants
+(NotebookLM, Communauté, Mise à jour) en badges compacts dans l'en-tête.
+
+### Changements
+
+#### 1. Déplacement et charte graphique du tracker
+- `GGUF-Tracker-update.html` → `scripts/gguf-tracker.html` (rangement avec
+  les autres outils de diagnostic `scripts/`).
+- Réécriture complète du CSS : suppression de Tailwind CDN et de toutes les
+  classes `slate-*`/`blue-*`/`sky-*`. Utilisation exclusive des variables CSS
+  de la charte BenchGo (`--bg-0` à `--bg-elev`, `--accent`, `--purple`,
+  `--green`, `--yellow`, `--border`, `--r-md`, `--r-pill`, etc.).
+- Textes traduits en français, couleurs alignées sur le leaderboard
+  (cartes `--bg-2`/`--bg-1`, liens `--accent`, favoris `--yellow`, nouveaux
+  `--accent`, mises à jour `--green`).
+
+#### 2. Badge GGUF Tracker + modale géante (iframe)
+- **`leaderboard.js`** : badge `📡 GGUF Tracker` dans l'en-tête → modale
+  géante (92vw × 90vh) contenant une `<iframe>` qui charge
+  `/gguf-tracker.html` (servi par le serveur local via route dédiée).
+  Chargement paresseux du `src` à la 1re ouverture.
+- **`consolidate-leaderboard.js`** : même badge + modale. L'iframe charge
+  `gguf-tracker.html` (copié dans `gh-pages-output/` à la génération).
+- Route serveur `GET /gguf-tracker.html` dans `leaderboard.js --serve` :
+  sert `scripts/gguf-tracker.html` avec `Content-Type: text/html`.
+- Copie automatique : `consolidate-leaderboard.js` copie
+  `scripts/gguf-tracker.html` → `gh-pages-output/gguf-tracker.html` à chaque
+  génération, pour GitHub Pages (même origine que l'iframe).
+
+#### 3. Bandeaux → badges centrés dans l'en-tête
+- **`leaderboard.js`** : les 3 bandeaux (NotebookLM, Communauté, Mise à jour)
+  sont supprimés du corps de page et remplacés par 4 badges compacts dans un
+  conteneur `.hero-badges` centré sous le `<h1>` :
+  - `🧠 NotebookLM` (violet) → modale existante (explication agent + lien).
+  - `🌐 Communauté` (vert) → nouvelle modale avec commande `node runner.js
+    --submit` + bouton « Copier la commande ».
+  - `⬆️ Mise à jour` (jaune, caché par défaut) → n'apparaît que si une mise
+    à jour GitHub est détectée. Nouvelle modale avec liste des 5 derniers
+    commits + commande `git pull`. Logique de cache localStorage 1h
+    préservée.
+  - `📡 GGUF Tracker` (bleu ciel) → modale géante iframe (voir §2).
+- **`consolidate-leaderboard.js`** : le bandeau NotebookLM est supprimé,
+  remplacé par 2 badges dans `.hero-badges` :
+  - `🧠 NotebookLM` (violet) → modale existante.
+  - `📡 GGUF Tracker` (bleu ciel) → modale géante iframe.
+- Chaque badge a un point lumineux pulsant (`.dot`), sauf sur
+  `prefers-reduced-motion`. Le badge « Mise à jour » pulse en jaune
+  (animation `updatePulse` existante réutilisée).
+- Toutes les modales se ferment avec : bouton ×, clic hors-zone, touche
+  Échap. Le `document.body.style.overflow` est géré pour bloquer le scroll
+  arrière-plan.
+
+#### 4. CSS nouveau (commun aux deux fichiers, dupliqué)
+- `.hero-badges` : conteneur flex centré, wrap sur mobile.
+- `.hero-badge` : pillule avec bordure dégradée + ombre, 4 variantes
+  colorimétriques (`.nb-badge` violet, `.community-badge` vert,
+  `.update-badge` jaune, `.gguf-badge` bleu ciel).
+- `.dot` : pastille lumineuse 8px avec `box-shadow` glow.
+- `@keyframes gguf-pulse` : pulsation d'opacité 2s (réduit respecté).
+- `.gguf-modal` : 92vw × 90vh, `flex-direction: column`.
+- `.gguf-iframe` : 100% × 100%, sans bordure, fond `--bg-2`.
+- `.update-modal` / `.community-modal` : modales standards 600/560px.
+- Styles `.nb-banner`, `.community-banner`, `.update-banner` conservés
+  (réutilisés par les modales `.nb-features`, `.nb-modal-cta`, etc.).
+
+### Fichiers modifiés
+- `scripts/gguf-tracker.html` — renommé depuis `GGUF-Tracker-update.html`,
+  réécriture complète CSS/HTML à la charte BenchGo (sans Tailwind).
+- `leaderboard.js` — route `/gguf-tracker.html`, CSS badges/modales,
+  HTML en-tête (badges) + 3 nouvelles modales (update, communauté, GGUF),
+  JS inline réécrit (badges au lieu de bandeaux, nouvelles fonctions
+  `openUpdateModal`/`closeUpdateModal`, `openCommunityModal`/`closeCommunityModal`,
+  `openGgufModal`/`closeGgufModal`), update checker réécrit
+  (`updateBanner` → `updateBadge`).
+- `consolidate-leaderboard.js` — CSS badges/modales, HTML en-tête (badges) +
+  modale GGUF, JS inline (`nbInfoBtn` → `nbBadge`, `openGgufModal`/
+  `closeGgufModal`), copie `gguf-tracker.html` → `gh-pages-output/`.
+- `Docs/CHANGELOG.md`, `AGENTS.md`, `Memories-BenchGo/README.md`,
+  `Memories-BenchGo/INSTRUCTIONS.md`.
+
+### Résultat obtenu
+- L'outil de surveillance Hugging Face est rangé dans `scripts/`, intégré aux
+  deux classements via un badge cliquable → modale géante, et entièrement
+  aligné sur la charte graphique BenchGo (plus de Tailwind, plus de slate).
+- Les 3 bandeaux encombrants du leaderboard local sont remplacés par 4 badges
+  compacts et centrés dans l'en-tête. L'information est toujours accessible,
+  mais l'en-tête est visuellement plus léger.
+- Le classement communautaire gagne le badge GGUF Tracker (en plus de
+  NotebookLM). Le tracker fonctionne sur GitHub Pages (iframe même origine).
+- Fermeture des modales : bouton ×, clic extérieur, Échap.
+
+### Validation
+- `node --check leaderboard.js` → OK.
+- `node --check consolidate-leaderboard.js` → OK.
+- `node leaderboard.js` → 52 modèles classés, HTML généré.
+- `node consolidate-leaderboard.js` → 46 modèles, tracker copié dans
+  `gh-pages-output/gguf-tracker.html`.
+- `node scripts/check-inline-js.js` → JS inline valide pour les deux HTML.
+
+### Pour modifier
+1. **Changer le tracker lui-même** : éditer `scripts/gguf-tracker.html`
+   (CSS/JS/HTML). La copie dans `gh-pages-output/` est automatique au
+   prochain `node consolidate-leaderboard.js`.
+2. **Ajouter un badge dans l'en-tête** : ajouter un `<button class="hero-badge
+   <variante>">` dans `.hero-badges`, le CSS correspondant, et le JS
+   `openXModal`/`closeXModal` dans le `<script>` inline. Dupliquer dans les
+  deux fichiers (`leaderboard.js` + `consolidate-leaderboard.js`).
+3. **Changer la taille de la modale GGUF** : éditer `.gguf-modal` (width/
+   height) dans le CSS des deux fichiers.
+4. **Changer la couleur d'un badge** : éditer `.hero-badge.<variante>` dans
+   le CSS des deux fichiers.
+5. **Tester en local** : `node leaderboard.js --serve`, cliquer sur le badge
+   `📡 GGUF Tracker` dans l'en-tête → la modale géante s'ouvre avec le
+   tracker. Pour le classement communautaire : `node consolidate-leaderboard.js`
+   puis ouvrir `gh-pages-output/community-leaderboard.html`.
+
+### Pièges
+- Le JS inline des deux fichiers est dupliqué (CSS `.hero-badge`, HTML des
+  badges, fonctions `openXModal`/`closeXModal`). Modifier un seul fichier ne
+  suffit pas.
+- L'iframe du tracker charge `gguf-tracker.html` en **chemin relatif**
+  (`src="gguf-tracker.html"`). Sur le serveur local (`leaderboard.js --serve`),
+  cela pointe vers la route `/gguf-tracker.html`. Sur GitHub Pages, cela
+  pointe vers `gh-pages-output/gguf-tracker.html` (copié à la génération).
+  Si le fichier est absent, l'iframe affiche une page 404 (pas de crash).
+- Le badge « Mise à jour » est `hidden` par défaut. Il n'apparaît que si
+  `data.sha !== LOCAL_SHA` (comparaison SHA GitHub). Le cache localStorage
+  1h est préservé : fermer la modale marque `dismissedAt` et masque le badge.
+- Les anciens styles `.nb-banner`, `.community-banner`, `.update-banner`
+  sont conservés dans le CSS (réutilisés par les modales). Les supprimer
+  casserait les modales NotebookLM/communauté/update.
+- Le tracker fait des appels `fetch()` vers `https://huggingface.co/api/models`
+  depuis le navigateur. En iframe sur GitHub Pages, cela fonctionne (CORS
+  ouvert sur l'API HF publique). Pas de clé API nécessaire.
+
+---
+
 ## 2026-08-07 — fix(détection): suggestions de retest ignorent les modèles dont le nom n'a pas de taille
 
 ### Contexte

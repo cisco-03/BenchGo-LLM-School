@@ -1597,6 +1597,141 @@ function buildLeaderboardHTML(entries) {
     display: flex; gap: var(--space-s); margin-top: var(--space-m); flex-wrap: wrap;
   }
 
+  /* Badge + modale GGUF Tracker (surveillance Hugging Face) */
+  .gguf-badge {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 5px 12px; border-radius: var(--r-pill);
+    border: 1px solid rgba(56, 189, 248, 0.45);
+    background: linear-gradient(135deg, rgba(56, 189, 248, 0.16), rgba(14, 165, 233, 0.08));
+    color: #38bdf8; font-weight: 700; font-size: var(--fs-small);
+    cursor: pointer; transition: all 0.18s ease; text-decoration: none;
+    box-shadow: 0 0 0 1px rgba(56,189,248,0.18), 0 2px 8px rgba(56,189,248,0.14);
+  }
+  .gguf-badge:hover { background: linear-gradient(135deg, rgba(56, 189, 248, 0.30), rgba(14, 165, 233, 0.18)); transform: translateY(-1px); }
+  .gguf-badge .gguf-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: #38bdf8; box-shadow: 0 0 6px #38bdf8;
+    animation: gguf-pulse 2s ease-in-out infinite;
+  }
+  @keyframes gguf-pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.35; } }
+  @media (prefers-reduced-motion: reduce) { .gguf-badge .gguf-dot { animation: none; } }
+
+  /* --- Badges dans l'en-tête (NotebookLM, Communauté, Update, GGUF Tracker) --- */
+  .hero-badges {
+    display: flex; flex-wrap: wrap; justify-content: center; align-items: center;
+    gap: var(--space-xs); margin-block: var(--space-xs);
+  }
+  .hero-badge {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 5px 12px; border-radius: var(--r-pill);
+    font-weight: 700; font-size: var(--fs-small);
+    cursor: pointer; transition: all 0.18s ease; text-decoration: none;
+    border: 1px solid; white-space: nowrap;
+  }
+  .hero-badge:hover { transform: translateY(-1px); }
+  .hero-badge.nb-badge {
+    border-color: rgba(188,140,255,0.45);
+    background: linear-gradient(135deg, rgba(188,140,255,0.16), rgba(88,166,255,0.08));
+    color: var(--purple);
+    box-shadow: 0 0 0 1px rgba(188,140,255,0.18), 0 2px 8px rgba(188,140,255,0.14);
+  }
+  .hero-badge.nb-badge:hover { background: linear-gradient(135deg, rgba(188,140,255,0.30), rgba(88,166,255,0.18)); }
+  .hero-badge.community-badge {
+    border-color: rgba(63,185,80,0.45);
+    background: linear-gradient(135deg, rgba(63,185,80,0.16), rgba(56,189,248,0.06));
+    color: var(--green);
+    box-shadow: 0 0 0 1px rgba(63,185,80,0.18), 0 2px 8px rgba(63,185,80,0.14);
+  }
+  .hero-badge.community-badge:hover { background: linear-gradient(135deg, rgba(63,185,80,0.30), rgba(56,189,248,0.14)); }
+  .hero-badge.update-badge {
+    border-color: rgba(210,153,34,0.5);
+    background: linear-gradient(135deg, rgba(210,153,34,0.20), rgba(188,140,255,0.06));
+    color: var(--yellow);
+    box-shadow: 0 0 0 1px rgba(210,153,34,0.2), 0 2px 8px rgba(210,153,34,0.14);
+    animation: updatePulse 2.4s ease-in-out infinite;
+  }
+  .hero-badge.update-badge:hover { background: linear-gradient(135deg, rgba(210,153,34,0.34), rgba(188,140,255,0.12)); }
+  .hero-badge.gguf-badge {
+    border-color: rgba(56, 189, 248, 0.45);
+    background: linear-gradient(135deg, rgba(56, 189, 248, 0.16), rgba(14, 165, 233, 0.08));
+    color: #38bdf8;
+    box-shadow: 0 0 0 1px rgba(56,189,248,0.18), 0 2px 8px rgba(56,189,248,0.14);
+  }
+  .hero-badge.gguf-badge:hover { background: linear-gradient(135deg, rgba(56, 189, 248, 0.30), rgba(14, 165, 233, 0.18)); }
+  .hero-badge .dot {
+    width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+  }
+  .hero-badge.nb-badge .dot { background: var(--purple); box-shadow: 0 0 6px var(--purple); }
+  .hero-badge.community-badge .dot { background: var(--green); box-shadow: 0 0 6px var(--green); }
+  .hero-badge.update-badge .dot { background: var(--yellow); box-shadow: 0 0 6px var(--yellow); }
+  .hero-badge.gguf-badge .dot { background: #38bdf8; box-shadow: 0 0 6px #38bdf8; animation: gguf-pulse 2s ease-in-out infinite; }
+  @media (prefers-reduced-motion: reduce) { .hero-badge .dot { animation: none; } }
+  @media (max-width: 560px) { .hero-badges { flex-direction: column; align-items: center; } }
+
+  /* Modale de mise à jour (détails des commits GitHub) */
+  .update-modal { max-width: 600px; }
+  .update-modal .modal-head { background: linear-gradient(135deg, rgba(210,153,34,0.18), rgba(188,140,255,0.10)); }
+  .update-modal h2 { color: var(--yellow) !important; }
+  .update-modal-body { padding: var(--space-l); }
+  .update-modal-body p { color: var(--text); font-size: var(--fs-small); line-height: 1.6; margin-bottom: var(--space-s); }
+  .update-modal-body .update-commits { list-style: none; margin: var(--space-s) 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+  .update-modal-body .update-commits li {
+    font-size: var(--fs-tiny); color: var(--text-muted);
+    display: flex; gap: 8px; align-items: baseline;
+    padding: var(--space-xs) var(--space-s); border-radius: var(--r-sm); background: var(--bg-3);
+  }
+  .update-modal-body .update-commits li .cdate { color: var(--accent); font-weight: 600; flex: 0 0 auto; }
+  .update-modal-body .update-action { margin-top: var(--space-xs); font-size: var(--fs-small); color: var(--text); }
+  .update-modal-body .update-action code, .update-modal-body p code {
+    background: var(--bg-3); padding: 2px 7px; border-radius: 4px;
+    color: var(--purple); font-weight: 600; font-family: 'Cascadia Code', 'Consolas', monospace;
+  }
+
+  /* Modale communauté (copier commande de soumission) */
+  .community-modal { max-width: 560px; }
+  .community-modal .modal-head { background: linear-gradient(135deg, rgba(63,185,80,0.18), rgba(56,189,248,0.10)); }
+  .community-modal h2 { color: var(--green) !important; }
+  .community-modal-body { padding: var(--space-l); }
+  .community-modal-body p { color: var(--text); font-size: var(--fs-small); line-height: 1.6; margin-bottom: var(--space-s); }
+  .community-modal-body code {
+    background: var(--bg-3); padding: 4px 10px; border-radius: var(--r-sm); display: inline-block;
+    color: var(--accent); font-weight: 600; font-family: 'Cascadia Code', 'Consolas', monospace;
+    user-select: all; cursor: text;
+  }
+  .community-modal-cta { display: flex; gap: var(--space-s); margin-top: var(--space-m); flex-wrap: wrap; }
+  .community-copy-btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 8px 16px; border-radius: var(--r-pill);
+    border: 1px solid var(--green); background: var(--green);
+    color: #fff; font-weight: 700; font-size: var(--fs-small);
+    cursor: pointer; transition: all 0.18s ease;
+  }
+  .community-copy-btn:hover { background: #2da44e; border-color: #2da44e; transform: translateY(-1px); }
+  .community-copy-tip { font-size: var(--fs-tiny); color: var(--green); opacity: 0; transition: opacity 0.3s; }
+  .community-copy-tip.show { opacity: 1; }
+
+  .gguf-modal { width: 92vw; max-width: 1400px; height: 90vh; max-height: 860px; display: flex; flex-direction: column; }
+  .gguf-modal .modal-head { background: linear-gradient(135deg, rgba(56,189,248,0.18), rgba(14,165,233,0.10)); }
+  .gguf-modal h2 { color: #38bdf8 !important; }
+
+  /* Les modales des badges (NotebookLM, Communauté, Mise à jour, GGUF Tracker)
+     ont des titres fixes courts : ne jamais les couper au milieu d'un mot.
+     word-break: normal + overflow-wrap: break-word (coupe seulement si le mot
+     dépasse la largeur). Line-height aéré pour la lisibilité multi-lignes. */
+  .nb-modal .modal-head .title h2,
+  .community-modal .modal-head .title h2,
+  .update-modal .modal-head .title h2,
+  .gguf-modal .modal-head .title h2 {
+    word-break: normal;
+    overflow-wrap: break-word;
+    line-height: 1.2;
+  }
+  .gguf-modal-body { flex: 1 1 auto; padding: 0; overflow: hidden; display: flex; }
+  .gguf-iframe {
+    width: 100%; height: 100%; border: 0; border-radius: 0 0 var(--r-md) var(--r-md);
+    background: var(--bg-2);
+  }
+
   /* --- Animations d'entrée au scroll (§3 UI/Ludisme) --- */
   /* Les cartes apparaissent avec un fondu + translation quand elles entrent
      dans le viewport. Géré par IntersectionObserver qui ajoute .visible. */
@@ -1628,48 +1763,23 @@ function buildLeaderboardHTML(entries) {
     <span class="badge-top">🏇 BenchGo V3 · Classement comportemental</span>
     <h1>Classement BenchGo V3</h1>
     <p class="subtitle">Généré le ${esc(now)} — ${entries.length} modèle${entries.length > 1 ? 's' : ''} classé${entries.length > 1 ? 's' : ''} du meilleur au pire</p>
+    <div class="hero-badges">
+      <button class="hero-badge nb-badge" id="nbBadge" title="Agent NotebookLM — renseignement IA sur les modèles">
+        <span class="dot"></span>🧠 NotebookLM
+      </button>
+      <button class="hero-badge community-badge" id="communityBadge" title="Classement communautaire — soumettre vos carnets">
+        <span class="dot"></span>🌐 Communauté
+      </button>
+      <button class="hero-badge update-badge" id="updateBadge" title="Mise à jour BenchGo disponible" hidden>
+        <span class="dot"></span>⬆️ Mise à jour
+      </button>
+      <button class="hero-badge gguf-badge" id="ggufBadge" title="Surveiller en temps réel les nouveaux modèles GGUF sur Hugging Face">
+        <span class="dot"></span>📡 GGUF Tracker
+      </button>
+    </div>
   </header>
 
-  <div class="nb-banner">
-    <div class="nb-banner-inner">
-      <div class="nb-icon" title="Agent NotebookLM">🧠</div>
-      <div class="nb-content">
-        <div class="nb-title">Agent NotebookLM</div>
-        <div class="nb-desc">Posez vos questions sur les modèles testés à l'<b>agent IA</b> — analyses, comparaisons, recommandations.</div>
-      </div>
-      <div class="nb-actions">
-        <button class="nb-btn-info" id="nbInfoBtn" title="Qu'est-ce que c'est ?">?</button>
-        <a class="nb-btn" href="${NOTEBOOKLM_URL}" target="_blank" rel="noopener noreferrer">🧠 Ouvrir l'agent</a>
-      </div>
-    </div>
-  </div>
   <div class="nb-tip" id="nbTip">Besoin de renseignements sur un modèle ? Contactez l'agent NotebookLM 🧠</div>
-
-  <div class="community-banner">
-    <div class="community-banner-inner">
-      <div class="community-icon" title="Classement communautaire">🌐</div>
-      <div class="community-content">
-        <div class="community-title">Classement communautaire</div>
-        <div class="community-desc">Vos carnets peuvent alimenter le classement public visible par tous les utilisateurs. Soumettez-les depuis le terminal : <code>node runner.js --submit</code><span class="community-copy-tip" id="communityCopyTip">copié ✓</span></div>
-      </div>
-      <div class="community-actions">
-        <button class="community-btn" id="communityCopyBtn" title="Copier la commande de soumission">Copier la commande</button>
-      </div>
-    </div>
-  </div>
-
-  <div id="updateBanner" class="update-banner" hidden>
-    <div class="update-banner-inner">
-      <span class="update-icon">⬆️</span>
-      <div class="update-content">
-        <div class="update-title">Mise à jour disponible</div>
-        <div class="update-desc">Une nouvelle version de BenchGo a été publiée sur GitHub (nouveautés, corrections d'exercices, améliorations). Vous êtes en retard sur la branche <code>main</code>.</div>
-        <ul class="update-commits" id="updateCommits"></ul>
-        <div class="update-action">Pour mettre à jour : <code>git pull</code> puis relancez <code>node runner.js</code></div>
-      </div>
-      <button class="update-close" id="updateClose" title="Masquer cet avis (reviendra dans 1h)">✕</button>
-    </div>
-  </div>
 
   <div class="sticky-bar" id="stickyBar">
     <div class="toolbar" style="justify-content: space-between;">
@@ -1790,6 +1900,66 @@ function buildLeaderboardHTML(entries) {
   </div>
 </div>
 
+<div id="ggufModal" class="modal-overlay">
+  <div class="modal gguf-modal">
+    <div class="modal-head">
+      <div class="rank" style="background:linear-gradient(135deg,#38bdf8,#0ea5e9)">📡</div>
+      <div class="title">
+        <h2>GGUF Tracker — Surveillance Hugging Face</h2>
+        <div class="tags"><span class="cat-tag">Détection temps réel des nouveaux modèles GGUF</span></div>
+      </div>
+      <button class="modal-close" onclick="closeGgufModal()" aria-label="Fermer">×</button>
+    </div>
+    <div class="modal-body gguf-modal-body">
+      <iframe class="gguf-iframe" id="ggufIframe" src="about:blank" title="GGUF Tracker Hugging Face"></iframe>
+    </div>
+  </div>
+</div>
+
+<div id="updateModal" class="modal-overlay">
+  <div class="modal update-modal">
+    <div class="modal-head">
+      <div class="rank" style="background:linear-gradient(135deg,var(--yellow),var(--purple))">⬆️</div>
+      <div class="title">
+        <h2>Mise à jour disponible</h2>
+        <div class="tags"><span class="cat-tag">Nouvelle version BenchGo sur GitHub</span></div>
+      </div>
+      <button class="modal-close" onclick="closeUpdateModal()" aria-label="Fermer">×</button>
+    </div>
+    <div class="modal-body update-modal-body">
+      <p>Une nouvelle version de BenchGo a été publiée sur GitHub (nouveautés, corrections d'exercices, améliorations). Vous êtes en retard sur la branche <code>main</code>.</p>
+      <ul class="update-commits" id="updateCommits"></ul>
+      <div class="update-action">Pour mettre à jour : <code>git pull</code> puis relancez <code>node runner.js</code></div>
+      <div class="nb-modal-cta">
+        <a class="nb-btn" href="https://github.com/cisco-03/BenchGo-LLM-School" target="_blank" rel="noopener noreferrer" style="border-color:var(--yellow);background:var(--yellow)">Voir sur GitHub</a>
+        <button class="nb-btn-info" style="width:auto;padding:8px 16px;border-radius:var(--r-pill)" onclick="closeUpdateModal()">Fermer</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="communityModal" class="modal-overlay">
+  <div class="modal community-modal">
+    <div class="modal-head">
+      <div class="rank" style="background:linear-gradient(135deg,var(--green),var(--accent))">🌐</div>
+      <div class="title">
+        <h2>Classement communautaire</h2>
+        <div class="tags"><span class="cat-tag">Soumettre vos carnets de scores</span></div>
+      </div>
+      <button class="modal-close" onclick="closeCommunityModal()" aria-label="Fermer">×</button>
+    </div>
+    <div class="modal-body community-modal-body">
+      <p>Vos carnets peuvent alimenter le classement public visible par tous les utilisateurs. Soumettez-les depuis le terminal :</p>
+      <p><code>node runner.js --submit</code></p>
+      <p>Le serveur est local, la soumission se fait depuis le CLI (pas depuis le navigateur, par sécurité du token GitHub).</p>
+      <div class="community-modal-cta">
+        <button class="community-copy-btn" id="communityCopyBtn2" title="Copier la commande de soumission">Copier la commande</button>
+        <span class="community-copy-tip" id="communityCopyTip2">copié ✓</span>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div id="toast" class="toast"></div>
 
 <script>
@@ -1797,23 +1967,26 @@ var MODELS = ${JSON.stringify(modelsData)};
 var LOCAL_SHA = ${JSON.stringify(localSha)};
 var REMOTE_REPO = ${JSON.stringify(updateChecker.COMMUNITY_REPO)};
 
-// --- Agent NotebookLM (bandeau + modale + bulle d'info périodique) ---
+// --- Agent NotebookLM (badge → modale + bulle d'info périodique) ---
 var NB_SEEN_KEY = 'benchgo_nb_seen';
 var NB_TIP = document.getElementById('nbTip');
 var NB_MODAL = document.getElementById('nbModal');
 function openNbModal() { NB_MODAL.classList.add('show'); document.body.style.overflow = 'hidden'; }
 function closeNbModal() { NB_MODAL.classList.remove('show'); document.body.style.overflow = ''; }
-document.getElementById('nbInfoBtn').addEventListener('click', openNbModal);
+document.getElementById('nbBadge').addEventListener('click', openNbModal);
 NB_MODAL.addEventListener('click', function(e) { if (e.target === NB_MODAL) closeNbModal(); });
 document.addEventListener('keydown', function(e) { if (e.key === 'Escape' && NB_MODAL.classList.contains('show')) closeNbModal(); });
 
-// --- Bannière Communauté : bouton « Copier la commande » ---
-// Copie la commande de soumission (node runner.js --submit) dans le presse-papier
-// pour que l'utilisateur puisse la coller dans son terminal. Le serveur est local,
-// la soumission se fait depuis le CLI (pas depuis le navigateur, par sécurité du token).
+// --- Classement communautaire (badge → modale + copier commande) ---
+var COMMUNITY_MODAL = document.getElementById('communityModal');
+function openCommunityModal() { COMMUNITY_MODAL.classList.add('show'); document.body.style.overflow = 'hidden'; }
+function closeCommunityModal() { COMMUNITY_MODAL.classList.remove('show'); document.body.style.overflow = ''; }
+document.getElementById('communityBadge').addEventListener('click', openCommunityModal);
+COMMUNITY_MODAL.addEventListener('click', function(e) { if (e.target === COMMUNITY_MODAL) closeCommunityModal(); });
+document.addEventListener('keydown', function(e) { if (e.key === 'Escape' && COMMUNITY_MODAL.classList.contains('show')) closeCommunityModal(); });
 (function communityCopySetup() {
-  var btn = document.getElementById('communityCopyBtn');
-  var tip = document.getElementById('communityCopyTip');
+  var btn = document.getElementById('communityCopyBtn2');
+  var tip = document.getElementById('communityCopyTip2');
   if (!btn || !tip) return;
   btn.addEventListener('click', function() {
     var cmd = 'node runner.js --submit';
@@ -1842,6 +2015,26 @@ document.addEventListener('keydown', function(e) { if (e.key === 'Escape' && NB_
     } catch (e) {}
   }
 })();
+
+// --- GGUF Tracker (badge → modale géante avec iframe) ---
+// L'iframe charge /gguf-tracker.html (servi par le serveur local) qui contient
+// l'outil de surveillance Hugging Face. src chargé paresseusement à la 1re ouverture.
+var GGUF_MODAL = document.getElementById('ggufModal');
+var GGUF_IFRAME = document.getElementById('ggufIframe');
+var GGUF_IFRAME_LOADED = false;
+function openGgufModal() {
+  if (!GGUF_IFRAME_LOADED) {
+    GGUF_IFRAME.src = 'gguf-tracker.html';
+    GGUF_IFRAME_LOADED = true;
+  }
+  GGUF_MODAL.classList.add('show');
+  document.body.style.overflow = 'hidden';
+}
+function closeGgufModal() { GGUF_MODAL.classList.remove('show'); document.body.style.overflow = ''; }
+document.getElementById('ggufBadge').addEventListener('click', openGgufModal);
+GGUF_MODAL.addEventListener('click', function(e) { if (e.target === GGUF_MODAL) closeGgufModal(); });
+document.addEventListener('keydown', function(e) { if (e.key === 'Escape' && GGUF_MODAL.classList.contains('show')) closeGgufModal(); });
+
 // Bulle d'info périodique : s'affiche après 12s la 1re visite, puis toutes les ~5 min
 // si l'utilisateur n'a jamais cliqué. Disparait après 6 s.
 (function nbBubble() {
@@ -4025,19 +4218,25 @@ if (_btnMd) _btnMd.addEventListener('click', exportLeaderboardMd);
 renderCards();
 
 // --- Bannière de mise à jour disponible ---
+// --- Mise à jour (badge → modale avec détails des commits GitHub) ---
+var UPDATE_MODAL = document.getElementById('updateModal');
+var UPDATE_BADGE = document.getElementById('updateBadge');
+function openUpdateModal() { UPDATE_MODAL.classList.add('show'); document.body.style.overflow = 'hidden'; }
+function closeUpdateModal() { UPDATE_MODAL.classList.remove('show'); document.body.style.overflow = ''; }
+UPDATE_BADGE.addEventListener('click', openUpdateModal);
+document.addEventListener('keydown', function(e) { if (e.key === 'Escape' && UPDATE_MODAL.classList.contains('show')) closeUpdateModal(); });
+
 // Compare le SHA du commit local (embarqué à la génération) avec le dernier
-// commit poussé sur la branche main du dépôt GitHub. Si différent, affiche une
-// bannière visuelle pour inciter l'utilisateur a faire 'git pull'.
+// commit poussé sur la branche main du dépôt GitHub. Si différent, affiche le
+// badge "Mise à jour" dans l'en-tête (cliquable → modale avec détails des commits).
 // Cache localStorage 1h pour ne pas spammer l'API GitHub a chaque ouverture.
 (function() {
   if (!LOCAL_SHA || !REMOTE_REPO) return;
-  var banner = document.getElementById('updateBanner');
-  if (!banner) return;
-  var closeBtn = document.getElementById('updateClose');
+  if (!UPDATE_BADGE) return;
   var commitsList = document.getElementById('updateCommits');
 
   // Cache localStorage : évite de re-vérifier pendant 1h et mémorise le
-  // refus de l'utilisateur (bouton ✕) jusqu'à expiration du cache.
+  // refus de l'utilisateur (fermeture de la modale) jusqu'à expiration du cache.
   var CACHE_KEY = 'benchgo_update_check';
   var TTL_MS = 60 * 60 * 1000;
   function readCache() {
@@ -4052,7 +4251,7 @@ renderCards();
     return;
   }
   if (cached && cached.checkedAt && (Date.now() - cached.checkedAt) < TTL_MS && cached.result) {
-    if (cached.result.updateAvailable) showBanner(cached.result.commits || []);
+    if (cached.result.updateAvailable) showBadge(cached.result.commits || []);
     return;
   }
 
@@ -4075,16 +4274,16 @@ renderCards();
         };
       });
       writeCache({ checkedAt: Date.now(), result: result });
-      showBanner(result.commits);
+      showBadge(result.commits);
     }).catch(function() {
       writeCache({ checkedAt: Date.now(), result: result });
-      showBanner([]);
+      showBadge([]);
     });
   }).catch(function() {
     // Pas de réseau → on n'affiche rien (échec silencieux).
   });
 
-  function showBanner(commits) {
+  function showBadge(commits) {
     var c = readCache();
     if (c && c.dismissedAt && (Date.now() - c.dismissedAt) < TTL_MS) return;
     if (commits && commits.length && commitsList) {
@@ -4100,17 +4299,20 @@ renderCards();
         commitsList.appendChild(li);
       });
     }
-    banner.hidden = false;
+    UPDATE_BADGE.hidden = false;
   }
 
-  if (closeBtn) {
-    closeBtn.addEventListener('click', function() {
-      banner.hidden = true;
+  // Fermeture de la modale (clic hors-zone, bouton ×) = marquer comme "vu"
+  // (cache 1h) + masquer le badge + fermer proprement la modale.
+  UPDATE_MODAL.addEventListener('click', function(e) {
+    if (e.target.classList && (e.target.classList.contains('modal-overlay') || e.target.classList.contains('modal-close'))) {
+      closeUpdateModal();
       var c = readCache() || {};
       c.dismissedAt = Date.now();
       writeCache(c);
-    });
-  }
+      UPDATE_BADGE.hidden = true;
+    }
+  });
 })();
 </script>
 </body>
@@ -5863,6 +6065,21 @@ function startServer(port) {
       } catch (e) {
         res.writeHead(404, { 'Content-Type': 'text/html; charset=utf-8' });
         res.end('<h1>Classement communautaire non trouvé</h1><p>Génère-le d\'abord avec <code>node consolidate-leaderboard.js</code>.</p>', 'utf8');
+      }
+      return;
+    }
+
+    // /gguf-tracker.html : sert l'outil de surveillance Hugging Face (scripts/gguf-tracker.html).
+    // Embarqué dans la modale géante du classement via une iframe (même origine).
+    if (url.pathname === '/gguf-tracker.html') {
+      const trackerPath = path.join(__dirname, 'scripts', 'gguf-tracker.html');
+      try {
+        const trackerHtml = fs.readFileSync(trackerPath, 'utf8');
+        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+        res.end(trackerHtml, 'utf8');
+      } catch (e) {
+        res.writeHead(404, { 'Content-Type': 'text/html; charset=utf-8' });
+        res.end('<h1>Tracker GGUF introuvable</h1><p>Le fichier <code>scripts/gguf-tracker.html</code> est absent.</p>', 'utf8');
       }
       return;
     }

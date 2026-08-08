@@ -202,27 +202,95 @@ Si modèle > 3B paramètres, le runner peut enchaîner LIGHT puis STANDARD dans 
 
 **Fichiers touchés :** `leaderboard.js`, `consolidate-leaderboard.js`, `Docs/CHANGELOG.md`, `AGENTS.md`, `Memories-BenchGo/README.md`.
 
-**Principe :** BenchGo s'appuie sur un agent **NotebookLM** (Google) qui a ingéré tous les comptes rendus de tests. C'est l'outil de renseignement central de l'application. Le lien est intégré dans les en-têtes des deux classements via un bandeau proéminent + modale + bulle d'info périodique.
+**Principe :** BenchGo s'appuie sur un agent **NotebookLM** (Google) qui a ingéré tous les comptes rendus de tests. C'est l'outil de renseignement central de l'application. Le lien est intégré dans les en-têtes des deux classements via un badge compact + modale + bulle d'info périodique.
 
 **Lien public :** `https://notebook.google.com/notebook/bd6cf971-b22a-460a-9892-419d1db02f9e`. Défini en une seule constante `NOTEBOOKLM_URL` en haut de `leaderboard.js` et `consolidate-leaderboard.js`. Pour le changer, modifier ces deux constantes.
 
 **Pourquoi pas d'iframe :** NotebookLM renvoie `X-Frame-Options: DENY` + CSP `trusted-types` → l'intégration en iframe est bloquée par Google (public ou non). Un proxy local serait fragile (SPA Google avec nonces CSP rotatifs). Solution retenue : ouverture dans un nouvel onglet (`target="_blank" rel="noopener"`).
 
-**Affichage :**
-- `.nb-banner` : bandeau sous l'en-tête `<header class="hero">` (icône 🧠 + titre + bouton "?" + bouton "Ouvrir l'agent").
+**Affichage (depuis 2026-08-08 : bandeaux → badges) :**
+- `.hero-badge.nb-badge` (`#nbBadge`) : badge violet compact dans le conteneur `.hero-badges` centré sous le `<h1>` (cliquable → modale).
 - `.nb-modal` (`#nbModal`) : modale d'explication des 4 usages + CTA principal.
 - `.nb-tip` (`#nbTip`) : bulle d'info fixe en bas, affichée après 12 s puis toutes les ~5 min.
-- JS inline : `openNbModal()`/`closeNbModal()` + bulle périodique + mémorisation `sessionStorage`/`localStorage`.
+- JS inline : `openNbModal()`/`closeNbModal()` (bind sur `#nbBadge`) + bulle périodique + mémorisation `sessionStorage`/`localStorage`.
 
 **Pour modifier :**
 1. **Changer le lien NotebookLM** : éditer la constante `NOTEBOOKLM_URL` dans les deux fichiers (`leaderboard.js` + `consolidate-leaderboard.js`).
-2. **Changer le texte du bandeau/modale** : éditer le HTML dans le template literal (section `<div class="nb-banner">` et `<div id="nbModal">` des deux fichiers).
+2. **Changer le texte du badge/modale** : éditer le HTML dans le template literal (bouton `.hero-badge.nb-badge` et `<div id="nbModal">` des deux fichiers).
 3. **Changer le timing de la bulle** : modifier les valeurs `12000` (1re apparition) et `300000` (récurrence) dans le JS inline des deux fichiers.
 4. **Tester** : `node leaderboard.js` puis `node scripts/check-inline-js.js`.
 
 **Pièges :**
-- Le JS inline des deux fichiers est dupliqué (constante `NOTEBOOKLM_URL`, CSS `.nb-*`, HTML du bandeau/modale, fonctions `openNbModal`/`closeNbModal`). Modifier un seul fichier ne suffit pas.
+- Le JS inline des deux fichiers est dupliqué (constante `NOTEBOOKLM_URL`, CSS `.nb-*`/`.hero-badge`, HTML du badge/modale, fonctions `openNbModal`/`closeNbModal`). Modifier un seul fichier ne suffit pas.
 - `leaderboard.js` et `consolidate-leaderboard.js` ont des styles d'insertion légèrement différents (template literal `${NOTEBOOKLM_URL}` côté serveur, pas de backticks littéraux dans le JS inline de consolidate — contrainte existante).
+
+### GGUF Tracker — Surveillance Hugging Face (tâche 2026-08-08)
+
+**Fichiers touchés :** `scripts/gguf-tracker.html` (nouveau), `leaderboard.js`, `consolidate-leaderboard.js`, `Docs/CHANGELOG.md`, `AGENTS.md`, `Memories-BenchGo/README.md`, `Memories-BenchGo/INSTRUCTIONS.md`.
+
+**Principe :** Outil de surveillance temps réel des nouveaux modèles GGUF sur Hugging Face. Interroge l'API publique paginée `https://huggingface.co/api/models?library=gguf&sort=lastModified`, détecte les nouveautés (persisté en `localStorage`), alerte sonore (Web Audio API) + notification navigateur. Filtres : recherche, taille max (slider B), favoris ⭐, nouveaux 🆕, éditeurs vérifiés. Favoris avec détection de mise à jour.
+
+**Charte graphique :** entièrement aligné sur BenchGo (variables CSS `--bg-*`, `--accent`, `--purple`, etc.). Pas de Tailwind. Le tracker est un fichier HTML autonome (CSS + JS inline, pas de framework).
+
+**Emplacement :** `scripts/gguf-tracker.html` (rangé avec les autres outils de diagnostic). Anciennement `GGUF-Tracker-update.html` à la racine.
+
+**Intégration aux classements :** badge `📡 GGUF Tracker` (bleu ciel, `.hero-badge.gguf-badge`) dans `.hero-badges` → modale géante (92vw × 90vh) contenant une `<iframe>` qui charge le tracker.
+
+- **`leaderboard.js --serve`** : route `GET /gguf-tracker.html` sert `scripts/gguf-tracker.html`.
+- **`consolidate-leaderboard.js`** : copie `scripts/gguf-tracker.html` → `gh-pages-output/gguf-tracker.html` à chaque génération. L'iframe charge `gguf-tracker.html` en chemin relatif (même origine GitHub Pages).
+- Chargement paresseux : `src` de l'iframe n'est défini qu'à la 1re ouverture (`GGUF_IFRAME_LOADED`).
+
+**Affichage :**
+- `.hero-badge.gguf-badge` (`#ggufBadge`) : badge bleu ciel avec point pulsant.
+- `.gguf-modal` (`#ggufModal`) : modale géante `width: 92vw; height: 90vh`.
+- `.gguf-iframe` (`#ggufIframe`) : iframe 100% × 100% sans bordure.
+- JS inline : `openGgufModal()`/`closeGgufModal()` (chargement paresseux + Échap + clic hors-zone).
+
+**Pour modifier :**
+1. **Changer le tracker lui-même** : éditer `scripts/gguf-tracker.html` (CSS/JS/HTML). La copie dans `gh-pages-output/` est automatique au prochain `node consolidate-leaderboard.js`.
+2. **Changer la taille de la modale** : éditer `.gguf-modal` (width/height/max-width/max-height) dans le CSS des deux fichiers.
+3. **Changer la couleur du badge** : éditer `.hero-badge.gguf-badge` dans le CSS des deux fichiers.
+4. **Tester en local** : `node leaderboard.js --serve`, cliquer sur `📡 GGUF Tracker`. Pour le communautaire : `node consolidate-leaderboard.js` puis ouvrir `gh-pages-output/community-leaderboard.html`.
+5. **Valider le JS inline** : `node scripts/check-inline-js.js`.
+
+**Pièges :**
+- Le JS inline des deux fichiers est dupliqué (CSS `.hero-badge.gguf-badge`, HTML du badge + modale, fonctions `openGgufModal`/`closeGgufModal`). Modifier un seul fichier ne suffit pas.
+- L'iframe charge `gguf-tracker.html` en **chemin relatif**. Sur le serveur local, cela pointe vers la route `/gguf-tracker.html`. Sur GitHub Pages, vers `gh-pages-output/gguf-tracker.html`. Si le fichier est absent → iframe 404 (pas de crash).
+- Le tracker fait des `fetch()` vers `huggingface.co` depuis le navigateur (CORS ouvert sur l'API HF publique, pas de clé nécessaire).
+- `consolidate-leaderboard.js` copie le tracker avec `fs.copyFileSync`. Si `scripts/gguf-tracker.html` est absent, un avertissement est loggé mais la génération continue.
+
+### Bandeaux → Badges dans l'en-tête (tâche 2026-08-08)
+
+**Fichiers touchés :** `leaderboard.js`, `consolidate-leaderboard.js`.
+
+**Principe :** Les bandeaux pleine largeur (NotebookLM, Communauté, Mise à jour) sont remplacés par des badges compacts centrés dans l'en-tête `<header class="hero">`, sous le `<h1>`. Conteneur `.hero-badges` (flex, `justify-content: center`, wrap sur mobile).
+
+**`leaderboard.js` (4 badges) :**
+- `🧠 NotebookLM` (`.nb-badge`, violet) → `#nbModal`.
+- `🌐 Communauté` (`.community-badge`, vert) → `#communityModal` (commande `node runner.js --submit` + bouton « Copier »).
+- `⬆️ Mise à jour` (`.update-badge`, jaune, `hidden` par défaut) → `#updateModal` (liste des 5 derniers commits + `git pull`). N'apparaît que si `data.sha !== LOCAL_SHA`. Cache localStorage 1h préservé.
+- `📡 GGUF Tracker` (`.gguf-badge`, bleu ciel) → `#ggufModal` (modale géante iframe).
+
+**`consolidate-leaderboard.js` (2 badges) :**
+- `🧠 NotebookLM` (`.nb-badge`, violet) → `#nbModal`.
+- `📡 GGUF Tracker` (`.gguf-badge`, bleu ciel) → `#ggufModal`.
+
+**CSS commun (dupliqué dans les deux fichiers) :**
+- `.hero-badges` : conteneur flex centré, `flex-direction: column` sur mobile.
+- `.hero-badge` : pillule `border-radius: var(--r-pill)`, bordure + ombre, 4 variantes.
+- `.hero-badge .dot` : pastille 8px avec `box-shadow` glow, `gguf-pulse` 2s (sauf `prefers-reduced-motion`).
+
+**JS inline (dupliqué) :** `openXModal()`/`closeXModal()` pour chaque badge. Fermeture : bouton ×, clic hors-zone, Échap. `document.body.style.overflow` géré.
+
+**Pour modifier :**
+1. **Ajouter un badge** : ajouter `<button class="hero-badge <variante>" id="x">` dans `.hero-badges`, le CSS `.hero-badge.<variante>`, et le JS `openXModal`/`closeXModal` + la modale HTML. Dupliquer dans les deux fichiers.
+2. **Supprimer un badge** : retirer le bouton + la modale + le JS + le CSS. Vérifier qu'aucun autre JS ne référence l'ID.
+3. **Tester** : `node leaderboard.js` + `node consolidate-leaderboard.js` + `node scripts/check-inline-js.js`.
+
+**Pièges :**
+- L'ancien CSS des bandeaux (`.nb-banner`, `.community-banner`, `.update-banner`) est conservé car les modales réutilisent `.nb-features`, `.nb-modal-cta`, `.update-commits`, etc. Les supprimer casserait les modales.
+- L'update checker (`showBadge`) fait `UPDATE_BADGE.hidden = false` pour révéler le badge. Fermer la modale fait `UPDATE_BADGE.hidden = true` + cache `dismissedAt`.
+- Le badge « Mise à jour » n'existe que dans `leaderboard.js` (le consolidate n'a pas de vérification SHA locale).
 
 ### Nom d'affichage personnalisé (tâche 2026-08-05)
 

@@ -702,6 +702,60 @@ function buildConsolidatedHTML(entries) {
     display: flex; gap: var(--space-s); margin-top: var(--space-m); flex-wrap: wrap;
   }
 
+  /* Badge + modale GGUF Tracker (surveillance Hugging Face) */
+  .hero-badges {
+    display: flex; flex-wrap: wrap; justify-content: center; align-items: center;
+    gap: var(--space-xs); margin-block: var(--space-xs);
+  }
+  .hero-badge {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 5px 12px; border-radius: var(--r-pill);
+    font-weight: 700; font-size: var(--fs-small);
+    cursor: pointer; transition: all 0.18s ease; text-decoration: none;
+    border: 1px solid; white-space: nowrap;
+  }
+  .hero-badge:hover { transform: translateY(-1px); }
+  .hero-badge.nb-badge {
+    border-color: rgba(188,140,255,0.45);
+    background: linear-gradient(135deg, rgba(188,140,255,0.16), rgba(88,166,255,0.08));
+    color: var(--purple);
+    box-shadow: 0 0 0 1px rgba(188,140,255,0.18), 0 2px 8px rgba(188,140,255,0.14);
+  }
+  .hero-badge.nb-badge:hover { background: linear-gradient(135deg, rgba(188,140,255,0.30), rgba(88,166,255,0.18)); }
+  .hero-badge.gguf-badge {
+    border-color: rgba(56, 189, 248, 0.45);
+    background: linear-gradient(135deg, rgba(56, 189, 248, 0.16), rgba(14, 165, 233, 0.08));
+    color: #38bdf8;
+    box-shadow: 0 0 0 1px rgba(56,189,248,0.18), 0 2px 8px rgba(56,189,248,0.14);
+  }
+  .hero-badge.gguf-badge:hover { background: linear-gradient(135deg, rgba(56, 189, 248, 0.30), rgba(14, 165, 233, 0.18)); }
+  .hero-badge .dot {
+    width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+  }
+  .hero-badge.nb-badge .dot { background: var(--purple); box-shadow: 0 0 6px var(--purple); }
+  .hero-badge.gguf-badge .dot { background: #38bdf8; box-shadow: 0 0 6px #38bdf8; animation: gguf-pulse 2s ease-in-out infinite; }
+  @keyframes gguf-pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.35; } }
+  @media (prefers-reduced-motion: reduce) { .hero-badge .dot { animation: none; } }
+  @media (max-width: 560px) { .hero-badges { flex-direction: column; align-items: center; } }
+
+  .gguf-modal { width: 92vw; max-width: 1400px; height: 90vh; max-height: 860px; display: flex; flex-direction: column; }
+  .gguf-modal .modal-head { background: linear-gradient(135deg, rgba(56,189,248,0.18), rgba(14,165,233,0.10)); }
+  .gguf-modal h2 { color: #38bdf8 !important; }
+  .gguf-modal-body { flex: 1 1 auto; padding: 0; overflow: hidden; display: flex; }
+  .gguf-iframe {
+    width: 100%; height: 100%; border: 0; border-radius: 0 0 var(--r-md) var(--r-md);
+    background: var(--bg-2);
+  }
+
+  /* Les modales des badges (NotebookLM, GGUF Tracker) ont des titres fixes
+     courts : ne jamais les couper au milieu d'un mot. */
+  .nb-modal .modal-head .title h2,
+  .gguf-modal .modal-head .title h2 {
+    word-break: normal;
+    overflow-wrap: break-word;
+    line-height: 1.2;
+  }
+
   .toolbar {
     display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-xs);
     margin-block: var(--space-s);
@@ -1084,21 +1138,16 @@ function buildConsolidatedHTML(entries) {
     <span class="badge-top">🌐 BenchGo V3 · Classement Communautaire</span>
     <h1>Classement Communautaire BenchGo V3</h1>
     <p class="subtitle">Généré le ${esc(generatedAt)} — ${entries.length} modèle${entries.length > 1 ? 's' : ''} classé${entries.length > 1 ? 's' : ''} · ${totalSubmissions} soumission${totalSubmissions > 1 ? 's' : ''} de la communauté</p>
+    <div class="hero-badges">
+      <button class="hero-badge nb-badge" id="nbBadge" title="Agent NotebookLM — renseignement IA sur les modèles">
+        <span class="dot"></span>🧠 NotebookLM
+      </button>
+      <button class="hero-badge gguf-badge" id="ggufBadge" title="Surveiller en temps réel les nouveaux modèles GGUF sur Hugging Face">
+        <span class="dot"></span>📡 GGUF Tracker
+      </button>
+    </div>
   </header>
 
-  <div class="nb-banner">
-    <div class="nb-banner-inner">
-      <div class="nb-icon" title="Agent NotebookLM">🧠</div>
-      <div class="nb-content">
-        <div class="nb-title">Agent NotebookLM</div>
-        <div class="nb-desc">Posez vos questions sur les modèles testés à l'<b>agent IA</b> — analyses, comparaisons, recommandations.</div>
-      </div>
-      <div class="nb-actions">
-        <button class="nb-btn-info" id="nbInfoBtn" title="Qu'est-ce que c'est ?">?</button>
-        <a class="nb-btn" href="${NOTEBOOKLM_URL}" target="_blank" rel="noopener noreferrer">🧠 Ouvrir l'agent</a>
-      </div>
-    </div>
-  </div>
   <div class="nb-tip" id="nbTip">Besoin de renseignements sur un modèle ? Contactez l'agent NotebookLM 🧠</div>
 
   <div class="sticky-bar" id="stickyBar">
@@ -1219,20 +1268,55 @@ function buildConsolidatedHTML(entries) {
   </div>
 </div>
 
+<div id="ggufModal" class="modal-overlay">
+  <div class="modal gguf-modal">
+    <div class="modal-head">
+      <div class="rank" style="background:linear-gradient(135deg,#38bdf8,#0ea5e9)">📡</div>
+      <div class="title">
+        <h2>GGUF Tracker — Surveillance Hugging Face</h2>
+        <div class="tags"><span class="cat-tag">Détection temps réel des nouveaux modèles GGUF</span></div>
+      </div>
+      <button class="modal-close" onclick="closeGgufModal()" aria-label="Fermer">×</button>
+    </div>
+    <div class="modal-body gguf-modal-body">
+      <iframe class="gguf-iframe" id="ggufIframe" src="about:blank" title="GGUF Tracker Hugging Face"></iframe>
+    </div>
+  </div>
+</div>
+
 <div id="toast" class="toast"></div>
 
 <script>
 var MODELS = ${modelsJson};
 
-// --- Agent NotebookLM (bandeau + modale + bulle d'info périodique) ---
+// --- Agent NotebookLM (badge → modale + bulle d'info périodique) ---
 var NB_SEEN_KEY = 'benchgo_nb_seen';
 var NB_TIP = document.getElementById('nbTip');
 var NB_MODAL = document.getElementById('nbModal');
 function openNbModal() { NB_MODAL.classList.add('show'); document.body.style.overflow = 'hidden'; }
 function closeNbModal() { NB_MODAL.classList.remove('show'); document.body.style.overflow = ''; }
-document.getElementById('nbInfoBtn').addEventListener('click', openNbModal);
+document.getElementById('nbBadge').addEventListener('click', openNbModal);
 NB_MODAL.addEventListener('click', function(e) { if (e.target === NB_MODAL) closeNbModal(); });
 document.addEventListener('keydown', function(e) { if (e.key === 'Escape' && NB_MODAL.classList.contains('show')) closeNbModal(); });
+
+// --- GGUF Tracker (badge → modale géante avec iframe) ---
+// Sur GitHub Pages, l'iframe charge gguf-tracker.html (copié dans gh-pages-output).
+// En local (node consolidate-leaderboard.js), même chose depuis gh-pages-output/.
+var GGUF_MODAL = document.getElementById('ggufModal');
+var GGUF_IFRAME = document.getElementById('ggufIframe');
+var GGUF_IFRAME_LOADED = false;
+function openGgufModal() {
+  if (!GGUF_IFRAME_LOADED) {
+    GGUF_IFRAME.src = 'gguf-tracker.html';
+    GGUF_IFRAME_LOADED = true;
+  }
+  GGUF_MODAL.classList.add('show');
+  document.body.style.overflow = 'hidden';
+}
+function closeGgufModal() { GGUF_MODAL.classList.remove('show'); document.body.style.overflow = ''; }
+document.getElementById('ggufBadge').addEventListener('click', openGgufModal);
+GGUF_MODAL.addEventListener('click', function(e) { if (e.target === GGUF_MODAL) closeGgufModal(); });
+document.addEventListener('keydown', function(e) { if (e.key === 'Escape' && GGUF_MODAL.classList.contains('show')) closeGgufModal(); });
 // Bulle d'info périodique : s'affiche après 12s la 1re visite, puis toutes les ~5 min
 // si l'utilisateur n'a jamais cliqué. Disparait après 6 s.
 (function nbBubble() {
@@ -2274,6 +2358,18 @@ function main() {
     generatedAt: new Date().toISOString(),
     totalSubmissions: submissions.length
   }, null, 2), 'utf8');
+
+  // Copie l'outil GGUF Tracker dans gh-pages-output pour que l'iframe
+  // de la modale puisse le charger sur GitHub Pages (même origine).
+  try {
+    const trackerSrc = path.join(__dirname, 'scripts', 'gguf-tracker.html');
+    if (fs.existsSync(trackerSrc)) {
+      fs.copyFileSync(trackerSrc, path.join(OUTPUT_DIR, 'gguf-tracker.html'));
+      console.log('GGUF Tracker copié : gguf-tracker.html');
+    }
+  } catch (e) {
+    console.warn('Impossible de copier gguf-tracker.html :', e.message);
+  }
 
   console.log(`Classement consolidé généré : ${path.basename(OUTPUT_HTML)}`);
 }
