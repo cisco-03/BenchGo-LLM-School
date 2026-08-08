@@ -1305,10 +1305,19 @@ document.addEventListener('keydown', function(e) { if (e.key === 'Escape' && NB_
 var GGUF_MODAL = document.getElementById('ggufModal');
 var GGUF_IFRAME = document.getElementById('ggufIframe');
 var GGUF_IFRAME_LOADED = false;
+function sendTestedModelsToTracker() {
+  var testedNames = MODELS.map(function(m) { return m.model || m.shortName || ''; }).filter(Boolean);
+  try {
+    GGUF_IFRAME.contentWindow.postMessage({ type: 'benchgo-tested-models', models: testedNames }, '*');
+  } catch (e) {}
+}
 function openGgufModal() {
   if (!GGUF_IFRAME_LOADED) {
     GGUF_IFRAME.src = 'gguf-tracker.html';
     GGUF_IFRAME_LOADED = true;
+    GGUF_IFRAME.addEventListener('load', sendTestedModelsToTracker);
+  } else {
+    sendTestedModelsToTracker();
   }
   GGUF_MODAL.classList.add('show');
   document.body.style.overflow = 'hidden';

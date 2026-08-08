@@ -28,6 +28,7 @@ le tout dans un bac à sable VM isolé.
 - ☁️ **Mode cloud** : 6 fournisseurs supportés (OpenAI, Anthropic, Groq, Together, OpenRouter, Mistral).
 - 🧪 **Évaluateurs custom asynchrones** : Promise.allSettled, retry/backoff, concurrence limitée, middleware Cloudflare, etc.
 - 🌐 **Classement communautaire participatif** : envoyez vos résultats sur le dépôt GitHub via une Pull Request automatique. Le classement consolidé de tous les contributeurs est publié sur GitHub Pages. Détection automatique des nouveaux modèles (pas de re-soumission). 👉 [Documentation communauté](./Docs/Manuel-utilisateur/08-communaute.md)
+- 📡 **GGUF Tracker — Surveillance Hugging Face** : outil intégré aux classements qui détecte en temps réel les nouveaux modèles GGUF publiés sur Hugging Face. Alertes sonores et notifications navigateur, filtres par taille/éditeur/favoris, et **marquage automatique des modèles déjà testés** dans BenchGo (badge vert « TESTÉ » sur les cartes) pour éviter de retélécharger un modèle déjà évalué.
 - 📡 **Télémétrie anonyme** : un ping opt-in (une fois par jour) permet au propriétaire du projet de savoir combien de personnes utilisent BenchGo. Aucune donnée personnelle transmise. Désactivable avec `--no-telemetry`.
 
 ---
@@ -179,6 +180,35 @@ Le classement consolidé de tous les contributeurs est consultable en ligne :
 Il est reconstruit automatiquement à chaque fois qu'une Pull Request de soumission
 est mergée par le propriétaire du dépôt.
 
+### 📡 GGUF Tracker — Surveiller les nouveaux modèles
+
+Le **GGUF Tracker** est un outil de surveillance temps réel intégré aux classements
+(local et communautaire). Il interroge l'API publique de Hugging Face et détecte
+les nouveaux modèles GGUF publiés.
+
+**Accès :** dans l'en-tête du classement (`node leaderboard.js --serve` ou le
+classement communautaire en ligne), cliquez sur le badge **`📡 GGUF Tracker`**.
+Une modale géante s'ouvre, contenant l'outil en plein écran.
+
+**Fonctionnalités :**
+
+- 🔔 **Alertes sonores + notifications navigateur** quand de nouveaux modèles GGUF
+  sont publiés (auto-rafraîchissement toutes les 5 min en option).
+- 🔍 **Filtres** : recherche par nom, taille max (slider jusqu'à 80B), favoris ⭐,
+  nouveaux 🆕, éditeurs vérifiés, et **modèles déjà testés** dans BenchGo.
+- ✅ **Marquage automatique des modèles testés** : le tracker reçoit la liste des
+  modèles déjà évalués par BenchGo et affiche un badge vert **« TESTÉ »** sur les
+  cartes correspondantes. Cochez « Testes » dans les filtres pour n'afficher que
+  les modèles que vous avez déjà testés — évite de retélécharger un modèle déjà
+  évalué.
+- ⭐ **Favoris avec détection de mise à jour** : marquez un modèle comme favori,
+  le tracker vous alerte si une nouvelle version est publiée.
+
+**Où trouver le fichier :** `scripts/gguf-tracker.html` (autonome, CSS + JS inline,
+charte graphique BenchGo). Le serveur local le sert sur la route `/gguf-tracker.html`.
+Le classement communautaire le copie automatiquement dans `gh-pages-output/` pour
+GitHub Pages.
+
 ---
 
 ## 🏫 Architecture scolaire
@@ -278,6 +308,8 @@ un **historique** des performances d'un modèle dans le temps.
 | `consolidate-leaderboard.js` | Script CI : consolidation du classement communautaire (GitHub Action) |
 | `progress-bar.js` | UI console (ProgressBar, Spinner, `letterGrade`) |
 | `logger.js` | Journalisation dans `logs/` |
+| `scripts/gguf-tracker.html` | Outil de surveillance temps réel des nouveaux modèles GGUF sur Hugging Face (intégré aux classements via badge + modale iframe) |
+| `scripts/check-inline-js.js` | Valide le JS inline des HTML générés (leaderboard + consolidate) |
 
 ---
 
@@ -305,6 +337,9 @@ benchmark-v3/
 ├── progress-bar.js            ← UI console
 ├── logger.js                  ← Journalisation
 ├── tiers/                     ← 16 fichiers JSON d'exercices (par profil × tier)
+├── scripts/                   ← Outils de diagnostic
+│   ├── gguf-tracker.html      ← Tracker GGUF Hugging Face (surveillance temps réel)
+│   └── check-inline-js.js     ← Validation du JS inline des classements HTML
 ├── Docs/                      ← Documentation utilisateur (Manuel, CHANGELOG, gamification)
 └── Export-Rapports/           ← Rapports générés (gitignored)
     ├── .carnet/<modele>.json  ← Carnets de scores persistants
