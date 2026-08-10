@@ -1,5 +1,72 @@
 # CHANGELOG - Carnet de Notes BenchGo
 
+## 2026-08-10 — feat(night-batch): pré-test de santé (health check) + auto-blacklist des modèles défectueux
+
+### Contexte
+Plusieurs modèles LM Studio causaient des pertes de temps massives en mode nuit :
+- **OpenCoder 8B** s'est chargé (`lms load` OK) puis a gelé pendant **3h48** sur
+  le premier exercice avant que LM Studio crash — le reste du batch a échoué
+  instantanément (LM Studio injoignable).
+- **Ornith 9B** et **ProCreations Grug 3B** ont crashé au chargement
+  (`load_failed`) mais restaient dans la file à chaque batch, gaspillant du temps
+  de déchargement/rechargement.
+
+Il manquait un pré-test qui valide qu'un modèle répond réellement après son
+chargement, et un mécanisme pour écarter automatiquement les modèles
+défectueux des futurs batchs.
+
+### Changements
+
+#### 1. Fonction `healthCheck(modelKey)` — `night-batch.js`
+- Après un `lms load` réussi, envoie une requête `POST /v1/chat/completions`
+  triviale ("Reply with: OK", `max_tokens: 8`, `stream: false`) avec un
+  **timeout de 30 s**.
+- Si le modèle répond → sain, on lance le benchmark.
+- Si timeout/erreur/réponse vide → `health_failed`, on décharge et passe au
+  suivant sans lancer le benchmark.
+- Détecte les modèles qui se chargent mais gelent au premier appel (le cas
+  OpenCoder 8B — plus de perte de 3h+).
+
+#### 2. Fonction `autoBlacklist(modelKey, reason)` — `night-batch.js`
+- Ajoute le `modelKey` à `.benchgo-blacklist.json` (même fichier que
+  l'isolation manuelle `!<num>`).
+- Enregistre le statut dans `.benchgo-run-history.json`.
+- Affiche la raison et un message indiquant comment désisoler (`!!<num>`).
+
+#### 3. Auto-blacklist sur 3 conditions
+- **`load_failed`** : `lms load` échoue → auto-blacklist immédiat (GGUF
+  corrompu ou incompatible).
+- **`health_failed`** : le modèle se charge mais ne répond pas dans les 30 s
+  → auto-blacklist (modèle gelé / moteur instable).
+- **`run_ko` systémique** : si TOUTES les écoles d'un modèle ont échoué en
+  `run_ko` et aucune n'a réussi → auto-blacklist (problème systémique).
+  Si au moins une école a réussi, le modèle est conservé (il fonctionne
+  partiellement).
+
+#### 4. Intégration dans le flux principal
+- Le health check est exécuté après `loadModel()` et avant la boucle des
+  écoles, pour chaque modèle.
+- En cas d'échec : `unloadAll()`, `autoBlacklist()`, `continue` vers le
+  modèle suivant.
+- Le bilan de fin affiche les raisons traduites (`chargement échoué`,
+  `health check échoué`, `run KO`) et le tag `[auto-blacklisté]`.
+
+#### 5. Aide CLI mise à jour
+- Note ajoutée dans les astuces de `node night-batch.js --help` :
+  "Pré-test de santé : chaque modèle reçoit un ping après chargement ; les
+  modèles défectueux sont auto-blacklistés."
+
+### Fichiers touchés
+- `night-batch.js` : `healthCheck()`, `autoBlacklist()`, intégration flux,
+  bilan, aide CLI, exports.
+- `Docs/CHANGELOG.md`.
+
+### Tests
+- `node --check night-batch.js` : OK.
+- `node tests/run-tests.js` : 27/27 passés.
+
+---
+
 ## 2026-08-08 — feat(classements): GGUF Tracker intégré + bandeaux transformés en badges dans l'en-tête
 
 ### Contexte

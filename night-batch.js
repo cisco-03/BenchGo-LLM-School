@@ -1238,6 +1238,70 @@ function unloadAll() {
   runLms(['unload', '--all'], { timeoutMs: 60000 });
 }
 
+// --- Pré-test de santé (health check) ---
+// Après un lms load réussi, le modèle est en mémoire mais on ne sait pas s'il
+// est réellement capable de répondre. Un GGUF corrompu ou une architecture
+// non supportée peut faire planter le moteur silencieusement : lms load
+// renvoie status=0, mais le serveur HTTP ne répond plus (ou hang
+// indéfiniment). C'est ce qui a causé le hang de 3h48 d'OpenCoder 8B : le
+// modèle s'est chargé, puis a gelé sur le premier exercice.
+//
+// Le health check envoie une requête /v1/chat/completions triviale ("Reply
+// with: OK") avec un timeout court (30 s). Si le modèle répond dans les
+// temps, il est sain. Sinon, on le marque health_failed et on l'auto-
+// blackliste pour éviter de retenter un modèle défectueux nuit après nuit.
+const HEALTH_CHECK_TIMEOUT_MS = 30000;
+
+async function healthCheck(modelKey) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), HEALTH_CHECK_TIMEOUT_MS);
+  try {
+    const body = JSON.stringify({
+      model: modelKey,
+      messages: [{ role: 'user', content: 'Reply with exactly: OK' }],
+      max_tokens: 8,
+      temperature: 0,
+      stream: false
+    });
+    const res = await fetch(`${LMSTUDIO_HOST}/v1/chat/completions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body,
+      signal: controller.signal
+    });
+    clearTimeout(timer);
+    if (!res.ok) {
+      return { ok: false, reason: `HTTP ${res.status} ${res.statusText}` };
+    }
+    const data = await res.json();
+    const content = data && data.choices && data.choices[0] && data.choices[0].message
+      ? data.choices[0].message.content : '';
+    if (!content || content.length === 0) {
+      return { ok: false, reason: 'Réponse vide (modèle silencieux)' };
+    }
+    return { ok: true, content };
+  } catch (e) {
+    clearTimeout(timer);
+    const aborted = e && e.name === 'AbortError';
+    return { ok: false, reason: aborted ? `Timeout (${HEALTH_CHECK_TIMEOUT_MS / 1000}s) — modèle gelé` : (e.message || 'erreur réseau') };
+  }
+}
+
+// Auto-blacklist : ajoute le modelKey à .benchgo-blacklist.json et enregistre
+// le statut dans l'historique des runs. L'utilisateur peut désisoler le modèle
+// manuellement avec !!<num> dans la sélection interactive s'il pense que le
+// problème est temporaire (ex: mise à jour du GGUF, nouvelle version llama.cpp).
+function autoBlacklist(modelKey, reason) {
+  const bl = loadBlacklist();
+  if (bl.has(modelKey)) return false;
+  bl.add(modelKey);
+  saveBlacklist(bl);
+  recordRun(modelKey, 'load_failed', null);
+  console.log(`  ${C.yellow}Modèle ${modelKey} auto-blacklisté : ${reason}${C.reset}`);
+  console.log(`  ${C.gray}Il sera ignoré dans les futurs batchs. Désisolez-le avec !!<num> si le GGUF a été corrigé.${C.reset}`);
+  return true;
+}
+
 function runBenchmark(modelKey, schoolCli, extraArgs) {
   const args = ['runner.js', '--force'];
   if (schoolCli) args.push(`--profile=${schoolCli}`);
@@ -1289,12 +1353,13 @@ async function main() {
       { cmd: 'node night-batch.js --models=key1,key2', desc: 'Modèles à tester sans sélection interactive (modelKeys).' },
       { cmd: 'node night-batch.js --schools=STANDARD,EXPERT', desc: 'Écoles à tester sans sélection interactive (clés SCHOOLS).' },
       { cmd: 'node night-batch.js --no-teacher', desc: 'Désactive le professeur IA (correcteur externe).' },
-      { cmd: 'Pendant la sélection : !<num>  /  !!<num>', desc: 'Isoler (!) ou désisoler (!!) un modèle de la liste noire manuelle.' },
+      { cmd: 'Pendant la sélection : !<num>  /  !!<num>', desc: 'Isoler (!) ou désisoler (!!) un modèle de la liste noire.' },
       { cmd: 'node night-batch.js --help  |  help  |  -h', desc: 'Affiche cette aide.' }
     ], [
       '--force, --profile= et --hybrid sont transmis au runner sous-jacent (cf. node runner.js --help).',
       'Les rapports vont dans Export-Rapports/<date>/<ecole>/<niveau>/rapport_v3_*.md',
-      'Classement communautaire : soumettez vos carnets avec : node runner.js --submit'
+      'Classement communautaire : soumettez vos carnets avec : node runner.js --submit',
+      'Pré-test de santé : chaque modèle reçoit un ping après chargement ; les modèles défectueux (load_failed, health check KO, run KO systémique) sont auto-blacklistés.'
     ]);
     process.exit(0);
   }
@@ -1529,10 +1594,27 @@ async function main() {
     if (!loadModel(m.modelKey, m.mtpModelKey)) {
       console.log(`  ${C.yellow}Modele ${m.modelKey} non chargeable - ignore.${C.reset}`);
       recordRun(m.modelKey, 'load_failed', null);
+      autoBlacklist(m.modelKey, 'lms load échoué (GGUF corrompu ou incompatible)');
       results.push({ model: m, ok: false, reason: 'load_failed', durationMs: 0 });
       continue;
     }
     console.log(`  ${C.green}Modele charge.${C.reset}`);
+
+    // Pré-test de santé : vérifie que le modèle répond réellement avant de
+    // lancer le benchmark complet. Détecte les modèles qui se chargent mais
+    // gelent au premier appel (hang infini, comme OpenCoder 8B — 3h48 perdues).
+    // Si le health check échoue, on décharge, auto-blackliste et passe au suivant.
+    console.log(`  ${C.gray}[${nowClock()}] Pré-test de santé (health check)...${C.reset}`);
+    const health = await healthCheck(m.modelKey);
+    if (!health.ok) {
+      console.log(`  ${C.red}Health check ÉCHEC : ${health.reason}${C.reset}`);
+      console.log(`  ${C.gray}Déchargement et passage au modèle suivant.${C.reset}`);
+      unloadAll();
+      autoBlacklist(m.modelKey, `health check échoué — ${health.reason}`);
+      results.push({ model: m, ok: false, reason: 'health_failed', durationMs: 0 });
+      continue;
+    }
+    console.log(`  ${C.green}Health check OK — le modèle répond (${String(health.content).slice(0, 40).trim()}).${C.reset}`);
 
     let modelOk = true;
     // Arguments runner supplementaires propres a CE modele : on passe la
@@ -1557,6 +1639,19 @@ async function main() {
       results.push({ model: m, school: school.key, ok: bench.ok, status: bench.status, durationMs: bench.durationMs });
     }
     console.log(`\n  ${modelOk ? C.green : C.red}[${nowClock()}] Modele ${m.displayName} termine (${modelSchools.length} ecole(s)).${C.reset}`);
+
+    // Auto-blacklist si TOUTES les écoles ont échoué en run_ko (et aucune n'a
+    // réussi). Un modèle qui rate toutes ses écoles a un problème systémique
+    // (crash moteur, instabilité) : on le blackliste pour épargner les nuits
+    // futures. Si au moins une école a réussi, on garde le modèle (il fonctionne
+    // partiellement). L'utilisateur peut toujours désisoler avec !!<num>.
+    if (!modelOk) {
+      const allFailed = results.filter(r => r.model && r.model.modelKey === m.modelKey && r.reason !== 'load_failed' && r.reason !== 'health_failed')
+                               .every(r => !r.ok);
+      if (allFailed) {
+        autoBlacklist(m.modelKey, 'toutes les écoles ont échoué (run KO systémique)');
+      }
+    }
   }
 
   console.log(`\n  ${C.gray}[${nowClock()}] Dechargement de tous les modeles...${C.reset}`);
@@ -1576,13 +1671,16 @@ async function main() {
   for (const r of results) {
     const mins = (r.durationMs / 60000).toFixed(1);
     const icon = r.ok ? `${C.green}OK${C.reset}` : `${C.red}KO${C.reset}`;
-    const reason = r.reason ? ` ${C.gray}(${r.reason})${C.reset}` : '';
+    const reasonMap = { 'load_failed': 'chargement échoué', 'health_failed': 'health check échoué', 'run_ko': 'run KO' };
+    const reason = r.reason ? ` ${C.gray}(${reasonMap[r.reason] || r.reason})${C.reset}` : '';
     const schoolTag = r.school ? ` ${C.gray}[${r.school}]${C.reset}` : '';
     // Quantification affichée si disponible (ex: Q5_K_L). Indispensable quand
     // plusieurs quantifs du même modèle sont testées : sans elle, le bilan
     // répète le même displayName sans préciser quelle quantif a été évaluée.
     const quantTag = r.model.quant && r.model.quant !== '?' ? ` ${C.magenta}${r.model.quant}${C.reset}` : '';
-    console.log(`  ${icon} ${r.model.displayName.padEnd(28)}${quantTag}${schoolTag} ${C.gray}${mins} min${C.reset}${reason}`);
+    const blacklisted = r.reason === 'load_failed' || r.reason === 'health_failed' || (r.reason === 'run_ko' && !results.some(x => x.model && x.model.modelKey === r.model.modelKey && x.ok));
+    const blTag = blacklisted && !r.ok ? ` ${C.yellow}[auto-blacklisté]${C.reset}` : '';
+    console.log(`  ${icon} ${r.model.displayName.padEnd(28)}${quantTag}${schoolTag} ${C.gray}${mins} min${C.reset}${reason}${blTag}`);
   }
 
   console.log(`\n  ${C.gray}Rapports : Export-Rapports/<date>/<ecole>/<niveau>/rapport_v3_*.md${C.reset}`);
@@ -1632,7 +1730,9 @@ module.exports = {
   loadRunHistory,
   saveRunHistory,
   recordRun,
-  runStatusFromHistory
+  runStatusFromHistory,
+  healthCheck,
+  autoBlacklist
 };
 
 if (require.main === module) {

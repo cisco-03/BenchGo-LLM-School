@@ -152,6 +152,34 @@ Bug undici : `TypeError: Cannot assign to read only property 'name' of object 'E
 ### Écoles séquentielles
 Si modèle > 3B paramètres, le runner peut enchaîner LIGHT puis STANDARD dans le même run (même clé, auto-profilage partagé, santé réinitialisée).
 
+### Pré-test de santé + auto-blacklist (tâche 2026-08-10)
+
+**Fichiers touchés :** `night-batch.js`, `Docs/CHANGELOG.md`, `AGENTS.md`.
+
+**Principe :** Après `lms load` (réussi), `night-batch.js` envoie un ping `POST /v1/chat/completions` trivial ("Reply with: OK", `max_tokens: 8`, timeout 30 s) pour vérifier que le modèle répond réellement. Si le ping échoue (timeout, erreur, réponse vide), le modèle est déchargé et **auto-blacklisté** dans `.benchgo-blacklist.json`. L'auto-blacklist se déclenche aussi sur `load_failed` et sur `run_ko` systémique (toutes les écoles échouées).
+
+**Fonctions :**
+- `healthCheck(modelKey)` → `{ ok, content }` ou `{ ok: false, reason }`. Timeout `HEALTH_CHECK_TIMEOUT_MS` = 30 s.
+- `autoBlacklist(modelKey, reason)` → ajoute à `.benchgo-blacklist.json` + enregistre `load_failed` dans l'historique. Non-bloquant si déjà blacklisté.
+
+**Conditions d'auto-blacklist :**
+1. **`load_failed`** : `lms load` échoue → blacklisting immédiat.
+2. **`health_failed`** : modèle chargé mais health check KO → blacklisting après déchargement.
+3. **`run_ko` systémique** : toutes les écoles du modèle ont échoué en `run_ko`, aucune réussie → blacklisting en fin de traitement du modèle.
+
+**Désisolation :** `!!<num>` dans la sélection interactive `night-batch.js` retire le modèle de la blacklist (pour retester après correction du GGUF ou mise à jour llama.cpp).
+
+**Pour modifier :**
+1. **Changer le timeout du health check** : éditer `HEALTH_CHECK_TIMEOUT_MS` dans `night-batch.js`.
+2. **Changer le prompt du ping** : éditer le `messages[0].content` dans `healthCheck()`.
+3. **Désactiver l'auto-blacklist** : commenter les appels `autoBlacklist()` (3 sites) — le health check tournera toujours mais ne blacklitera pas.
+4. **Consulter les modèles blacklists** : `cat .benchgo-blacklist.json` ou `node night-batch.js --list-only` (statut "Isolé manuellement" / "Échec de chargement").
+
+**Pièges :**
+- Le health check utilise le même `modelKey` que `lms load`. Si LM Studio nomme différemment le modèle dans `/v1/models`, le health check peut échouer à tort — vérifier avec `lms ls --json`.
+- Un modèle peut réussir le health check mais échouer le benchmark (run_ko) si le problème ne se manifeste qu'avec des prompts longs ou du streaming. Le health check est un filet de sécurité, pas une garantie absolue.
+- L'auto-blacklist sur `run_ko` systémique ne se déclenche que si **toutes** les écoles ont échoué. Un modèle qui réussit LIGHT mais échoue EXPERT n'est **pas** blacklisté (il fonctionne partiellement).
+
 ### Tarif cloud estimé (pricing.js — tâche 2026-08-04)
 
 **Fichiers touchés :** `pricing.js` (nouveau), `runner.js`, `leaderboard.js`, `consolidate-leaderboard.js`, `Docs/CHANGELOG.md`, `AGENTS.md`, `Memories-BenchGo/README.md`.
