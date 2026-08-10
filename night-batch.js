@@ -33,6 +33,7 @@
 
 const { spawnSync, spawn } = require('child_process');
 const readline = require('readline');
+const os = require('os');
 const fs = require('fs');
 const path = require('path');
 const { PROFILES, detectProfileFromModelName } = require('./config');
@@ -499,6 +500,160 @@ function saveBlacklist(set) {
   } catch (e) { /* ignore erreur disque */ }
 }
 
+// --- Forçage de l'index LM Studio (détection des modèles non indexés) ---
+// Quand lms ls ne renvoie pas tous les GGUF présents sur disque (indexation en
+// cache désynchronisée de l'UI), cette fonction scanne le dossier physique des
+// modèles, repère les GGUF orphelins (présents sur disque mais absents de lms
+// ls) et les réimporter via `lms import --symbolic-link -y`. Le lien symbolique
+// préserve le fichier d'origine (aucun déplacement ni copie).
+//
+// Dossier scanné : ~/.lmstudio/models (chemin standard de LM Studio). Les
+// fichiers mmproj-*.gguf (projets multimodaux) et mtp-* sont exclus du scan :
+// ils ne sont pas des modèles testables seuls (dépendances accessoires d'un
+// modèle principal déjà indexé avec lui).
+const LMSTUDIO_MODELS_DIR = path.join(os.homedir(), '.lmstudio', 'models');
+
+// Liste les fichiers .gguf présents sur disque dans le dossier des modèles LM
+// Studio. Retourne un tableau de chemins absolus vers des GGUF candidats à
+// l'import (on exclut les mmproj et mtp qui ne sont pas des LLM autonomes).
+function listGgufOnDisk() {
+  const out = [];
+  if (!fs.existsSync(LMSTUDIO_MODELS_DIR)) return out;
+  let entries = [];
+  try {
+    entries = fs.readdirSync(LMSTUDIO_MODELS_DIR, { withFileTypes: true, recursive: true });
+  } catch (_) { return out; }
+  for (const e of entries) {
+    if (!e.isFile()) continue;
+    const name = e.name || '';
+    if (!/\.gguf$/i.test(name)) continue;
+    // Exclut les projets multimodaux (mmproj-*) et les modules MTP (mtp-*).
+    // Ce ne sont pas des LLM autonomes : les importer seuls polluerait l'index.
+    if (/^mmproj-/i.test(name) || /^mtp-/i.test(name)) continue;
+    out.push(path.join(e.parentPath || '', name));
+  }
+  return out;
+}
+
+// Détermine si un fichier GGUF sur disque est déjà indexé par lms ls. Compare
+// le basename (sans extension) du fichier aux modelKeys et displayNames déjà
+// connus. Retourne true si un indice de correspondance est trouvé.
+function ggufAlreadyIndexed(ggufPath, lmsEntries) {
+  const base = path.basename(ggufPath, '.gguf').toLowerCase();
+  if (!base) return false;
+  for (const e of lmsEntries) {
+    const cands = [e.modelKey, e.displayName, e.path].filter(Boolean).map(s => s.toLowerCase());
+    for (const c of cands) {
+      if (!c) continue;
+      const cBase = path.basename(c.replace(/\\/g, '/').split('/').pop() || c, '.gguf');
+      if (cBase === base) return true;
+      if (c.includes(base) || base.includes(cBase)) return true;
+    }
+  }
+  return false;
+}
+
+// Force la réindexation des modèles GGUF orphelins : scanne le dossier physique,
+// repère les GGUF absents de lms ls, et les réimporte via lms import (lien
+// symbolique, -y pour confirmer automatiquement). Retourne un rapport
+// { scanned, orphans, imported, failed, errors[] }.
+//
+// Cette fonction est appelée explicitement par l'utilisateur (flag
+// --force-detect ou commande "detect" dans la sélection interactive). Elle ne
+// réimporter QUE les orphelins — les modèles déjà indexés ne sont pas touchés.
+function forceDetectModels() {
+  const report = { scanned: 0, orphans: 0, imported: 0, failed: 0, errors: [] };
+  // Récupère l'index courant via lms ls --json --llm (tous les modèles, pas
+  // seulement les LLM : on veut comparer aussi les éventuels embeddings déjà
+  // indexés pour ne pas les réimporter inutilement).
+  const raw = runLms(['ls', '--json'], { timeoutMs: 30000 });
+  let lmsEntries = [];
+  if (raw.status === 0 && raw.stdout) {
+    try {
+      const arr = JSON.parse(raw.stdout);
+      if (Array.isArray(arr)) lmsEntries = arr;
+    } catch (_) { /* index illisible : on considère tout comme orphelin */ }
+  }
+  const onDisk = listGgufOnDisk();
+  report.scanned = onDisk.length;
+  const orphans = onDisk.filter(p => !ggufAlreadyIndexed(p, lmsEntries));
+  report.orphans = orphans.length;
+  if (orphans.length === 0) return report;
+  // Réimporter chaque orphelin via lms import --symbolic-link -y. Le lien
+  // symbolique ne déplace pas le fichier : l'original reste intact.
+  for (const p of orphans) {
+    const baseName = path.basename(p);
+    const r = runLms(['import', '--symbolic-link', '-y', p], { timeoutMs: 60000 });
+    if (r.status === 0) {
+      report.imported++;
+      console.log(`  ${C.green}→ ${baseName} importé (lien symbolique)${C.reset}`);
+    } else {
+      report.failed++;
+      const msg = `${baseName}: ${(r.stderr || 'import échoué').slice(0, 120)}`;
+      report.errors.push(msg);
+      console.log(`  ${C.red}✘ ${msg}${C.reset}`);
+    }
+  }
+  return report;
+}
+
+// --- Détection des carnets orphelins (modèles supprimés de LM Studio) ---
+// Quand un modèle est supprimé de LM Studio (UI ou suppression du GGUF), son
+// carnet .json persiste dans Export-Rapports/.carnet/. Le classement continue
+// alors de l'afficher comme s'il existait encore — trompeur pour l'utilisateur
+// qui croit que le modèle est toujours disponible.
+//
+// Cette fonction compare les carnets existants à la liste lms ls et renvoie
+// les modelKeys de carnets dont le modèle n'est plus présent sur disque.
+//
+// On exclut les carnets cloud (isCloud=true) : ces modèles ne dépendent pas de
+// LM Studio, ils sont testés via des API distantes (OpenRouter, OpenAI...).
+// Un carnet cloud reste valide même si le modèle n'est pas dans lms ls.
+//
+// @returns { orphanLedgers: [{file, model, shortName}], lmsKeys: Set<string> }
+//   orphanLedgers : carnets locaux sans modèle correspondant dans lms ls.
+//   lmsKeys       : ensemble des modelKeys connus de lms ls (pour d'autres usages).
+function detectOrphanLedgers() {
+  const ledgers = loadAllLedgers();
+  const r = runLms(['ls', '--json'], { timeoutMs: 30000 });
+  let lmsEntries = [];
+  if (r.status === 0 && r.stdout) {
+    try {
+      const arr = JSON.parse(r.stdout);
+      if (Array.isArray(arr)) lmsEntries = arr;
+    } catch (_) { /* index illisible : on ne peut pas détecter les orphelins */ }
+  }
+  // Construit un set de modelKeys normalisés + displayNames connus de lms ls.
+  const lmsKeys = new Set();
+  const lmsDisplayNames = new Set();
+  for (const e of lmsEntries) {
+    if (e.modelKey) lmsKeys.add(e.modelKey);
+    if (e.displayName) lmsDisplayNames.add(String(e.displayName).toLowerCase());
+  }
+  const orphanLedgers = [];
+  for (const l of ledgers) {
+    // Les carnets cloud ne dépendent pas de LM Studio → jamais orphelins.
+    if (l.raw && l.raw.isCloud) continue;
+    // Si le carnet matche un modelKey connu de lms ls, il n'est pas orphelin.
+    // On teste via matchLedger (même logique que le reste de BenchGo) pour
+    // gérer les variantes de nommage (quantif dans shortName, suffixes...).
+    const matched = lmsEntries.some(e => {
+      if (!e.modelKey) return false;
+      const ml = matchLedger(e.modelKey, [l]);
+      return ml !== null;
+    });
+    if (matched) continue;
+    // Sinon, c'est un orphelin (modèle supprimé ou GGUF retiré du dossier).
+    orphanLedgers.push({
+      file: l.shortName || l.model || '?',
+      model: l.model,
+      shortName: l.shortName,
+      quantization: l.quantization
+    });
+  }
+  return { orphanLedgers, lmsKeys };
+}
+
 // --- Historique des runs (succès ET échecs) ---
 // Permet de distinguer un modèle "jamais testé" d'un modèle "testé mais échec"
 // (load_failed, run KO). Sans cet historique, un modèle dont le chargement ou le
@@ -907,7 +1062,8 @@ async function selectModelsInteractive(models) {
   console.log(`  ${C.gray}Astuce : le dernier des testes est le plus faible — un bon candidat au retrait.${C.reset}`);
   console.log(`  ${C.gray}Isoler un modele non-LLM : !<num> (ex: !7) — le marque NON APPLICABLE et l'exclut.${C.reset}`);
   console.log(`  ${C.gray}Désisoler : !!<num> — retire un modele de la liste noire manuelle.${C.reset}`);
-  console.log(`  ${C.gray}Tri par tokens (verbeux en haut) : tape "tok" puis Entrée — repère les modèles qui écrivent trop.${C.reset}\n`);
+  console.log(`  ${C.gray}Tri par tokens (verbeux en haut) : tape "tok" puis Entrée — repère les modèles qui écrivent trop.${C.reset}`);
+  console.log(`  ${C.gray}Forcer la détection (modèles manquants) : tape "detect" — réindexe les GGUF orphelins via lms import.${C.reset}\n`);
 
   // Tri par tokens produits (décroissant) si demandé. Les modèles jamais testés
   // (sans metrics) vont à la fin. Permet de repérer les modèles « verbeux » qui
@@ -1003,6 +1159,30 @@ async function selectModelsInteractive(models) {
       if (raw === 'tok' || raw === 'tokens') {
         _sortByTokens = !_sortByTokens;
         console.log(`  ${C.cyan}Tri par tokens : ${_sortByTokens ? 'ACTIVÉ (verbeux en haut)' : 'désactivé (tri par score)'}${C.reset}`);
+        resolve(selectModelsInteractive(models));
+        return;
+      }
+      // Commande "detect" : force la réindexation des GGUF orphelins (présents
+      // sur disque mais absents de lms ls) via lms import. Recharge ensuite la
+      // liste depuis lms ls pour refléter les nouveaux modèles.
+      if (raw === 'detect' || raw === 'force-detect') {
+        console.log(`\n  ${C.bold}${C.yellow}=== FORÇAGE DE LA DÉTECTION LM STUDIO ===${C.reset}`);
+        console.log(`  ${C.gray}Scan du dossier ${LMSTUDIO_MODELS_DIR}${C.reset}`);
+        const rep = forceDetectModels();
+        console.log(`  ${C.gray}${rep.scanned} GGUF scanné(s), ${rep.orphans} orphelin(s), ${rep.imported} importé(s), ${rep.failed} échec(s).${C.reset}`);
+        if (rep.imported > 0) {
+          console.log(`  ${C.green}${rep.imported} modèle(s) réindexé(s). Rechargement de la liste...${C.reset}`);
+          const { ok, models: fresh, error } = listLlmModels();
+          if (ok && fresh.length > 0) {
+            console.log(`  ${C.green}Nouvelle liste : ${fresh.length} modèle(s) LLM détecté(s).${C.reset}\n`);
+            resolve(selectModelsInteractive(fresh));
+            return;
+          }
+          console.log(`  ${C.yellow}Rechargement impossible (${error || 'lms indisponible'}). La liste courante reste affichée.${C.reset}`);
+        } else if (rep.orphans === 0) {
+          console.log(`  ${C.green}Aucun GGUF orphelin : tous les modèles sont déjà indexés par lms ls.${C.reset}`);
+        }
+        console.log('');
         resolve(selectModelsInteractive(models));
         return;
       }
@@ -1308,15 +1488,22 @@ function runBenchmark(modelKey, schoolCli, extraArgs) {
   for (const a of extraArgs) args.push(a);
   const start = Date.now();
   console.log(`\n  ${C.magenta}> Lancement : node ${args.join(' ')}${C.reset}\n`);
+  // stdio: 'inherit' : la sortie du runner (spinner, exercice en cours, tokens,
+  // score) est streamée EN TEMPS RÉEL sur le terminal du mode nuit. Avant, on
+  // capturait stdout/stderr via spawnSync pour les réécrire à la fin — le
+  // terminal restait muet pendant tout le benchmark (parfois 30+ min), sans
+  // aucun feedback sur l'exercice en cours. L'utilisateur ne savait pas où en
+  // était le modèle. Avec inherit, on voit exactement ce que runner.js affiche.
   const r = spawnSync(process.execPath, args, {
     encoding: 'utf8',
     cwd: PROJECT_ROOT,
+    stdio: 'inherit',
     windowsHide: false,
     timeout: 0
   });
   const durationMs = Date.now() - start;
-  if (r.stdout) process.stdout.write(r.stdout);
-  if (r.stderr) process.stderr.write(r.stderr);
+  // stdio: 'inherit' ne capture pas stdout/stderr (ils vont directement au
+  // terminal). On ne peut donc pas les réécrire ici — c'est attendu.
   return { ok: r.status === 0, status: r.status, durationMs };
 }
 
@@ -1327,10 +1514,11 @@ function parseArgs() {
   const noTeacher = raw.includes('--no-teacher');
   const hybridFlag = raw.includes('--hybrid');
   const listOnly = raw.includes('--list-only');
+  const forceDetect = raw.includes('--force-detect');
   const extraRunnerArgs = [];
   if (noTeacher) extraRunnerArgs.push('--no-teacher');
   if (hybridFlag) extraRunnerArgs.push('--hybrid');
-  return { modelsArg, schoolsArg, noTeacher, listOnly, hybridFlag, extraRunnerArgs };
+  return { modelsArg, schoolsArg, noTeacher, listOnly, hybridFlag, forceDetect, extraRunnerArgs };
 }
 
 function resolveSchoolsFromArg(schoolsArg) {
@@ -1353,7 +1541,9 @@ async function main() {
       { cmd: 'node night-batch.js --models=key1,key2', desc: 'Modèles à tester sans sélection interactive (modelKeys).' },
       { cmd: 'node night-batch.js --schools=STANDARD,EXPERT', desc: 'Écoles à tester sans sélection interactive (clés SCHOOLS).' },
       { cmd: 'node night-batch.js --no-teacher', desc: 'Désactive le professeur IA (correcteur externe).' },
+      { cmd: 'node night-batch.js --force-detect', desc: 'Réindexe les GGUF orphelins (modèles sur disque absents de lms ls) puis liste.' },
       { cmd: 'Pendant la sélection : !<num>  /  !!<num>', desc: 'Isoler (!) ou désisoler (!!) un modèle de la liste noire.' },
+      { cmd: 'Pendant la sélection : detect  /  force-detect', desc: 'Force la détection des modèles manquants (scan + lms import).' },
       { cmd: 'node night-batch.js --help  |  help  |  -h', desc: 'Affiche cette aide.' }
     ], [
       '--force, --profile= et --hybrid sont transmis au runner sous-jacent (cf. node runner.js --help).',
@@ -1369,7 +1559,7 @@ async function main() {
   console.log(`${C.bold}${C.cyan}   File d'attente automatique de modeles LM Studio   ${C.reset}`);
   console.log(`${C.bold}${C.cyan}==================================================${C.reset}\n`);
 
-  const { modelsArg, schoolsArg, listOnly, hybridFlag, extraRunnerArgs } = parseArgs();
+  const { modelsArg, schoolsArg, listOnly, hybridFlag, forceDetect, extraRunnerArgs } = parseArgs();
 
   console.log(`  ${C.gray}[${nowClock()}] Verification du daemon LM Studio...${C.reset}`);
   if (!isDaemonUp()) {
@@ -1391,6 +1581,22 @@ async function main() {
   }
 
   console.log(`\n  ${C.gray}[${nowClock()}] Recuperation de la liste des modeles...${C.reset}`);
+  // Flag --force-detect : réindexe les GGUF orphelins (présents sur disque mais
+  // absents de lms ls) AVANT de lister les modèles. Utile quand l'indexation de
+  // LM Studio est désynchronisée de l'UI (modèles ajoutés manuellement, cache
+  // périmé). Le scan lit le dossier physique ~/.lmstudio/models et réimporte
+  // chaque orphelin via `lms import --symbolic-link -y` (aucun déplacement).
+  if (forceDetect) {
+    console.log(`  ${C.bold}${C.yellow}Forçage de la détection (scan du dossier physique)...${C.reset}`);
+    const rep = forceDetectModels();
+    console.log(`  ${C.gray}${rep.scanned} GGUF scanné(s), ${rep.orphans} orphelin(s), ${rep.imported} importé(s), ${rep.failed} échec(s).${C.reset}`);
+    if (rep.orphans === 0) {
+      console.log(`  ${C.green}Aucun GGUF orphelin : tous les modèles sont déjà indexés par lms ls.${C.reset}`);
+    } else if (rep.imported > 0) {
+      console.log(`  ${C.green}${rep.imported} modèle(s) réindexé(s).${C.reset}`);
+    }
+    console.log('');
+  }
   const { ok: listOk, models, error: listErr } = listLlmModels();
   if (!listOk || models.length === 0) {
     console.log(`  ${C.red}Aucun modele LLM trouve : ${listErr}${C.reset}`);
@@ -1725,6 +1931,8 @@ module.exports = {
   isMtpModel,
   buildMtpAssociations,
   isNonLlmModel,
+  forceDetectModels,
+  detectOrphanLedgers,
   loadBlacklist,
   saveBlacklist,
   loadRunHistory,

@@ -4893,6 +4893,7 @@ function printLmStudioStatus() {
 
   let entries;
   let hiddenLmsCount = 0;
+  let orphanEntries = [];
   if (lmsModelKeys) {
     entries = allEntries.filter(e => {
       const nm = nightBatch.normalizeForMatch(e.model);
@@ -4902,6 +4903,15 @@ function printLmStudioStatus() {
       return (nm && lmsModelKeys.has(nm)) || (ns && lmsModelKeys.has(ns));
     });
     hiddenLmsCount = allEntries.length - entries.length;
+    // Carnets orphelins = locaux, présents dans les carnets mais absents de
+    // lms ls (modèle supprimé de LM Studio). Les carnets cloud (isCloud=true)
+    // ne dépendent pas de LM Studio → exclus des orphelins.
+    orphanEntries = allEntries.filter(e => {
+      if (e.isCloud) return false;
+      const nm = nightBatch.normalizeForMatch(e.model);
+      const ns = nightBatch.normalizeForMatch(e.shortName);
+      return !(nm && lmsModelKeys.has(nm)) && !(ns && lmsModelKeys.has(ns));
+    });
   } else {
     // lms indisponible : on garde tous les carnets (repli).
     entries = allEntries.slice();
@@ -4992,13 +5002,39 @@ function printLmStudioStatus() {
       console.log(`  ${res.lines[i + 2]}`);
     }
     if (hiddenLmsCount > 0) {
-      console.log(`  \x1b[90m${hiddenLmsCount} carnet(s) de modèles testés mais supprimés de LM Studio (masqué(s) du rapport).\x1b[0m`);
+      console.log(`  \x1b[90m${hiddenLmsCount} carnet(s) de modèles testés mais supprimés de LM Studio (voir section « Carnets orphelins » ci-dessous).${'\x1b[0m'}`);
     }
   }
 
   // --- Bloc 2 : Modèles non testés (détectés dans LM Studio, absents des carnets) ---
   console.log('');
   printUntestedLmStudioModels();
+
+  // --- Bloc 2b : Carnets orphelins (modèles supprimés de LM Studio) ---
+  // Les carnets locaux dont le modèle n'est plus dans lms ls (modèle supprimé
+  // via l'UI LM Studio ou le GGUF retiré du dossier). Affichés explicitement
+  // pour que l'utilisateur sache que ces carnets sont obsolètes et puisse les
+  // nettoyer manuellement (supprimer le .json) s'il le souhaite. Le carnet est
+  // conservé pour l'historique — il n'est pas supprimé automatiquement.
+  if (orphanEntries.length > 0) {
+    console.log('');
+    console.log(`  \x1b[90m━━━ CARNETS ORPHELINS (${orphanEntries.length}) — MODÈLES SUPPRIMÉS DE LM STUDIO ━━━\x1b[0m`);
+    console.log(`  \x1b[90mCarnets locaux dont le modèle n'est plus dans lms ls. Le carnet .json est conservé pour l'historique.\x1b[0m`);
+    console.log(`  \x1b[90mPour nettoyer : supprimez le fichier dans Export-Rapports/.carnet/<shortName>.json\x1b[0m`);
+    const headers = ['Modèle', 'ShortName', 'Quant', 'Écoles testées'];
+    const aligns = ['left', 'left', 'left', 'left'];
+    const rows = [];
+    for (const e of orphanEntries) {
+      const ecoles = (e.ecoles || []).map(ec => ec.ecole).join(', ') || '\x1b[90m—\x1b[0m';
+      rows.push([e.model || '?', e.shortName || '?', e.quantization || '\x1b[90m—\x1b[0m', ecoles]);
+    }
+    const res = cliTable.table(headers, rows, { colAligns: aligns, separator: '  ' });
+    console.log(`  \x1b[90m    ${res.lines[0]}\x1b[0m`);
+    console.log(`  \x1b[90m    ${res.sepLine}\x1b[0m`);
+    for (let i = 0; i < rows.length; i++) {
+      console.log(`  \x1b[90m${res.lines[i + 2]}\x1b[0m`);
+    }
+  }
 
   // --- Bloc 3 : Suggestions de retest (modèles testés mais écoles manquantes) ---
   // Pour chaque modèle déjà testé et présent dans LM Studio, on détermine

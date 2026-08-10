@@ -34,7 +34,9 @@ OS : Windows, PowerShell 5.1. Projet Node.js 18+ **sans `package.json`** (module
 | Effacer une clé API mémorisée | `node runner.js --forget-key=<provider>` |
 | Lister les clés API mémorisées | `node runner.js --list-keys` |
 | Liste LM Studio triée par score local | `node night-batch.js --list-only` |
+| Forcer la détection (réindexer les GGUF orphelins) | `node night-batch.js --force-detect` |
 | Isoler/désisoler un modèle LM Studio | Interaction `!<num>` / `!!<num>` pendant la sélection `night-batch.js` |
+| Forcer la détection pendant la sélection | Taper `detect` (ou `force-detect`) à l'invite de sélection `night-batch.js` |
 | Stats communautaires (propriétaire) | `node community-stats.js --token=ghp_...` (ou `GITHUB_TOKEN` env) |
 | Vérifier syntaxe JS | `node --check <fichier>.js` |
 | Vérifier JS inline des classements | `node scripts/check-inline-js.js` |
@@ -151,6 +153,57 @@ Bug undici : `TypeError: Cannot assign to read only property 'name' of object 'E
 
 ### Écoles séquentielles
 Si modèle > 3B paramètres, le runner peut enchaîner LIGHT puis STANDARD dans le même run (même clé, auto-profilage partagé, santé réinitialisée).
+
+### Sortie temps réel du mode nuit + carnets orphelins (tâche 2026-08-10)
+
+**Fichiers touchés :** `night-batch.js`, `leaderboard.js`, `Docs/CHANGELOG.md`, `AGENTS.md`.
+
+**Principe :** Trois corrections distinctes :
+1. **Mode nuit muet** : `runBenchmark()` capturait stdout/stderr puis les réécrivait à la fin — le terminal restait muet pendant tout le benchmark. Corrigé avec `stdio: 'inherit'` : la sortie du runner (spinner, exercice, score) est streamée en temps réel.
+2. **Carnets orphelins** : `detectOrphanLedgers()` compare les carnets `.json` à `lms ls` et renvoie les carnets locaux dont le modèle n'est plus sur disque. Les carnets cloud sont exclus (API distantes, pas liées à LM Studio).
+3. **Rapport `--lmstudio`** : nouvelle section « Carnets orphelins » qui liste explicitement les carnets obsolètes (modèle supprimé) au lieu de les masquer silencieusement.
+
+**Fonctions :**
+- `detectOrphanLedgers()` (dans `night-batch.js`) → `{ orphanLedgers: [{file, model, shortName, quantization}], lmsKeys: Set }`. Compare les carnets à `lms ls --json` via `matchLedger()`. Exclut les carnets cloud. Repli : si `lms ls` échoue, tous les carnets locaux sont vus comme orphelins (le rapport `--lmstudio` ne l'appelle qu'avec lms disponible).
+- `runBenchmark()` (dans `night-batch.js`) → `stdio: 'inherit'` au lieu de capture différée. La sortie du runner apparaît en temps réel sur le terminal du mode nuit.
+
+**Pour modifier :**
+1. **Changer le comportement orphelin** (supprimer vs archiver vs marquer) : éditer la section Bloc 2b dans `leaderboard.js` et `detectOrphanLedgers()` dans `night-batch.js`.
+2. **Revenir à la capture différée** (mode nuit silencieux) : remplacer `stdio: 'inherit'` par `encoding: 'utf8'` + réécriture différée dans `runBenchmark()` de `night-batch.js`.
+3. **Désactiver le filtrage des orphelins du Bloc 1** : commenter le bloc `if (lmsModelKeys)` dans `leaderboard.js` (~ligne 4896).
+4. **Tester** : `node leaderboard.js --lmstudio` (daemon LM Studio requis pour voir la section orphelins). Sans daemon, la section ne s'affiche pas (repli).
+
+**Pièges :**
+- `detectOrphanLedgers()` renvoie TOUS les carnets locaux comme orphelins si `lms ls` échoue (daemon éteint). Le rapport `--lmstudio` ne l'appelle que quand lms est disponible.
+- La suppression d'un GGUF dans LM Studio met à jour `lms ls` immédiatement (aucun redémarrage serveur requis). Le carnet `.json` persiste sur disque jusqu'à suppression manuelle — c'est volontaire (conservation de l'historique).
+- `stdio: 'inherit'` ne permet pas de capturer stdout/stderr du runner pour un log fichier. Si on veut loguer la sortie du mode nuit, il faudra rediriger le stdout du process parent (`node night-batch.js > nuit.log`).
+
+### Forçage de la détection LM Studio (tâche 2026-08-10)
+
+**Fichiers touchés :** `night-batch.js`, `Docs/CHANGELOG.md`, `AGENTS.md`.
+
+**Principe :** LM Studio indexe les GGUF dans un cache interne (`models.json`) qui se désynchronise de l'UI : un GGUF ajouté manuellement à `~/.lmstudio/models` peut être visible dans l'app graphique mais absent de `lms ls --json --llm`. BenchGo, qui s'appuie sur `lms ls`, ne voit alors pas ces modèles. La fonction `forceDetectModels()` scanne le dossier physique, repère les GGUF **orphelins** (présents sur disque mais absents de l'index) et les réimporter via `lms import --symbolic-link -y` (lien symbolique : le fichier d'origine n'est pas déplacé ni copié).
+
+**Fonctions :**
+- `listGgufOnDisk()` → liste les `.gguf` de `~/.lmstudio/models` (récursif), exclut `mmproj-*` et `mtp-*` (pas des LLM autonomes).
+- `ggufAlreadyIndexed(ggufPath, lmsEntries)` → compare le basename du fichier aux `modelKey`/`displayName`/`path` de l'index `lms ls`.
+- `forceDetectModels()` → scan + réimport des orphelins, retourne `{ scanned, orphans, imported, failed, errors[] }`.
+
+**Deux modes d'utilisation :**
+1. **Flag CLI `--force-detect`** : `node night-batch.js --force-detect` réindexe les orphelins AVANT de lister les modèles, puis continue le flux normal (sélection + batch). Non-interactif, combinable avec `--models=` et `--schools=`.
+2. **Commande interactive `detect`** : pendant la sélection des modèles (`selectModelsInteractive`), taper `detect` (ou `force-detect`) déclenche le scan + réimport, puis **recharge la liste** depuis `lms ls` pour afficher les nouveaux modèles détectés sans relancer le script.
+
+**Pour modifier :**
+1. **Changer le dossier scanné** : éditer `LMSTUDIO_MODELS_DIR` (constante dans `night-batch.js`).
+2. **Changer la méthode d'import** : remplacer `--symbolic-link` par `--hard-link` ou `--copy` dans l'appel `runLms(['import', ...])`.
+3. **Inclure les mmproj/mtp** : retirer le filtre `/^mmproj-/i` ou `/^mtp-/i` dans `listGgufOnDisk()`.
+4. **Consulter les orphelins sans réimporter** : `forceDetectModels()` est exportée dans `module.exports` — un autre module peut l'appeler et inspecter `report.orphans`.
+
+**Pièges :**
+- `lms import --symbolic-link` peut échouer si le fichier est sur un volume différent du dossier cible LM Studio (liens symboliques Windows pas toujours inter-volumes). L'erreur est affichée, le GGUF est compté en `failed` — le scan continue.
+- Le scan compare les **basenames** (sans extension) à l'index. Un GGUF renommé sur disque est vu comme orphelin même si son contenu est déjà indexé sous un autre nom — c'est attendu (un fichier renommé est un nouveau modèle du point de vue de l'index).
+- Les modèles déjà indexés ne sont **pas** réimportés (comparaison basenames). Pour une réindexation complète, il faudrait modifier la fonction pour ignorer la comparaison.
+- Le daemon LM Studio doit être actif : `lms import` échoue si le daemon est éteint. Le flag `--force-detect` s'exécute après la vérification du daemon dans `main()`.
 
 ### Pré-test de santé + auto-blacklist (tâche 2026-08-10)
 
