@@ -5021,12 +5021,12 @@ function printLmStudioStatus() {
     console.log(`  \x1b[90m━━━ CARNETS ORPHELINS (${orphanEntries.length}) — MODÈLES SUPPRIMÉS DE LM STUDIO ━━━\x1b[0m`);
     console.log(`  \x1b[90mCarnets locaux dont le modèle n'est plus dans lms ls. Le carnet .json est conservé pour l'historique.\x1b[0m`);
     console.log(`  \x1b[90mPour nettoyer : supprimez le fichier dans Export-Rapports/.carnet/<shortName>.json\x1b[0m`);
-    const headers = ['Modèle', 'ShortName', 'Quant', 'Écoles testées'];
-    const aligns = ['left', 'left', 'left', 'left'];
+    const headers = ['Modèle', 'Quant', 'Écoles testées'];
+    const aligns = ['left', 'left', 'left'];
     const rows = [];
     for (const e of orphanEntries) {
       const ecoles = (e.ecoles || []).map(ec => ec.ecole).join(', ') || '\x1b[90m—\x1b[0m';
-      rows.push([e.model || '?', e.shortName || '?', e.quantization || '\x1b[90m—\x1b[0m', ecoles]);
+      rows.push([e.model || '?', e.quantization || '\x1b[90m—\x1b[0m', ecoles]);
     }
     const res = cliTable.table(headers, rows, { colAligns: aligns, separator: '  ' });
     console.log(`  \x1b[90m    ${res.lines[0]}\x1b[0m`);

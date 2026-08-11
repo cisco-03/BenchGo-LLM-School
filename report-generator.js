@@ -177,6 +177,13 @@ function buildCalibrationReport(declaredProfile, calibration, filterDecisions, s
   if (calibration.calibrationIndex < 0.65) {
     report += `> Le modèle se surévalue ou se sous-évalue drastiquement par rapport à ses performances réelles.\n`;
   }
+  // Caveat : la calibration mesure l'honnêteté de l'auto-évaluation, PAS la
+  // performance. Un modèle « Hautement Fiable / Lucide » peut quand même être
+  // NON RECOMMANDÉ s'il échoue aux exercices — il connaît ses limites sans les
+  // surmonter. On l'explique explicitement pour éviter la contradiction visuelle.
+  if (calibration.calibrationIndex >= 0.85 && calibration.actualPerformance < 0.5) {
+    report += `\n> ⚠️ **Lucide mais faible :** l'Indice de Calibration (C) mesure l'honnêteté de l'auto-évaluation, pas la qualité du modèle. Un modèle « Hautement Fiable / Lucide » connaît ses limites — mais les reconnaître ne suffit pas à les surmonter. Le verdict de performance (ci-dessus) prime sur le verdict de calibration.\n`;
+  }
 
   // Décisions de filtrage
   if (filterDecisions && filterDecisions.length > 0) {

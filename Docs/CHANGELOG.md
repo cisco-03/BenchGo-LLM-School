@@ -1,5 +1,72 @@
 # CHANGELOG - Carnet de Notes BenchGo
 
+## 2026-08-11 — fix(calibration/streaming/rapport): clarification verdict + stats ordonnées + colonnes tableau
+
+### Contexte
+Quatre problèmes remontés via `Admin/Tasks1.md` :
+
+1. **Contradiction visuelle « Modèle Hautement Fiable » vs « NON RECOMMANDÉ »** :
+   un modèle à 60% (NON RECOMMANDÉ) affichait « Modèle Hautement Fiable / Lucide »
+   juste en dessous, sans explication. La calibration (C=0.955) mesure
+   l'honnêteté de l'auto-évaluation, pas la performance — un modèle peut être
+   lucide (il connaît ses limites) tout en étant faible (il ne les surmonte pas).
+   L'utilisateur lisait une contradiction absurde.
+2. **Stats streaming entrelacées dans le texte du modèle** : les lignes
+   `n_decoded = 24, tg = 11.89 t/s...` s'intercalaient au milieu des fragments
+   de réponse streamés, rendant le texte illisible (mots coupés, explications
+   morcelées sur plusieurs lignes).
+3. **Colonne ShortName superflue dans le tableau des carnets orphelins** :
+   le rapport `--lmstudio` affichait une colonne ShortName redondante avec le
+   nom du modèle, déséquilibrant le tableau (3 colonnes larges + 1 étroite).
+4. **Prompt d'aide : « En tant que professeur, je vous propose »** : le modèle
+   répondait « L'utilisateur demande si je veux recevoir l'indice » — le rôle
+   était inversé. Le Professeur (BenchGo) propose l'aide, le modèle (élève)
+   décide de l'accepter.
+
+### Changements
+
+#### 1. Caveat de calibration — `score-ledger.js`, `report-generator.js`, `runner.js`
+- `interpretCalibration(C, performancePct)` accepte désormais un second
+  paramètre optionnel `performancePct`. Quand C ≥ 0.85 ET performancePct < 50%,
+  le verdict est suffixé : « lucide mais faible : le modèle connaît ses limites
+  sans pour autant les surmonter ».
+- `report-generator.js` `buildCalibrationReport()` ajoute un bloc
+  « ⚠️ Lucide mais faible » expliquant que l'Indice de Calibration mesure
+  l'honnêteté de l'auto-évaluation, pas la qualité. Le verdict de performance
+  prime sur le verdict de calibration.
+- `runner.js` affichage console : deux lignes explicatives grises sous le
+  verdict de calibration quand `verdictPct < 50` et C ≥ 0.85.
+
+#### 2. Stats streaming séparées du texte — `progress-bar.js`
+- `appendStreamChunk()` (ProgressBar ET BigSpinner) : les stats
+  `n_decoded/tg/tg_3s` sont désormais écrites avec un saut de ligne AVANT
+  (`\n` préfixe) pour les détacher du texte du modèle en cours, au lieu
+  d'être collées au fragment précédent. Le texte du modèle reste sur ses
+  propres lignes, les stats sur les leurs.
+
+#### 3. Colonne ShortName supprimée — `leaderboard.js`
+- Section « Carnets orphelins » du rapport `--lmstudio` : la colonne ShortName
+  est retirée. Le tableau passe de 4 colonnes (Modèle, ShortName, Quant,
+  Écoles testées) à 3 (Modèle, Quant, Écoles testées), automatiquement
+  rééquilibrées par `cliTable.computeWidths()`.
+
+#### 4. Rôle corrigé dans le prompt d'aide — `runner.js`
+- `helpPrompt` : « En tant que professeur, je vous propose un indice » →
+  « Le Professeur vous propose un indice ». Le modèle ne se prend plus pour
+  le professeur ; le Professeur (BenchGo) propose, le modèle (élève) décide.
+
+### Fichiers touchés
+- `score-ledger.js` — `interpretCalibration()` (paramètre `performancePct`)
+- `report-generator.js` — `buildCalibrationReport()` (caveat lucide-mais-faible)
+- `runner.js` — affichage console calibration + `helpPrompt`
+- `progress-bar.js` — `appendStreamChunk()` (×2 : ProgressBar + BigSpinner)
+- `leaderboard.js` — tableau carnets orphelins (colonne ShortName retirée)
+- `Docs/CHANGELOG.md`
+
+### Vérifications
+- `node --check` sur les 5 fichiers modifiés : OK
+- `node tests/run-tests.js` : 27/27 passés
+
 ## 2026-08-10 — fix(night-batch/leaderboard): sortie temps réel + carnets orphelins (modèles supprimés)
 
 ### Contexte

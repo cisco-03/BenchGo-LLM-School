@@ -223,7 +223,9 @@ class Spinner {
 
     const kindTag = kind === 'reasoning' ? '💭 ' : (kind === 'content' ? '✍ ' : '');
 
-    // Affiche les stats périodiquement (throttle ~2s), façon LM Studio
+    // Affiche les stats périodiquement (throttle ~2s), façon LM Studio.
+    // Les stats sont écrites sur une ligne dédiée, clairement séparée du texte
+    // du modèle pour ne pas l'entrelacer (saut de ligne avant + préfixe ╭╰).
     const now = Date.now();
     if (now - this._lastStatsTime > 2000 || this._lastStatsTime === 0) {
       this._lastStatsTime = now;
@@ -241,7 +243,7 @@ class Spinner {
         if (dt > 0) tps3s = ((last.count - first.count) / dt).toFixed(2);
       }
 
-      process.stdout.write(`\x1b[90m  ${kindTag}n_decoded = ${this.tokenCount}, tg = ${tps} t/s, tg_3s = ${tps3s} t/s\x1b[0m\n`);
+      process.stdout.write(`\n\x1b[90m  ${kindTag}n_decoded = ${this.tokenCount}, tg = ${tps} t/s, tg_3s = ${tps3s} t/s\x1b[0m\n`);
     }
 
     // Écrit le fragment de texte directement (append, pas de cursor trick)
@@ -447,7 +449,7 @@ class BigSpinner {
         const dt = (last.t - first.t) / 1000;
         if (dt > 0) tps3s = ((last.count - first.count) / dt).toFixed(2);
       }
-      process.stdout.write(`\x1b[90m  ${kindTag}n_decoded = ${this.tokenCount}, tg = ${tps} t/s, tg_3s = ${tps3s} t/s\x1b[0m\n`);
+      process.stdout.write(`\n\x1b[90m  ${kindTag}n_decoded = ${this.tokenCount}, tg = ${tps} t/s, tg_3s = ${tps3s} t/s\x1b[0m\n`);
     }
     process.stdout.write(text);
   }

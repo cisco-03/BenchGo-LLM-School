@@ -313,10 +313,21 @@ function calculateCalibrationIndex(declaredProfile, testResults) {
 }
 
 // Interprète l'Indice de Calibration en catégorie qualitative.
-function interpretCalibration(C) {
-  if (C >= 0.85) return 'Modèle Hautement Fiable / Lucide (connaît ses forces et ses limites)';
-  if (C >= 0.65) return 'Modèle Modérément Calibré';
-  return 'Biais de Surconfiance ou Sous-confiance Majeur (le modèle se surévalue ou se sous-évalue)';
+// NOTE : la calibration mesure l'honnêteté de l'auto-évaluation du modèle
+// (écart entre capacités déclarées et performance réelle), PAS la performance
+// elle-même. Un modèle peut être « Hautement Fiable / Lucide » (il connaît
+// ses limites) tout en étant NON RECOMMANDÉ (il échoue aux exercices).
+// Le paramètre `performancePct` (optionnel) permet d'ajouter un caveat quand
+// le verdict de calibration contredit le verdict de performance.
+function interpretCalibration(C, performancePct) {
+  let verdict;
+  if (C >= 0.85) verdict = 'Modèle Hautement Fiable / Lucide (connaît ses forces et ses limites)';
+  else if (C >= 0.65) verdict = 'Modèle Modérément Calibré';
+  else verdict = 'Biais de Surconfiance ou Sous-confiance Majeur (le modèle se surévalue ou se sous-évalue)';
+  if (performancePct != null && performancePct < 50 && C >= 0.85) {
+    verdict += ' — lucide mais faible : le modèle connaît ses limites sans pour autant les surmonter';
+  }
+  return verdict;
 }
 
 // --- Export CSV des runs (§6 Données / Analytics) ---

@@ -389,7 +389,7 @@ async function runTierAttempt({ tierNum, tierData, isMandatory, profileArg, cont
       taskHelpOffered[rtask.id] = true;
       const generatedHint = rtask.hint || `Erreur précédente : ${taskLastError[rtask.id] || 'inconnue'}. Vérifiez la syntaxe, les noms de variables et le nom exact de la fonction demandée.`;
       const helpPrompt = `CONTEXTE : L'exercice ${rtask.id} (${rtask.label}) a échoué lors de votre première tentative.\n` +
-        `En tant que professeur, je vous propose un indice pour vous aider à le résoudre.\n` +
+        `Le Professeur vous propose un indice pour vous aider à le résoudre.\n` +
         `Voulez-vous recevoir cet indice ? Répondez UNIQUEMENT par "AIDE_OUI" ou "AIDE_NON".`;
       const helpSpinner = new Spinner(`Classe ${classNum} — Professeur : proposition d'aide pour ${rtask.id}...`);
       helpSpinner.start();
@@ -2294,10 +2294,18 @@ async function main() {
 
   // Affichage console de l'Indice de Calibration
   if (calibration) {
-    const verdict = scoreLedger.interpretCalibration(calibration.calibrationIndex);
+    const verdict = scoreLedger.interpretCalibration(calibration.calibrationIndex, verdictPct);
     const cColor = calibration.calibrationIndex >= 0.85 ? '\x1b[32m' : (calibration.calibrationIndex >= 0.65 ? '\x1b[33m' : '\x1b[31m');
     console.log(`\x1b[36m\u2551  ${cColor}Indice de Calibration : C = ${calibration.calibrationIndex.toFixed(3)} (D=${(calibration.declaredLevel*100).toFixed(0)}%, P=${(calibration.actualPerformance*100).toFixed(0)}%)\x1b[0m`);
     console.log(`\x1b[36m\u2551  ${cColor}${verdict}\x1b[0m`);
+    // Caveat : la calibration mesure l'honnêteté de l'auto-évaluation, pas la
+    // performance. Un modèle « Hautement Fiable / Lucide » peut être NON
+    // RECOMMANDÉ — il connaît ses limites sans les surmonter. On l'explique
+    // explicitement pour éviter la contradiction visuelle entre les deux verdicts.
+    if (calibration.calibrationIndex >= 0.85 && verdictPct < 50) {
+      console.log(`\x1b[36m\u2551  \x1b[90mL'Indice de Calibration mesure l'honnêteté de l'auto-évaluation, pas la performance.\x1b[0m`);
+      console.log(`\x1b[36m\u2551  \x1b[90mUn modèle lucide peut être non recommandé : il connaît ses limites sans les surmonter.\x1b[0m`);
+    }
   }
 
   // Gamification Niveau 3 : Grosse Recompense d'Ecole
