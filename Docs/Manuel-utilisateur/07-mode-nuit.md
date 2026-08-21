@@ -125,10 +125,11 @@ Le script propose ensuite les écoles (niveaux) à faire passer :
    2. College-Lycee (3B - 14B)
    3. Universite (14B - 30B)
    4. These (> 30B)
-   5. Auto-detection (1 ecole) (auto-detection runner)
-   6. Auto par modele (ecole selon la taille)
+    5. Auto-detection (1 ecole) (auto-detection runner)
+    6. Auto par modele (ecole selon la taille)
+    7. Exercice par exercice (tier-by-tier) — choisir les tiers
 
-  Aperçu option 6 (auto par modele) :
+   Aperçu option 6 (auto par modele) :
     Ornith 1.0 9B                      → College-Lycee (3B - 14B)
     Nanbeige Nanbeige4 3B Thinking 2511 → College-Lycee (3B - 14B)
     Gemma 4 26B A4B QAT                → Universite (14B - 30B)
@@ -154,6 +155,13 @@ Tapez :
 > le profil depuis le nom du modèle ; l'option 6 le calcule dans le mode nuit
 > (aperçu affiché avant lancement, et l'école apparaît dans le résumé de la file).
 > Préférez l'option 6 pour visualiser l'attribution avant de lancer la nuit.
+
+> **Option 7 — Exercice par exercice (tier-by-tier)** : au lieu de lancer toute
+> une école d'un coup, vous choisissez l'école puis les **exercices (tiers)** à
+> passer (ex : `0` pour le 1er, `0,1` pour les 2 premiers, `all` pour tous).
+> Chaque tier est exécuté dans un process séparé avec un timeout de 45 min
+> (mode classe-par-classe) — un exercice qui « freeze » ne bloque pas la nuit.
+> C'est l'équivalent interactif des flags `--class-by-class` et `--tiers=` (voir §5).
 
 Le script affiche alors la file d'attente complète et démarre :
 
@@ -209,6 +217,12 @@ Ici les modelKeys sont `ornith-1.0-9b@q4_k_m`, `mythos-9b-unhinged`, `qwen/qwen3
 | `--models=key1,key2` | Modèles à tester (modelKeys séparés par virgules). Sans ce flag en session non-interactive, le script s'arrête. |
 | `--schools=LIGHT,STANDARD` | Écoles à tester (séparées par virgules). Valeurs : `LIGHT`, `STANDARD`, `EXPERT`, `DOCTORAT`, `auto`, `auto-per-model`. Sans ce flag en non-interactif → `auto`. |
 | `--no-teacher` | Désactive le professeur IA correcteur (OpenRouter) pour toute la session. Utile si vous n'avez pas de clé OpenRouter ou voulez aller plus vite. |
+| `--teacher-provider=<prov>` | Provider du professeur correcteur (transmis au runner). Valeurs : `openrouter`, `openai`, `anthropic`, `groq`, `together`, `mistral`, `deepseek`, `cohere`, `ollama`, `lmstudio`, `custom`. Si absent, le runner propose le choix à l'écran (mode interactif). |
+| `--teacher-model=<modèle>` | Modèle du professeur (requis pour les providers non-OpenRouter, car pas de rotation de modèles gratuits). |
+| `--teacher-api-key=<clé>` | Clé API du provider du professeur (inutile pour les providers locaux ollama/lmstudio/custom). |
+| `--teacher-endpoint=<url>` | Endpoint perso (provider `custom`). |
+| `--class-by-class` (ou `--cbc`) | Chaque exercice (tier) d'une école est lancé dans un **process séparé** avec un timeout de 45 min. Un tier gelé ne bloque plus tout le batch : on passe automatiquement au tier suivant. Idéal pour éviter les hangs nocturnes. |
+| `--tiers=0` | Filtre rapide : ne teste que le **1er exercice** (tier 0) de chaque école. Combine avec `--class-by-class` et `--schools=LIGHT` pour trier vite les modèles faibles. `--tiers=0,1` = 2 premiers exercices, etc. (sans ce flag = tous les exercices). |
 
 ### Exemples
 
@@ -229,6 +243,38 @@ node night-batch.js --models=ornith-1.0-9b@q4_k_m --schools=LIGHT,STANDARD
 # File mixte (1B + 15B + 26B) : chaque modèle passe l'école adaptée à sa taille
 node night-batch.js --models=gemma-3-1b-it,google/gemma-4-12b-qat,google/gemma-4-26b-a4b-qat --schools=auto-per-model
 ```
+
+#### Filtre rapide « exercice par exercice » (anti-hang)
+
+Pour trier vite une fournée de modèles faibles sans lancer toute une école, combinez
+`--class-by-class` et `--tiers=` :
+
+```powershell
+# Ne teste QUE le 1er exercice (tier 0) de Primaire sur plusieurs modèles
+node night-batch.js --class-by-class --tiers=0 --models=falcon3-10b-instruct,yi-1.5-9b-chat,opencoder-8b-instruct-i1 --schools=LIGHT --no-teacher
+```
+
+- `--tiers=0,1` teste les 2 premiers exercices ; `--tiers=0,1,2,3` les 4 premiers.
+- Retirez `--tiers=` pour tester tous les exercices.
+- Chaque tier tourne dans son propre process avec un timeout de 45 min : si un modèle
+  « freeze », le batch passe au tier suivant au lieu de rester bloqué toute la nuit.
+
+#### Avec professeur IA (provider au choix)
+
+Le professeur correcteur n'est plus limité à OpenRouter : passez le provider et le modèle
+voulus via `--teacher-provider` / `--teacher-model`. Les providers locaux (ollama, lmstudio,
+custom) ne nécessitent **aucune clé API**.
+
+```powershell
+# Professeur local via Ollama (aucune clé requise)
+node night-batch.js --class-by-class --tiers=0 --models=falcon3-10b-instruct,yi-1.5-9b-chat --schools=LIGHT --teacher-provider=ollama --teacher-model=llama3.2
+
+# Professeur cloud via OpenRouter (Free Router, modèles gratuits)
+node night-batch.js --class-by-class --tiers=0 --models=falcon3-10b-instruct,yi-1.5-9b-chat --schools=LIGHT --teacher-provider=openrouter --teacher-model=meta-llama/llama-3.3-70b-instruct:free
+```
+
+> Sans `--teacher-provider`, le runner vous propose le choix à l'écran (mode interactif).
+> `--teacher-model` est **requis** pour tous les providers sauf OpenRouter Free Router.
 
 ---
 
@@ -500,6 +546,9 @@ consulter `Export-Rapports/` le matin.
 | Lancer interactif (choix à l'écran) | `node night-batch.js` |
 | Lancer avec modèles + écoles fixés | `node night-batch.js --models=... --schools=...` |
 | Sans professeur IA | ajouter `--no-teacher` |
+| Avec professeur IA (provider local Ollama) | ajouter `--teacher-provider=ollama --teacher-model=llama3.2` |
+| Avec professeur IA (provider cloud) | ajouter `--teacher-provider=openrouter --teacher-model=<modèle>` |
+| Filtre rapide : 1er exercice seulement | ajouter `--class-by-class --tiers=0` |
 | Connaître les modelKeys | `lms ls` |
 | Décharger un modèle resté en mémoire | `lms unload --all` |
 | Voir les résultats le matin | `Export-Rapports/classement.html` |

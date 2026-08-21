@@ -1748,10 +1748,18 @@ function parseArgs() {
   const listOnly = raw.includes('--list-only');
   const classByClass = raw.includes('--class-by-class') || raw.includes('--cbc');
   const forceDetect = raw.includes('--force-detect');
+  const teacherProviderArg = (() => { const a = raw.find(r => r.startsWith('--teacher-provider=')); return a ? a.split('=').slice(1).join('=') : null; })();
+  const teacherModelArg = (() => { const a = raw.find(r => r.startsWith('--teacher-model=')); return a ? a.split('=').slice(1).join('=') : null; })();
+  const teacherApiKeyArg = (() => { const a = raw.find(r => r.startsWith('--teacher-api-key=')); return a ? a.split('=').slice(1).join('=') : null; })();
+  const teacherEndpointArg = (() => { const a = raw.find(r => r.startsWith('--teacher-endpoint=')); return a ? a.split('=').slice(1).join('=') : null; })();
   const extraRunnerArgs = [];
   if (noTeacher) extraRunnerArgs.push('--no-teacher');
   if (hybridFlag) extraRunnerArgs.push('--hybrid');
-  return { modelsArg, schoolsArg, tiersArg, noTeacher, listOnly, hybridFlag, forceDetect, classByClass, extraRunnerArgs };
+  if (teacherProviderArg) extraRunnerArgs.push(`--teacher-provider=${teacherProviderArg}`);
+  if (teacherModelArg) extraRunnerArgs.push(`--teacher-model=${teacherModelArg}`);
+  if (teacherApiKeyArg) extraRunnerArgs.push(`--teacher-api-key=${teacherApiKeyArg}`);
+  if (teacherEndpointArg) extraRunnerArgs.push(`--teacher-endpoint=${teacherEndpointArg}`);
+  return { modelsArg, schoolsArg, tiersArg, noTeacher, listOnly, hybridFlag, forceDetect, classByClass, teacherProviderArg, teacherModelArg, extraRunnerArgs };
 }
 
 function resolveSchoolsFromArg(schoolsArg) {

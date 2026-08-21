@@ -13,6 +13,17 @@ Quatre tâches demandées dans `Admin/Tasks1.md` :
 
 ### Changements
 
+**Task 5 — Transmettre `--teacher-*` au runner depuis le mode nuit** (`night-batch.js`)
+- `parseArgs()` capture désormais `--teacher-provider=`, `--teacher-model=`,
+  `--teacher-api-key=`, `--teacher-endpoint=` et les ajoute à `extraRunnerArgs`.
+- Conséquence : `node night-batch.js --teacher-provider=ollama --teacher-model=llama3.2 ...`
+  configure bien le professeur correcteur (avant, ces flags étaient ignorés par le
+  mode nuit et le runner retombait sur OpenRouter).
+- Documentation : `Docs/Manuel-utilisateur/07-mode-nuit.md` enrichi des sections
+  « Filtre rapide exercice par exercice » (`--class-by-class` + `--tiers=`) et
+  « Avec professeur IA (provider au choix) », plus l'option 7 (tier-by-tier)
+  interactive et le tableau des nouveaux flags.
+
 **Task 1 — `--list-only` ne demande plus à tester** (`night-batch.js`)
 - Refactorisation : extraction de `printModelsList(models, { interactive })`
   (affichage du tableau seul) depuis `selectModelsInteractive` (tableau + prompt).
