@@ -1396,13 +1396,41 @@ async function selectSchoolsInteractive(selectedModels) {
     });
   });
   const cbc = modeAnswer !== 'a';
+
+  // --- Sélection des tiers (exercices) à exécuter ---
+  // En mode classe-par-classe, on demande quels tiers (exercices) lancer.
+  // Entrée = tous les tiers (comportement par défaut).
+  // Sinon, numéros séparés par virgules (ex: "0" = premier exercice seulement,
+  // "0,1" = les deux premiers). Permet un test rapide sur un seul exercice.
+  let tierFilter = null;
   if (cbc) {
     console.log(`  ${C.gray}→ Classe par classe : chaque tier isolé (timeout ${TIER_TIMEOUT_MS / 60000} min/tier).${C.reset}`);
+    console.log(`\n  ${C.bold}── Exercices à exécuter ──${C.reset}`);
+    console.log(`  ${C.gray}Quels exercices (tiers) lancer ?${C.reset}`);
+    console.log(`  ${C.gray}Entrée = tous les exercices (défaut).${C.reset}`);
+    console.log(`  ${C.gray}Numéros séparés par virgules (ex: "0" = 1er exercice, "0,1" = 2 premiers).${C.reset}`);
+    const tierAnswer = await new Promise(resolve => {
+      const rlT = readline.createInterface({ input: process.stdin, output: process.stdout });
+      rlT.question(`  ${C.cyan}Tiers à exécuter (défaut = tous) :${C.reset} `, a => {
+        rlT.close();
+        resolve((a || '').trim());
+      });
+    });
+    if (tierAnswer) {
+      const nums = tierAnswer.split(/[\s,;]+/).map(s => parseInt(s, 10)).filter(n => Number.isInteger(n) && n >= 0);
+      if (nums.length > 0) {
+        tierFilter = [...new Set(nums)];
+        console.log(`  ${C.gray}→ Tiers sélectionnés : ${tierFilter.join(', ')}${C.reset}`);
+      }
+    }
+    if (!tierFilter) {
+      console.log(`  ${C.gray}→ Tous les tiers seront exécutés.${C.reset}`);
+    }
   } else {
     console.log(`  ${C.gray}→ Mode classique : école entière en un process.${C.reset}`);
   }
 
-  return { schools, classByClass: cbc };
+  return { schools, classByClass: cbc, tierFilter };
 }
 
 // Sélection manuelle de l'école pour chaque modèle, un par un.
@@ -1607,14 +1635,19 @@ function runBenchmark(modelKey, schoolCli, extraArgs, opts = {}) {
 // ne comptent pas comme échec global).
 const TIER_TIMEOUT_MS = 45 * 60 * 1000; // 45 min par tier (sécurité anti-hang)
 
-function runSchoolClassByClass(modelKey, schoolKey, schoolCli, extraArgs) {
+function runSchoolClassByClass(modelKey, schoolKey, schoolCli, extraArgs, tierFilter = null) {
   const profile = PROFILES[schoolKey];
   if (!profile) {
     console.log(`  ${C.red}Profil inconnu : ${schoolKey}${C.reset}`);
     return { ok: false, durationMs: 0, tierResults: [] };
   }
   // Tous les tiers du profil (obligatoires + optionnels), triés.
-  const tierNums = [...profile.mandatory, ...profile.optional].sort((a, b) => a - b);
+  let tierNums = [...profile.mandatory, ...profile.optional].sort((a, b) => a - b);
+  // Si l'utilisateur a demandé des tiers précis, on ne garde que ceux-là.
+  // Permet de tester un seul exercice (ex: tier 0) pour un test rapide.
+  if (tierFilter && Array.isArray(tierFilter) && tierFilter.length > 0) {
+    tierNums = tierNums.filter(t => tierFilter.includes(t));
+  }
   const tierResults = [];
   const startMs = Date.now();
   let allMandatoryOk = true;
@@ -1642,7 +1675,8 @@ function runSchoolClassByClass(modelKey, schoolKey, schoolCli, extraArgs) {
 
   const durationMs = Date.now() - startMs;
   const okCount = tierResults.filter(t => t.ok).length;
-  console.log(`\n  ${allMandatoryOk ? C.green : C.red}[${nowClock()}] École ${schoolKey} terminée : ${okCount}/${tierResults.length} tiers réussis en ${(durationMs / 60000).toFixed(1)} min.${C.reset}`);
+  const tiersLabel = tierFilter && tierFilter.length > 0 ? `tiers ${tierFilter.join(',')}` : `${tierResults.length} tiers`;
+  console.log(`\n  ${allMandatoryOk ? C.green : C.red}[${nowClock()}] École ${schoolKey} terminée : ${okCount}/${tierResults.length} tiers réussis (${tiersLabel}) en ${(durationMs / 60000).toFixed(1)} min.${C.reset}`);
   return { ok: allMandatoryOk, durationMs, tierResults };
 }
 
@@ -1650,6 +1684,7 @@ function parseArgs() {
   const raw = process.argv.slice(2);
   const modelsArg = (() => { const a = raw.find(r => r.startsWith('--models=')); return a ? a.split('=').slice(1).join('=') : null; })();
   const schoolsArg = (() => { const a = raw.find(r => r.startsWith('--schools=')); return a ? a.split('=').slice(1).join('=') : null; })();
+  const tiersArg = (() => { const a = raw.find(r => r.startsWith('--tiers=')); return a ? a.split('=').slice(1).join('=') : null; })();
   const noTeacher = raw.includes('--no-teacher');
   const hybridFlag = raw.includes('--hybrid');
   const listOnly = raw.includes('--list-only');
@@ -1658,7 +1693,7 @@ function parseArgs() {
   const extraRunnerArgs = [];
   if (noTeacher) extraRunnerArgs.push('--no-teacher');
   if (hybridFlag) extraRunnerArgs.push('--hybrid');
-  return { modelsArg, schoolsArg, noTeacher, listOnly, hybridFlag, forceDetect, classByClass, extraRunnerArgs };
+  return { modelsArg, schoolsArg, tiersArg, noTeacher, listOnly, hybridFlag, forceDetect, classByClass, extraRunnerArgs };
 }
 
 function resolveSchoolsFromArg(schoolsArg) {
@@ -1683,12 +1718,14 @@ async function main() {
       { cmd: 'node night-batch.js --no-teacher', desc: 'Désactive le professeur IA (correcteur externe).' },
       { cmd: 'node night-batch.js --force-detect', desc: 'Réindexe les GGUF orphelins (modèles sur disque absents de lms ls) puis liste.' },
       { cmd: 'node night-batch.js --class-by-class', desc: 'Mode classe-par-classe : chaque tier dans un process séparé avec timeout (robustesse anti-hang).' },
+      { cmd: 'node night-batch.js --class-by-class --tiers=0', desc: 'Filtre rapide : ne teste que le 1er exercice (tier 0) de chaque école. Virer les modèles qui échouent.' },
       { cmd: 'Pendant la sélection : !<num>  /  !!<num>', desc: 'Isoler (!) ou désisoler (!!) un modèle de la liste noire.' },
       { cmd: 'Pendant la sélection : detect  /  force-detect', desc: 'Force la détection des modèles manquants (scan + lms import).' },
       { cmd: 'node night-batch.js --help  |  help  |  -h', desc: 'Affiche cette aide.' }
     ], [
       '--force, --profile= et --hybrid sont transmis au runner sous-jacent (cf. node runner.js --help).',
       '--class-by-class (ou --cbc) : isole chaque tier dans un process séparé avec timeout de 45 min. Un tier gelé ne bloque plus le batch — passage automatique au tier suivant.',
+      '--tiers=0,1 : ne teste que les tiers indiqués (filtre rapide pour trier les modèles faibles). Combine avec --class-by-class et --schools=LIGHT.',
       'Les rapports vont dans Export-Rapports/<date>/<ecole>/<niveau>/rapport_v3_*.md',
       'Classement communautaire : soumettez vos carnets avec : node runner.js --submit',
       'Pré-test de santé : chaque modèle reçoit un ping après chargement ; les modèles défectueux (load_failed, health check KO, run KO systémique) sont auto-blacklistés.'
@@ -1701,8 +1738,13 @@ async function main() {
   console.log(`${C.bold}${C.cyan}   File d'attente automatique de modeles LM Studio   ${C.reset}`);
   console.log(`${C.bold}${C.cyan}==================================================${C.reset}\n`);
 
-  const { modelsArg, schoolsArg, listOnly, hybridFlag, forceDetect, classByClass: cbcFromCli, extraRunnerArgs } = parseArgs();
+  const { modelsArg, schoolsArg, tiersArg, listOnly, hybridFlag, forceDetect, classByClass: cbcFromCli, extraRunnerArgs } = parseArgs();
   let classByClass = cbcFromCli;
+  let tierFilter = null;
+  if (tiersArg) {
+    const nums = tiersArg.split(/[\s,;]+/).map(s => parseInt(s, 10)).filter(n => Number.isInteger(n) && n >= 0);
+    if (nums.length > 0) tierFilter = [...new Set(nums)];
+  }
 
   console.log(`  ${C.gray}[${nowClock()}] Verification du daemon LM Studio...${C.reset}`);
   if (!isDaemonUp()) {
@@ -1808,6 +1850,7 @@ async function main() {
       const interactiveResult = await selectSchoolsInteractive(selected);
       schools = interactiveResult.schools;
       if (!classByClass) classByClass = interactiveResult.classByClass;
+      if (interactiveResult.tierFilter) tierFilter = interactiveResult.tierFilter;
       if (schools.length === 0) {
         console.log(`  ${C.yellow}Aucune ecole selectionnee. Abandon.${C.reset}`);
         if (serverHandle.startedByUs) stopServer();
@@ -1992,7 +2035,7 @@ async function main() {
         // timeout. Robustesse accrue : un tier gelé n'arrête pas l'école
         // entière et ne bloque pas le batch. Reprend au tier suivant.
         console.log(`  ${C.gray}Mode classe-par-classe : chaque tier dans un process séparé (timeout ${TIER_TIMEOUT_MS / 60000} min/tier).${C.reset}`);
-        bench = runSchoolClassByClass(m.modelKey, school.key, school.cli, modelExtraArgs);
+        bench = runSchoolClassByClass(m.modelKey, school.key, school.cli, modelExtraArgs, tierFilter);
       } else {
         // Mode classique : toute l'école dans un seul process (comportement
         // historique). Pas de timeout (timeout=0) — un modèle gelé peut
