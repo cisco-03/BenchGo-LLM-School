@@ -1419,14 +1419,14 @@ async function main() {
         if (teacherEndpoint) resolved.endpoint = teacherEndpoint;
         if (resolved.apiKey) secrets.rememberSecret(tProvider, resolved.apiKey, true);
         const provLabel = isLocalTeacher ? `${tProvider} (local, sans clé)` : `${tProvider} (Free Router)`;
-        console.log(`  \x1b[35mProfesseur : ${provLabel} activé.${C.reset}`);
+        console.log(`  \x1b[35mProfesseur : ${provLabel} activé.\x1b[0m`);
         return resolved;
       }
 
       // Sinon : on demande interactivement à l'utilisateur (saisie masquée).
       console.log(`\n  \x1b[36m━━ PROFESSEUR CORRECTEUR ━━\x1b[0m`);
       console.log(`  \x1b[90mAprès chaque échec définitif, l'élève s'auto-analyse. Un professeur IA indépendant peut relire cette analyse et démontrer la vraie cause racine.\x1b[0m`);
-      console.log(`  \x1b[90m(A) Professeur ${tProvider} — nécessite une clé API (sauf providers locaux ollama/lmstudio).${C.reset}`);
+      console.log(`  \x1b[90m(A) Professeur ${tProvider} — nécessite une clé API (sauf providers locaux ollama/lmstudio).\x1b[0m`);
       console.log(`  \x1b[90m(B) Auto-analyse classique (aucun compte requis) — le modèle testé s'analyse lui-même.\x1b[0m`);
       return (async () => {
         const wantsTeacher = await askYesNo(`  Utiliser le professeur ${tProvider} ?`, true);
