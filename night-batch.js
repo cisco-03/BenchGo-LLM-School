@@ -1318,29 +1318,43 @@ function schoolsForModelPlan(m) {
 
 // Selection interactive des ecoles.
 async function selectSchoolsInteractive(selectedModels) {
-  console.log(`\n  ${C.bold}${C.cyan}=== ECOLES A TESTER ===${C.reset}`);
-  console.log(`  ${C.gray}Selectionnez les ecoles (niveaux) a faire passer a chaque modele.${C.reset}`);
-  console.log(`  ${C.gray}Syntaxe : numeros separes par les virgules (ex: 1,2) ou "all".${C.reset}`);
-  console.log(`  ${C.gray}Option 6 = AUTO PAR MODELE : chaque modele passe l'ecole${C.reset}`);
-  console.log(`  ${C.gray}adaptee a sa taille de parametres (3B->Primaire, 15B->College-Lycee, etc.).${C.reset}`);
-  console.log(`  ${C.gray}Modeles > 3B : enchaîne Primaire (LIGHT) puis l'ecole detectee.${C.reset}`);
-  console.log(`  ${C.gray}Ideal quand la file melange des modeles de tailles differentes.${C.reset}`);
-  console.log(`  ${C.gray}Option 7 = MANUEL PAR MODELE : choisissez l'ecole de chaque modele${C.reset}`);
-  console.log(`  ${C.gray}individuellement. Permet de melanger auto + manuel dans la meme session.${C.reset}\n`);
-  SCHOOLS.forEach((s, i) => {
+  console.log(`\n  ${C.bold}${C.cyan}=== ÉCOLES À TESTER ===${C.reset}`);
+  console.log(`  ${C.gray}Sélectionnez les écoles à faire passer à chaque modèle.${C.reset}`);
+  console.log(`  ${C.gray}Syntaxe : numéros séparés par des virgules (ex: 1,2) ou "all".${C.reset}\n`);
+
+  // --- Écoles (1-4) : un niveau scolaire appliqué identiquement à TOUS les modèles ---
+  console.log(`  ${C.bold}── Écoles (un niveau fixe pour toute la file) ──${C.reset}`);
+  console.log(`  ${C.gray}Tous les modèles passent le(s) même(s) niveau(x).${C.reset}\n`);
+  SCHOOLS.slice(0, 4).forEach((s, i) => {
     const idx = String(i + 1).padStart(2);
-    // Pour l'option 'auto', on précise que c'est l'auto-détection classique
-    // (1 école par modèle, le runner devine le profil).
-    let extra = '';
-    if (s.key === 'auto') extra = ' (auto-detection runner)';
-    console.log(`  ${C.bold}${idx}.${C.reset} ${s.label}${C.gray}${extra}${C.reset}`);
+    console.log(`  ${C.bold}${idx}.${C.reset} ${s.label}`);
   });
+
+  // --- Modes d'attribution (5-7) : le niveau est déterminé par modèle ---
+  console.log(`\n  ${C.bold}── Modes d'attribution (le niveau dépend du modèle) ──${C.reset}`);
+  console.log(`  ${C.gray}Au lieu d'imposer le même niveau à tous, chaque modèle${C.reset}`);
+  console.log(`  ${C.gray}reçoit le sien selon la stratégie choisie ci-dessous.${C.reset}\n`);
+
+  console.log(`  ${C.bold} 5.${C.reset} ${C.bold}Auto-detection${C.reset} ${C.gray}— 1 école par modèle${C.reset}`);
+  console.log(`      ${C.gray}Le runner devine le profil depuis le nom du modèle.${C.reset}`);
+  console.log(`      ${C.gray}Ex: «Qwen3 4B» → Collège-Lycée. Pas d'enchaînement.${C.reset}\n`);
+
+  console.log(`  ${C.bold} 6.${C.reset} ${C.bold}Auto par modèle${C.reset} ${C.gray}— école selon la taille${C.reset}`);
+  console.log(`      ${C.gray}Chaque modèle passe l'école adaptée à ses paramètres.${C.reset}`);
+  console.log(`      ${C.gray}< 3B → Primaire  |  3B–15B → Collège-Lycée  |  etc.${C.reset}`);
+  console.log(`      ${C.gray}Modèles > 3B : enchaîne Primaire puis l'école détectée.${C.reset}`);
+  console.log(`      ${C.gray}Idéal quand la file mélange des tailles différentes.${C.reset}\n`);
+
+  console.log(`  ${C.bold} 7.${C.reset} ${C.bold}Manuel par modèle${C.reset} ${C.gray}— vous choisissez pour chacun${C.reset}`);
+  console.log(`      ${C.gray}L'école de chaque modèle est saisie individuellement.${C.reset}`);
+  console.log(`      ${C.gray}Ex: un 12B en Collège-Lycée, un 4B en Primaire seulement.${C.reset}`);
+  console.log(`      ${C.gray}Permet de mélanger des stratégies dans la même session.${C.reset}\n`);
 
   // Aperçu de l'attribution auto-par-modèle (option 6) pour aider l'utilisateur
   // à anticiper : montre quelles écoles chaque modèle sélectionné ferait.
   // Les modèles > 3B enchaînent Primaire (LIGHT) puis l'école détectée.
   if (selectedModels && selectedModels.length > 0) {
-    console.log(`\n  ${C.gray}Aperçu option 6 (auto par modèle) :${C.reset}`);
+    console.log(`  ${C.gray}Aperçu option 6 :${C.reset}`);
     for (const m of selectedModels) {
       const schoolsList = schoolsForModelPlan(m);
       const labels = schoolsList.map(s => s.label).join(' → ');
@@ -1349,9 +1363,9 @@ async function selectSchoolsInteractive(selectedModels) {
     console.log('');
   }
 
-  return new Promise(resolve => {
+  const schools = await new Promise(resolve => {
     const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-    rl.question(`  ${C.cyan}Ecoles a tester :${C.reset} `, answer => {
+    rl.question(`  ${C.cyan}Écoles à tester :${C.reset} `, answer => {
       rl.close();
       const raw = (answer || '').trim().toLowerCase();
       if (raw === 'all' || raw === '*') { resolve(SCHOOLS.filter(s => s.cli !== null)); return; }
@@ -1360,6 +1374,35 @@ async function selectSchoolsInteractive(selectedModels) {
       resolve(uniq.map(i => SCHOOLS[i]));
     });
   });
+
+  // --- Mode d'exécution : classique ou classe-par-classe ---
+  // Demande comment exécuter chaque école : toute l'école en un seul process
+  // (classique, rapide mais un gel bloque tout) ou chaque exercice (tier) isolé
+  // dans un process séparé avec timeout 45 min (classe-par-classe, robuste nuit).
+  console.log(`\n  ${C.bold}── Mode d'exécution ──${C.reset}`);
+  console.log(`  ${C.gray}Comment lancer chaque école ?${C.reset}\n`);
+  console.log(`  ${C.bold} A.${C.reset} ${C.bold}Classique${C.reset} ${C.gray}— toute l'école d'un coup${C.reset}`);
+  console.log(`      ${C.gray}Un seul process pour toute l'école. Plus rapide.${C.reset}`);
+  console.log(`      ${C.gray}Inconvénient : si le modèle gèle, tout le batch bloque.${C.reset}\n`);
+  console.log(`  ${C.bold} B.${C.reset} ${C.bold}Classe par classe${C.reset} ${C.gray}— un exercice à la fois${C.reset}`);
+  console.log(`      ${C.gray}Chaque exercice (tier) dans un process séparé, timeout 45 min.${C.reset}`);
+  console.log(`      ${C.gray}Si un exercice gèle : kill auto, passage au suivant.${C.reset}`);
+  console.log(`      ${C.gray}Recommandé pour le mode nuit (robustesse maximale).${C.reset}\n`);
+  const modeAnswer = await new Promise(resolve => {
+    const rlM = readline.createInterface({ input: process.stdin, output: process.stdout });
+    rlM.question(`  ${C.cyan}Mode d'exécution [A/B] (défaut B) :${C.reset} `, a => {
+      rlM.close();
+      resolve((a || '').trim().toLowerCase());
+    });
+  });
+  const cbc = modeAnswer !== 'a';
+  if (cbc) {
+    console.log(`  ${C.gray}→ Classe par classe : chaque tier isolé (timeout ${TIER_TIMEOUT_MS / 60000} min/tier).${C.reset}`);
+  } else {
+    console.log(`  ${C.gray}→ Mode classique : école entière en un process.${C.reset}`);
+  }
+
+  return { schools, classByClass: cbc };
 }
 
 // Sélection manuelle de l'école pour chaque modèle, un par un.
@@ -1658,8 +1701,8 @@ async function main() {
   console.log(`${C.bold}${C.cyan}   File d'attente automatique de modeles LM Studio   ${C.reset}`);
   console.log(`${C.bold}${C.cyan}==================================================${C.reset}\n`);
 
-  const { modelsArg, schoolsArg, listOnly, hybridFlag, forceDetect, extraRunnerArgs } = parseArgs();
-  let classByClass = parseArgs().classByClass;
+  const { modelsArg, schoolsArg, listOnly, hybridFlag, forceDetect, classByClass: cbcFromCli, extraRunnerArgs } = parseArgs();
+  let classByClass = cbcFromCli;
 
   console.log(`  ${C.gray}[${nowClock()}] Verification du daemon LM Studio...${C.reset}`);
   if (!isDaemonUp()) {
@@ -1762,7 +1805,9 @@ async function main() {
       schools = [SCHOOLS.find(s => s.key === 'auto')];
       console.log(`  ${C.gray}Non-interactif sans --schools : auto-detection du profil par modele.${C.reset}`);
     } else {
-      schools = await selectSchoolsInteractive(selected);
+      const interactiveResult = await selectSchoolsInteractive(selected);
+      schools = interactiveResult.schools;
+      if (!classByClass) classByClass = interactiveResult.classByClass;
       if (schools.length === 0) {
         console.log(`  ${C.yellow}Aucune ecole selectionnee. Abandon.${C.reset}`);
         if (serverHandle.startedByUs) stopServer();
@@ -1777,35 +1822,6 @@ async function main() {
     }
   }
 
-  // --- Mode d'exécution : classique ou classe-par-classe ---
-  // En mode interactif (TTY) et sans --class-by-class déjà passé en CLI,
-  // on demande à l'utilisateur comment exécuter chaque école :
-  //   (A) Classique : toute l'école dans un seul process (comportement historique).
-  //       Un modèle gelé peut bloquer indéfiniment (aucun timeout).
-  //   (B) Classe par classe : chaque exercice (tier) dans un process séparé
-  //       avec timeout de 45 min/tier. Un exercice gelé ne bloque pas le batch —
-  //       passage automatique à l'exercice suivant. Robustesse maximale en mode nuit.
-  // En non-TTY, on garde le comportement par défaut (classique) sauf si --class-by-class.
-  if (!classByClass && process.stdin.isTTY && process.stdout.isTTY) {
-    console.log(`\n  ${C.bold}${C.cyan}=== MODE D'EXÉCUTION ===${C.reset}`);
-    console.log(`  ${C.gray}Comment exécuter chaque école ?${C.reset}`);
-    console.log(`  ${C.bold}A${C.reset} ${C.gray}Classique${C.reset} — toute l'école dans un seul process (plus rapide, mais un gel bloque tout).`);
-    console.log(`  ${C.bold}B${C.reset} ${C.gray}Classe par classe${C.reset} — chaque exercice (tier) isolé avec timeout 45 min (reprise auto, robustesse nuit).${C.reset}`);
-    const modeAnswer = await new Promise(resolve => {
-      const rlM = readline.createInterface({ input: process.stdin, output: process.stdout });
-      rlM.question(`  ${C.cyan}Mode d'exécution [A/B] (défaut B) :${C.reset} `, a => {
-        rlM.close();
-        resolve((a || '').trim().toLowerCase());
-      });
-    });
-    if (modeAnswer === 'a') {
-      classByClass = false;
-      console.log(`  ${C.gray}Mode classique sélectionné.${C.reset}`);
-    } else {
-      classByClass = true;
-      console.log(`  ${C.gray}Mode classe-par-classe sélectionné (chaque tier isolé, timeout ${TIER_TIMEOUT_MS / 60000} min).${C.reset}`);
-    }
-  }
   // Un modele dont la taille n'est pas detectable est envoye en auto-detection
   // (le runner devinera le profil depuis le nom). On construit un plan
   // { model, schools: [...] } par modele pour l'affichage et l'execution.
