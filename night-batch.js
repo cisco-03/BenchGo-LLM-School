@@ -1658,7 +1658,8 @@ async function main() {
   console.log(`${C.bold}${C.cyan}   File d'attente automatique de modeles LM Studio   ${C.reset}`);
   console.log(`${C.bold}${C.cyan}==================================================${C.reset}\n`);
 
-  const { modelsArg, schoolsArg, listOnly, hybridFlag, forceDetect, classByClass, extraRunnerArgs } = parseArgs();
+  const { modelsArg, schoolsArg, listOnly, hybridFlag, forceDetect, extraRunnerArgs } = parseArgs();
+  let classByClass = parseArgs().classByClass;
 
   console.log(`  ${C.gray}[${nowClock()}] Verification du daemon LM Studio...${C.reset}`);
   if (!isDaemonUp()) {
@@ -1776,7 +1777,35 @@ async function main() {
     }
   }
 
-  // Mode auto-par-modele : on calcule l'ecole de chaque modele individuellement.
+  // --- Mode d'exécution : classique ou classe-par-classe ---
+  // En mode interactif (TTY) et sans --class-by-class déjà passé en CLI,
+  // on demande à l'utilisateur comment exécuter chaque école :
+  //   (A) Classique : toute l'école dans un seul process (comportement historique).
+  //       Un modèle gelé peut bloquer indéfiniment (aucun timeout).
+  //   (B) Classe par classe : chaque exercice (tier) dans un process séparé
+  //       avec timeout de 45 min/tier. Un exercice gelé ne bloque pas le batch —
+  //       passage automatique à l'exercice suivant. Robustesse maximale en mode nuit.
+  // En non-TTY, on garde le comportement par défaut (classique) sauf si --class-by-class.
+  if (!classByClass && process.stdin.isTTY && process.stdout.isTTY) {
+    console.log(`\n  ${C.bold}${C.cyan}=== MODE D'EXÉCUTION ===${C.reset}`);
+    console.log(`  ${C.gray}Comment exécuter chaque école ?${C.reset}`);
+    console.log(`  ${C.bold}A${C.reset} ${C.gray}Classique${C.reset} — toute l'école dans un seul process (plus rapide, mais un gel bloque tout).`);
+    console.log(`  ${C.bold}B${C.reset} ${C.gray}Classe par classe${C.reset} — chaque exercice (tier) isolé avec timeout 45 min (reprise auto, robustesse nuit).${C.reset}`);
+    const modeAnswer = await new Promise(resolve => {
+      const rlM = readline.createInterface({ input: process.stdin, output: process.stdout });
+      rlM.question(`  ${C.cyan}Mode d'exécution [A/B] (défaut B) :${C.reset} `, a => {
+        rlM.close();
+        resolve((a || '').trim().toLowerCase());
+      });
+    });
+    if (modeAnswer === 'a') {
+      classByClass = false;
+      console.log(`  ${C.gray}Mode classique sélectionné.${C.reset}`);
+    } else {
+      classByClass = true;
+      console.log(`  ${C.gray}Mode classe-par-classe sélectionné (chaque tier isolé, timeout ${TIER_TIMEOUT_MS / 60000} min).${C.reset}`);
+    }
+  }
   // Un modele dont la taille n'est pas detectable est envoye en auto-detection
   // (le runner devinera le profil depuis le nom). On construit un plan
   // { model, schools: [...] } par modele pour l'affichage et l'execution.
