@@ -33,7 +33,10 @@ const OPTIONAL_BONUS_PCT = 0.20; // Bonus appliqué aux exercices optionnels ré
 // qu'un modèle faible se contredise lui-même ou valide une analyse erronée.
 //
 // Par défaut : OpenRouter gratuit (aucune clé requise pour les modèles :free).
-// Override possible via --teacher-model / --teacher-api-key / --teacher-endpoint.
+// Override possible via --teacher-provider / --teacher-model / --teacher-api-key / --teacher-endpoint.
+// --teacher-provider permet de choisir un provider autre qu'OpenRouter pour le
+// professeur : openai, anthropic, groq, together, mistral, deepseek, cohere,
+// ollama, lmstudio, custom. Par défaut 'openrouter' (Free Router, modèles gratuits).
 const TEACHER_CONFIG = {
   enabled: true,
   provider: 'openrouter',
@@ -192,6 +195,7 @@ function parseCliArgs() {
 
   // --- Override du professeur (modèle cloud indépendant qui corrige l'élève) ---
   const teacherModelRaw    = (() => { const a = rawArgs.find(r => r.startsWith('--teacher-model='));    return a ? a.split('=').slice(1).join('=') : null; })();
+  const teacherProviderRaw = (() => { const a = rawArgs.find(r => r.startsWith('--teacher-provider=')); return a ? a.split('=').slice(1).join('=') : null; })();
   const teacherApiKeyRaw   = (() => { const a = rawArgs.find(r => r.startsWith('--teacher-api-key='));  return a ? a.split('=').slice(1).join('=') : null; })();
   const teacherEndpointRaw = (() => { const a = rawArgs.find(r => r.startsWith('--teacher-endpoint=')); return a ? a.split('=').slice(1).join('=') : null; })();
   const teacherDisabledRaw = rawArgs.includes('--no-teacher');
@@ -215,6 +219,8 @@ function parseCliArgs() {
   const forgetKeyRaw   = (() => { const a = rawArgs.find(r => r.startsWith('--forget-key='));         return a ? a.split('=').slice(1).join('=') : null; })();
   const listKeysFlag   = rawArgs.includes('--list-keys');
   const noSaveKeysFlag = rawArgs.includes('--no-save-keys');
+  // --restore-carnets : restaure les carnets disparus depuis .carnet-backup/.
+  const restoreCarnetsFlag = rawArgs.includes('--restore-carnets');
 
   // --- Mode batch / nuit ---
   // --force : en session non-interactive (non-TTY), accepte automatiquement les
@@ -261,10 +267,11 @@ function parseCliArgs() {
   let profileArg = profileArgExplicit || (provider ? 'FRONTIER' : 'STANDARD');
 
   return { tierArg, profileArg, profileArgExplicit, contextLimitTokens, provider, model, apiKey, endpoint,
-           teacherModel: teacherModelRaw, teacherApiKey: teacherApiKeyRaw, teacherEndpoint: teacherEndpointRaw,
+           teacherModel: teacherModelRaw, teacherProvider: teacherProviderRaw, teacherApiKey: teacherApiKeyRaw, teacherEndpoint: teacherEndpointRaw,
            teacherDisabled: teacherDisabledRaw, quantization: quantizationRaw,
            preset: presetRaw, savePreset: savePresetRaw, deletePreset: deletePresetRaw, listPresets: listPresetsFlag,
             forgetKey: forgetKeyRaw, listKeys: listKeysFlag, noSaveKeys: noSaveKeysFlag, force: forceFlag,
+            restoreCarnets: restoreCarnetsFlag,
             submit: submitFlag, noTelemetry: noTelemetryFlag, githubToken: githubTokenRaw,
             noUpdateCheck: noUpdateCheckFlag, dryRun: dryRunFlag, hybrid: hybridFlag };
 }

@@ -1053,17 +1053,26 @@ function recomputeStatus(m) {
 // trop de temps d inference pour des scores parfois catastrophiques.
 var _sortByTokens = false;
 
-// Selection interactive des modeles.
-async function selectModelsInteractive(models) {
+// Affiche le tableau des modèles (en-têtes + lignes). Fonction utilitaire
+// partagée entre le mode interactif (selectModelsInteractive) et le mode
+// --list-only (affichage seul, sans prompt). Le paramètre `interactive` ajoute
+// les lignes d'aide (syntaxe de sélection, commandes !/!!/tok/detect) qui n'ont
+// pas de sens en mode --list-only.
+function printModelsList(models, { interactive = true } = {}) {
   console.log(`\n  ${C.bold}${C.cyan}=== MODELES LLM TELECHARGES ===${C.reset}`);
-  console.log(`  ${C.gray}Selectionnez les modeles a tester cette nuit.${C.reset}`);
-  console.log(`  ${C.gray}Syntaxe : numeros separes par les virgules (ex: 1,3,5) ou "all".${C.reset}`);
-  console.log(`  ${C.gray}Ordre : modeles testes du plus fort au plus faible, puis jamais testes, puis non-LLM a la fin.${C.reset}`);
-  console.log(`  ${C.gray}Astuce : le dernier des testes est le plus faible — un bon candidat au retrait.${C.reset}`);
-  console.log(`  ${C.gray}Isoler un modele non-LLM : !<num> (ex: !7) — le marque NON APPLICABLE et l'exclut.${C.reset}`);
-  console.log(`  ${C.gray}Désisoler : !!<num> — retire un modele de la liste noire manuelle.${C.reset}`);
-  console.log(`  ${C.gray}Tri par tokens (verbeux en haut) : tape "tok" puis Entrée — repère les modèles qui écrivent trop.${C.reset}`);
-  console.log(`  ${C.gray}Forcer la détection (modèles manquants) : tape "detect" — réindexe les GGUF orphelins via lms import.${C.reset}\n`);
+  if (interactive) {
+    console.log(`  ${C.gray}Selectionnez les modeles a tester cette nuit.${C.reset}`);
+    console.log(`  ${C.gray}Syntaxe : numeros separes par les virgules (ex: 1,3,5) ou "all".${C.reset}`);
+    console.log(`  ${C.gray}Ordre : modeles testes du plus fort au plus faible, puis jamais testes, puis non-LLM a la fin.${C.reset}`);
+    console.log(`  ${C.gray}Astuce : le dernier des testes est le plus faible — un bon candidat au retrait.${C.reset}`);
+    console.log(`  ${C.gray}Isoler un modele non-LLM : !<num> (ex: !7) — le marque NON APPLICABLE et l'exclut.${C.reset}`);
+    console.log(`  ${C.gray}Désisoler : !!<num> — retire un modele de la liste noire manuelle.${C.reset}`);
+    console.log(`  ${C.gray}Tri par tokens (verbeux en haut) : tape "tok" puis Entrée — repère les modèles qui écrivent trop.${C.reset}`);
+    console.log(`  ${C.gray}Forcer la détection (modèles manquants) : tape "detect" — réindexe les GGUF orphelins via lms import.${C.reset}\n`);
+  } else {
+    console.log(`  ${C.gray}Mode --list-only : affichage seul (aucun test lancé).${C.reset}`);
+    console.log(`  ${C.gray}Ordre : modeles testes du plus fort au plus faible, puis jamais testes, puis non-LLM a la fin.${C.reset}\n`);
+  }
 
   // Tri par tokens produits (décroissant) si demandé. Les modèles jamais testés
   // (sans metrics) vont à la fin. Permet de repérer les modèles « verbeux » qui
@@ -1147,6 +1156,12 @@ async function selectModelsInteractive(models) {
     console.log(`  ${C.bold}${idx}${C.reset} ${name} ${C.gray}${params} ${quant}${C.reset} ${sz}  ${C.gray}${pub}${C.reset} ${statusStr} ${pctStr} ${tpsStr} ${tokStr} ${attStr} ${trendStr} ${timeStr}  ${missStr}`);
   });
   console.log('');
+}
+
+// Selection interactive des modeles. Affiche le tableau via printModelsList puis
+// attend la saisie de l'utilisateur (numéros, "all", commandes !/!!/tok/detect).
+async function selectModelsInteractive(models) {
+  printModelsList(models, { interactive: true });
   return new Promise(resolve => {
     const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
     rl.question(`  ${C.cyan}Modeles a tester :${C.reset} `, answer => {
@@ -1482,12 +1497,22 @@ function autoBlacklist(modelKey, reason) {
   return true;
 }
 
-function runBenchmark(modelKey, schoolCli, extraArgs) {
+function runBenchmark(modelKey, schoolCli, extraArgs, opts = {}) {
+  // opts.tierNum : si défini, lance uniquement CE tier (mode classe-par-classe).
+  //   Le runner supporte un argument positionnel = numéro de tier. On l'insère
+  //   juste après --force et --profile. Ex : runner.js --force --profile=STANDARD 2
+  // opts.timeoutMs : timeout global du spawnSync. 0 = pas de timeout (défaut).
+  //   En mode classe-par-classe, on met un timeout par tier pour éviter qu'un
+  //   modèle gelé bloque toute la nuit (bug constaté : un hang infini sur un
+  //   tier arrêtait tout le batch sans jamais passer au modèle suivant).
+  const { tierNum = null, timeoutMs = 0 } = opts;
   const args = ['runner.js', '--force'];
   if (schoolCli) args.push(`--profile=${schoolCli}`);
+  if (tierNum !== null && tierNum !== undefined) args.push(String(tierNum));
   for (const a of extraArgs) args.push(a);
   const start = Date.now();
-  console.log(`\n  ${C.magenta}> Lancement : node ${args.join(' ')}${C.reset}\n`);
+  const tierLabel = tierNum !== null && tierNum !== undefined ? ` (tier ${tierNum})` : '';
+  console.log(`\n  ${C.magenta}> Lancement : node ${args.join(' ')}${tierLabel}${C.reset}\n`);
   // stdio: 'inherit' : la sortie du runner (spinner, exercice en cours, tokens,
   // score) est streamée EN TEMPS RÉEL sur le terminal du mode nuit. Avant, on
   // capturait stdout/stderr via spawnSync pour les réécrire à la fin — le
@@ -1499,12 +1524,83 @@ function runBenchmark(modelKey, schoolCli, extraArgs) {
     cwd: PROJECT_ROOT,
     stdio: 'inherit',
     windowsHide: false,
-    timeout: 0
+    timeout: timeoutMs || 0
   });
   const durationMs = Date.now() - start;
   // stdio: 'inherit' ne capture pas stdout/stderr (ils vont directement au
   // terminal). On ne peut donc pas les réécrire ici — c'est attendu.
-  return { ok: r.status === 0, status: r.status, durationMs };
+  // Détection du timeout : spawnSync renvoie status=null et signal='SIGTERM'
+  // quand le timeout est atteint (le process est tué).
+  const timedOut = r.status === null && r.signal === 'SIGTERM' && timeoutMs > 0;
+  return { ok: r.status === 0, status: r.status, durationMs, timedOut };
+}
+
+// --- Mode classe-par-classe (tâche 2026-08-11, Tasks1.md #2a) ---
+// Au lieu de lancer toute une école d'un coup (node runner.js --profile=STANDARD
+// --force, qui fait tous les tiers en séquence dans le même process), ce mode
+// lance CHAQUE tier dans un process séparé : node runner.js --force
+// --profile=STANDARD <tierNum>. Avantages :
+//
+//   1. REPRISE : si un tier crash ou timeout, on peut continuer le suivant au
+//      lieu de perdre toute l'école. Le carnet conserve déjà les meilleurs
+//      scores par école (pas par tier), mais en mode classe-par-classe chaque
+//      tier réussi est sauvegardé individuellement dans le rapport.
+//
+//   2. TIMEOUT : chaque tier a son propre timeout (TIER_TIMEOUT_MS). Avant,
+//      timeout=0 sur toute l'école → un modèle gelé (hang infini) bloquait le
+//      batch entier nuit après nuit sans jamais passer au modèle suivant. C'est
+//      la cause du « mode automatique perdu » : un tier gelé → spawnSync hang
+//      indéfiniment → le script ne revient jamais à la boucle des modèles.
+//
+//   3. ISOLATION : un crash sur un tier n'empêche pas les autres tiers de
+//      s'exécuter (process séparé = mémoire isolée).
+//
+// Inconvénient : l'auto-profilage est relancé à chaque tier (overhead de ~30s
+// par tier). C'est un compromis acceptable en mode nuit (le temps n'est pas
+// critique, la robustesse l'est).
+//
+// Retourne { ok, durationMs, tierResults: [{ tierNum, ok, timedOut, durationMs }] }.
+// ok = true si tous les tiers obligatoires ont réussi (les optionnels échoués
+// ne comptent pas comme échec global).
+const TIER_TIMEOUT_MS = 45 * 60 * 1000; // 45 min par tier (sécurité anti-hang)
+
+function runSchoolClassByClass(modelKey, schoolKey, schoolCli, extraArgs) {
+  const profile = PROFILES[schoolKey];
+  if (!profile) {
+    console.log(`  ${C.red}Profil inconnu : ${schoolKey}${C.reset}`);
+    return { ok: false, durationMs: 0, tierResults: [] };
+  }
+  // Tous les tiers du profil (obligatoires + optionnels), triés.
+  const tierNums = [...profile.mandatory, ...profile.optional].sort((a, b) => a - b);
+  const tierResults = [];
+  const startMs = Date.now();
+  let allMandatoryOk = true;
+
+  for (const tierNum of tierNums) {
+    const isMandatory = profile.mandatory.includes(tierNum);
+    const tierLabel = isMandatory ? `${C.bold}obligatoire${C.reset}` : `${C.gray}optionnel${C.reset}`;
+    console.log(`\n  ${C.bold}${C.cyan}--- Classe tier ${tierNum} (${tierLabel}) ---${C.reset}`);
+    const bench = runBenchmark(modelKey, schoolCli, extraArgs, {
+      tierNum,
+      timeoutMs: TIER_TIMEOUT_MS
+    });
+    const mins = (bench.durationMs / 60000).toFixed(1);
+    tierResults.push({ tierNum, ok: bench.ok, timedOut: bench.timedOut, durationMs: bench.durationMs });
+    if (bench.timedOut) {
+      console.log(`  ${C.red}[TIMEOUT] Tier ${tierNum} a dépassé ${TIER_TIMEOUT_MS / 60000} min — killé, passage au tier suivant.${C.reset}`);
+    }
+    console.log(`  ${bench.ok ? C.green : C.red}[${nowClock()}] Tier ${tierNum} terminé en ${mins} min (status=${bench.status}).${C.reset}`);
+    // Un tier obligatoire échoué ou en timeout marque l'école comme échouée,
+    // mais on CONTINUE les tiers suivants (optionnels) pour collecter un
+    // maximum de données. Avant, un échec sur un tier obligatoire arrêtait
+    // toute l'école → perte des tiers suivants.
+    if (isMandatory && !bench.ok) allMandatoryOk = false;
+  }
+
+  const durationMs = Date.now() - startMs;
+  const okCount = tierResults.filter(t => t.ok).length;
+  console.log(`\n  ${allMandatoryOk ? C.green : C.red}[${nowClock()}] École ${schoolKey} terminée : ${okCount}/${tierResults.length} tiers réussis en ${(durationMs / 60000).toFixed(1)} min.${C.reset}`);
+  return { ok: allMandatoryOk, durationMs, tierResults };
 }
 
 function parseArgs() {
@@ -1514,11 +1610,12 @@ function parseArgs() {
   const noTeacher = raw.includes('--no-teacher');
   const hybridFlag = raw.includes('--hybrid');
   const listOnly = raw.includes('--list-only');
+  const classByClass = raw.includes('--class-by-class') || raw.includes('--cbc');
   const forceDetect = raw.includes('--force-detect');
   const extraRunnerArgs = [];
   if (noTeacher) extraRunnerArgs.push('--no-teacher');
   if (hybridFlag) extraRunnerArgs.push('--hybrid');
-  return { modelsArg, schoolsArg, noTeacher, listOnly, hybridFlag, forceDetect, extraRunnerArgs };
+  return { modelsArg, schoolsArg, noTeacher, listOnly, hybridFlag, forceDetect, classByClass, extraRunnerArgs };
 }
 
 function resolveSchoolsFromArg(schoolsArg) {
@@ -1542,11 +1639,13 @@ async function main() {
       { cmd: 'node night-batch.js --schools=STANDARD,EXPERT', desc: 'Écoles à tester sans sélection interactive (clés SCHOOLS).' },
       { cmd: 'node night-batch.js --no-teacher', desc: 'Désactive le professeur IA (correcteur externe).' },
       { cmd: 'node night-batch.js --force-detect', desc: 'Réindexe les GGUF orphelins (modèles sur disque absents de lms ls) puis liste.' },
+      { cmd: 'node night-batch.js --class-by-class', desc: 'Mode classe-par-classe : chaque tier dans un process séparé avec timeout (robustesse anti-hang).' },
       { cmd: 'Pendant la sélection : !<num>  /  !!<num>', desc: 'Isoler (!) ou désisoler (!!) un modèle de la liste noire.' },
       { cmd: 'Pendant la sélection : detect  /  force-detect', desc: 'Force la détection des modèles manquants (scan + lms import).' },
       { cmd: 'node night-batch.js --help  |  help  |  -h', desc: 'Affiche cette aide.' }
     ], [
       '--force, --profile= et --hybrid sont transmis au runner sous-jacent (cf. node runner.js --help).',
+      '--class-by-class (ou --cbc) : isole chaque tier dans un process séparé avec timeout de 45 min. Un tier gelé ne bloque plus le batch — passage automatique au tier suivant.',
       'Les rapports vont dans Export-Rapports/<date>/<ecole>/<niveau>/rapport_v3_*.md',
       'Classement communautaire : soumettez vos carnets avec : node runner.js --submit',
       'Pré-test de santé : chaque modèle reçoit un ping après chargement ; les modèles défectueux (load_failed, health check KO, run KO systémique) sont auto-blacklistés.'
@@ -1559,7 +1658,7 @@ async function main() {
   console.log(`${C.bold}${C.cyan}   File d'attente automatique de modeles LM Studio   ${C.reset}`);
   console.log(`${C.bold}${C.cyan}==================================================${C.reset}\n`);
 
-  const { modelsArg, schoolsArg, listOnly, hybridFlag, forceDetect, extraRunnerArgs } = parseArgs();
+  const { modelsArg, schoolsArg, listOnly, hybridFlag, forceDetect, classByClass, extraRunnerArgs } = parseArgs();
 
   console.log(`  ${C.gray}[${nowClock()}] Verification du daemon LM Studio...${C.reset}`);
   if (!isDaemonUp()) {
@@ -1605,8 +1704,12 @@ async function main() {
   }
 
   // Mode --list-only : affiche la liste triee par statut et quitte (debug).
+  // On n'appelle PAS selectModelsInteractive : elle afficherait le prompt
+  // « Modèles à tester » qui n'a aucun sens en mode lecture seule. Avant, ce
+  // bug faisait croire à l'utilisateur qu'il allait lancer un test alors que
+  // --list-only est censé juste lister et quitter.
   if (listOnly) {
-    await selectModelsInteractive(models);
+    printModelsList(models, { interactive: false });
     if (serverHandle.startedByUs) stopServer();
     process.exit(0);
   }
@@ -1746,6 +1849,9 @@ async function main() {
     : selected.length * schools.length;
   console.log(`\n  ${C.bold}${C.cyan}=== FILE D'ATTENTE DE NUIT ===${C.reset}`);
   console.log(`  ${C.bold}Modeles :${C.reset} ${selected.length}  |  ${C.bold}Ecoles :${C.reset} ${schools.map(s => s.key).join(', ')}  |  ${C.bold}Runs totaux :${C.reset} ${totalRuns}`);
+  if (classByClass) {
+    console.log(`  ${C.yellow}Mode classe-par-classe ACTIVÉ : chaque tier dans un process séparé (timeout ${TIER_TIMEOUT_MS / 60000} min/tier, reprise auto au tier suivant).${C.reset}`);
+  }
   if (manualPerModel) {
     console.log(`  ${C.gray}Mode manuel-par-modele : ecole choisie individuellement pour chaque modele.${C.reset}`);
     console.log(`  ${C.gray}Attribution :${C.reset}`);
@@ -1835,7 +1941,20 @@ async function main() {
       const school = modelSchools[j];
       console.log(`\n  ${C.bold}${C.cyan}=== ECOLE ${j + 1}/${modelSchools.length} - ${school.label} ===${C.reset}`);
 
-      const bench = runBenchmark(m.modelKey, school.cli, modelExtraArgs);
+      let bench;
+      if (classByClass && school.key !== 'auto') {
+        // Mode classe-par-classe : chaque tier dans un process séparé avec
+        // timeout. Robustesse accrue : un tier gelé n'arrête pas l'école
+        // entière et ne bloque pas le batch. Reprend au tier suivant.
+        console.log(`  ${C.gray}Mode classe-par-classe : chaque tier dans un process séparé (timeout ${TIER_TIMEOUT_MS / 60000} min/tier).${C.reset}`);
+        bench = runSchoolClassByClass(m.modelKey, school.key, school.cli, modelExtraArgs);
+      } else {
+        // Mode classique : toute l'école dans un seul process (comportement
+        // historique). Pas de timeout (timeout=0) — un modèle gelé peut
+        // bloquer indéfiniment. En mode --class-by-class, on n'utilise cette
+        // branche que pour l'école 'auto' (le runner devine le profil).
+        bench = runBenchmark(m.modelKey, school.cli, modelExtraArgs);
+      }
       const mins = (bench.durationMs / 60000).toFixed(1);
       if (!bench.ok) modelOk = false;
       // Enregistre le résultat (succès OU échec) dans l'historique des runs

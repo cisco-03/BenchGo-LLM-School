@@ -5,10 +5,34 @@ const { letterGrade } = require('./progress-bar');
 const cliTable = require('./cli-table');
 
 const LEDGER_DIR = path.join(__dirname, 'Export-Rapports', '.carnet');
+const LEDGER_BACKUP_DIR = path.join(__dirname, 'Export-Rapports', '.carnet-backup');
 const CSV_EXPORT_FILE = path.join(__dirname, 'Export-Rapports', 'runs_export.csv');
 
 function ledgerPath(shortName) {
   return path.join(LEDGER_DIR, shortName + '.json');
+}
+
+// Sauvegarde de sécurité : copie le carnet vers .carnet-backup/ à chaque
+// écriture. Les carnets ne sont PAS versionnés (en .gitignore) — une suppression
+// accidentelle du dossier .carnet/ (ou d'un fichier) est irréversible. Le
+// backup garantit qu'une copie récente survive même si .carnet/ est purgé.
+// Non-bloquant : si la copie échoue (disque plein, permissions), on log un
+// avertissement et on continue (le carnet principal est quand même sauvegardé).
+function backupLedger(shortName) {
+  try {
+    const src = ledgerPath(shortName);
+    if (!fs.existsSync(src)) return;
+    if (!fs.existsSync(LEDGER_BACKUP_DIR)) {
+      fs.mkdirSync(LEDGER_BACKUP_DIR, { recursive: true });
+    }
+    const dst = path.join(LEDGER_BACKUP_DIR, shortName + '.json');
+    // Copie atomique : écrit dans un fichier temporaire puis renomme.
+    const tmp = dst + '.tmp';
+    fs.copyFileSync(src, tmp);
+    fs.renameSync(tmp, dst);
+  } catch (e) {
+    logger.warn('Backup carnet échoué (' + shortName + ') : ' + e.message);
+  }
 }
 
 // Formate une durée en millisecondes vers un affichage humain compact :
@@ -49,6 +73,8 @@ function saveLedger(ledger) {
     fs.mkdirSync(LEDGER_DIR, { recursive: true });
     ledger.lastUpdated = new Date().toISOString();
     fs.writeFileSync(ledgerPath(ledger.shortName), JSON.stringify(ledger, null, 2) + '\n', 'utf8');
+    // Sauvegarde de sécurité : copie vers .carnet-backup/ (anti-perte).
+    backupLedger(ledger.shortName);
   } catch (e) {
     logger.error('Impossible de sauvegarder le carnet de scores : ' + e.message);
   }
@@ -470,5 +496,47 @@ module.exports = {
   formatDuration,
   exportCsv,
   detectUnstableModels,
+  backupLedger,
+  restoreLedgersFromBackup,
+  LEDGER_DIR,
+  LEDGER_BACKUP_DIR,
   CSV_EXPORT_FILE
 };
+
+// Restaure les carnets manquants depuis .carnet-backup/ vers .carnet/.
+// Compare les deux dossiers : pour chaque fichier présent dans le backup mais
+// absent de .carnet/, on le copie. Ne surcharge JAMAIS un carnet existant (le
+// carnet principal est toujours la source de vérité la plus récente).
+// Retourne { restored: number, skipped: number, errors: string[] }.
+function restoreLedgersFromBackup() {
+  const report = { restored: 0, skipped: 0, errors: [] };
+  if (!fs.existsSync(LEDGER_BACKUP_DIR)) {
+    report.errors.push('Dossier backup introuvable : ' + LEDGER_BACKUP_DIR);
+    return report;
+  }
+  if (!fs.existsSync(LEDGER_DIR)) {
+    fs.mkdirSync(LEDGER_DIR, { recursive: true });
+  }
+  let backupFiles = [];
+  try {
+    backupFiles = fs.readdirSync(LEDGER_BACKUP_DIR).filter(f => f.endsWith('.json'));
+  } catch (e) {
+    report.errors.push('Lecture backup impossible : ' + e.message);
+    return report;
+  }
+  for (const f of backupFiles) {
+    const dst = path.join(LEDGER_DIR, f);
+    if (fs.existsSync(dst)) {
+      report.skipped++;
+      continue;
+    }
+    try {
+      const src = path.join(LEDGER_BACKUP_DIR, f);
+      fs.copyFileSync(src, dst);
+      report.restored++;
+    } catch (e) {
+      report.errors.push(f + ': ' + e.message);
+    }
+  }
+  return report;
+}

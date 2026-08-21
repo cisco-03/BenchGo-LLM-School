@@ -2,6 +2,7 @@ const logger = require('./logger');
 const { TEACHER_CONFIG } = require('./config');
 const { BenchgoError } = require('./cli-help');
 const { withRetry, isRetryableError } = require('./http-middleware');
+const { CLOUD_PROVIDERS } = require('./cloud-client');
 
 // --- Professeur IA (correcteur indépendant) — Free Router ---
 // Le professeur est un modèle cloud distinct de l'élève testé. Après un échec
@@ -216,6 +217,99 @@ async function callOpenRouter({ model, apiKey, prompt, temperature, maxTokens })
 }
 
 /**
+ * Appelle un provider cloud NON-OpenRouter pour la correction du professeur.
+ * Supporte tous les providers de CLOUD_PROVIDERS (openai, groq, together, mistral,
+ * anthropic, deepseek, cohere, ollama, lmstudio, custom). Non streamé, appel
+ * simple chat/completions (ou Messages API pour Anthropic).
+ *
+ * Contrairement à OpenRouter, il n'y a pas de rotation de modèles gratuits :
+ * l'utilisateur a choisi UN provider et UN modèle (--teacher-model). On fait un
+ * seul appel avec retry intra-modèle (withRetry).
+ *
+ * Retourne le contenu texte ou lance une erreur (attrapée par l'appelant).
+ */
+async function callCloudTeacher({ provider, model, apiKey, endpoint, prompt, temperature, maxTokens }) {
+  const provKey = (provider || '').toLowerCase();
+  const provSpec = CLOUD_PROVIDERS[provKey];
+  if (!provSpec) {
+    throw new Error(`Teacher: provider inconnu '${provider}'. Valides: ${Object.keys(CLOUD_PROVIDERS).join(', ')}`);
+  }
+  if (!model) throw new Error('Teacher: modèle manquant pour le provider ' + provider);
+
+  // URL : --teacher-endpoint en priorité, sinon l'URL du provider.
+  const url = endpoint || provSpec.url;
+  if (!url) throw new Error(`Teacher: provider '${provider}' nécessite --teacher-endpoint=<url>`);
+
+  // Clé API : pour les providers locaux (ollama, lmstudio, custom), pas requise.
+  const resolvedKey = apiKey || (provSpec.envKey ? process.env[provSpec.envKey] : null);
+  if (provSpec.requiresAuth && !resolvedKey) {
+    throw new Error(`Teacher: clé API manquante pour '${provider}' (env ${provSpec.envKey})`);
+  }
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 60000);
+  try {
+    const headers = { 'Content-Type': 'application/json', 'Connection': 'close' };
+    if (resolvedKey) headers['Authorization'] = `Bearer ${resolvedKey}`;
+    // Anthropic utilise x-api-key au lieu de Bearer.
+    if (provKey === 'anthropic' && resolvedKey) {
+      headers['x-api-key'] = resolvedKey;
+      headers['anthropic-version'] = '2023-06-01';
+      delete headers['Authorization'];
+    }
+
+    let body;
+    if (provSpec.openaiCompat) {
+      // Format OpenAI-compat (tous sauf Anthropic).
+      body = JSON.stringify({
+        model,
+        messages: [
+          { role: 'system', content: TEACHER_SYSTEM_PROMPT },
+          { role: 'user', content: prompt }
+        ],
+        temperature: temperature ?? 0.15,
+        max_tokens: maxTokens ?? 512,
+        stream: false
+      });
+    } else {
+      // Format Anthropic Messages API.
+      body = JSON.stringify({
+        model,
+        system: TEACHER_SYSTEM_PROMPT,
+        messages: [{ role: 'user', content: prompt }],
+        temperature: temperature ?? 0.15,
+        max_tokens: maxTokens ?? 512,
+        stream: false
+      });
+    }
+
+    const res = await fetch(url, { method: 'POST', headers, body, signal: controller.signal });
+    clearTimeout(timeoutId);
+
+    if (!res.ok) {
+      const errText = await res.text().catch(() => '');
+      const err = new Error(`HTTP_${res.status} — ${errText.substring(0, 200)}`);
+      err.httpStatus = res.status;
+      throw err;
+    }
+    const data = await res.json();
+    // Format OpenAI-compat : data.choices[0].message.content
+    // Format Anthropic : data.content[0].text
+    let content;
+    if (provSpec.openaiCompat) {
+      content = (data?.choices?.[0]?.message?.content || '').trim();
+    } else {
+      content = (data?.content?.[0]?.text || '').trim();
+    }
+    if (!content) throw new Error('Réponse vide du professeur (' + provider + ')');
+    return content.replace(/```[\s\S]*?```/g, '').trim() || content.trim();
+  } catch (e) {
+    clearTimeout(timeoutId);
+    throw e;
+  }
+}
+
+/**
  * Appelle le professeur (Free Router OpenRouter) pour qu'il corrige l'analyse de l'élève.
  * Non streamé. Récupère les modèles gratuits, rotate jusqu'à maxRetries modèles
  * distincts. Retourne le texte de correction ou null (repli sur auto-analyse).
@@ -230,6 +324,53 @@ async function callOpenRouter({ model, apiKey, prompt, temperature, maxTokens })
  */
 async function askTeacherToCorrectStudentAnalysis({ teacherConfig, task, errors, studentCode, studentAnalysis, tierNum }) {
   if (!teacherConfig || !teacherConfig.enabled) return null;
+
+  const prompt = buildTeacherPrompt({ task, errors, studentCode, studentAnalysis, tierNum });
+  const tProvider = (teacherConfig.provider || 'openrouter').toLowerCase();
+  const localProviders = ['ollama', 'lmstudio', 'custom'];
+
+  // --- Provider non-OpenRouter : appel direct via callCloudTeacher ---
+  // Pas de rotation de modèles gratuits (logique propre à OpenRouter). On fait
+  // un seul appel au modèle spécifié par --teacher-model (ou défaut du provider).
+  // Pour les providers locaux (ollama, lmstudio, custom), aucune clé n'est requise.
+  if (tProvider !== 'openrouter') {
+    if (!localProviders.includes(tProvider) && !teacherConfig.apiKey) {
+      logger.warn(`Teacher: aucune clé pour ${tProvider} — professeur désactivé, repli sur auto-analyse.`);
+      return null;
+    }
+    if (!teacherConfig.model) {
+      logger.warn(`Teacher: --teacher-model requis pour le provider ${tProvider}. Professeur désactivé.`);
+      return null;
+    }
+    try {
+      logger.info(`Teacher: appel ${tProvider}/${teacherConfig.model} (avec retry intra-modèle)`);
+      const content = await withRetry({
+        label: 'Teacher/' + tProvider + '/' + teacherConfig.model,
+        timeoutMs: 60000,
+        maxRetries: 2,
+        baseDelayMs: 1000,
+        maxDelayMs: 8000,
+        fn: () => callCloudTeacher({
+          provider: tProvider,
+          model: teacherConfig.model,
+          apiKey: teacherConfig.apiKey,
+          endpoint: teacherConfig.endpoint,
+          prompt,
+          temperature: teacherConfig.temperature,
+          maxTokens: teacherConfig.maxTokens
+        })
+      });
+      if (content) {
+        logger.info(`Teacher: ${tProvider}/${teacherConfig.model} a répondu (${content.length} chars).`);
+        return { content, model: teacherConfig.model };
+      }
+    } catch (e) {
+      logger.warn(`Teacher: ${tProvider}/${teacherConfig.model} a échoué — ${e.message}. Repli sur auto-analyse.`);
+    }
+    return null;
+  }
+
+  // --- Provider OpenRouter : Free Router avec rotation de modèles gratuits ---
   if (!teacherConfig.apiKey) {
     logger.warn('Teacher: aucune clé OpenRouter — professeur désactivé, repli sur auto-analyse.');
     return null;
@@ -239,7 +380,7 @@ async function askTeacherToCorrectStudentAnalysis({ teacherConfig, task, errors,
   // 1. Modèle explicite de teacherConfig.model (si override --teacher-model)
   // 2. Puis modèles gratuits récupérés dynamiquement (Free Router)
   let candidates = [];
-  if (teacherConfig.model) candidates.push(teacherConfig.model);
+  if (teacherConfig.model && teacherConfig.model !== 'openrouter/free') candidates.push(teacherConfig.model);
   try {
     const free = await fetchFreeModels();
     for (const id of free) {
@@ -253,7 +394,6 @@ async function askTeacherToCorrectStudentAnalysis({ teacherConfig, task, errors,
     return null;
   }
 
-  const prompt = buildTeacherPrompt({ task, errors, studentCode, studentAnalysis, tierNum });
   const maxAttempts = Math.min(candidates.length, Math.max(1, teacherConfig.maxRetries || 3));
 
   // Politique de retry (Plan §2) : pour chaque modèle, on tente avec timeout +
@@ -310,5 +450,6 @@ module.exports = {
   askTeacherToCorrectStudentAnalysis,
   buildTeacherPrompt,
   fetchFreeModels,
+  callCloudTeacher,
   TEACHER_SYSTEM_PROMPT
 };

@@ -1,5 +1,145 @@
 # CHANGELOG - Carnet de Notes BenchGo
 
+## 2026-08-21 — fix(night-batch+teacher+ledger): 4 corrections Tasks1.md
+
+### Contexte
+Quatre tâches demandées dans `Admin/Tasks1.md` :
+1. `--list-only` demandait à tester les modèles (faux — mode lecture seule).
+2. Mode nuit automatique perdu : un seul modèle testé cette nuit + fonction
+   classe-par-classe manquante.
+3. Professeur IA câblé sur OpenRouter uniquement — pas de choix de provider.
+4. Anciens carnets de scores disparus du dossier `.carnet/` (30+ modèles testés
+   depuis le 29/07, seuls 2 carnets subsistent au 11/08).
+
+### Changements
+
+**Task 1 — `--list-only` ne demande plus à tester** (`night-batch.js`)
+- Refactorisation : extraction de `printModelsList(models, { interactive })`
+  (affichage du tableau seul) depuis `selectModelsInteractive` (tableau + prompt).
+- `--list-only` appelle `printModelsList(models, { interactive: false })` puis
+  quitte — plus de prompt « Modèles à tester ».
+- `selectModelsInteractive` réutilise `printModelsList` (DRY).
+
+**Task 2 — Mode classe-par-classe + robustesse anti-hang** (`night-batch.js`)
+- Nouveau flag `--class-by-class` (alias `--cbc`) : chaque tier d'une école est
+  lancé dans un process séparé (`node runner.js --force --profile=X <tierNum>`)
+  au lieu d'un seul process pour toute l'école.
+- Avantages : (1) reprise — un tier crashé ne perd pas toute l'école, (2)
+  timeout par tier `TIER_TIMEOUT_MS = 45 min` — un modèle gelé ne bloque plus
+  le batch entier (cause du « mode automatique perdu »), (3) isolation mémoire.
+- `runBenchmark` accepte désormais `{ tierNum, timeoutMs }` et détecte le
+  timeout (`status=null, signal=SIGTERM`).
+- Nouvelle fonction `runSchoolClassByClass()` : itère sur les tiers du profil,
+  lance chaque tier séparément, continue au suivant même en cas d'échec.
+- L'école `auto` (le runner devine le profil) reste en mode classique (pas de
+  tier individuel sans connaître le profil).
+
+**Task 3 — Provider du professeur configurable** (`config.js`, `runner.js`,
+`teacher-client.js`, `cli-help.js`)
+- Nouveau flag `--teacher-provider=<provider>` : openrouter (défaut), openai,
+  groq, together, mistral, anthropic, deepseek, cohere, ollama, lmstudio, custom.
+- `teacher-client.js` : nouvelle fonction `callCloudTeacher()` qui route vers
+  n'importe quel provider de `CLOUD_PROVIDERS` (OpenAI-compat ou Anthropic
+  Messages API). `askTeacherToCorrectStudentAnalysis` branche vers
+  `callCloudTeacher` si le provider n'est pas openrouter (sinon Free Router
+  avec rotation de modèles gratuits, comportement inchangé).
+- Providers locaux (ollama, lmstudio, custom) : aucune clé API requise.
+- `--teacher-model` devient requis pour les providers non-openrouter (pas de
+  rotation de modèles gratuits).
+- `teacherProvider` sauvegardé dans les presets (`--save-preset`).
+- `TEACHER_CONFIG` documenté dans `config.js`.
+
+**Task 4 — Sauvegarde auto des carnets + restauration** (`score-ledger.js`,
+`config.js`, `runner.js`, `cli-help.js`)
+- Cause des disparitions : les carnets sont en `.gitignore` (jamais versionnés).
+  Une purge manuelle ou un script a supprimé les anciens `.json` — irréversible
+  sans backup. Aucun bug dans le code de chargement/affichage.
+- Nouvelle fonction `backupLedger()` dans `score-ledger.js` : copie chaque
+  carnet vers `Export-Rapports/.carnet-backup/` à chaque `saveLedger()`. Copie
+  atomique (tmp + rename). Non-bloquant si échec.
+- Nouvelle fonction `restoreLedgersFromBackup()` : copie les carnets du backup
+  absents de `.carnet/` (ne surcharge jamais un carnet existant).
+- Nouveau flag `--restore-carnets` (`node runner.js --restore-carnets`) :
+  restaure et quitte.
+- `LEDGER_DIR`, `LEDGER_BACKUP_DIR` exportés depuis `score-ledger.js`.
+
+### Fichiers modifiés
+- `night-batch.js` — Tasks 1, 2 (printModelsList, runSchoolClassByClass, --class-by-class, timeout)
+- `config.js` — Tasks 3, 4 (--teacher-provider, --restore-carnets, TEACHER_CONFIG)
+- `teacher-client.js` — Task 3 (callCloudTeacher, routing multi-provider)
+- `runner.js` — Tasks 3, 4 (teacherProvider resolution, --restore-carnets handler)
+- `score-ledger.js` — Task 4 (backupLedger, restoreLedgersFromBackup, LEDGER_BACKUP_DIR)
+- `cli-help.js` — Tasks 3, 4 (--teacher-provider, --restore-carnets dans l'aide)
+- `Docs/CHANGELOG.md`, `AGENTS.md` — documentation
+
+### Validation
+- `node --check` sur les 6 fichiers JS modifiés : OK.
+- `node tests/run-tests.js` : 27 passés, 0 échoués.
+- `node -e "const {parseCliArgs}=require('./config'); …"` : `--teacher-provider`,
+  `--restore-carnets`, `--class-by-class` correctement parsés.
+
+### Leçons apprises
+- Les carnets en `.gitignore` sont fragiles : sans backup, une suppression est
+  définitive. Le backup automatique (`backupLedger` à chaque save) protège désormais.
+- `spawnSync` avec `timeout: 0` est dangereux en mode batch : un modèle gelé
+  bloque indéfiniment le process parent. Le timeout par tier (45 min) est un
+  filet de sécurité essentiel pour le mode nuit.
+
+---
+
+## 2026-08-11 — docs(logseq): TODO statiques → query dynamique + propriétés de bloc requêtables
+
+### Contexte
+Suite à l'analyse d'un agent spécialisé Logseq (message dans `Admin/Tasks1.md`),
+deux recommandations étaient proposées :
+- **A. Namespaces** (`BenchGo/Modules/runner.js`) — **rejetée** : entre en conflit
+  avec la contrainte `logseq_index_hierarchy` (isolation par app sous
+  `index → APPS-CISCO → BenchGo-LLM-School`). Les namespaces casseraient
+  l'isolation en créant une nouvelle racine `BenchGo/` détachée d'`APPS-CISCO`.
+- **B. Requêtes dynamiques** — **acceptée** : la liste TODO statique de la page
+  `Architecture-BenchGo V3` était un bloc multi-lignes non requêtable.
+
+### Changements (graphe Logseq `M:\Logsec-Cisco`)
+- Section `## TODO — Points d'amélioration et surveillance` renommée en
+  `## Suivi des améliorations et surveillance` (le mot « TODO » dans un titre
+  de niveau 2 était interprété par Logseq comme un marker de tâche, créant une
+  auto-référence dans la query).
+- Liste statique de 5 TODO remplacée par une query Logseq :
+  `{{query (and (todo TODO DOING) [[Architecture-BenchGo V3]])}}`
+- Les 5 TODO éclatés en blocs individuels, chacun avec propriétés de bloc
+  requêtables : `priorite::` (A/B/C), `statut::` (en-cours/terminé),
+  `domaine::` (test/surveillance/doc/perf), `projet:: [[BenchGo V3]]`.
+- Tri par priorité décroissante : A (perf LRU) → B×3 (test, test, doc) → C (surveillance).
+
+### TODO créés (UUIDs Logseq)
+| Priorite | Domaine | Description | UUID |
+|---|---|---|---|
+| A | perf | Valider le cache LRU de `task-evaluator.js` sur 50+ modèles | `6a7b420e…` |
+| B | test | Tester `external-profiling.js` avec un vrai provider cloud | `6a7b4201…` |
+| B | test | Vérifier `health-sentinels.js` sur un run complet | `6a7b4206…` |
+| B | doc | Documenter le flux `hybrid-mode.js` dans le CHANGELOG | `6a7b420b…` |
+| C | surveillance | Surveiller les modèles instables (`detectUnstableModels()`) | `6a7b4209…` |
+
+### Pour modifier
+1. **Changer les filtres de la query** : éditer le bloc `6a7a2e56-bebf…` de la page
+   `Architecture-BenchGo V3`. Syntaxe Logseq Datalog/Query DSL.
+2. **Marquer un TODO DONE** : changer `statut:: en-cours` → `statut:: termine`
+   et le marker `TODO` → `DONE` sur le bloc. La query se met à jour automatiquement.
+3. **Ajouter un TODO** : créer un bloc enfant sous `## Suivi des améliorations…`
+   avec `TODO <desc>` + propriétés `priorite`/`statut`/`domaine`/`projet`.
+4. **Requêter par priorité** : `{{query (and (todo TODO) (property priorite A))}}`.
+
+### Pièges
+- Un titre `## TODO …` est interprété par Logseq comme un bloc de tâche (marker
+  `TODO`) à cause du mot-clé. Éviter « TODO » dans les titres de sections qui
+  contiennent des queries `(todo …)`.
+- La query `(and (todo TODO DOING) [[page]])` filtre par appartenance de page,
+  pas par tag de bloc. Les blocs enfants de la page `Architecture-BenchGo V3`
+  sont automatiquement inclus.
+- Les propriétés `priorite`/`statut`/`domaine`/`projet` sont des propriétés
+  libres (free-form text). Pour les typer (enum/number), utiliser
+  `logseq_upsertProperty` côté MCP.
+
 ## 2026-08-11 — fix(calibration/streaming/rapport): clarification verdict + stats ordonnées + colonnes tableau
 
 ### Contexte

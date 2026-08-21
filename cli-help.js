@@ -52,9 +52,10 @@ const HELP_TEXT = `
   \x1b[1m--quantization=\x1b[0m<N>      Force la quantification (Q4_K_M, Q5_K_S...).
   \x1b[1m--force\x1b[0m                Mode batch : neutralise les askYesNo (re-test, pénalité).
   \x1b[1m--no-teacher\x1b[0m           Désactive le professeur IA (auto-analyse classique).
-  \x1b[1m--teacher-model=\x1b[0m<N>     Override du modèle professeur.
-  \x1b[1m--teacher-api-key=\x1b[0m<N>    Clé API OpenRouter pour le professeur.
-  \x1b[1m--teacher-endpoint=\x1b[0m<N>   Endpoint custom du professeur.
+  \x1b[1m--teacher-provider=\x1b[0m<N>  Provider du professeur (openrouter, openai, groq, ollama, lmstudio...).
+  \x1b[1m--teacher-model=\x1b[0m<N>     Override du modèle professeur (requis si provider != openrouter).
+  \x1b[1m--teacher-api-key=\x1b[0m<N>    Clé API du professeur (OpenRouter par défaut, sinon le provider choisi).
+  \x1b[1m--teacher-endpoint=\x1b[0m<N>   Endpoint custom du professeur (pour custom/ollama/lmstudio).
   \x1b[1m--submit\x1b[0m              Force la soumission communautaire (PR GitHub).
   \x1b[1m--no-telemetry\x1b[0m        Désactive le ping anonyme (compteur d'utilisateurs).
   \x1b[1m--github-token=\x1b[0m<N>       PAT GitHub pour la soumission (évite la saisie interactive).
@@ -65,6 +66,7 @@ const HELP_TEXT = `
   \x1b[1m--forget-key=\x1b[0m<N>        Efface une clé API mémorisée, puis exit.
   \x1b[1m--list-keys\x1b[0m          Liste les clés API mémorisées, puis exit.
   \x1b[1m--no-save-keys\x1b[0m        Désactive la mémorisation des clés ce run.
+  \x1b[1m--restore-carnets\x1b[0m      Restaure les carnets disparus depuis .carnet-backup/, puis exit.
   \x1b[1m--no-update-check\x1b[0m      Désactive l'avis de mise à jour au démarrage.
   \x1b[1m--hybrid\x1b[0m             Mode nuit hybride : CLI + auto-soumission GitHub si seuil atteint.
 

@@ -1122,9 +1122,10 @@ async function main() {
 
   const cliArgs = parseCliArgs();
   const { tierArg: tierArgRaw, profileArgExplicit, contextLimitTokens: contextLimitFromCli, provider, model: cloudModel, apiKey, endpoint,
-           teacherModel, teacherApiKey, teacherEndpoint, teacherDisabled, quantization: cliQuantization,
+           teacherModel, teacherProvider, teacherApiKey, teacherEndpoint, teacherDisabled, quantization: cliQuantization,
            preset: presetName, savePreset: savePresetName, deletePreset: deletePresetName, listPresets: listPresetsFlag,
            forgetKey: forgetKeyName, listKeys: listKeysFlag, noSaveKeys: noSaveKeysFlag, force: forceFlag,
+            restoreCarnets: restoreCarnetsFlag,
             submit: submitFlag, noTelemetry: noTelemetryFlag, githubToken: cliGithubToken,
             noUpdateCheck: noUpdateCheckFlag, dryRun: dryRunFlag, hybrid: hybridFlag } = cliArgs;
   let tierArg = tierArgRaw;
@@ -1168,6 +1169,25 @@ async function main() {
     const existed = apiKeysStore.forgetKey(forgetKeyName);
     console.log(existed ? `  \x1b[32mClé '${forgetKeyName}' effacée du magasin local.\x1b[0m`
                         : `  \x1b[33mAucune clé mémorisée pour '${forgetKeyName}'.\x1b[0m`);
+    logger.close();
+    process.exit(0);
+  }
+  // --restore-carnets : restaure les carnets disparus depuis .carnet-backup/.
+  // Utile quand le dossier .carnet/ a été purgé accidentellement. Compare les
+  // deux dossiers et copie les carnets présents dans le backup mais absents du
+  // dossier principal. Ne surcharge jamais un carnet existant.
+  if (restoreCarnetsFlag) {
+    const report = scoreLedger.restoreLedgersFromBackup();
+    console.log('  \x1b[1;36m━━━ RESTAURATION DES CARNETS ━━━\x1b[0m');
+    console.log(`  \x1b[32mCarnets restaurés : ${report.restored}\x1b[0m`);
+    console.log(`  \x1b[90mCarnets ignorés (déjà présents) : ${report.skipped}\x1b[0m`);
+    if (report.errors.length > 0) {
+      console.log(`  \x1b[33mErreurs (${report.errors.length}) :\x1b[0m`);
+      for (const e of report.errors) console.log(`    \x1b[33m• ${e}\x1b[0m`);
+    }
+    if (report.restored === 0 && report.errors.length === 0) {
+      console.log('  \x1b[90mAucun carnet à restaurer (backup vide ou tous déjà présents).\x1b[0m');
+    }
     logger.close();
     process.exit(0);
   }
@@ -1294,8 +1314,9 @@ async function main() {
       const teacherKey = secrets.getSecret('openrouter') || secrets.getSecret('teacher-openrouter');
       teacherConfigResolved = { ...TEACHER_CONFIG, enabled: Boolean(teacherKey), apiKey: teacherKey || null };
       if (p.teacherModel)    teacherConfigResolved.model    = p.teacherModel;
+      if (p.teacherProvider) teacherConfigResolved.provider = p.teacherProvider;
       if (p.teacherEndpoint) teacherConfigResolved.endpoint = p.teacherEndpoint;
-      console.log(`  \x1b[90mProfesseur : ${teacherConfigResolved.enabled ? 'OpenRouter activé (clé restaurée)' : 'auto-analyse classique (pas de clé OpenRouter mémorisée)'}.\x1b[0m`);
+      console.log(`  \x1b[90mProfesseur : ${teacherConfigResolved.enabled ? (teacherConfigResolved.provider || 'openrouter') + ' activé (clé restaurée)' : 'auto-analyse classique (pas de clé mémorisée)'}.\x1b[0m`);
     }
     console.log('');
   } else if (!hasCliProvider && !hasCliModel && process.stdin.isTTY && process.stdout.isTTY) {
@@ -1365,7 +1386,11 @@ async function main() {
       if (resolvedApiKey) secrets.rememberSecret(resolvedProvider, resolvedApiKey, true);
     }
   } else {
-    // --- Mode CLI historique : professeur OpenRouter (Free Router) ---
+    // --- Mode CLI historique : professeur (provider configurable) ---
+    // Par défaut : OpenRouter (Free Router, modèles gratuits). --teacher-provider
+    // permet de choisir un autre provider (openai, groq, ollama, lmstudio, etc.).
+    // Pour les providers locaux (ollama, lmstudio, custom), aucune clé n'est
+    // requise — le professeur tourne sur un serveur local.
     const teacherConfig = (() => {
       const base = { ...TEACHER_CONFIG, enabled: false };
       if (teacherDisabled) {
@@ -1373,47 +1398,64 @@ async function main() {
         return base;
       }
 
-      // Clé fournie en CLI, en env, ou déjà mémorisée (.api-keys.json restauré
-      // dans secrets au démarrage) → mode OpenRouter sans redemander.
-      const envKey = process.env.OPENROUTER_API_KEY || process.env.OPENROUTER_KEY;
-      const storedKey = secrets.getSecret('openrouter');
-      if (teacherApiKey || envKey || storedKey) {
-        const resolved = { ...TEACHER_CONFIG, enabled: true };
+      // Provider du professeur : --teacher-provider ou défaut 'openrouter'.
+      const tProvider = (teacherProvider || 'openrouter').toLowerCase();
+      // Providers locaux sans auth (serveurs OpenAI-compatibles locaux).
+      const localProviders = ['ollama', 'lmstudio', 'custom'];
+      const isLocalTeacher = localProviders.includes(tProvider);
+
+      // Clé fournie en CLI, en env, ou déjà mémorisée → mode activé sans redemander.
+      // Pour les providers locaux, aucune clé n'est nécessaire.
+      const envKeyName = tProvider.toUpperCase() + '_API_KEY';
+      const envKey = process.env[envKeyName] || (tProvider === 'openrouter' ? (process.env.OPENROUTER_KEY) : null);
+      const storedKey = secrets.getSecret(tProvider);
+      if (isLocalTeacher || teacherApiKey || envKey || storedKey) {
+        const resolved = { ...TEACHER_CONFIG, enabled: true, provider: tProvider };
         if (teacherModel)    resolved.model    = teacherModel;
         if (teacherApiKey)      resolved.apiKey   = teacherApiKey;
         else if (envKey)        resolved.apiKey   = envKey;
         else if (storedKey)     resolved.apiKey   = storedKey;
+        else if (isLocalTeacher) resolved.apiKey  = null; // pas de clé pour les providers locaux
         if (teacherEndpoint) resolved.endpoint = teacherEndpoint;
-        secrets.rememberSecret('openrouter', resolved.apiKey, true);
-        console.log(`  \x1b[35mProfesseur : OpenRouter (Free Router) activé — clé détectée.\x1b[0m`);
+        if (resolved.apiKey) secrets.rememberSecret(tProvider, resolved.apiKey, true);
+        const provLabel = isLocalTeacher ? `${tProvider} (local, sans clé)` : `${tProvider} (Free Router)`;
+        console.log(`  \x1b[35mProfesseur : ${provLabel} activé.${C.reset}`);
         return resolved;
       }
 
       // Sinon : on demande interactivement à l'utilisateur (saisie masquée).
       console.log(`\n  \x1b[36m━━ PROFESSEUR CORRECTEUR ━━\x1b[0m`);
       console.log(`  \x1b[90mAprès chaque échec définitif, l'élève s'auto-analyse. Un professeur IA indépendant peut relire cette analyse et démontrer la vraie cause racine.\x1b[0m`);
-      console.log(`  \x1b[90m(A) Professeur OpenRouter (Free Router, modèles gratuits) — nécessite une clé API (création de compte gratuite sur https://openrouter.ai).\x1b[0m`);
+      console.log(`  \x1b[90m(A) Professeur ${tProvider} — nécessite une clé API (sauf providers locaux ollama/lmstudio).${C.reset}`);
       console.log(`  \x1b[90m(B) Auto-analyse classique (aucun compte requis) — le modèle testé s'analyse lui-même.\x1b[0m`);
       return (async () => {
-        const wantsOpenRouter = await askYesNo(`  Utiliser le professeur OpenRouter (Free Router) ?`, true);
-        if (!wantsOpenRouter) {
+        const wantsTeacher = await askYesNo(`  Utiliser le professeur ${tProvider} ?`, true);
+        if (!wantsTeacher) {
           console.log(`  \x1b[90mProfesseur : auto-analyse classique.\x1b[0m`);
           return base;
+        }
+        // Pour les providers locaux, pas de clé à saisir.
+        if (isLocalTeacher) {
+          console.log(`  \x1b[35mProfesseur : ${tProvider} (local) activé — aucune clé requise.\x1b[0m`);
+          const resolved = { ...TEACHER_CONFIG, enabled: true, provider: tProvider, apiKey: null };
+          if (teacherModel)    resolved.model    = teacherModel;
+          if (teacherEndpoint) resolved.endpoint = teacherEndpoint;
+          return resolved;
         }
         // Saisie masquée + aperçu temporaire (repli sur askFreeText si non-TTY).
         let key = null;
         if (process.stdin.isTTY && process.stdout.isTTY) {
-          key = await secrets.askSecret(`  Collez votre clé API OpenRouter (saisie masquée)`, { revealMs: 3000 });
+          key = await secrets.askSecret(`  Collez votre clé API ${tProvider} (saisie masquée)`, { revealMs: 3000 });
         } else {
-          key = await askFreeText(`  Collez votre clé API OpenRouter (sk-or-v1-...) :`);
+          key = await askFreeText(`  Collez votre clé API ${tProvider} :`);
         }
         if (!key) {
           console.log(`  \x1b[33mAucune clé saisie — repli sur l'auto-analyse classique.\x1b[0m`);
           return base;
         }
-        secrets.rememberSecret('openrouter', key);
-        console.log(`  \x1b[35mProfesseur : OpenRouter (Free Router) activé — clé mémorisée :\x1b[0m ${secrets.maskedForDisplay(key)}`);
-        const resolved = { ...TEACHER_CONFIG, enabled: true, apiKey: key };
+        secrets.rememberSecret(tProvider, key);
+        console.log(`  \x1b[35mProfesseur : ${tProvider} activé — clé mémorisée :\x1b[0m ${secrets.maskedForDisplay(key)}`);
+        const resolved = { ...TEACHER_CONFIG, enabled: true, provider: tProvider, apiKey: key };
         if (teacherModel)    resolved.model    = teacherModel;
         if (teacherEndpoint) resolved.endpoint = teacherEndpoint;
         return resolved;
@@ -1460,6 +1502,7 @@ async function main() {
       quantization: resolvedQuantization,
       tier: tierArg,
       teacherEnabled: Boolean(teacherConfigResolved && teacherConfigResolved.enabled),
+      teacherProvider: teacherConfigResolved && teacherConfigResolved.provider,
       teacherModel: teacherConfigResolved && teacherConfigResolved.model,
       teacherEndpoint: teacherConfigResolved && teacherConfigResolved.endpoint
     };

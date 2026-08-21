@@ -10,6 +10,7 @@ OS : Windows, PowerShell 5.1. Projet Node.js 18+ **sans `package.json`** (module
 |---|---|
 | Benchmark interactif | `node runner.js all` |
 | Mode nuit (batch local) | `node night-batch.js` |
+| Mode nuit classe-par-classe (robustesse anti-hang) | `node night-batch.js --class-by-class` (ou `--cbc`) |
 | Mode batch cloud (frontière) | `node frontier-batch.js` |
 | Mode batch cloud (petits modèles) | `node frontier-batch.js --profile=STANDARD` (ou `LIGHT`) |
 | Valider config sans exécuter | `node runner.js all --dry-run` |
@@ -33,6 +34,8 @@ OS : Windows, PowerShell 5.1. Projet Node.js 18+ **sans `package.json`** (module
 | Liste des presets | `node runner.js --list-presets` |
 | Effacer une clé API mémorisée | `node runner.js --forget-key=<provider>` |
 | Lister les clés API mémorisées | `node runner.js --list-keys` |
+| Restaurer les carnets disparus depuis le backup | `node runner.js --restore-carnets` |
+| Professeur IA avec provider custom | `node runner.js --teacher-provider=<provider> --teacher-model=<model>` |
 | Liste LM Studio triée par score local | `node night-batch.js --list-only` |
 | Forcer la détection (réindexer les GGUF orphelins) | `node night-batch.js --force-detect` |
 | Isoler/désisoler un modèle LM Studio | Interaction `!<num>` / `!!<num>` pendant la sélection `night-batch.js` |
@@ -398,6 +401,79 @@ Si modèle > 3B paramètres, le runner peut enchaîner LIGHT puis STANDARD dans 
 - `displayName` est exposé au client via `aggregateLedger` (leaderboard.js) ET `aggregateCarnet` (consolidate-leaderboard.js). Les deux doivent l'inclure.
 - Les filtres de recherche testent désormais `displayName` en plus de `model`/`shortName`/`quantization` dans les deux fichiers.
 - Le `displayName` est soumis avec le carnet (`carnet: ledger` dans `buildSubmissionPayload`) — aucune modification spécifique needed côté community-sync pour la soumission, mais le titre/body de PR l'utilise.
+
+### Mode classe-par-classe + robustesse anti-hang (tâche 2026-08-21)
+
+**Fichiers touchés :** `night-batch.js`, `Docs/CHANGELOG.md`, `AGENTS.md`.
+
+**Principe :** Trois corrections distinctes :
+1. **`--list-only` ne demande plus à tester** : `printModelsList(models, { interactive })` extraite de `selectModelsInteractive`. `--list-only` affiche le tableau et quitte sans prompt.
+2. **Mode classe-par-classe** (`--class-by-class` / `--cbc`) : chaque tier d'une école est lancé dans un process séparé (`node runner.js --force --profile=X <tierNum>`) avec un timeout de 45 min (`TIER_TIMEOUT_MS`). Un tier gelé ne bloque plus le batch — passage automatique au tier suivant. Cause du « mode automatique perdu » : `spawnSync` avec `timeout: 0` sur toute l'école → un modèle gelé hangait indéfiniment.
+3. **Fonction `runSchoolClassByClass()`** : itère sur les tiers du profil (obligatoires + optionnels), lance chaque tier séparément, continue au suivant même en cas d'échec. `ok` = tous les tiers obligatoires réussis.
+
+**Fonctions :**
+- `printModelsList(models, { interactive })` (dans `night-batch.js`) → affiche le tableau des modèles. `interactive: false` = mode `--list-only` (pas d'aide sur les commandes !/!!/tok/detect).
+- `runSchoolClassByClass(modelKey, schoolKey, schoolCli, extraArgs)` → `{ ok, durationMs, tierResults: [{ tierNum, ok, timedOut, durationMs }] }`. Lance chaque tier dans un process séparé.
+- `runBenchmark(modelKey, schoolCli, extraArgs, { tierNum, timeoutMs })` → accepte désormais un tier optionnel et un timeout. `timedOut: true` si `status=null, signal=SIGTERM`.
+
+**Pour modifier :**
+1. **Changer le timeout par tier** : éditer `TIER_TIMEOUT_MS` dans `night-batch.js`.
+2. **Désactiver le mode classe-par-classe** : ne pas passer `--class-by-class` (le mode classique `runBenchmark` sans tier reste le défaut).
+3. **Changer le comportement de reprise** : éditer `runSchoolClassByClass()` — actuellement elle continue TOUJOURS au tier suivant même si un obligatoire échoue (pour collecter un max de données).
+4. **Tester** : `node night-batch.js --class-by-class --models=<key> --schools=STANDARD`.
+
+**Pièges :**
+- L'école `auto` (le runner devine le profil) reste en mode classique — on ne peut pas lancer un tier individuel sans connaître le profil.
+- L'auto-profilage est relancé à chaque tier en mode classe-par-classe (overhead ~30s/tier) — compromis acceptable en mode nuit.
+- `spawnSync` avec `timeout` tue le process via SIGTERM. Le runner peut ne pas avoir le temps de flusher ses rapports. C'est un compromis : mieux vaut un tier incomplet qu'un batch entier bloqué.
+- `runBenchmark` retourne `timedOut: true` mais `status: null` — tester `bench.timedOut` ET `bench.ok` séparément.
+
+### Provider du professeur configurable (tâche 2026-08-21)
+
+**Fichiers touchés :** `config.js`, `runner.js`, `teacher-client.js`, `cli-help.js`, `Docs/CHANGELOG.md`, `AGENTS.md`.
+
+**Principe :** Le professeur IA (correcteur des auto-analyses d'élève) n'était câblé que sur OpenRouter. `--teacher-provider=<provider>` permet de choisir n'importe quel provider de `CLOUD_PROVIDERS` (openai, groq, together, mistral, anthropic, deepseek, cohere, ollama, lmstudio, custom).
+
+**Fonctions :**
+- `callCloudTeacher({ provider, model, apiKey, endpoint, prompt, temperature, maxTokens })` (dans `teacher-client.js`) → appel non-streamé vers n'importe quel provider. Gère OpenAI-compat (tous sauf Anthropic) et Anthropic Messages API (`x-api-key` + `anthropic-version`).
+- `askTeacherToCorrectStudentAnalysis` (dans `teacher-client.js`) → route vers `callCloudTeacher` si `provider !== 'openrouter'`, sinon Free Router avec rotation (comportement inchangé).
+
+**Pour modifier :**
+1. **Ajouter un provider** : éditer `CLOUD_PROVIDERS` dans `cloud-client.js` (le professeur réutilise la même table).
+2. **Changer le provider par défaut** : éditer `TEACHER_CONFIG.provider` dans `config.js`.
+3. **Changer le timeout** : éditer le `60000` dans `callCloudTeacher()` et `callOpenRouter()`.
+4. **Tester** : `node runner.js --teacher-provider=groq --teacher-model=llama-3.3-70b-versatile --teacher-api-key=<key>`.
+
+**Pièges :**
+- `--teacher-model` est REQUIS pour les providers non-openrouter (pas de rotation de modèles gratuits). Sans modèle, le professeur se désactive et repli sur auto-analyse.
+- Les providers locaux (ollama, lmstudio, custom) n'ont pas besoin de clé — `teacherConfig.apiKey = null` est valide.
+- Anthropic utilise `x-api-key` (pas `Bearer`) + header `anthropic-version: 2023-06-01` + format Messages API (`system` séparé, `content[0].text`). `callCloudTeacher` gère les deux formats via `provSpec.openaiCompat`.
+- La clé est mémorisée dans `secrets` sous le nom du provider (`secrets.rememberSecret(tProvider, key)`), pas sous 'openrouter'.
+- `teacherProvider` est sauvegardé dans les presets (`--save-preset`).
+
+### Sauvegarde auto des carnets + restauration (tâche 2026-08-21)
+
+**Fichiers touchés :** `score-ledger.js`, `config.js`, `runner.js`, `cli-help.js`, `Docs/CHANGELOG.md`, `AGENTS.md`.
+
+**Principe :** Les carnets de scores sont en `.gitignore` (jamais versionnés). Une suppression accidentelle du dossier `.carnet/` est irréversible. Deux mécanismes de protection :
+1. **Backup automatique** : à chaque `saveLedger()`, le carnet est copié vers `Export-Rapports/.carnet-backup/`. Copie atomique (tmp + rename). Non-bloquant si échec.
+2. **Restauration** : `node runner.js --restore-carnets` copie les carnets du backup absents de `.carnet/` (ne surcharge jamais un carnet existant).
+
+**Fonctions :**
+- `backupLedger(shortName)` (dans `score-ledger.js`) → copie `LEDGER_DIR/<shortName>.json` vers `LEDGER_BACKUP_DIR/<shortName>.json`. Appelée automatiquement par `saveLedger()`.
+- `restoreLedgersFromBackup()` (dans `score-ledger.js`) → `{ restored, skipped, errors[] }`. Copie les carnets du backup absents de `.carnet/`.
+
+**Pour modifier :**
+1. **Changer le dossier de backup** : éditer `LEDGER_BACKUP_DIR` dans `score-ledger.js`.
+2. **Désactiver le backup auto** : commenter l'appel `backupLedger(ledger.shortName)` dans `saveLedger()`.
+3. **Forcer la restauration (écraser)** : modifier `restoreLedgersFromBackup()` pour retirer le check `fs.existsSync(dst)`.
+4. **Tester** : `node runner.js --restore-carnets` (affiche le nombre de carnets restaurés).
+
+**Pièges :**
+- Le backup ne contient que la DERNIÈRE version de chaque carnet (écrasée à chaque save). Si un carnet est corrompu puis sauvegardé, le backup est aussi corrompu. Pour un historique versionné, il faudrait git ou des snapshots datés.
+- `restoreLedgersFromBackup()` ne restaure QUE les carnets absents — elle ne répare pas un carnet existant mais corrompu.
+- Le dossier `.carnet-backup/` est aussi en `.gitignore` (sous `Export-Rapports/`). Il est purement local.
+- Les anciens carnets disparus (avant le 2026-08-21) ne peuvent PAS être restaurés — le backup n'existait pas encore. Seuls les carnets créés après cette date sont protégés.
 
 ---
 
