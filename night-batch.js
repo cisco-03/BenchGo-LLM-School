@@ -64,16 +64,21 @@ const SCHOOLS = [
   { key: 'auto',     label: 'Auto-detection (1 ecole)',   cli: null },
   // Mode auto-par-modele : chaque modele passe UNIQUEMENT l'ecole adaptee a
   // sa taille de parametres (detectee via detectProfileFromModelName). Permet de
-  // melanger des modeles de tailles differentes dans la meme session de nuit
+  // melanger des modeles de tailles differentes dans une meme session de nuit
   // (un 3B fait Primaire, un 15B fait College-Lycee, etc.) sans selectionner
   // manuellement l'ecole de chacun. cli=null : l'ecole est calculee par modele.
   { key: 'auto-per-model', label: 'Auto par modele (ecole selon la taille)', cli: null },
   // Mode manuel-par-modele : l'utilisateur choisit individuellement l'ecole de
-  // chaque modele, un par un. Permet de melanger des modèles aux besoins
-  // differents dans la meme session (ex: re-tester Kai Os Grug 12B en auto,
+  // chaque modele, un par un. Permet de melanger des modeles aux besoins
+  // differents dans une meme session (ex: re-tester Kai Os Grug 12B en auto,
   // mais faire passer Phi 4 uniquement en Primaire). cli=null : les ecoles sont
   // choisies interactivement pour chaque modele.
-  { key: 'manual-per-model', label: 'Manuel par modele (ecole choisie pour chacun)', cli: null }
+  { key: 'manual-per-model', label: 'Manuel par modele (ecole choisie pour chacun)', cli: null },
+  // Mode exercice-par-exercice (classe-par-classe) : l'utilisateur choisit
+  // une école PUIS les exercices (tiers) qu'il veut faire passer.
+  // Utile pour un filtre rapide : faire passer seulement le tier 0 à plusieurs
+  // modèles pour éliminer les plus faibles avant un test complet.
+  { key: 'tier-by-tier', label: 'Exercice par exercice (choisir les tiers)', cli: null }
 ];
 
 // Détecte si la sélection d'écoles correspond au mode « auto par modèle »
@@ -83,6 +88,15 @@ const SCHOOLS = [
 function isAutoPerModel(schools) {
   if (!schools) return false;
   return schools.some(s => s && s.key === 'auto-per-model');
+}
+
+// Détecte si la sélection d'écoles correspond au mode « exercice par exercice »
+// (option 8, key 'tier-by-tier'). Dans ce mode, l'utilisateur choisit une école
+// puis les exercices (tiers) qu'il veut tester. Utile pour un filtre rapide :
+// faire passer seulement le tier 0 à plusieurs modèles, éliminer les faibles.
+function isTierByTier(schools) {
+  if (!schools) return false;
+  return schools.some(s => s && s.key === 'tier-by-tier');
 }
 
 // Détecte si la sélection d'écoles correspond au mode « manuel par modèle »
@@ -1350,6 +1364,12 @@ async function selectSchoolsInteractive(selectedModels) {
   console.log(`      ${C.gray}Ex: un 12B en Collège-Lycée, un 4B en Primaire seulement.${C.reset}`);
   console.log(`      ${C.gray}Permet de mélanger des stratégies dans la même session.${C.reset}\n`);
 
+  console.log(`  ${C.bold} 8.${C.reset} ${C.bold}Exercice par exercice${C.reset} ${C.gray}— choisir les tiers${C.reset}`);
+  console.log(`      ${C.gray}Choisissez une école, puis les exercices (tiers) à tester.${C.reset}`);
+  console.log(`      ${C.gray}Ex: Primaire, exercices 0 et 1 seulement (filtre rapide).${C.reset}`);
+  console.log(`      ${C.gray}Idéal pour trier les modèles faibles : si un modèle échoue${C.reset}`);
+  console.log(`      ${C.gray}au 1er exercice, il part à la poubelle sans perdre de temps.${C.reset}\n`);
+
   // Aperçu de l'attribution auto-par-modèle (option 6) pour aider l'utilisateur
   // à anticiper : montre quelles écoles chaque modèle sélectionné ferait.
   // Les modèles > 3B enchaînent Primaire (LIGHT) puis l'école détectée.
@@ -1379,55 +1399,61 @@ async function selectSchoolsInteractive(selectedModels) {
   // Demande comment exécuter chaque école : toute l'école en un seul process
   // (classique, rapide mais un gel bloque tout) ou chaque exercice (tier) isolé
   // dans un process séparé avec timeout 45 min (classe-par-classe, robuste nuit).
-  console.log(`\n  ${C.bold}── Mode d'exécution ──${C.reset}`);
-  console.log(`  ${C.gray}Comment lancer chaque école ?${C.reset}\n`);
-  console.log(`  ${C.bold} A.${C.reset} ${C.bold}Classique${C.reset} ${C.gray}— toute l'école d'un coup${C.reset}`);
-  console.log(`      ${C.gray}Un seul process pour toute l'école. Plus rapide.${C.reset}`);
-  console.log(`      ${C.gray}Inconvénient : si le modèle gèle, tout le batch bloque.${C.reset}\n`);
-  console.log(`  ${C.bold} B.${C.reset} ${C.bold}Classe par classe${C.reset} ${C.gray}— un exercice à la fois${C.reset}`);
-  console.log(`      ${C.gray}Chaque exercice (tier) dans un process séparé, timeout 45 min.${C.reset}`);
-  console.log(`      ${C.gray}Si un exercice gèle : kill auto, passage au suivant.${C.reset}`);
-  console.log(`      ${C.gray}Recommandé pour le mode nuit (robustesse maximale).${C.reset}\n`);
-  const modeAnswer = await new Promise(resolve => {
-    const rlM = readline.createInterface({ input: process.stdin, output: process.stdout });
-    rlM.question(`  ${C.cyan}Mode d'exécution [A/B] (défaut B) :${C.reset} `, a => {
-      rlM.close();
-      resolve((a || '').trim().toLowerCase());
-    });
-  });
-  const cbc = modeAnswer !== 'a';
-
-  // --- Sélection des tiers (exercices) à exécuter ---
-  // En mode classe-par-classe, on demande quels tiers (exercices) lancer.
-  // Entrée = tous les tiers (comportement par défaut).
-  // Sinon, numéros séparés par virgules (ex: "0" = premier exercice seulement,
-  // "0,1" = les deux premiers). Permet un test rapide sur un seul exercice.
+  // Skip si l'option 8 (tier-by-tier) est sélectionnée : elle gère son propre
+  // prompt mode auto/manuel + tiers dans main().
+  const tierByTier = isTierByTier(schools);
+  let cbc = false;
   let tierFilter = null;
-  if (cbc) {
-    console.log(`  ${C.gray}→ Classe par classe : chaque tier isolé (timeout ${TIER_TIMEOUT_MS / 60000} min/tier).${C.reset}`);
-    console.log(`\n  ${C.bold}── Exercices à exécuter ──${C.reset}`);
-    console.log(`  ${C.gray}Quels exercices (tiers) lancer ?${C.reset}`);
-    console.log(`  ${C.gray}Entrée = tous les exercices (défaut).${C.reset}`);
-    console.log(`  ${C.gray}Numéros séparés par virgules (ex: "0" = 1er exercice, "0,1" = 2 premiers).${C.reset}`);
-    const tierAnswer = await new Promise(resolve => {
-      const rlT = readline.createInterface({ input: process.stdin, output: process.stdout });
-      rlT.question(`  ${C.cyan}Tiers à exécuter (défaut = tous) :${C.reset} `, a => {
-        rlT.close();
-        resolve((a || '').trim());
+  if (!tierByTier) {
+    console.log(`\n  ${C.bold}── Mode d'exécution ──${C.reset}`);
+    console.log(`  ${C.gray}Comment lancer chaque école ?${C.reset}\n`);
+    console.log(`  ${C.bold} A.${C.reset} ${C.bold}Classique${C.reset} ${C.gray}— toute l'école d'un coup${C.reset}`);
+    console.log(`      ${C.gray}Un seul process pour toute l'école. Plus rapide.${C.reset}`);
+    console.log(`      ${C.gray}Inconvénient : si le modèle gèle, tout le batch bloque.${C.reset}\n`);
+    console.log(`  ${C.bold} B.${C.reset} ${C.bold}Classe par classe${C.reset} ${C.gray}— un exercice à la fois${C.reset}`);
+    console.log(`      ${C.gray}Chaque exercice (tier) dans un process séparé, timeout 45 min.${C.reset}`);
+    console.log(`      ${C.gray}Si un exercice gèle : kill auto, passage au suivant.${C.reset}`);
+    console.log(`      ${C.gray}Recommandé pour le mode nuit (robustesse maximale).${C.reset}\n`);
+    const modeAnswer = await new Promise(resolve => {
+      const rlM = readline.createInterface({ input: process.stdin, output: process.stdout });
+      rlM.question(`  ${C.cyan}Mode d'exécution [A/B] (défaut B) :${C.reset} `, a => {
+        rlM.close();
+        resolve((a || '').trim().toLowerCase());
       });
     });
-    if (tierAnswer) {
-      const nums = tierAnswer.split(/[\s,;]+/).map(s => parseInt(s, 10)).filter(n => Number.isInteger(n) && n >= 0);
-      if (nums.length > 0) {
-        tierFilter = [...new Set(nums)];
-        console.log(`  ${C.gray}→ Tiers sélectionnés : ${tierFilter.join(', ')}${C.reset}`);
+    cbc = modeAnswer !== 'a';
+
+    // --- Sélection des tiers (exercices) à exécuter ---
+    // En mode classe-par-classe, on demande quels tiers (exercices) lancer.
+    // Entrée = tous les tiers (comportement par défaut).
+    // Sinon, numéros séparés par virgules (ex: "0" = premier exercice seulement,
+    // "0,1" = les deux premiers). Permet un test rapide sur un seul exercice.
+    if (cbc) {
+      console.log(`  ${C.gray}→ Classe par classe : chaque tier isolé (timeout ${TIER_TIMEOUT_MS / 60000} min/tier).${C.reset}`);
+      console.log(`\n  ${C.bold}── Exercices à exécuter ──${C.reset}`);
+      console.log(`  ${C.gray}Quels exercices (tiers) lancer ?${C.reset}`);
+      console.log(`  ${C.gray}Entrée = tous les exercices (défaut).${C.reset}`);
+      console.log(`  ${C.gray}Numéros séparés par virgules (ex: "0" = 1er exercice, "0,1" = 2 premiers).${C.reset}`);
+      const tierAnswer = await new Promise(resolve => {
+        const rlT = readline.createInterface({ input: process.stdin, output: process.stdout });
+        rlT.question(`  ${C.cyan}Tiers à exécuter (défaut = tous) :${C.reset} `, a => {
+          rlT.close();
+          resolve((a || '').trim());
+        });
+      });
+      if (tierAnswer) {
+        const nums = tierAnswer.split(/[\s,;]+/).map(s => parseInt(s, 10)).filter(n => Number.isInteger(n) && n >= 0);
+        if (nums.length > 0) {
+          tierFilter = [...new Set(nums)];
+          console.log(`  ${C.gray}→ Tiers sélectionnés : ${tierFilter.join(', ')}${C.reset}`);
+        }
       }
+      if (!tierFilter) {
+        console.log(`  ${C.gray}→ Tous les tiers seront exécutés.${C.reset}`);
+      }
+    } else {
+      console.log(`  ${C.gray}→ Mode classique : école entière en un process.${C.reset}`);
     }
-    if (!tierFilter) {
-      console.log(`  ${C.gray}→ Tous les tiers seront exécutés.${C.reset}`);
-    }
-  } else {
-    console.log(`  ${C.gray}→ Mode classique : école entière en un process.${C.reset}`);
   }
 
   return { schools, classByClass: cbc, tierFilter };
@@ -1861,6 +1887,75 @@ async function main() {
       // uniquement le marqueur 'manual-per-model' qui active la branche manuelle.
       if (isManualPerModel(schools)) {
         manualPlan = await selectSchoolsManualPerModel(selected);
+      }
+      // Option 8 = exercice par exercice : l'utilisateur choisit une école
+      // puis les exercices (tiers) qu'il veut tester. schools contient
+      // uniquement le marqueur 'tier-by-tier'. On demande l'école et les tiers.
+      if (isTierByTier(schools)) {
+        console.log(`\n  ${C.bold}${C.cyan}=== EXERCICE PAR EXERCICE ===${C.reset}`);
+        console.log(`  ${C.gray}Choisissez l'école, puis les exercices (tiers) à tester.${C.reset}\n`);
+        SCHOOLS.slice(0, 4).forEach((s, i) => {
+          const idx = String(i + 1).padStart(2);
+          console.log(`  ${C.bold}${idx}.${C.reset} ${s.label}`);
+        });
+        const schoolAnswer = await new Promise(resolve => {
+          const rlS = readline.createInterface({ input: process.stdin, output: process.stdout });
+          rlS.question(`  ${C.cyan}École à tester :${C.reset} `, a => {
+            rlS.close();
+            resolve((a || '').trim());
+          });
+        });
+        const schoolIdx = parseInt(schoolAnswer, 10) - 1;
+        if (!Number.isInteger(schoolIdx) || schoolIdx < 0 || schoolIdx > 3) {
+          console.log(`  ${C.red}École invalide. Abandon.${C.reset}`);
+          if (serverHandle.startedByUs) stopServer();
+          process.exit(1);
+        }
+        const chosenSchool = SCHOOLS[schoolIdx];
+        schools = [chosenSchool];
+        console.log(`  ${C.gray}→ École : ${chosenSchool.label}${C.reset}`);
+        const profile = PROFILES[chosenSchool.key];
+        const allTiers = [...profile.mandatory, ...profile.optional].sort((a, b) => a - b);
+        console.log(`  ${C.gray}  Tiers disponibles : ${allTiers.join(', ')} (0 = 1er exercice)${C.reset}`);
+        const tierAnswer = await new Promise(resolve => {
+          const rlT = readline.createInterface({ input: process.stdin, output: process.stdout });
+          rlT.question(`  ${C.cyan}Tiers à exécuter (défaut = tous, ex: "0" pour le 1er) :${C.reset} `, a => {
+            rlT.close();
+            resolve((a || '').trim());
+          });
+        });
+        if (tierAnswer) {
+          const nums = tierAnswer.split(/[\s,;]+/).map(s => parseInt(s, 10)).filter(n => Number.isInteger(n) && n >= 0);
+          if (nums.length > 0) {
+            tierFilter = [...new Set(nums)];
+            console.log(`  ${C.gray}→ Tiers sélectionnés : ${tierFilter.join(', ')}${C.reset}`);
+          }
+        }
+        if (!tierFilter) {
+          console.log(`  ${C.gray}→ Tous les tiers seront exécutés.${C.reset}`);
+        }
+        // Mode auto : passage automatique au modèle suivant même si un modèle
+        // échoue ou gèle. Activé par défaut (classByClass = true = chaque tier
+        // isolé avec timeout 45 min). L'utilisateur peut désactiver pour un
+        // contrôle manuel (arrêt au premier échec).
+        console.log(`\n  ${C.bold}── Mode de passage ──${C.reset}`);
+        console.log(`  ${C.gray}A = Auto : passage au modèle suivant même si un modèle échoue ou gèle.${C.reset}`);
+        console.log(`      ${C.gray}Chaque exercice a un timeout de 45 min (kill auto si gel).${C.reset}`);
+        console.log(`  ${C.gray}M = Manuel : arrêt au premier modèle qui échoue (contrôle strict).${C.reset}\n`);
+        const autoAnswer = await new Promise(resolve => {
+          const rlA = readline.createInterface({ input: process.stdin, output: process.stdout });
+          rlA.question(`  ${C.cyan}Mode de passage [A/M] (défaut A) :${C.reset} `, a => {
+            rlA.close();
+            resolve((a || '').trim().toLowerCase());
+          });
+        });
+        if (autoAnswer === 'm') {
+          classByClass = false;
+          console.log(`  ${C.gray}→ Mode manuel : arrêt au premier échec (pas de timeout auto).${C.reset}`);
+        } else {
+          classByClass = true;
+          console.log(`  ${C.gray}→ Mode auto : chaque tier isolé (timeout ${TIER_TIMEOUT_MS / 60000} min), passage auto au modèle suivant.${C.reset}`);
+        }
       }
     }
   }
