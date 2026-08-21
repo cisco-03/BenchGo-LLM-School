@@ -10772,9 +10772,10 @@
       ],
       "pseudo": null,
       "submittedAt": "2026-08-01T11:02:03.116Z",
-      "contributors": 1,
+      "contributors": 2,
       "allPct": [
-        97
+        97,
+        90
       ]
     },
     {
@@ -52436,6 +52437,6 @@
       ]
     }
   ],
-  "generatedAt": "2026-08-21T05:39:27.908Z",
-  "totalSubmissions": 55
+  "generatedAt": "2026-08-21T06:47:41.178Z",
+  "totalSubmissions": 56
 }
