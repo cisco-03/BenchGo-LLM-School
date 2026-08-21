@@ -1,5 +1,47 @@
 # CHANGELOG - Carnet de Notes BenchGo
 
+## 2026-08-21 — fix(night-batch): mode 8 intégré au flux normal + --models= tolérant
+
+### Contexte
+L'utilisateur ne voyait jamais le mode « Exercice par exercice » : l'option 8
+était noyée parmi 8 choix dans le menu des écoles et sautait systématiquement.
+La fonctionnalité existait mais n'était pas accessible en pratique. De plus,
+`--models=` ne matchait que les `modelKey` (ex: `opencoder-8b-instruct-i1`),
+pas les display names avec espaces (ex: `OpenCoder 8B Instruct I1`).
+
+### Changements
+
+**Fix 1 — « Exercice par exercice » intégré au flux normal** (`night-batch.js`)
+- L'ancienne option 8 du menu des écoles est **supprimée**. Elle était
+  invisible/noyée parmi 8 choix.
+- Désormais, après le choix des écoles (1-7), le menu « Mode d'exécution »
+  propose :
+  - **A** = Classique (toute l'école d'un coup)
+  - **B** = Exercice par exercice (chaque tier isolé, timeout 45 min)
+- En mode B, le choix des **tiers** (exercices) est proposé **automatiquement**
+  juste après — c'est l'équivalent de l'ancienne option 8, mais intégré au flux
+  normal. Plus besoin de taper `8` pour y accéder.
+- Le mode de passage **A/M** (auto/manuel) suit le choix des tiers.
+  - A = passage au modèle suivant même en cas d'échec.
+  - M = arrêt au premier échec obligatoire (`stopOnFirstFailure`).
+- `stopOnFirstFailure` est propagé jusqu'à la boucle principale qui stoppe la
+  file d'attente entière (`batchStopped`).
+- Compatibilité : si l'utilisateur tape encore `8`, il est redirigé vers le
+  flux normal (choix d'une école 1-4 + mode B).
+
+**Fix 2 — `--models=` accepte les display names** (`night-batch.js`)
+- La résolution de `--models=` compare désormais à la fois `modelKey` ET
+  `displayName`, insensible à la casse et aux espaces multiples (normalisation
+  `trim().toLowerCase().replace(/\s+/g, ' ')`).
+- Le split se fait uniquement sur la virgule (les display names contiennent
+  des espaces) — pas de split sur les espaces.
+- Message d'erreur enrichi d'une astuce rappelant que les display names sont
+  acceptés.
+
+### Vérifications
+- `node --check night-batch.js` : OK.
+- `node tests/run-tests.js` : 27/27 passés.
+
 ## 2026-08-21 — fix(night-batch+teacher+ledger): 4 corrections Tasks1.md
 
 ### Contexte

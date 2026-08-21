@@ -1376,11 +1376,11 @@ async function selectSchoolsInteractive(selectedModels) {
   console.log(`      ${C.gray}Ex: un 12B en Collège-Lycée, un 4B en Primaire seulement.${C.reset}`);
   console.log(`      ${C.gray}Permet de mélanger des stratégies dans la même session.${C.reset}\n`);
 
-  console.log(`  ${C.bold} 8.${C.reset} ${C.bold}Exercice par exercice${C.reset} ${C.gray}— choisir les tiers${C.reset}`);
-  console.log(`      ${C.gray}Choisissez une école, puis les exercices (tiers) à tester.${C.reset}`);
-  console.log(`      ${C.gray}Ex: Primaire, exercices 0 et 1 seulement (filtre rapide).${C.reset}`);
-  console.log(`      ${C.gray}Idéal pour trier les modèles faibles : si un modèle échoue${C.reset}`);
-  console.log(`      ${C.gray}au 1er exercice, il part à la poubelle sans perdre de temps.${C.reset}\n`);
+  // NOTE : l'ancienne option 8 (« Exercice par exercice ») a été supprimée du menu
+  // car elle était noyée parmi 8 choix et l'utilisateur la sautait systématiquement.
+  // Désormais, le choix des exercices (tiers) est proposé AUTOMATIQUEMENT à l'étape
+  // suivante, juste après le choix des écoles — voir « Exercices à exécuter » plus
+  // bas. C'est l'équivalent de l'ancienne option 8, mais intégré au flux normal.
 
   // Aperçu de l'attribution auto-par-modèle (option 6) pour aider l'utilisateur
   // à anticiper : montre quelles écoles chaque modèle sélectionné ferait.
@@ -1405,74 +1405,47 @@ async function selectSchoolsInteractive(selectedModels) {
     schools = uniq.map(i => SCHOOLS[i]);
   }
 
-  // --- Option 8 : exercice par exercice ---
-  // L'utilisateur a choisi le mode tier-by-tier. On demande l'école, les tiers
-  // et le mode de passage (auto/manuel) directement ici, puis on retourne.
+  // --- Compatibilité : si l'utilisateur tape 8 (ancien mode tier-by-tier),
+  // on le redirige vers le flux normal ci-dessous (mode classe-par-classe +
+  // choix des tiers). L'ancien bloc isTierByTier est supprimé.
   if (isTierByTier(schools)) {
-    console.log(`\n  ${C.bold}${C.cyan}=== EXERCICE PAR EXERCICE ===${C.reset}`);
-    console.log(`  ${C.gray}Choisissez l'école, puis les exercices (tiers) à tester.${C.reset}\n`);
-    SCHOOLS.slice(0, 4).forEach((s, i) => {
-      const idx = String(i + 1).padStart(2);
-      console.log(`  ${C.bold}${idx}.${C.reset} ${s.label}`);
-    });
-    const schoolAnswer = await ask(`  ${C.cyan}École à tester :${C.reset} `);
-    const schoolIdx = parseInt(schoolAnswer, 10) - 1;
-    if (!Number.isInteger(schoolIdx) || schoolIdx < 0 || schoolIdx > 3) {
-      console.log(`  ${C.red}École invalide. Abandon.${C.reset}`);
-      return { schools: [], classByClass: false, tierFilter: null };
+    // On retire le marqueur tier-by-tier de schools pour éviter qu'il ne
+    // pollue la suite (isTierByTier ne sera plus vrai). L'utilisateur devra
+    // choisir une école réelle (1-4) dans le flux normal.
+    schools = schools.filter(s => s.key !== 'tier-by-tier');
+    if (schools.length === 0) {
+      console.log(`  ${C.yellow}L'option 8 a été intégrée au flux normal. Choisissez une école (1-4) ci-dessous.${C.reset}`);
+      return selectSchoolsInteractive(selectedModels);
     }
-    const chosenSchool = SCHOOLS[schoolIdx];
-    console.log(`  ${C.gray}→ École : ${chosenSchool.label}${C.reset}`);
-    const profile = PROFILES[chosenSchool.key];
-    const allTiers = [...profile.mandatory, ...profile.optional].sort((a, b) => a - b);
-    console.log(`  ${C.gray}  Tiers disponibles : ${allTiers.join(', ')} (0 = 1er exercice)${C.reset}`);
-    const tierAnswer = await ask(`  ${C.cyan}Tiers à exécuter (défaut = tous, ex: "0" pour le 1er) :${C.reset} `);
-    let tFilter = null;
-    if (tierAnswer) {
-      const nums = tierAnswer.split(/[\s,;]+/).map(s => parseInt(s, 10)).filter(n => Number.isInteger(n) && n >= 0);
-      if (nums.length > 0) {
-        tFilter = [...new Set(nums)];
-        console.log(`  ${C.gray}→ Tiers sélectionnés : ${tFilter.join(', ')}${C.reset}`);
-      }
-    }
-    if (!tFilter) {
-      console.log(`  ${C.gray}→ Tous les tiers seront exécutés.${C.reset}`);
-    }
-    console.log(`\n  ${C.bold}── Mode de passage ──${C.reset}`);
-    console.log(`  ${C.gray}A = Auto : passage au modèle suivant même si un modèle échoue ou gèle.${C.reset}`);
-    console.log(`      ${C.gray}Chaque exercice a un timeout de 45 min (kill auto si gel).${C.reset}`);
-    console.log(`  ${C.gray}M = Manuel : arrêt au premier modèle qui échoue (contrôle strict).${C.reset}\n`);
-    const autoAnswer = (await ask(`  ${C.cyan}Mode de passage [A/M] (défaut A) :${C.reset} `)).toLowerCase();
-    const cbc = autoAnswer !== 'm';
-    if (cbc) {
-      console.log(`  ${C.gray}→ Mode auto : chaque tier isolé (timeout ${TIER_TIMEOUT_MS / 60000} min), passage auto au modèle suivant.${C.reset}`);
-    } else {
-      console.log(`  ${C.gray}→ Mode manuel : arrêt au premier échec (pas de timeout auto).${C.reset}`);
-    }
-    return { schools: [chosenSchool], classByClass: cbc, tierFilter: tFilter };
   }
 
-  // --- Mode d'exécution : classique ou classe-par-classe (options 1-7) ---
+  // --- Mode d'exécution : classique ou classe-par-classe ---
   console.log(`\n  ${C.bold}── Mode d'exécution ──${C.reset}`);
   console.log(`  ${C.gray}Comment lancer chaque école ?${C.reset}\n`);
   console.log(`  ${C.bold} A.${C.reset} ${C.bold}Classique${C.reset} ${C.gray}— toute l'école d'un coup${C.reset}`);
   console.log(`      ${C.gray}Un seul process pour toute l'école. Plus rapide.${C.reset}`);
   console.log(`      ${C.gray}Inconvénient : si le modèle gèle, tout le batch bloque.${C.reset}\n`);
-  console.log(`  ${C.bold} B.${C.reset} ${C.bold}Classe par classe${C.reset} ${C.gray}— un exercice à la fois${C.reset}`);
+  console.log(`  ${C.bold} B.${C.reset} ${C.bold}Exercice par exercice${C.reset} ${C.gray}— un exercice à la fois${C.reset}`);
   console.log(`      ${C.gray}Chaque exercice (tier) dans un process séparé, timeout 45 min.${C.reset}`);
   console.log(`      ${C.gray}Si un exercice gèle : kill auto, passage au suivant.${C.reset}`);
+  console.log(`      ${C.gray}Vous pourrez choisir quels exercices (tiers) tester.${C.reset}`);
   console.log(`      ${C.gray}Recommandé pour le mode nuit (robustesse maximale).${C.reset}\n`);
   const modeAnswer = (await ask(`  ${C.cyan}Mode d'exécution [A/B] (défaut B) :${C.reset} `)).toLowerCase();
   const cbc = modeAnswer !== 'a';
 
   // --- Sélection des tiers (exercices) à exécuter ---
+  // En mode classe-par-classe (B), on propose SYSTÉMATIQUEMENT le choix des
+  // exercices (tiers). C'est l'équivalent de l'ancienne option 8, mais intégré
+  // au flux normal : l'utilisateur n'a plus à taper « 8 » pour y accéder.
   let tierFilter = null;
   if (cbc) {
-    console.log(`  ${C.gray}→ Classe par classe : chaque tier isolé (timeout ${TIER_TIMEOUT_MS / 60000} min/tier).${C.reset}`);
+    console.log(`  ${C.gray}→ Exercice par exercice : chaque tier isolé (timeout ${TIER_TIMEOUT_MS / 60000} min/tier).${C.reset}`);
     console.log(`\n  ${C.bold}── Exercices à exécuter ──${C.reset}`);
     console.log(`  ${C.gray}Quels exercices (tiers) lancer ?${C.reset}`);
     console.log(`  ${C.gray}Entrée = tous les exercices (défaut).${C.reset}`);
     console.log(`  ${C.gray}Numéros séparés par virgules (ex: "0" = 1er exercice, "0,1" = 2 premiers).${C.reset}`);
+    console.log(`  ${C.gray}Idéal pour trier les modèles faibles : si un modèle échoue${C.reset}`);
+    console.log(`  ${C.gray}au 1er exercice, il part à la poubelle sans perdre de temps.${C.reset}`);
     const tierAnswer = await ask(`  ${C.cyan}Tiers à exécuter (défaut = tous) :${C.reset} `);
     if (tierAnswer) {
       const nums = tierAnswer.split(/[\s,;]+/).map(s => parseInt(s, 10)).filter(n => Number.isInteger(n) && n >= 0);
@@ -1484,6 +1457,21 @@ async function selectSchoolsInteractive(selectedModels) {
     if (!tierFilter) {
       console.log(`  ${C.gray}→ Tous les tiers seront exécutés.${C.reset}`);
     }
+
+    // --- Mode de passage (auto/manuel) ---
+    console.log(`\n  ${C.bold}── Mode de passage ──${C.reset}`);
+    console.log(`  ${C.gray}A = Auto : passage au modèle suivant même si un modèle échoue ou gèle.${C.reset}`);
+    console.log(`      ${C.gray}Chaque exercice a un timeout de 45 min (kill auto si gel).${C.reset}`);
+    console.log(`  ${C.gray}M = Manuel : arrêt au premier modèle qui échoue (contrôle strict).${C.reset}`);
+    console.log(`      ${C.gray}Un échec sur un tier obligatoire stoppe la file (pas de passage auto).${C.reset}\n`);
+    const autoAnswer = (await ask(`  ${C.cyan}Mode de passage [A/M] (défaut A) :${C.reset} `)).toLowerCase();
+    const stopOnFirstFailure = autoAnswer === 'm';
+    if (!stopOnFirstFailure) {
+      console.log(`  ${C.gray}→ Mode auto : passage au modèle suivant même en cas d'échec.${C.reset}`);
+    } else {
+      console.log(`  ${C.gray}→ Mode manuel : arrêt au premier échec obligatoire.${C.reset}`);
+    }
+    return { schools, classByClass: cbc, tierFilter, stopOnFirstFailure };
   } else {
     console.log(`  ${C.gray}→ Mode classique : école entière en un process.${C.reset}`);
   }
@@ -1693,11 +1681,11 @@ function runBenchmark(modelKey, schoolCli, extraArgs, opts = {}) {
 // ne comptent pas comme échec global).
 const TIER_TIMEOUT_MS = 45 * 60 * 1000; // 45 min par tier (sécurité anti-hang)
 
-function runSchoolClassByClass(modelKey, schoolKey, schoolCli, extraArgs, tierFilter = null) {
+function runSchoolClassByClass(modelKey, schoolKey, schoolCli, extraArgs, tierFilter = null, stopOnFirstFailure = false) {
   const profile = PROFILES[schoolKey];
   if (!profile) {
     console.log(`  ${C.red}Profil inconnu : ${schoolKey}${C.reset}`);
-    return { ok: false, durationMs: 0, tierResults: [] };
+    return { ok: false, durationMs: 0, tierResults: [], stopped: false };
   }
   // Tous les tiers du profil (obligatoires + optionnels), triés.
   let tierNums = [...profile.mandatory, ...profile.optional].sort((a, b) => a - b);
@@ -1709,6 +1697,7 @@ function runSchoolClassByClass(modelKey, schoolKey, schoolCli, extraArgs, tierFi
   const tierResults = [];
   const startMs = Date.now();
   let allMandatoryOk = true;
+  let stopped = false;
 
   for (const tierNum of tierNums) {
     const isMandatory = profile.mandatory.includes(tierNum);
@@ -1724,18 +1713,26 @@ function runSchoolClassByClass(modelKey, schoolKey, schoolCli, extraArgs, tierFi
       console.log(`  ${C.red}[TIMEOUT] Tier ${tierNum} a dépassé ${TIER_TIMEOUT_MS / 60000} min — killé, passage au tier suivant.${C.reset}`);
     }
     console.log(`  ${bench.ok ? C.green : C.red}[${nowClock()}] Tier ${tierNum} terminé en ${mins} min (status=${bench.status}).${C.reset}`);
-    // Un tier obligatoire échoué ou en timeout marque l'école comme échouée,
-    // mais on CONTINUE les tiers suivants (optionnels) pour collecter un
-    // maximum de données. Avant, un échec sur un tier obligatoire arrêtait
-    // toute l'école → perte des tiers suivants.
-    if (isMandatory && !bench.ok) allMandatoryOk = false;
+    // Un tier obligatoire échoué marque l'école comme échouée. En mode
+    // stopOnFirstFailure (mode 8 Manuel), on s'arrête IMMÉDIATEMENT ici : on
+    // ne lance pas les tiers suivants et on remonte le flag stopped pour que
+    // la boucle principale des modèles stoppe la file entière. En mode auto
+    // (défaut), on continue les tiers suivants pour collecter un max de données.
+    if (isMandatory && !bench.ok) {
+      allMandatoryOk = false;
+      if (stopOnFirstFailure) {
+        console.log(`  ${C.red}[STOP] Mode manuel : tier obligatoire ${tierNum} échoué — arrêt de l'école et de la file.${C.reset}`);
+        stopped = true;
+        break;
+      }
+    }
   }
 
   const durationMs = Date.now() - startMs;
   const okCount = tierResults.filter(t => t.ok).length;
   const tiersLabel = tierFilter && tierFilter.length > 0 ? `tiers ${tierFilter.join(',')}` : `${tierResults.length} tiers`;
   console.log(`\n  ${allMandatoryOk ? C.green : C.red}[${nowClock()}] École ${schoolKey} terminée : ${okCount}/${tierResults.length} tiers réussis (${tiersLabel}) en ${(durationMs / 60000).toFixed(1)} min.${C.reset}`);
-  return { ok: allMandatoryOk, durationMs, tierResults };
+  return { ok: allMandatoryOk, durationMs, tierResults, stopped };
 }
 
 function parseArgs() {
@@ -1792,6 +1789,7 @@ async function main() {
       '--force, --profile= et --hybrid sont transmis au runner sous-jacent (cf. node runner.js --help).',
       '--class-by-class (ou --cbc) : isole chaque tier dans un process séparé avec timeout de 45 min. Un tier gelé ne bloque plus le batch — passage automatique au tier suivant.',
       '--tiers=0,1 : ne teste que les tiers indiqués (filtre rapide pour trier les modèles faibles). Combine avec --class-by-class et --schools=LIGHT.',
+      'Mode interactif : après le choix des écoles, le mode « Exercice par exercice » (B) propose automatiquement de choisir les tiers et le mode de passage (A=auto / M=manuel).',
       'Les rapports vont dans Export-Rapports/<date>/<ecole>/<niveau>/rapport_v3_*.md',
       'Classement communautaire : soumettez vos carnets avec : node runner.js --submit',
       'Pré-test de santé : chaque modèle reçoit un ping après chargement ; les modèles défectueux (load_failed, health check KO, run KO systémique) sont auto-blacklistés.'
@@ -1807,6 +1805,9 @@ async function main() {
   const { modelsArg, schoolsArg, tiersArg, listOnly, hybridFlag, forceDetect, classByClass: cbcFromCli, extraRunnerArgs } = parseArgs();
   let classByClass = cbcFromCli;
   let tierFilter = null;
+  // Mode 8 Manuel : stoppe la file au premier tier obligatoire échoué.
+  // Faux par défaut (comportement historique : passage auto au suivant).
+  let stopOnFirstFailure = false;
   if (tiersArg) {
     const nums = tiersArg.split(/[\s,;]+/).map(s => parseInt(s, 10)).filter(n => Number.isInteger(n) && n >= 0);
     if (nums.length > 0) tierFilter = [...new Set(nums)];
@@ -1868,11 +1869,24 @@ async function main() {
 
   let selected;
   if (modelsArg) {
+    // Tolérance : --models= accepte indifféremment des modelKeys (ex:
+    // "opencoder-8b-instruct-i1") OU des display names (ex: "OpenCoder 8B
+    // Instruct I1"). La comparaison est insensible à la casse et aux espaces
+    // multiples. Important : les display names contiennent des espaces, donc
+    // on NE splitte PAS sur les espaces — uniquement sur la virgule. Chaque
+    // élément de la liste est normalisé (trim + lower + collapse spaces).
+    const normalize = s => s.trim().toLowerCase().replace(/\s+/g, ' ');
     const keys = modelsArg.split(',').map(s => s.trim()).filter(Boolean);
-    selected = models.filter(m => keys.includes(m.modelKey));
+    const normKeys = keys.map(normalize);
+    selected = models.filter(m => {
+      const k = normalize(m.modelKey);
+      const d = normalize(m.displayName);
+      return normKeys.includes(k) || normKeys.includes(d);
+    });
     if (selected.length === 0) {
       console.log(`  ${C.red}Aucun modele de --models= trouve dans la liste.${C.reset}`);
       console.log(`  ${C.gray}ModelKeys disponibles : ${models.map(m => m.modelKey).join(', ')}${C.reset}`);
+      console.log(`  ${C.gray}Astuce : --models= accepte aussi les display names (ex: "OpenCoder 8B Instruct I1").${C.reset}`);
       if (serverHandle.startedByUs) stopServer();
       process.exit(1);
     }
@@ -1917,6 +1931,8 @@ async function main() {
       schools = interactiveResult.schools;
       if (!classByClass) classByClass = interactiveResult.classByClass;
       if (interactiveResult.tierFilter) tierFilter = interactiveResult.tierFilter;
+      // Mode 8 Manuel : stoppe la file au premier tier obligatoire échoué.
+      if (interactiveResult.stopOnFirstFailure) stopOnFirstFailure = true;
       if (schools.length === 0) {
         console.log(`  ${C.yellow}Aucune ecole selectionnee. Abandon.${C.reset}`);
         if (serverHandle.startedByUs) stopServer();
@@ -2032,6 +2048,7 @@ async function main() {
 
   const results = [];
   const batchStart = Date.now();
+  let batchStopped = false;
   for (let i = 0; i < selected.length; i++) {
     const m = selected[i];
     console.log(`\n${C.bold}${C.magenta}==================================================${C.reset}`);
@@ -2096,12 +2113,16 @@ async function main() {
       console.log(`\n  ${C.bold}${C.cyan}=== ECOLE ${j + 1}/${modelSchools.length} - ${school.label} ===${C.reset}`);
 
       let bench;
+      let stopBatch = false;
       if (classByClass && school.key !== 'auto') {
         // Mode classe-par-classe : chaque tier dans un process séparé avec
         // timeout. Robustesse accrue : un tier gelé n'arrête pas l'école
         // entière et ne bloque pas le batch. Reprend au tier suivant.
+        // En mode 8 Manuel (stopOnFirstFailure), un tier obligatoire échoué
+        // stoppe l'école ET la file entière (bench.stopped = true).
         console.log(`  ${C.gray}Mode classe-par-classe : chaque tier dans un process séparé (timeout ${TIER_TIMEOUT_MS / 60000} min/tier).${C.reset}`);
-        bench = runSchoolClassByClass(m.modelKey, school.key, school.cli, modelExtraArgs, tierFilter);
+        bench = runSchoolClassByClass(m.modelKey, school.key, school.cli, modelExtraArgs, tierFilter, stopOnFirstFailure);
+        if (bench.stopped) { stopBatch = true; batchStopped = true; }
       } else {
         // Mode classique : toute l'école dans un seul process (comportement
         // historique). Pas de timeout (timeout=0) — un modèle gelé peut
@@ -2116,6 +2137,8 @@ async function main() {
       recordRun(m.modelKey, bench.ok ? 'ok' : 'run_ko', school.key);
       console.log(`\n  ${bench.ok ? C.green : C.red}[${nowClock()}] ${m.displayName} / ${school.label} termine en ${mins} min (status=${bench.status}).${C.reset}`);
       results.push({ model: m, school: school.key, ok: bench.ok, status: bench.status, durationMs: bench.durationMs });
+      // Mode 8 Manuel : arrêt immédiat de la file au premier échec obligatoire.
+      if (stopBatch) break;
     }
     console.log(`\n  ${modelOk ? C.green : C.red}[${nowClock()}] Modele ${m.displayName} termine (${modelSchools.length} ecole(s)).${C.reset}`);
 
@@ -2130,6 +2153,12 @@ async function main() {
       if (allFailed) {
         autoBlacklist(m.modelKey, 'toutes les écoles ont échoué (run KO systémique)');
       }
+    }
+    // Mode 8 Manuel : un tier obligatoire échoué a déclenché stopBatch → on
+    // sort de la file d'attente entière (plus aucun modèle n'est lancé).
+    if (batchStopped) {
+      console.log(`\n  ${C.red}[STOP] Mode manuel : arrêt de la file d'attente après l'échec de ${m.displayName}.${C.reset}`);
+      break;
     }
   }
 

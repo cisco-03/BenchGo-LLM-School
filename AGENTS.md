@@ -413,13 +413,13 @@ Si modèle > 3B paramètres, le runner peut enchaîner LIGHT puis STANDARD dans 
 
 **Fonctions :**
 - `printModelsList(models, { interactive })` (dans `night-batch.js`) → affiche le tableau des modèles. `interactive: false` = mode `--list-only` (pas d'aide sur les commandes !/!!/tok/detect).
-- `runSchoolClassByClass(modelKey, schoolKey, schoolCli, extraArgs)` → `{ ok, durationMs, tierResults: [{ tierNum, ok, timedOut, durationMs }] }`. Lance chaque tier dans un process séparé.
-- `runBenchmark(modelKey, schoolCli, extraArgs, { tierNum, timeoutMs })` → accepte désormais un tier optionnel et un timeout. `timedOut: true` si `status=null, signal=SIGTERM`.
+- `runSchoolClassByClass(modelKey, schoolKey, schoolCli, extraArgs, tierFilter, stopOnFirstFailure)` → `{ ok, durationMs, tierResults, stopped }`. Lance chaque tier dans un process séparé. `stopOnFirstFailure=true` → un tier obligatoire échoué stoppe l'école (`stopped: true`) et la file entière.
+- `runBenchmark(modelKey, schoolCli, extraArgs, { tierNum, timeoutMs })` → accepte un tier optionnel et un timeout. `timedOut: true` si `status=null, signal=SIGTERM`.
 
 **Pour modifier :**
 1. **Changer le timeout par tier** : éditer `TIER_TIMEOUT_MS` dans `night-batch.js`.
 2. **Désactiver le mode classe-par-classe** : ne pas passer `--class-by-class` (le mode classique `runBenchmark` sans tier reste le défaut).
-3. **Changer le comportement de reprise** : éditer `runSchoolClassByClass()` — actuellement elle continue TOUJOURS au tier suivant même si un obligatoire échoue (pour collecter un max de données).
+3. **Changer le comportement de reprise** : éditer `runSchoolClassByClass()` — `stopOnFirstFailure=false` (défaut) continue au tier suivant même si un obligatoire échoue ; `true` (mode 8 Manuel) stoppe l'école et la file.
 4. **Tester** : `node night-batch.js --class-by-class --models=<key> --schools=STANDARD`.
 
 **Pièges :**
@@ -427,6 +427,9 @@ Si modèle > 3B paramètres, le runner peut enchaîner LIGHT puis STANDARD dans 
 - L'auto-profilage est relancé à chaque tier en mode classe-par-classe (overhead ~30s/tier) — compromis acceptable en mode nuit.
 - `spawnSync` avec `timeout` tue le process via SIGTERM. Le runner peut ne pas avoir le temps de flusher ses rapports. C'est un compromis : mieux vaut un tier incomplet qu'un batch entier bloqué.
 - `runBenchmark` retourne `timedOut: true` mais `status: null` — tester `bench.timedOut` ET `bench.ok` séparément.
+- **Mode 8 (exercice par exercice) est TOUJOURS en classe-par-classe**, même si l'utilisateur choisit « M » (Manuel). Le mode Manuel active `stopOnFirstFailure` (arrêt au premier échec obligatoire), pas le mode classique sans timeout. Avant ce fix, choisir M désactivait `classByClass` → le `tierFilter` était ignoré et toute l'école tournait d'un coup.
+- **L'ancienne option 8 du menu des écoles est supprimée** : elle était noyée parmi 8 choix et l'utilisateur la sautait systématiquement. Désormais, le choix des tiers (exercices) est proposé **automatiquement** à l'étape suivante, après le choix des écoles et le mode d'exécution « B = Exercice par exercice ». Plus besoin de taper `8` pour y accéder. Si l'utilisateur tape encore `8`, il est redirigé vers le flux normal (choix d'une école 1-4 + mode B).
+- **`--models=` accepte les display names** (ex: `OpenCoder 8B Instruct I1`) en plus des `modelKey` (ex: `opencoder-8b-instruct-i1`). Comparaison insensible à la casse/espaces. Le split se fait sur la virgule uniquement (les display names contiennent des espaces).
 
 ### Provider du professeur configurable (tâche 2026-08-21)
 
