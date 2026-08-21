@@ -1391,7 +1391,7 @@ async function main() {
     // permet de choisir un autre provider (openai, groq, ollama, lmstudio, etc.).
     // Pour les providers locaux (ollama, lmstudio, custom), aucune clé n'est
     // requise — le professeur tourne sur un serveur local.
-    const teacherConfig = (() => {
+    const teacherConfig = (async () => {
       const base = { ...TEACHER_CONFIG, enabled: false };
       if (teacherDisabled) {
         console.log(`  \x1b[90mProfesseur : auto-analyse classique (--no-teacher).\x1b[0m`);
@@ -1399,10 +1399,26 @@ async function main() {
       }
 
       // Provider du professeur : --teacher-provider ou défaut 'openrouter'.
-      const tProvider = (teacherProvider || 'openrouter').toLowerCase();
+      let tProvider = (teacherProvider || 'openrouter').toLowerCase();
       // Providers locaux sans auth (serveurs OpenAI-compatibles locaux).
       const localProviders = ['ollama', 'lmstudio', 'custom'];
-      const isLocalTeacher = localProviders.includes(tProvider);
+      let isLocalTeacher = localProviders.includes(tProvider);
+
+      // Si le provider n'est pas imposé par --teacher-provider, on demande
+      // interactivement lequel utiliser (openrouter, openai, ollama, etc.).
+      // Même si une clé est déjà mémorisée, l'utilisateur peut vouloir changer.
+      if (!teacherProvider && process.stdin.isTTY && process.stdout.isTTY) {
+        console.log(`\n  \x1b[36m━━ PROFESSEUR CORRECTEUR ━━\x1b[0m`);
+        console.log(`  \x1b[90mAprès chaque échec définitif, l'élève s'auto-analyse. Un professeur IA indépendant peut relire cette analyse et démontrer la vraie cause racine.\x1b[0m`);
+        console.log(`  \x1b[90mProviders disponibles :${'\x1b[0m'}`);
+        console.log(`  \x1b[90m  Locaux (sans clé)  : ollama, lmstudio, custom${'\x1b[0m'}`);
+        console.log(`  \x1b[90m  Cloud (clé requise) : openrouter, openai, anthropic, groq, together, mistral, deepseek, cohere${'\x1b[0m'}`);
+        const provInput = await askFreeText(`  Provider du professeur (défaut: ${tProvider}) :`);
+        if (provInput && provInput.trim()) {
+          tProvider = provInput.trim().toLowerCase();
+          isLocalTeacher = localProviders.includes(tProvider);
+        }
+      }
 
       // Clé fournie en CLI, en env, ou déjà mémorisée → mode activé sans redemander.
       // Pour les providers locaux, aucune clé n'est nécessaire.
@@ -1423,43 +1439,43 @@ async function main() {
         return resolved;
       }
 
-      // Sinon : on demande interactivement à l'utilisateur (saisie masquée).
-      console.log(`\n  \x1b[36m━━ PROFESSEUR CORRECTEUR ━━\x1b[0m`);
-      console.log(`  \x1b[90mAprès chaque échec définitif, l'élève s'auto-analyse. Un professeur IA indépendant peut relire cette analyse et démontrer la vraie cause racine.\x1b[0m`);
-      console.log(`  \x1b[90m(A) Professeur ${tProvider} — nécessite une clé API (sauf providers locaux ollama/lmstudio).\x1b[0m`);
-      console.log(`  \x1b[90m(B) Auto-analyse classique (aucun compte requis) — le modèle testé s'analyse lui-même.\x1b[0m`);
-      return (async () => {
-        const wantsTeacher = await askYesNo(`  Utiliser le professeur ${tProvider} ?`, true);
-        if (!wantsTeacher) {
-          console.log(`  \x1b[90mProfesseur : auto-analyse classique.\x1b[0m`);
-          return base;
-        }
-        // Pour les providers locaux, pas de clé à saisir.
-        if (isLocalTeacher) {
-          console.log(`  \x1b[35mProfesseur : ${tProvider} (local) activé — aucune clé requise.\x1b[0m`);
-          const resolved = { ...TEACHER_CONFIG, enabled: true, provider: tProvider, apiKey: null };
-          if (teacherModel)    resolved.model    = teacherModel;
-          if (teacherEndpoint) resolved.endpoint = teacherEndpoint;
-          return resolved;
-        }
-        // Saisie masquée + aperçu temporaire (repli sur askFreeText si non-TTY).
-        let key = null;
-        if (process.stdin.isTTY && process.stdout.isTTY) {
-          key = await secrets.askSecret(`  Collez votre clé API ${tProvider} (saisie masquée)`, { revealMs: 3000 });
-        } else {
-          key = await askFreeText(`  Collez votre clé API ${tProvider} :`);
-        }
-        if (!key) {
-          console.log(`  \x1b[33mAucune clé saisie — repli sur l'auto-analyse classique.\x1b[0m`);
-          return base;
-        }
-        secrets.rememberSecret(tProvider, key);
-        console.log(`  \x1b[35mProfesseur : ${tProvider} activé — clé mémorisée :\x1b[0m ${secrets.maskedForDisplay(key)}`);
-        const resolved = { ...TEACHER_CONFIG, enabled: true, provider: tProvider, apiKey: key };
+      // Sinon : aucune clé mémorisée pour ce provider. On demande si l'utilisateur
+      // veut l'activer et saisir sa clé.
+      if (!process.stdin.isTTY || !process.stdout.isTTY) {
+        return base;
+      }
+      console.log(`  \x1b[90m(A) Professeur ${tProvider} — ${isLocalTeacher ? 'local, sans clé' : 'nécessite une clé API'}.${'\x1b[0m'}`);
+      console.log(`  \x1b[90m(B) Auto-analyse classique (aucun compte requis) — le modèle testé s'analyse lui-même.${'\x1b[0m'}`);
+      const wantsTeacher = await askYesNo(`  Utiliser le professeur ${tProvider} ?`, true);
+      if (!wantsTeacher) {
+        console.log(`  \x1b[90mProfesseur : auto-analyse classique.${'\x1b[0m'}`);
+        return base;
+      }
+      // Pour les providers locaux, pas de clé à saisir.
+      if (isLocalTeacher) {
+        console.log(`  \x1b[35mProfesseur : ${tProvider} (local) activé — aucune clé requise.${'\x1b[0m'}`);
+        const resolved = { ...TEACHER_CONFIG, enabled: true, provider: tProvider, apiKey: null };
         if (teacherModel)    resolved.model    = teacherModel;
         if (teacherEndpoint) resolved.endpoint = teacherEndpoint;
         return resolved;
-      })();
+      }
+      // Saisie masquée + aperçu temporaire (repli sur askFreeText si non-TTY).
+      let key = null;
+      if (process.stdin.isTTY && process.stdout.isTTY) {
+        key = await secrets.askSecret(`  Collez votre clé API ${tProvider} (saisie masquée)`, { revealMs: 3000 });
+      } else {
+        key = await askFreeText(`  Collez votre clé API ${tProvider} :`);
+      }
+      if (!key) {
+        console.log(`  \x1b[33mAucune clé saisie — repli sur l'auto-analyse classique.${'\x1b[0m'}`);
+        return base;
+      }
+      secrets.rememberSecret(tProvider, key);
+      console.log(`  \x1b[35mProfesseur : ${tProvider} activé — clé mémorisée :${'\x1b[0m'} ${secrets.maskedForDisplay(key)}`);
+      const resolved = { ...TEACHER_CONFIG, enabled: true, provider: tProvider, apiKey: key };
+      if (teacherModel)    resolved.model    = teacherModel;
+      if (teacherEndpoint) resolved.endpoint = teacherEndpoint;
+      return resolved;
     })();
     teacherConfigResolved = (teacherConfig && teacherConfig.then) ? await teacherConfig : teacherConfig;
     if (resolvedApiKey) secrets.rememberSecret(resolvedProvider, resolvedApiKey, true);

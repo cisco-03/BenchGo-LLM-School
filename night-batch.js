@@ -1331,6 +1331,18 @@ function schoolsForModelPlan(m) {
 }
 
 // Selection interactive des ecoles.
+// Helper interactif : pose une question sur stdin, attend la réponse, ferme.
+// Évite les problèmes de readline multiples sur Windows.
+function ask(prompt) {
+  return new Promise(resolve => {
+    const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+    rl.question(prompt, answer => {
+      rl.close();
+      resolve((answer || '').trim());
+    });
+  });
+}
+
 async function selectSchoolsInteractive(selectedModels) {
   console.log(`\n  ${C.bold}${C.cyan}=== ÉCOLES À TESTER ===${C.reset}`);
   console.log(`  ${C.gray}Sélectionnez les écoles à faire passer à chaque modèle.${C.reset}`);
@@ -1383,77 +1395,97 @@ async function selectSchoolsInteractive(selectedModels) {
     console.log('');
   }
 
-  const schools = await new Promise(resolve => {
-    const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-    rl.question(`  ${C.cyan}Écoles à tester :${C.reset} `, answer => {
-      rl.close();
-      const raw = (answer || '').trim().toLowerCase();
-      if (raw === 'all' || raw === '*') { resolve(SCHOOLS.filter(s => s.cli !== null)); return; }
-      const indices = raw.split(/[\s,;]+/).map(s => parseInt(s, 10)).filter(n => Number.isInteger(n) && n >= 1 && n <= SCHOOLS.length);
-      const uniq = [...new Set(indices.map(n => n - 1))];
-      resolve(uniq.map(i => SCHOOLS[i]));
-    });
-  });
+  const rawSchools = await ask(`  ${C.cyan}Écoles à tester :${C.reset} `);
+  let schools;
+  if (rawSchools.toLowerCase() === 'all' || rawSchools === '*') {
+    schools = SCHOOLS.filter(s => s.cli !== null);
+  } else {
+    const indices = rawSchools.split(/[\s,;]+/).map(s => parseInt(s, 10)).filter(n => Number.isInteger(n) && n >= 1 && n <= SCHOOLS.length);
+    const uniq = [...new Set(indices.map(n => n - 1))];
+    schools = uniq.map(i => SCHOOLS[i]);
+  }
 
-  // --- Mode d'exécution : classique ou classe-par-classe ---
-  // Demande comment exécuter chaque école : toute l'école en un seul process
-  // (classique, rapide mais un gel bloque tout) ou chaque exercice (tier) isolé
-  // dans un process séparé avec timeout 45 min (classe-par-classe, robuste nuit).
-  // Skip si l'option 8 (tier-by-tier) est sélectionnée : elle gère son propre
-  // prompt mode auto/manuel + tiers dans main().
-  const tierByTier = isTierByTier(schools);
-  let cbc = false;
-  let tierFilter = null;
-  if (!tierByTier) {
-    console.log(`\n  ${C.bold}── Mode d'exécution ──${C.reset}`);
-    console.log(`  ${C.gray}Comment lancer chaque école ?${C.reset}\n`);
-    console.log(`  ${C.bold} A.${C.reset} ${C.bold}Classique${C.reset} ${C.gray}— toute l'école d'un coup${C.reset}`);
-    console.log(`      ${C.gray}Un seul process pour toute l'école. Plus rapide.${C.reset}`);
-    console.log(`      ${C.gray}Inconvénient : si le modèle gèle, tout le batch bloque.${C.reset}\n`);
-    console.log(`  ${C.bold} B.${C.reset} ${C.bold}Classe par classe${C.reset} ${C.gray}— un exercice à la fois${C.reset}`);
-    console.log(`      ${C.gray}Chaque exercice (tier) dans un process séparé, timeout 45 min.${C.reset}`);
-    console.log(`      ${C.gray}Si un exercice gèle : kill auto, passage au suivant.${C.reset}`);
-    console.log(`      ${C.gray}Recommandé pour le mode nuit (robustesse maximale).${C.reset}\n`);
-    const modeAnswer = await new Promise(resolve => {
-      const rlM = readline.createInterface({ input: process.stdin, output: process.stdout });
-      rlM.question(`  ${C.cyan}Mode d'exécution [A/B] (défaut B) :${C.reset} `, a => {
-        rlM.close();
-        resolve((a || '').trim().toLowerCase());
-      });
+  // --- Option 8 : exercice par exercice ---
+  // L'utilisateur a choisi le mode tier-by-tier. On demande l'école, les tiers
+  // et le mode de passage (auto/manuel) directement ici, puis on retourne.
+  if (isTierByTier(schools)) {
+    console.log(`\n  ${C.bold}${C.cyan}=== EXERCICE PAR EXERCICE ===${C.reset}`);
+    console.log(`  ${C.gray}Choisissez l'école, puis les exercices (tiers) à tester.${C.reset}\n`);
+    SCHOOLS.slice(0, 4).forEach((s, i) => {
+      const idx = String(i + 1).padStart(2);
+      console.log(`  ${C.bold}${idx}.${C.reset} ${s.label}`);
     });
-    cbc = modeAnswer !== 'a';
-
-    // --- Sélection des tiers (exercices) à exécuter ---
-    // En mode classe-par-classe, on demande quels tiers (exercices) lancer.
-    // Entrée = tous les tiers (comportement par défaut).
-    // Sinon, numéros séparés par virgules (ex: "0" = premier exercice seulement,
-    // "0,1" = les deux premiers). Permet un test rapide sur un seul exercice.
-    if (cbc) {
-      console.log(`  ${C.gray}→ Classe par classe : chaque tier isolé (timeout ${TIER_TIMEOUT_MS / 60000} min/tier).${C.reset}`);
-      console.log(`\n  ${C.bold}── Exercices à exécuter ──${C.reset}`);
-      console.log(`  ${C.gray}Quels exercices (tiers) lancer ?${C.reset}`);
-      console.log(`  ${C.gray}Entrée = tous les exercices (défaut).${C.reset}`);
-      console.log(`  ${C.gray}Numéros séparés par virgules (ex: "0" = 1er exercice, "0,1" = 2 premiers).${C.reset}`);
-      const tierAnswer = await new Promise(resolve => {
-        const rlT = readline.createInterface({ input: process.stdin, output: process.stdout });
-        rlT.question(`  ${C.cyan}Tiers à exécuter (défaut = tous) :${C.reset} `, a => {
-          rlT.close();
-          resolve((a || '').trim());
-        });
-      });
-      if (tierAnswer) {
-        const nums = tierAnswer.split(/[\s,;]+/).map(s => parseInt(s, 10)).filter(n => Number.isInteger(n) && n >= 0);
-        if (nums.length > 0) {
-          tierFilter = [...new Set(nums)];
-          console.log(`  ${C.gray}→ Tiers sélectionnés : ${tierFilter.join(', ')}${C.reset}`);
-        }
-      }
-      if (!tierFilter) {
-        console.log(`  ${C.gray}→ Tous les tiers seront exécutés.${C.reset}`);
-      }
-    } else {
-      console.log(`  ${C.gray}→ Mode classique : école entière en un process.${C.reset}`);
+    const schoolAnswer = await ask(`  ${C.cyan}École à tester :${C.reset} `);
+    const schoolIdx = parseInt(schoolAnswer, 10) - 1;
+    if (!Number.isInteger(schoolIdx) || schoolIdx < 0 || schoolIdx > 3) {
+      console.log(`  ${C.red}École invalide. Abandon.${C.reset}`);
+      return { schools: [], classByClass: false, tierFilter: null };
     }
+    const chosenSchool = SCHOOLS[schoolIdx];
+    console.log(`  ${C.gray}→ École : ${chosenSchool.label}${C.reset}`);
+    const profile = PROFILES[chosenSchool.key];
+    const allTiers = [...profile.mandatory, ...profile.optional].sort((a, b) => a - b);
+    console.log(`  ${C.gray}  Tiers disponibles : ${allTiers.join(', ')} (0 = 1er exercice)${C.reset}`);
+    const tierAnswer = await ask(`  ${C.cyan}Tiers à exécuter (défaut = tous, ex: "0" pour le 1er) :${C.reset} `);
+    let tFilter = null;
+    if (tierAnswer) {
+      const nums = tierAnswer.split(/[\s,;]+/).map(s => parseInt(s, 10)).filter(n => Number.isInteger(n) && n >= 0);
+      if (nums.length > 0) {
+        tFilter = [...new Set(nums)];
+        console.log(`  ${C.gray}→ Tiers sélectionnés : ${tFilter.join(', ')}${C.reset}`);
+      }
+    }
+    if (!tFilter) {
+      console.log(`  ${C.gray}→ Tous les tiers seront exécutés.${C.reset}`);
+    }
+    console.log(`\n  ${C.bold}── Mode de passage ──${C.reset}`);
+    console.log(`  ${C.gray}A = Auto : passage au modèle suivant même si un modèle échoue ou gèle.${C.reset}`);
+    console.log(`      ${C.gray}Chaque exercice a un timeout de 45 min (kill auto si gel).${C.reset}`);
+    console.log(`  ${C.gray}M = Manuel : arrêt au premier modèle qui échoue (contrôle strict).${C.reset}\n`);
+    const autoAnswer = (await ask(`  ${C.cyan}Mode de passage [A/M] (défaut A) :${C.reset} `)).toLowerCase();
+    const cbc = autoAnswer !== 'm';
+    if (cbc) {
+      console.log(`  ${C.gray}→ Mode auto : chaque tier isolé (timeout ${TIER_TIMEOUT_MS / 60000} min), passage auto au modèle suivant.${C.reset}`);
+    } else {
+      console.log(`  ${C.gray}→ Mode manuel : arrêt au premier échec (pas de timeout auto).${C.reset}`);
+    }
+    return { schools: [chosenSchool], classByClass: cbc, tierFilter: tFilter };
+  }
+
+  // --- Mode d'exécution : classique ou classe-par-classe (options 1-7) ---
+  console.log(`\n  ${C.bold}── Mode d'exécution ──${C.reset}`);
+  console.log(`  ${C.gray}Comment lancer chaque école ?${C.reset}\n`);
+  console.log(`  ${C.bold} A.${C.reset} ${C.bold}Classique${C.reset} ${C.gray}— toute l'école d'un coup${C.reset}`);
+  console.log(`      ${C.gray}Un seul process pour toute l'école. Plus rapide.${C.reset}`);
+  console.log(`      ${C.gray}Inconvénient : si le modèle gèle, tout le batch bloque.${C.reset}\n`);
+  console.log(`  ${C.bold} B.${C.reset} ${C.bold}Classe par classe${C.reset} ${C.gray}— un exercice à la fois${C.reset}`);
+  console.log(`      ${C.gray}Chaque exercice (tier) dans un process séparé, timeout 45 min.${C.reset}`);
+  console.log(`      ${C.gray}Si un exercice gèle : kill auto, passage au suivant.${C.reset}`);
+  console.log(`      ${C.gray}Recommandé pour le mode nuit (robustesse maximale).${C.reset}\n`);
+  const modeAnswer = (await ask(`  ${C.cyan}Mode d'exécution [A/B] (défaut B) :${C.reset} `)).toLowerCase();
+  const cbc = modeAnswer !== 'a';
+
+  // --- Sélection des tiers (exercices) à exécuter ---
+  let tierFilter = null;
+  if (cbc) {
+    console.log(`  ${C.gray}→ Classe par classe : chaque tier isolé (timeout ${TIER_TIMEOUT_MS / 60000} min/tier).${C.reset}`);
+    console.log(`\n  ${C.bold}── Exercices à exécuter ──${C.reset}`);
+    console.log(`  ${C.gray}Quels exercices (tiers) lancer ?${C.reset}`);
+    console.log(`  ${C.gray}Entrée = tous les exercices (défaut).${C.reset}`);
+    console.log(`  ${C.gray}Numéros séparés par virgules (ex: "0" = 1er exercice, "0,1" = 2 premiers).${C.reset}`);
+    const tierAnswer = await ask(`  ${C.cyan}Tiers à exécuter (défaut = tous) :${C.reset} `);
+    if (tierAnswer) {
+      const nums = tierAnswer.split(/[\s,;]+/).map(s => parseInt(s, 10)).filter(n => Number.isInteger(n) && n >= 0);
+      if (nums.length > 0) {
+        tierFilter = [...new Set(nums)];
+        console.log(`  ${C.gray}→ Tiers sélectionnés : ${tierFilter.join(', ')}${C.reset}`);
+      }
+    }
+    if (!tierFilter) {
+      console.log(`  ${C.gray}→ Tous les tiers seront exécutés.${C.reset}`);
+    }
+  } else {
+    console.log(`  ${C.gray}→ Mode classique : école entière en un process.${C.reset}`);
   }
 
   return { schools, classByClass: cbc, tierFilter };
@@ -1603,7 +1635,7 @@ function runBenchmark(modelKey, schoolCli, extraArgs, opts = {}) {
   //   modèle gelé bloque toute la nuit (bug constaté : un hang infini sur un
   //   tier arrêtait tout le batch sans jamais passer au modèle suivant).
   const { tierNum = null, timeoutMs = 0 } = opts;
-  const args = ['runner.js', '--force'];
+  const args = ['runner.js', '--force', '--provider=lmstudio', `--model=${modelKey}`];
   if (schoolCli) args.push(`--profile=${schoolCli}`);
   if (tierNum !== null && tierNum !== undefined) args.push(String(tierNum));
   for (const a of extraArgs) args.push(a);
@@ -1887,75 +1919,6 @@ async function main() {
       // uniquement le marqueur 'manual-per-model' qui active la branche manuelle.
       if (isManualPerModel(schools)) {
         manualPlan = await selectSchoolsManualPerModel(selected);
-      }
-      // Option 8 = exercice par exercice : l'utilisateur choisit une école
-      // puis les exercices (tiers) qu'il veut tester. schools contient
-      // uniquement le marqueur 'tier-by-tier'. On demande l'école et les tiers.
-      if (isTierByTier(schools)) {
-        console.log(`\n  ${C.bold}${C.cyan}=== EXERCICE PAR EXERCICE ===${C.reset}`);
-        console.log(`  ${C.gray}Choisissez l'école, puis les exercices (tiers) à tester.${C.reset}\n`);
-        SCHOOLS.slice(0, 4).forEach((s, i) => {
-          const idx = String(i + 1).padStart(2);
-          console.log(`  ${C.bold}${idx}.${C.reset} ${s.label}`);
-        });
-        const schoolAnswer = await new Promise(resolve => {
-          const rlS = readline.createInterface({ input: process.stdin, output: process.stdout });
-          rlS.question(`  ${C.cyan}École à tester :${C.reset} `, a => {
-            rlS.close();
-            resolve((a || '').trim());
-          });
-        });
-        const schoolIdx = parseInt(schoolAnswer, 10) - 1;
-        if (!Number.isInteger(schoolIdx) || schoolIdx < 0 || schoolIdx > 3) {
-          console.log(`  ${C.red}École invalide. Abandon.${C.reset}`);
-          if (serverHandle.startedByUs) stopServer();
-          process.exit(1);
-        }
-        const chosenSchool = SCHOOLS[schoolIdx];
-        schools = [chosenSchool];
-        console.log(`  ${C.gray}→ École : ${chosenSchool.label}${C.reset}`);
-        const profile = PROFILES[chosenSchool.key];
-        const allTiers = [...profile.mandatory, ...profile.optional].sort((a, b) => a - b);
-        console.log(`  ${C.gray}  Tiers disponibles : ${allTiers.join(', ')} (0 = 1er exercice)${C.reset}`);
-        const tierAnswer = await new Promise(resolve => {
-          const rlT = readline.createInterface({ input: process.stdin, output: process.stdout });
-          rlT.question(`  ${C.cyan}Tiers à exécuter (défaut = tous, ex: "0" pour le 1er) :${C.reset} `, a => {
-            rlT.close();
-            resolve((a || '').trim());
-          });
-        });
-        if (tierAnswer) {
-          const nums = tierAnswer.split(/[\s,;]+/).map(s => parseInt(s, 10)).filter(n => Number.isInteger(n) && n >= 0);
-          if (nums.length > 0) {
-            tierFilter = [...new Set(nums)];
-            console.log(`  ${C.gray}→ Tiers sélectionnés : ${tierFilter.join(', ')}${C.reset}`);
-          }
-        }
-        if (!tierFilter) {
-          console.log(`  ${C.gray}→ Tous les tiers seront exécutés.${C.reset}`);
-        }
-        // Mode auto : passage automatique au modèle suivant même si un modèle
-        // échoue ou gèle. Activé par défaut (classByClass = true = chaque tier
-        // isolé avec timeout 45 min). L'utilisateur peut désactiver pour un
-        // contrôle manuel (arrêt au premier échec).
-        console.log(`\n  ${C.bold}── Mode de passage ──${C.reset}`);
-        console.log(`  ${C.gray}A = Auto : passage au modèle suivant même si un modèle échoue ou gèle.${C.reset}`);
-        console.log(`      ${C.gray}Chaque exercice a un timeout de 45 min (kill auto si gel).${C.reset}`);
-        console.log(`  ${C.gray}M = Manuel : arrêt au premier modèle qui échoue (contrôle strict).${C.reset}\n`);
-        const autoAnswer = await new Promise(resolve => {
-          const rlA = readline.createInterface({ input: process.stdin, output: process.stdout });
-          rlA.question(`  ${C.cyan}Mode de passage [A/M] (défaut A) :${C.reset} `, a => {
-            rlA.close();
-            resolve((a || '').trim().toLowerCase());
-          });
-        });
-        if (autoAnswer === 'm') {
-          classByClass = false;
-          console.log(`  ${C.gray}→ Mode manuel : arrêt au premier échec (pas de timeout auto).${C.reset}`);
-        } else {
-          classByClass = true;
-          console.log(`  ${C.gray}→ Mode auto : chaque tier isolé (timeout ${TIER_TIMEOUT_MS / 60000} min), passage auto au modèle suivant.${C.reset}`);
-        }
       }
     }
   }
@@ -2246,6 +2209,15 @@ module.exports = {
 };
 
 if (require.main === module) {
+  // Ctrl+C : décharge tous les modèles LM Studio avant de quitter pour libérer
+  // la RAM. Sans ça, les modèles restent chargés en mémoire après l'arrêt.
+  process.on('SIGINT', () => {
+    console.log(`\n  ${C.yellow}[Ctrl+C] Déchargement des modèles LM Studio...${C.reset}`);
+    try { unloadAll(); } catch (_) {}
+    try { stopServer(); } catch (_) {}
+    console.log(`  ${C.green}Modèles déchargés. Au revoir.${C.reset}`);
+    process.exit(0);
+  });
   main().catch(e => {
     console.error(`\n${C.red}[ERREUR FATALE night-batch]${C.reset} ${e.message}`);
     console.error(e.stack);
