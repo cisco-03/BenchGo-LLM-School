@@ -202,6 +202,45 @@ function stopServer() {
   runLms(['server', 'stop'], { timeoutMs: 15000 });
 }
 
+// Keep-alive : LM Studio peut passer en veille / couper le serveur apres une
+// periode d'inactivite. En mode nuit (runs de plusieurs heures), cette coupure
+// survient en plein benchmark et se traduit par des reponses vides ou des
+// timeouts — signatures "modele silencieux" qui declenchent a tort
+// l'auto-blacklist. On maintient le serveur actif en envoyant un ping leger
+// (GET /v1/models, sans generation, donc sans toucher au GPU ni aux modeles
+// charges) a intervalle regulier pendant toute la duree du batch.
+const SERVER_KEEPALIVE_MS = 30000;
+let keepAliveTimer = null;
+
+async function keepAliveTick() {
+  try {
+    const controller = new AbortController();
+    const t = setTimeout(() => controller.abort(), 5000);
+    const res = await fetch(`${LMSTUDIO_HOST}/v1/models`, { signal: controller.signal });
+    clearTimeout(t);
+    if (!res.ok) {
+      console.log(`  ${C.yellow}[keep-alive] Attention : /v1/models a repondu HTTP ${res.status}.${C.reset}`);
+    }
+  } catch (e) {
+    const label = (e && e.name === 'AbortError') ? 'timeout' : (e && e.message ? e.message : 'injoignable');
+    console.log(`  ${C.yellow}[keep-alive] Serveur LM Studio ${label} — verifiez qu'il n'est pas en veille.${C.reset}`);
+  }
+}
+
+function startServerKeepAlive() {
+  if (keepAliveTimer) return;
+  keepAliveTimer = setInterval(keepAliveTick, SERVER_KEEPALIVE_MS);
+  if (keepAliveTimer.unref) keepAliveTimer.unref();
+  console.log(`  ${C.gray}Keep-alive serveur actif (ping /v1/models toutes les ${SERVER_KEEPALIVE_MS / 1000}s).${C.reset}`);
+}
+
+function stopServerKeepAlive() {
+  if (keepAliveTimer) {
+    clearInterval(keepAliveTimer);
+    keepAliveTimer = null;
+  }
+}
+
 // Charge tous les carnets de scores depuis Export-Rapports/.carnet/*.json.
 // Renvoie un tableau d'objets { model, shortName, quantization, ecoles, raw }.
 function loadAllLedgers() {
@@ -1831,6 +1870,9 @@ async function main() {
       process.exit(1);
     }
   }
+  // Maintient le serveur actif pendant tout le batch (anti-veille) : le serveur
+  // peut se couper tout seul en cas d'inactivite, meme s'il etait deja actif.
+  startServerKeepAlive();
 
   console.log(`\n  ${C.gray}[${nowClock()}] Recuperation de la liste des modeles...${C.reset}`);
   // Flag --force-detect : réindexe les GGUF orphelins (présents sur disque mais
@@ -2051,6 +2093,7 @@ async function main() {
   let batchStopped = false;
   for (let i = 0; i < selected.length; i++) {
     const m = selected[i];
+    try {
     console.log(`\n${C.bold}${C.magenta}==================================================${C.reset}`);
     console.log(`${C.bold}${C.magenta}  MODELE ${i + 1}/${selected.length} - ${m.displayName} ${C.gray}[${m.modelKey}]${C.reset}`);
     console.log(`${C.bold}${C.magenta}  ${m.params} - ${m.quant} - ${fmtBytes(m.size)} - ${m.publisher}${C.reset}`);
@@ -2160,10 +2203,19 @@ async function main() {
       console.log(`\n  ${C.red}[STOP] Mode manuel : arrêt de la file d'attente après l'échec de ${m.displayName}.${C.reset}`);
       break;
     }
+    } catch (err) {
+      // Filet de sécurité : une exception inattendue sur UN modèle ne doit
+      // jamais interrompre toute la file de nuit. On log, on trace l'échec et
+      // on passe au modèle suivant (comportement identique à un run_ko).
+      console.log(`\n  ${C.red}[ERREUR] Exception sur ${m.displayName} : ${err && err.message ? err.message : err}. Passage au modèle suivant.${C.reset}`);
+      recordRun(m.modelKey, 'exception', null);
+      results.push({ model: m, ok: false, reason: 'exception', durationMs: 0 });
+    }
   }
 
   console.log(`\n  ${C.gray}[${nowClock()}] Dechargement de tous les modeles...${C.reset}`);
   unloadAll();
+  stopServerKeepAlive();
   if (serverHandle.startedByUs) stopServer();
 
   const totalMin = ((Date.now() - batchStart) / 60000).toFixed(1);

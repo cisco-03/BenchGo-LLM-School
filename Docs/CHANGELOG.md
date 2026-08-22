@@ -1,5 +1,34 @@
 # CHANGELOG - Carnet de Notes BenchGo
 
+## 2026-08-22 — fix(night-batch): keep-alive serveur anti-veille pendant le batch
+
+### Contexte
+En mode nuit, LM Studio pouvait couper son propre serveur après une période
+d'inactivité (veille/standby). Le benchmark tournant des heures, cette coupure
+survenait en plein run et se traduisait par des réponses vides ou des timeouts
+— signatures « modèle silencieux » qui déclenchaient à tort l'auto-blacklist
+(toute la nuit du 2026-08-21 : 0 succès / 4 échecs, 3 modèles blacklistés pour
+rien). Aucune régression du code : les tests unitaires passaient (27/0) et le
+serveur LM Studio était tout simplement passé en veille.
+
+### Changements (`night-batch.js`)
+- `SERVER_KEEPALIVE_MS = 30000` : intervalle de ping.
+- `keepAliveTick()` : ping léger `GET /v1/models` (sans génération, sans toucher
+  au GPU) pour maintenir le serveur actif ; log une alerte jaune si le serveur
+  redevient injoignable.
+- `startServerKeepAlive()` / `stopServerKeepAlive()` : démarre/arrête le
+  intervalle. `unref()` pour ne pas bloquer la sortie du process.
+- Le keep-alive est activé **après** la vérification du serveur (que ce soit
+  BenchGo qui l'a démarré en headless ou un serveur déjà actif), et stoppé à la
+  fin du batch (avant `stopServer()`). Il couvre donc aussi les runs
+  classe-par-classe (process enfants) puisque le parent pingue en continu.
+
+### Vérification
+- `node --check night-batch.js` : OK.
+- `node tests/run-tests.js` : 27/0 (inchangé).
+- Test manuel : `lms server start` puis observation des pings `[keep-alive]`
+  dans les logs du mode nuit ; le serveur ne doit plus se couper en cours de run.
+
 ## 2026-08-21 — fix(night-batch): mode 8 intégré au flux normal + --models= tolérant
 
 ### Contexte
