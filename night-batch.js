@@ -1146,6 +1146,19 @@ function printModelsList(models, { interactive = true } = {}) {
   // Chaque largeur = max(longueur du header, longueur de la plus longue valeur).
   // Les valeurs trop longues sont tronquees avec .slice(0, W) pour garantir
   // un alignement parfait (style militaire — tout est carre).
+  //
+  // IMPORTANT sur le padding : certaines valeurs sont enveloppees de codes ANSI
+  // (couleur). On ne peut PAS faire .padEnd/.padStart sur la chaine coloree car
+  // String.length compte les codes ANSI invisibles (ex: '\x1b[90m=\x1b[0m' a
+  // une longueur de 10 mais 1 seul caractere visible). La regle : toujours
+  // padder le TEXTE SIMPLE puis appliquer la couleur autour, ou utiliser la
+  // fonction pad() qui calcule la longueur visible et ajoute les espaces
+  // manquants APRES les codes ANSI.
+  const visLen = s => s.replace(/\x1b\[[0-9;]*m/g, '').length;
+  // padRight/padLeft : remplissent a largeur fixe en tenant compte des ANSI.
+  const padRight = (s, w) => { const v = visLen(s); return v >= w ? s : s + ' '.repeat(w - v); };
+  const padLeft = (s, w) => { const v = visLen(s); return v >= w ? s : ' '.repeat(w - v) + s; };
+
   const colIdx = String(models.length) + '.';
   const idxW = Math.max(4, colIdx.length + 1);
   const nameW = Math.max(30, ...models.map(m => (m.displayName || '').length));
@@ -1155,8 +1168,17 @@ function printModelsList(models, { interactive = true } = {}) {
   const pubW = Math.max(14, ...models.map(m => (m.publisher || '?').length));
   const statusW = 15; // COMPLET / PARTIEL / JAMAIS TESTE / NON APPLICABLE — fixe
   const pctW = 5;
-  const tpsW = 8;
-  const tokW = 7;
+  // Largeur de la colonne vitesse : dynamique pour ne pas deborder sur les
+  // valeurs longues (ex: '16.29 t/s' = 9 chars). On inclut l'unite 't/s' et
+  // jusqu'a 2 decimales. Header 'Vit.' = 4.
+  const tpsW = Math.max(9, ...models.map(m => {
+    const mt = m.metrics;
+    return mt && mt.tokensPerSecond > 0 ? (mt.tokensPerSecond + ' t/s').length : 0;
+  }));
+  const tokW = Math.max(7, ...models.map(m => {
+    const mt = m.metrics;
+    return mt && (mt.tokens || 0) > 0 ? fmtTokens(mt.tokens).length : 0;
+  }));
   const attW = 5;
   const trendW = 4;
   const timeW = Math.max(8, ...models.map(m => {
@@ -1165,15 +1187,44 @@ function printModelsList(models, { interactive = true } = {}) {
   }));
   const missW = Math.max(22, ...models.map(m => (missingSchoolsLabel(m.status) || '').length));
 
+  // Séparateurs visuels entre groupes de colonnes. '│' delimite les groupes
+  // logiques : Identité | Statut | Performance | Reste à faire.
+  const SEP = '│';
+  // En-tête : groupes de colonnes separes par '│' pour structurer visuellement.
+  //   Groupe Identité : idx, Modèle, Param, Quant, Taille, Editeur
+  //   Groupe Statut   : Statut, Pct, Tnd
+  //   Groupe Perf     : Vit., Tokens, Temps, Tent.
+  //   Groupe Reste    : Écoles manquantes
   const hdrIdx = ' '.repeat(idxW);
-  const header = `  ${hdrIdx}${'Modèle'.padEnd(nameW)} ${'Param'.padEnd(paramW)} ${'Quant'.padEnd(quantW)} ${'Taille'.padStart(sizeW)}  ${'Editeur'.padEnd(pubW)} ${'Statut'.padEnd(statusW)} ${'Pct'.padStart(pctW)} ${'Vit.'.padStart(tpsW)} ${'Tokens'.padStart(tokW)} ${'Tent.'.padStart(attW)} ${'Tnd'.padStart(trendW)} ${'Temps'.padStart(timeW)}  ${'Ecoles manquantes'}`;
+  const header =
+    `  ${hdrIdx} ` +
+    `${padRight('Modèle', nameW)} ` +
+    `${padRight('Param', paramW)} ` +
+    `${padRight('Quant', quantW)} ` +
+    `${padLeft('Taille', sizeW)} ` +
+    `${padRight('Editeur', pubW)} ${SEP} ` +
+    `${padRight('Statut', statusW)} ` +
+    `${padLeft('Pct', pctW)} ` +
+    `${padRight('Tnd', trendW)} ${SEP} ` +
+    `${padLeft('Vit.', tpsW)} ` +
+    `${padLeft('Tokens', tokW)} ` +
+    `${padLeft('Temps', timeW)} ` +
+    `${padLeft('Tent.', attW)} ${SEP} ` +
+    `${padRight('Ecoles manquantes', missW)}`;
   console.log(`${C.gray}${header}${C.reset}`);
-  const sep = '─'.repeat(idxW + nameW + paramW + quantW + sizeW + pubW + statusW + pctW + tpsW + tokW + attW + trendW + timeW + missW + 21);
+  // Largeur du séparateur = largeur visible d'une ligne de données SANS les 2
+  // espaces d'indentation initiaux (le sep est imprimé préfixé de '  ').
+  // Somme des colonnes + 19 (16 espaces inter-colonnes + 3 séparateurs '│').
+  const sepLen = idxW + nameW + paramW + quantW + sizeW + pubW +
+                 statusW + pctW + trendW + tpsW + tokW + timeW + attW +
+                 missW + 19;
+  const sep = '─'.repeat(sepLen);
   console.log(`${C.gray}  ${sep}${C.reset}`);
   models.forEach((m, i) => {
     const idx = String(i + 1).padStart(Math.max(2, idxW - 1)) + '.';
-    const sz = fmtBytes(m.size).padStart(sizeW);
+    const sz = padLeft(fmtBytes(m.size), sizeW);
     const badge = statusBadge(m.status);
+    // Statut : padEnd sur le label SIMPLE puis couleur autour → largeur visible stable.
     const statusStr = `${badge.color}${badge.label.padEnd(statusW)}${C.reset}`;
     const missing = missingSchoolsLabel(m.status);
     const missStr = missing
@@ -1184,7 +1235,7 @@ function printModelsList(models, { interactive = true } = {}) {
     const mtpTag = m.mtpModelKey ? `${C.cyan}[MTP]${C.reset} ` : '';
     const namePad = nameW - (mtpTag ? 6 : 0);
     const nameRaw = (m.displayName || '').slice(0, namePad);
-    const name = `${nameRaw.padEnd(namePad)}${mtpTag}`;
+    const name = padRight(`${nameRaw.padEnd(namePad)}${mtpTag}`, nameW);
     const pub = (m.publisher || '?').slice(0, pubW).padEnd(pubW);
     const params = (m.params || '?').slice(0, paramW).padEnd(paramW);
     const quant = (m.quant || '?').slice(0, quantW).padEnd(quantW);
@@ -1202,11 +1253,28 @@ function printModelsList(models, { interactive = true } = {}) {
           : fmtTokens(tokVal).padStart(tokW))
       : `${C.gray}${'\u2014'.padStart(tokW)}${C.reset}`;
     const attStr = mt ? `${String(mt.attempts).padStart(attW)}` : `${C.gray}${'?'.padStart(attW)}${C.reset}`;
-    const trendStr = mt ? `${trendGlyph(mt.trend).padEnd(trendW)}` : `${C.gray}${'\u2014'.padEnd(trendW)}${C.reset}`;
+    // Tendance : la glyphe est colore. On padde en tenant compte des ANSI via
+    // padRight, sinon .padEnd(trendW) ne ferait rien (la longueur avec ANSI > trendW).
+    const trendStr = mt ? padRight(trendGlyph(mt.trend), trendW) : `${C.gray}${padRight('\u2014', trendW)}${C.reset}`;
     const timeStr = mt && mt.elapsedMs > 0
       ? `${fmtDuration(mt.elapsedMs).padStart(timeW)}`
       : `${C.gray}${'\u2014'.padStart(timeW)}${C.reset}`;
-    console.log(`  ${C.bold}${idx}${C.reset} ${name} ${C.gray}${params} ${quant}${C.reset} ${sz}  ${C.gray}${pub}${C.reset} ${statusStr} ${pctStr} ${tpsStr} ${tokStr} ${attStr} ${trendStr} ${timeStr}  ${missStr}`);
+    // Ligne de données : mêmes séparateurs '│' que l'en-tête, même espacement.
+    console.log(
+      `  ${C.bold}${idx}${C.reset} ` +
+      `${name} ` +
+      `${C.gray}${params} ${quant}${C.reset} ` +
+      `${sz} ` +
+      `${C.gray}${pub}${C.reset} ${SEP} ` +
+      `${statusStr} ` +
+      `${pctStr} ` +
+      `${trendStr} ${SEP} ` +
+      `${tpsStr} ` +
+      `${tokStr} ` +
+      `${timeStr} ` +
+      `${attStr} ${SEP} ` +
+      `${missStr}`
+    );
   });
   console.log('');
 }
@@ -1458,6 +1526,17 @@ async function selectSchoolsInteractive(selectedModels) {
     }
   }
 
+  // --- Option 7 : manuel par modèle ---
+  // On demande l'école de chaque modèle INDIVIDUELLEMENT dès maintenant, AVANT
+  // les questions de mode d'exécution / tiers / passage. Logique : l'utilisateur
+  // a choisi l'option 7 → il s'attend à saisir les écoles de ses modèles
+  // immédiatement, pas après 3 autres questions. Le plan manuel est retourné
+  // dans le résultat pour que main() l'utilise tel quel (sans le redemander).
+  let manualPlan = null;
+  if (isManualPerModel(schools)) {
+    manualPlan = await selectSchoolsManualPerModel(selectedModels);
+  }
+
   // --- Mode d'exécution : classique ou classe-par-classe ---
   console.log(`\n  ${C.bold}── Mode d'exécution ──${C.reset}`);
   console.log(`  ${C.gray}Comment lancer chaque école ?${C.reset}\n`);
@@ -1510,12 +1589,12 @@ async function selectSchoolsInteractive(selectedModels) {
     } else {
       console.log(`  ${C.gray}→ Mode manuel : arrêt au premier échec obligatoire.${C.reset}`);
     }
-    return { schools, classByClass: cbc, tierFilter, stopOnFirstFailure };
+    return { schools, classByClass: cbc, tierFilter, stopOnFirstFailure, manualPlan };
   } else {
     console.log(`  ${C.gray}→ Mode classique : école entière en un process.${C.reset}`);
   }
 
-  return { schools, classByClass: cbc, tierFilter };
+  return { schools, classByClass: cbc, tierFilter, manualPlan };
 }
 
 // Sélection manuelle de l'école pour chaque modèle, un par un.
@@ -1573,7 +1652,13 @@ async function selectSchoolsManualPerModel(selectedModels) {
 }
 
 function loadModel(modelKey, mtpModelKey) {
-  const args = ['load', modelKey];
+  // -y (--yes) : approuve automatiquement les prompts de lms load. Sans ce
+  // flag, lms peut afficher un sélecteur interactif (« ? Select a model to
+  // load ») qui bloque le batch en mode non-TTY (spawnSync hérite du stdin du
+  // parent, mais lms utilise une TUI readline qui capture le terminal et
+  // rend Ctrl+C très difficile à intercepter — l'utilisateur doit tuer le
+  // process à la main). Avec -y, lms charge le modèle sans aucune interaction.
+  const args = ['load', '-y', modelKey];
   if (mtpModelKey) {
     args.push('--speculative-draft-model', mtpModelKey, '--speculative-draft-mtp');
   }
@@ -1607,10 +1692,15 @@ async function healthCheck(modelKey) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), HEALTH_CHECK_TIMEOUT_MS);
   try {
+    // max_tokens large (512) : les modèles de raisonnement (thinking)
+    // consomment d'abord des tokens en phase de pensée (reasoning_content)
+    // avant de produire la réponse (content). Avec un budget faible (ex: 8),
+    // tout est consommé par le raisonnement → content vide → faux échec.
+    // 512 tokens laisse largement assez pour raisonner puis répondre.
     const body = JSON.stringify({
       model: modelKey,
       messages: [{ role: 'user', content: 'Reply with exactly: OK' }],
-      max_tokens: 8,
+      max_tokens: 512,
       temperature: 0,
       stream: false
     });
@@ -1625,10 +1715,27 @@ async function healthCheck(modelKey) {
       return { ok: false, reason: `HTTP ${res.status} ${res.statusText}` };
     }
     const data = await res.json();
-    const content = data && data.choices && data.choices[0] && data.choices[0].message
-      ? data.choices[0].message.content : '';
-    if (!content || content.length === 0) {
+    const choice = data && data.choices && data.choices[0];
+    const msg = choice ? choice.message : null;
+    const content = msg ? (msg.content || '') : '';
+    // Modèles de raisonnement (thinking) : le modèle pense d'abord dans
+    // reasoning_content, puis produit la réponse dans content. Avec un
+    // max_tokens faible (8), tout le budget est consommé par le raisonnement
+    // → content est vide mais reasoning_content est présent → finish_reason
+    // = "length". Ce n'est PAS un gel : le modèle fonctionne, il a juste
+    // besoin de plus de tokens. On accepte donc aussi reasoning_content non
+    // vide comme preuve que le modèle est vivant.
+    const reasoning = msg ? (msg.reasoning_content || '') : '';
+    const finishReason = choice ? choice.finish_reason : null;
+    if (!content && !reasoning) {
       return { ok: false, reason: 'Réponse vide (modèle silencieux)' };
+    }
+    // Si content est vide MAIS reasoning_content est présent, le modèle
+    // pense activement (thinking). On le marque sain mais on note que la
+    // réponse n'est pas encore produite (le runner donnera un budget plus
+    // large).
+    if (!content && reasoning) {
+      return { ok: true, content: `[thinking] ${reasoning.slice(0, 40)}`, reasoning: true };
     }
     return { ok: true, content };
   } catch (e) {
@@ -1776,18 +1883,69 @@ function runSchoolClassByClass(modelKey, schoolKey, schoolCli, extraArgs, tierFi
 
 function parseArgs() {
   const raw = process.argv.slice(2);
-  const modelsArg = (() => { const a = raw.find(r => r.startsWith('--models=')); return a ? a.split('=').slice(1).join('=') : null; })();
-  const schoolsArg = (() => { const a = raw.find(r => r.startsWith('--schools=')); return a ? a.split('=').slice(1).join('=') : null; })();
-  const tiersArg = (() => { const a = raw.find(r => r.startsWith('--tiers=')); return a ? a.split('=').slice(1).join('=') : null; })();
+
+  // Reconstitue la valeur d'un flag "--xxx=" dont la valeur a été découpée par
+  // le shell sur les espaces. C'est le cas des display names non quotés qui
+  // contiennent des espaces (ex: --models=Nanbeige4.2 3B sans guillemets → le
+  // shell coupe en "--models=Nanbeige4.2" + "3B,..."). On prend la valeur après
+  // '=', puis on rattache les tokens suivants qui ne commencent pas par '--'
+  // (continuation de la valeur coupée), en les rejoignant par une espace. On
+  // s'arrête au prochain vrai flag.
+  function flagValue(flag) {
+    const idx = raw.findIndex(r => r.startsWith(flag));
+    if (idx < 0) return null;
+    let val = raw[idx].slice(flag.length);
+    for (let j = idx + 1; j < raw.length; j++) {
+      if (raw[j].startsWith('--')) break;
+      val += ' ' + raw[j];
+    }
+    return val;
+  }
+
+  let modelsArg = flagValue('--models=');
+  let schoolsArg = flagValue('--schools=');
+  let tiersArg = flagValue('--tiers=');
   const noTeacher = raw.includes('--no-teacher');
   const hybridFlag = raw.includes('--hybrid');
   const listOnly = raw.includes('--list-only');
   const classByClass = raw.includes('--class-by-class') || raw.includes('--cbc');
   const forceDetect = raw.includes('--force-detect');
-  const teacherProviderArg = (() => { const a = raw.find(r => r.startsWith('--teacher-provider=')); return a ? a.split('=').slice(1).join('=') : null; })();
-  const teacherModelArg = (() => { const a = raw.find(r => r.startsWith('--teacher-model=')); return a ? a.split('=').slice(1).join('=') : null; })();
-  const teacherApiKeyArg = (() => { const a = raw.find(r => r.startsWith('--teacher-api-key=')); return a ? a.split('=').slice(1).join('=') : null; })();
-  const teacherEndpointArg = (() => { const a = raw.find(r => r.startsWith('--teacher-endpoint=')); return a ? a.split('=').slice(1).join('=') : null; })();
+  const teacherProviderArg = flagValue('--teacher-provider=');
+  const teacherModelArg = flagValue('--teacher-model=');
+  let teacherApiKeyArg = flagValue('--teacher-api-key=');
+  const teacherEndpointArg = flagValue('--teacher-endpoint=');
+  // --isoler=!N : isole le modèle n° N (le marque NON APPLICABLE + l'exclut
+  // des futurs batchs via .benchgo-blacklist.json). --isoler=!!N : désisole le
+  // modèle n° N (retire de la liste noire). Le numéro N correspond à la position
+  // dans la liste affichée par --list-only. Cette opération est one-shot : elle
+  // applique l'isolation puis quitte (aucun batch lancé). Permet d'isoler ou
+  // désisoler un modèle sans session interactive TTY — utile depuis un rapport
+  // --lmstudio qui affiche les numéros.
+  const isolateArg = flagValue('--isoler=');
+
+  // Récupère les flags avalés par la virgule dans --models=. Quand l'utilisateur
+  // écrit --models=Nanbeige4.2 3B,--schools=LIGHT sans guillemets, le shell
+  // découpe sur l'espace et la virgule fusionne le modèle et le flag suivant.
+  // Après reconstitution (flagValue), modelsArg = "Nanbeige4.2 3B,--schools=LIGHT".
+  // On sépare sur la virgule : les parts qui ressemblent à un flag (--xxx=yyy)
+  // sont récupérées comme flags (si pas déjà définies), pas comme modèles.
+  if (modelsArg) {
+    const parts = modelsArg.split(',');
+    const modelParts = [];
+    for (const p of parts) {
+      const fm = p.match(/^--([a-z][\w-]*)=(.*)$/);
+      if (fm) {
+        const name = fm[1], value = fm[2];
+        if (name === 'schools' && !schoolsArg) schoolsArg = value;
+        else if (name === 'tiers' && !tiersArg) tiersArg = value;
+        else if (name === 'teacher-provider' && !teacherProviderArg) {} // déjà capturé
+      } else {
+        modelParts.push(p);
+      }
+    }
+    modelsArg = modelParts.join(',').trim() || null;
+  }
+
   const extraRunnerArgs = [];
   if (noTeacher) extraRunnerArgs.push('--no-teacher');
   if (hybridFlag) extraRunnerArgs.push('--hybrid');
@@ -1795,7 +1953,7 @@ function parseArgs() {
   if (teacherModelArg) extraRunnerArgs.push(`--teacher-model=${teacherModelArg}`);
   if (teacherApiKeyArg) extraRunnerArgs.push(`--teacher-api-key=${teacherApiKeyArg}`);
   if (teacherEndpointArg) extraRunnerArgs.push(`--teacher-endpoint=${teacherEndpointArg}`);
-  return { modelsArg, schoolsArg, tiersArg, noTeacher, listOnly, hybridFlag, forceDetect, classByClass, teacherProviderArg, teacherModelArg, extraRunnerArgs };
+  return { modelsArg, schoolsArg, tiersArg, noTeacher, listOnly, hybridFlag, forceDetect, classByClass, isolateArg, teacherProviderArg, teacherModelArg, extraRunnerArgs };
 }
 
 function resolveSchoolsFromArg(schoolsArg) {
@@ -1817,6 +1975,8 @@ async function main() {
       { cmd: 'node night-batch.js --list-only', desc: 'Liste les modèles LM Studio triés par score local, puis quitte (debug).' },
       { cmd: 'node night-batch.js --models=key1,key2', desc: 'Modèles à tester sans sélection interactive (modelKeys).' },
       { cmd: 'node night-batch.js --schools=STANDARD,EXPERT', desc: 'Écoles à tester sans sélection interactive (clés SCHOOLS).' },
+      { cmd: 'node night-batch.js --isoler=!4', desc: 'Isole le modèle n° 4 (marque NON APPLICABLE + exclut des batchs). Numéro = position dans --list-only.' },
+      { cmd: 'node night-batch.js --isoler=!!6', desc: 'Désisole le modèle n° 6 (retire de la liste noire). Rétablit le statut réel.' },
       { cmd: 'node night-batch.js --no-teacher', desc: 'Désactive le professeur IA (correcteur externe).' },
       { cmd: 'node night-batch.js --force-detect', desc: 'Réindexe les GGUF orphelins (modèles sur disque absents de lms ls) puis liste.' },
       { cmd: 'node night-batch.js --class-by-class', desc: 'Mode classe-par-classe : chaque tier dans un process séparé avec timeout (robustesse anti-hang).' },
@@ -1828,6 +1988,7 @@ async function main() {
       '--force, --profile= et --hybrid sont transmis au runner sous-jacent (cf. node runner.js --help).',
       '--class-by-class (ou --cbc) : isole chaque tier dans un process séparé avec timeout de 45 min. Un tier gelé ne bloque plus le batch — passage automatique au tier suivant.',
       '--tiers=0,1 : ne teste que les tiers indiqués (filtre rapide pour trier les modèles faibles). Combine avec --class-by-class et --schools=LIGHT.',
+      '--isoler=!N / !!N : opérations one-shot. Affichez d\'abord --list-only pour connaître le numéro N, puis isolez/désisolez. Aucun batch lancé.',
       'Mode interactif : après le choix des écoles, le mode « Exercice par exercice » (B) propose automatiquement de choisir les tiers et le mode de passage (A=auto / M=manuel).',
       'Les rapports vont dans Export-Rapports/<date>/<ecole>/<niveau>/rapport_v3_*.md',
       'Classement communautaire : soumettez vos carnets avec : node runner.js --submit',
@@ -1841,7 +2002,7 @@ async function main() {
   console.log(`${C.bold}${C.cyan}   File d'attente automatique de modeles LM Studio   ${C.reset}`);
   console.log(`${C.bold}${C.cyan}==================================================${C.reset}\n`);
 
-  const { modelsArg, schoolsArg, tiersArg, listOnly, hybridFlag, forceDetect, classByClass: cbcFromCli, extraRunnerArgs } = parseArgs();
+  const { modelsArg, schoolsArg, tiersArg, listOnly, hybridFlag, forceDetect, isolateArg, classByClass: cbcFromCli, extraRunnerArgs } = parseArgs();
   let classByClass = cbcFromCli;
   let tierFilter = null;
   // Mode 8 Manuel : stoppe la file au premier tier obligatoire échoué.
@@ -1898,6 +2059,53 @@ async function main() {
     process.exit(1);
   }
 
+  // --- Opération one-shot : --isoler=!N ou --isoler=!!N ---
+  // Permet d'isoler/désisoler un modèle depuis la ligne de commande sans
+  // session interactive. Le numéro N correspond à la position dans la liste
+  // affichée par --list-only (ou par le menu interactif). L'utilisateur peut
+  // donc : (1) node night-batch.js --list-only pour voir les numéros, puis
+  // (2) node night-batch.js --isoler=!4 pour isoler le n° 4. Aucun batch
+  // n'est lancé — l'opération applique l'isolation et quitte.
+  if (isolateArg) {
+    const isoMatch = isolateArg.match(/^!(\d+)$/);
+    const uniMatch = isolateArg.match(/^!!(\d+)$/);
+    if (!isoMatch && !uniMatch) {
+      console.log(`  ${C.red}Syntaxe invalide pour --isoler. Utilisez : --isoler=!N (isoler) ou --isoler=!!N (désisoler).${C.reset}`);
+      console.log(`  ${C.gray}Exemple : --isoler=!4  (isole le modèle n° 4 affiché par --list-only).${C.reset}`);
+      if (serverHandle.startedByUs) stopServer();
+      process.exit(1);
+    }
+    const isIsolate = Boolean(isoMatch);
+    const n = parseInt((isoMatch || uniMatch)[1], 10);
+    if (n < 1 || n > models.length) {
+      console.log(`  ${C.red}Numéro invalide : ${n}. La liste contient ${models.length} modèle(s) (numéros 1 à ${models.length}).${C.reset}`);
+      console.log(`  ${C.gray}Astuce : lancez 'node night-batch.js --list-only' pour voir les numéros.${C.reset}`);
+      if (serverHandle.startedByUs) stopServer();
+      process.exit(1);
+    }
+    const target = models[n - 1];
+    if (isIsolate) {
+      const bl = loadBlacklist();
+      bl.add(target.modelKey);
+      saveBlacklist(bl);
+      console.log(`  ${C.yellow}✓ ${target.displayName} [${target.modelKey}] → isolé (NON APPLICABLE).${C.reset}`);
+      console.log(`  ${C.gray}Ne sera plus testé dans les futurs batchs. Désisolez avec : node night-batch.js --isoler=!!${n}${C.reset}`);
+    } else {
+      const bl = loadBlacklist();
+      if (!bl.has(target.modelKey)) {
+        console.log(`  ${C.yellow}${target.displayName} n'est pas isolé — rien à désisoler.${C.reset}`);
+        if (serverHandle.startedByUs) stopServer();
+        process.exit(0);
+      }
+      bl.delete(target.modelKey);
+      saveBlacklist(bl);
+      console.log(`  ${C.green}✓ ${target.displayName} [${target.modelKey}] → désisolé.${C.reset}`);
+      console.log(`  ${C.gray}Le modèle sera retesté dans les prochains batchs.${C.reset}`);
+    }
+    if (serverHandle.startedByUs) stopServer();
+    process.exit(0);
+  }
+
   // Mode --list-only : affiche la liste triee par statut et quitte (debug).
   // On n'appelle PAS selectModelsInteractive : elle afficherait le prompt
   // « Modèles à tester » qui n'a aucun sens en mode lecture seule. Avant, ce
@@ -1920,15 +2128,36 @@ async function main() {
     const normalize = s => s.trim().toLowerCase().replace(/\s+/g, ' ');
     const keys = modelsArg.split(',').map(s => s.trim()).filter(Boolean);
     const normKeys = keys.map(normalize);
+    // Match exact (modelKey OU displayName), insensible à la casse/espaces.
     selected = models.filter(m => {
       const k = normalize(m.modelKey);
       const d = normalize(m.displayName);
       return normKeys.includes(k) || normKeys.includes(d);
     });
+    // Repli par préfixe : un nom tronqué (ex: "nanbeige4.2" car l'utilisateur a
+    // oublié de quoter l'espace) matche un seul modèle. On ne l'active QUE si la
+    // correspondance est non ambiguë (un seul candidat).
+    if (selected.length === 0) {
+      const prefixMatches = new Map();
+      for (const m of models) {
+        const cands = [normalize(m.modelKey), normalize(m.displayName)];
+        for (const nk of normKeys) {
+          for (const c of cands) {
+            if (c && c.startsWith(nk)) {
+              if (!prefixMatches.has(nk)) prefixMatches.set(nk, []);
+              prefixMatches.get(nk).push(m);
+            }
+          }
+        }
+      }
+      const unambiguous = [...prefixMatches.values()].filter(arr => arr.length === 1).flat();
+      selected = [...new Set(unambiguous)];
+    }
     if (selected.length === 0) {
       console.log(`  ${C.red}Aucun modele de --models= trouve dans la liste.${C.reset}`);
       console.log(`  ${C.gray}ModelKeys disponibles : ${models.map(m => m.modelKey).join(', ')}${C.reset}`);
       console.log(`  ${C.gray}Astuce : --models= accepte aussi les display names (ex: "OpenCoder 8B Instruct I1").${C.reset}`);
+      console.log(`  ${C.gray}Si le nom contient des espaces, quottez-le : --models="Nanbeige4.2 3B".${C.reset}`);
       if (serverHandle.startedByUs) stopServer();
       process.exit(1);
     }
@@ -1975,16 +2204,15 @@ async function main() {
       if (interactiveResult.tierFilter) tierFilter = interactiveResult.tierFilter;
       // Mode 8 Manuel : stoppe la file au premier tier obligatoire échoué.
       if (interactiveResult.stopOnFirstFailure) stopOnFirstFailure = true;
+      // Option 7 = manuel par modèle : le plan a été construit DANS
+      // selectSchoolsInteractive (juste après le choix de l'option 7, AVANT les
+      // questions mode/tiers/passage). On le récupère tel quel — pas de second
+      // appel à selectSchoolsManualPerModel.
+      if (interactiveResult.manualPlan) manualPlan = interactiveResult.manualPlan;
       if (schools.length === 0) {
         console.log(`  ${C.yellow}Aucune ecole selectionnee. Abandon.${C.reset}`);
         if (serverHandle.startedByUs) stopServer();
         process.exit(0);
-      }
-      // Option 7 = manuel par modèle : on demande l'école de chaque modèle
-      // individuellement, puis on construit le plan manuel. schools contient
-      // uniquement le marqueur 'manual-per-model' qui active la branche manuelle.
-      if (isManualPerModel(schools)) {
-        manualPlan = await selectSchoolsManualPerModel(selected);
       }
     }
   }

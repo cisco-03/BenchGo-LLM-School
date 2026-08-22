@@ -4692,7 +4692,7 @@ function printUntestedLmStudioModels() {
     for (let i = 0; i < rows.length; i++) {
       console.log(`  \x1b[90m${res.lines[i + 2]}\x1b[0m`);
     }
-    console.log(`  \x1b[90mAstuce : node night-batch.js --isoler=<numéro> pour isoler/désisoler un modèle depuis le CLI interactif.\x1b[0m`);
+    console.log(`  \x1b[90mAstuce : node night-batch.js --isoler=!<numéro> pour isoler un modèle, --isoler=!!<numéro> pour le désisoler. Numéro = position dans --list-only.\x1b[0m`);
   }
 }
 

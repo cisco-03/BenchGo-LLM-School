@@ -38,7 +38,7 @@ OS : Windows, PowerShell 5.1. Projet Node.js 18+ **sans `package.json`** (module
 | Professeur IA avec provider custom | `node runner.js --teacher-provider=<provider> --teacher-model=<model>` |
 | Liste LM Studio triée par score local | `node night-batch.js --list-only` |
 | Forcer la détection (réindexer les GGUF orphelins) | `node night-batch.js --force-detect` |
-| Isoler/désisoler un modèle LM Studio | Interaction `!<num>` / `!!<num>` pendant la sélection `night-batch.js` |
+| Isoler/désisoler un modèle LM Studio | `node night-batch.js --isoler=!<num>` (isoler) / `--isoler=!!<num>` (désisoler) — numéro = position dans `--list-only`. Ou interaction `!<num>` / `!!<num>` pendant la sélection `night-batch.js` |
 | Forcer la détection pendant la sélection | Taper `detect` (ou `force-detect`) à l'invite de sélection `night-batch.js` |
 | Stats communautaires (propriétaire) | `node community-stats.js --token=ghp_...` (ou `GITHUB_TOKEN` env) |
 | Vérifier syntaxe JS | `node --check <fichier>.js` |
@@ -429,7 +429,7 @@ Si modèle > 3B paramètres, le runner peut enchaîner LIGHT puis STANDARD dans 
 - `runBenchmark` retourne `timedOut: true` mais `status: null` — tester `bench.timedOut` ET `bench.ok` séparément.
 - **Mode 8 (exercice par exercice) est TOUJOURS en classe-par-classe**, même si l'utilisateur choisit « M » (Manuel). Le mode Manuel active `stopOnFirstFailure` (arrêt au premier échec obligatoire), pas le mode classique sans timeout. Avant ce fix, choisir M désactivait `classByClass` → le `tierFilter` était ignoré et toute l'école tournait d'un coup.
 - **L'ancienne option 8 du menu des écoles est supprimée** : elle était noyée parmi 8 choix et l'utilisateur la sautait systématiquement. Désormais, le choix des tiers (exercices) est proposé **automatiquement** à l'étape suivante, après le choix des écoles et le mode d'exécution « B = Exercice par exercice ». Plus besoin de taper `8` pour y accéder. Si l'utilisateur tape encore `8`, il est redirigé vers le flux normal (choix d'une école 1-4 + mode B).
-- **`--models=` accepte les display names** (ex: `OpenCoder 8B Instruct I1`) en plus des `modelKey` (ex: `opencoder-8b-instruct-i1`). Comparaison insensible à la casse/espaces. Le split se fait sur la virgule uniquement (les display names contiennent des espaces).
+- **`--models=` accepte les display names** (ex: `OpenCoder 8B Instruct I1`) en plus des `modelKey` (ex: `opencoder-8b-instruct-i1`). Comparaison insensible à la casse/espaces. Le split se fait sur la virgule uniquement (les display names contiennent des espaces). Voir aussi la section dédiée sur la robustesse aux espaces/flags avalés.
 
 ### Provider du professeur configurable (tâche 2026-08-21)
 
@@ -477,6 +477,59 @@ Si modèle > 3B paramètres, le runner peut enchaîner LIGHT puis STANDARD dans 
 - `restoreLedgersFromBackup()` ne restaure QUE les carnets absents — elle ne répare pas un carnet existant mais corrompu.
 - Le dossier `.carnet-backup/` est aussi en `.gitignore` (sous `Export-Rapports/`). Il est purement local.
 - Les anciens carnets disparus (avant le 2026-08-21) ne peuvent PAS être restaurés — le backup n'existait pas encore. Seuls les carnets créés après cette date sont protégés.
+
+### Isolation CLI + lms load -y + flux interactif réordonné (tâche 2026-08-22)
+
+**Fichiers touchés :** `night-batch.js`, `leaderboard.js`, `Docs/CHANGELOG.md`, `AGENTS.md`.
+
+**Principe :** Trois corrections distinctes :
+1. **`--isoler=!N` / `--isoler=!!N`** : flag CLI one-shot pour isoler/désisoler un modèle par numéro sans session TTY. Le numéro N = position dans la liste `--list-only`. Aucun batch lancé — applique et quitte. Workflow : `--list-only` → voir les numéros → `--isoler=!4` → quitter.
+2. **`lms load -y`** : `loadModel()` ajoute `-y` (`--yes`) pour approuver les prompts automatiquement. Sans ça, `lms load` affichait un sélecteur interactif (« ? Select a model to load ») qui bloquait le batch en mode non-TTY. Ctrl+C était quasi impossible car le process enfant `lms` capture le terminal via une TUI readline.
+3. **Flux interactif réordonné** : `selectSchoolsManualPerModel()` est désormais appelé **dès le choix de l'option 7**, AVANT les questions mode d'exécution / tiers / passage. Le plan manuel est retourné dans le résultat (`manualPlan`) et consommé par `main()` sans second appel.
+
+**Fonctions :**
+- `parseArgs()` (dans `night-batch.js`) → expose `isolateArg` (parsing `--isoler=`).
+- `loadModel()` (dans `night-batch.js`) → ajoute `-y` à `lms load`.
+- `selectSchoolsInteractive()` (dans `night-batch.js`) → appelle `selectSchoolsManualPerModel()` juste après le choix de l'option 7, retourne `manualPlan` dans le résultat.
+
+**Pour modifier :**
+1. **Changer la syntaxe du flag** : éditer le regex `isolateArg.match(/^!(\d+)$/)` et `/^!!(\d+)$/` dans `main()` de `night-batch.js`.
+2. **Désactiver le -y de lms load** : retirer `'-y'` du tableau `args` dans `loadModel()` de `night-batch.js`.
+3. **Revenir à l'ancien flux** (manuel après questions) : retirer le bloc `if (isManualPerModel(schools))` de `selectSchoolsInteractive()` et remettre l'appel `selectSchoolsManualPerModel(selected)` dans `main()` après `selectSchoolsInteractive`.
+4. **Tester** : `node night-batch.js --list-only` (voir les numéros), `node night-batch.js --isoler=!4` (isoler), `node night-batch.js --isoler=!!4` (désisoler).
+
+**Pièges :**
+- `--isoler` est one-shot : aucun batch n'est lancé. Le script applique l'isolation et quitte immédiatement.
+- Le numéro N dépend de l'ordre de la liste au moment de l'appel. Si des modèles ont été ajoutés/supprimés entre `--list-only` et `--isoler`, les numéros peuvent changer.
+- `-y` sur `lms load` charge le modèle sur le device préféré (ou le premier matching). Si plusieurs GGUF matchent le même modelKey, `-y` choisit automatiquement — c'est le comportement voulu en mode batch.
+- `manualPlan` est retourné par `selectSchoolsInteractive` ET consommé par `main()`. Ne pas appeler `selectSchoolsManualPerModel` deux fois (double saisie).
+
+### `--models=` robuste aux espaces et flags avalés (tâche 2026-08-22)
+
+**Fichiers touchés :** `night-batch.js`, `Docs/CHANGELOG.md`, `AGENTS.md`.
+
+**Principe :** Les display names de LM Studio contiennent souvent des espaces (ex: `Nanbeige4.2 3B`). En PowerShell, un flag non quoté `--models=Nanbeige4.2 3B,--schools=LIGHT` est coupé sur l'espace en deux argv : `--models=Nanbeige4.2` (tronqué) et `3B,--schools=LIGHT` (avalé). L'ancien `parseArgs()` ne capturait que le premier argv → `modelsArg` valait `"Nanbeige4.2"` (ne matche rien) et `--schools=LIGHT` était perdu. Deux mécanismes de récupération :
+
+1. **Reconstitution des argv coupés** : `flagValue(flag)` prend la valeur après `=`, puis rattache les argv suivants qui ne commencent pas par `--` (continuation de la valeur coupée sur les espaces). `--models=Nanbeige4.2 3B` (2 argv) → `"Nanbeige4.2 3B"` (1 valeur).
+2. **Récupération des flags avalés par la virgule** : quand un display name avec espace est suivi d'une virgule et d'un flag (ex: `Nanbeige4.2 3B,--schools=LIGHT`), la reconstitution fusionne tout dans `modelsArg`. On sépare sur la virgule : les parts qui ressemblent à un flag (`--xxx=yyy`) sont réinjectées dans leurs flags (`--schools`, `--tiers`) si non déjà définies.
+3. **Match par préfixe** : si aucune correspondance exacte n'est trouvée, on tente un match par préfixe insensible à la casse/espaces. Un nom tronqué (`nanbeige4.2`) matche un modèle s'il est non ambigu (un seul candidat). Rattrape les typos et coupures shell.
+
+**Fonctions :**
+- `flagValue(flag)` (dans `parseArgs()` de `night-batch.js`) → reconstitue la valeur d'un flag coupée sur les espaces par le shell. Rattache les argv de continuation (sans `--`) jusqu'au prochain vrai flag.
+- Logique de récupération des flags avalés : après reconstitution, `modelsArg` est splitée sur la virgule ; les parts `--xxx=yyy` sont réinjectées dans `schoolsArg`/`tiersArg` (si non déjà définies).
+- Match par préfixe : activé uniquement si `selected.length === 0` après le match exact, et uniquement si non ambigu (1 seul candidat par clé).
+
+**Pour modifier :**
+1. **Désactiver la reconstitution** : remplacer `flagValue` par l'ancien `a.split('=').slice(1).join('=')` dans `parseArgs()`.
+2. **Désactiver la récupération des flags avalés** : commenter le bloc `if (modelsArg) { ... parts = modelsArg.split(',') ... }` dans `parseArgs()`.
+3. **Désactiver le match par préfixe** : commenter le bloc `if (selected.length === 0) { ... prefixMatches ... }` dans `main()` (~ligne 2003).
+4. **Tester** : `node night-batch.js --list-only` (voir les modèles), puis `node night-batch.js --models=Nanbeige4.2 3B,--schools=LIGHT` (non quoté — doit maintenant fonctionner).
+
+**Pièges :**
+- `flagValue` rattache TOUT argv qui ne commence pas par `--`. Si un display name contient une valeur qui ressemble à un flag (ex: `--models=Qwen3-4B`), le `-4B` est vu comme continuation (correct). Mais `--models=Qwen3 --tiers=0` couperait la reconstitution à `--tiers=0` (commence par `--`) — c'est voulu.
+- Le match par préfixe est non ambigu uniquement : `qwen` seul matcherait plusieurs modèles Qwen et serait rejeté (le script quitterait en erreur « Aucun modele »). C'est voulu pour éviter les surprises.
+- `--yes-teacher` n'est pas un flag reconnu (ignoré silencieusement). Le flag correct est `--no-teacher` (désactive) ; par défaut le professeur est actif.
+- La reconstitution s'applique à TOUS les flags (`--teacher-model=`, `--teacher-api-key=`, etc.), pas seulement `--models=`. Un `--teacher-model=Llama 3 70B` non quoté sera aussi reconstitué correctement.
 
 ---
 

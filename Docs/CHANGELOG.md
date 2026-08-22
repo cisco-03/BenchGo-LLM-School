@@ -1,5 +1,205 @@
 # CHANGELOG - Carnet de Notes BenchGo
 
+## 2026-08-22 — fix(night-batch): health check + modèles de raisonnement (thinking)
+
+### Contexte
+Bug remonté par l'utilisateur (Admin/Tasks1.md) : `Kai Os Grug 12B`, le meilleur
+modèle du classement, ne chargeait plus après désisolation. Le bilan de session
+affichait `health check échoué` et l'auto-blacklist le marquait
+`load_failed`. Cause : **le modèle est un modèle de raisonnement** (thinking).
+LM Studio renvoie `reasoning_content` (la phase de pensée) EN PLUS de `content`
+(la réponse finale). Avec `max_tokens: 8`, tout le budget de tokens était
+consommé par le raisonnement (`reasoning_tokens: 5`), laissant `content: ""`
+(vide) avec `finish_reason: "length"`. Le health check testait
+`content.length === 0` → échouait systématiquement → auto-blacklist. Or le
+modèle fonctionnait parfaitement — il avait juste besoin de plus de tokens pour
+terminer sa phase de pensée puis répondre.
+
+### Changements (`night-batch.js` `healthCheck()`)
+- **`max_tokens: 8 → 512`** : les modèles de raisonnement (thinking) consomment
+  d'abord des tokens en phase de pensée (`reasoning_content`) avant de
+  produire la réponse (`content`). Avec 8 tokens, tout était consommé par le
+  raisonnement (48 tokens pour Kai Os Grug) → `content` vide → faux échec.
+  Avec 512, le modèle a largement assez pour raisonner puis répondre. Testé :
+  Kai Os Grug 12B raisonne en 48 tokens puis répond `"OK"` (finish_reason:
+  "stop").
+- **Détection des modèles de raisonnement** : le health check lit désormais
+  `reasoning_content` (champ ajouté par LM Studio pour les modèles thinking)
+  en plus de `content`. Si `content` est vide MAIS `reasoning_content` est
+  présent, le modèle est marqué sain (`ok: true`) — filet de sécurité au cas
+  où un modèle thinking consommerait plus de 512 tokens de raisonnement.
+
+### Données
+- `kai-os_grug-12b` a été retiré manuellement de `.benchgo-blacklist.json`
+  (auto-blacklisté à tort par le health check défectueux).
+- `.benchgo-run-history.json` enregistre `lastStatus: "load_failed"` pour ce
+  modèle — c'est historique, le prochain run réussi écrasera ce statut.
+
+### Vérification
+- `node --check night-batch.js` → OK.
+- `node tests/run-tests.js` → 27/27 OK.
+- Test manuel : `healthCheck('kai-os_grug-12b')` → `{ ok: true, content: "[thinking] The user wants me to", reasoning: true }`.
+
+### Notes
+- Le champ `reasoning_content` est spécifique à LM Studio (et certains
+  backends OpenAI-compat). D'autres serveurs peuvent ne pas le renvoyer — le
+  health check retombe alors sur le test `content` classique.
+- `max_tokens: 8` dans le health check est volontairement faible (ping
+  rapide). Les modèles thinking consomment ces 8 tokens en raisonnement —
+  c'est attendu et désormais géré.
+
+## 2026-08-22 — fix(night-batch): refonte du tableau --list-only (alignement + groupes)
+
+### Contexte
+Le tableau des modèles (`--list-only` et sélection interactive) était mal
+structuré : colonnes décalées, pas de regroupement logique, plusieurs bugs
+d'alignement. L'utilisateur a qualifié la disposition d'« horreur ».
+
+### Bugs d'alignement corrigés (`night-batch.js` `printModelsList`)
+1. **Colonne Vit. (tpsW) trop étroite** : `tpsW = 8` fixe, mais
+   `'16.29 t/s'` fait 9 chars → débordement de 1, décalait toutes les colonnes
+   suivantes. `tpsW` est désormais dynamique (`Math.max(9, ...)` basé sur les
+   valeurs réelles).
+2. **Padding ANSI cassé sur la colonne Tnd (tendance)** : `trendGlyph()`
+   renvoie une chaîne enveloppée de codes ANSI (ex:
+   `\x1b[90m=\x1b[0m`, longueur 10 mais 1 char visible). `.padEnd(4)` ne
+   rajoutait aucun espace car `String.length` (10) > 4 → la colonne faisait 1
+   char visible au lieu de 4, décalant tout après la tendance de 3 vers la
+   gauche. Corrigé avec `padRight()` qui calcule la longueur visible (sans ANSI)
+   et ajoute les espaces manquants APRÈS les codes ANSI.
+3. **tokW (Tokens) fixe** : désormais dynamique (`Math.max(7, ...)`) pour
+   s'adapter aux valeurs longues.
+4. **Largeur du séparateur incorrecte** : la formule magique
+   `idxW + ... + missW + 21` ne correspondait pas à la largeur réelle des lignes
+   de données. Remplacée par une formule explicite :
+   `somme des largeurs + 19` (16 espaces inter-colonnes + 3 séparateurs `│`).
+5. **En-tête non paddé sur 'Ecoles manquantes'** : la dernière colonne de
+   l'en-tête n'était pas paddée à `missW`, décalant l'en-tête des lignes de
+   données. Désormais `padRight('Ecoles manquantes', missW)`.
+
+### Refonte de la structure (`night-batch.js` `printModelsList`)
+Les colonnes sont désormais regroupées en 4 blocs logiques séparés par `│` :
+1. **Identité** : N°, Modèle, Param, Quant, Taille, Editeur
+2. **Statut** : Statut, Pct, Tnd
+3. **Performance** : Vit., Tokens, Temps, Tent.
+4. **Reste à faire** : Écoles manquantes
+
+Ordre des colonnes revu pour regrouper les métriques de performance (Vit.,
+Tokens, Temps, Tent.) ensemble au lieu d'être mélangées avec les métadonnées.
+La colonne `Tnd` (tendance) rejoint le groupe Statut (elle décrit l'évolution
+du score, pas la vitesse d'exécution).
+
+### Fonctions utilitaires (`night-batch.js`)
+- `visLen(s)` → longueur visible d'une chaîne (sans codes ANSI).
+- `padRight(s, w)` / `padLeft(s, w)` → padding en tenant compte des ANSI.
+  Utilisé pour les valeurs colorées (tendance, statut, tokens) qui ne
+  supportent pas `.padEnd()/.padStart()` natif.
+
+### Vérification
+- `node --check night-batch.js` → OK.
+- `node tests/run-tests.js` → 27/27 OK.
+- Simulation avec données réelles : header = 164 chars visibles, separator =
+  164 (indent 2 + 162), toutes les lignes de données = 164 chars visibles.
+  Alignement parfait.
+
+### Notes
+- Les fonctions `padRight`/`padLeft` sont locales à `printModelsList` (pas
+  exportées) — elles ne servent que pour ce tableau. Si une autre partie du
+  code a le même bug de padding ANSI, il faudra les extraire vers un module
+  partagé.
+
+## 2026-08-22 — fix(night-batch): --models= robuste aux espaces et flags avalés
+
+### Contexte
+Bug remonté par l'utilisateur (Admin/Tasks1.md) : la commande
+`node night-batch.js --class-by-class --tiers=0 --models=Nanbeige4.2 3B,--schools=LIGHT --yes-teacher`
+renvoyait « Aucun modele de --models= trouvé ». Cause : le display name
+`Nanbeige4.2 3B` contient un espace. Non quoté en PowerShell, le shell a coupé
+`--models=Nanbeige4.2 3B,--schools=LIGHT` en deux argv distincts :
+`--models=Nanbeige4.2` (tronqué, ne matche aucun modelKey/displayName) et
+`3B,--schools=LIGHT` (avalé). Résultat : `modelsArg` valait `"Nanbeige4.2"`,
+`--schools=LIGHT` était perdu, et le script quittait en erreur.
+
+### Changements (`night-batch.js`)
+- **`parseArgs()` réécrit** : la fonction `flagValue(flag)` reconstitue la
+  valeur d'un flag dont le shell a découpé la valeur sur les espaces. Au lieu
+  de prendre `a.split('=').slice(1).join('=')` (qui s'arrête au premier argv),
+  elle rattache les argv suivants qui ne commencent pas par `--` (continuation
+  de la valeur coupée). Ainsi `--models=Nanbeige4.2 3B` (2 argv) devient
+  `"Nanbeige4.2 3B"` (1 valeur).
+- **Récupération des flags avalés par la virgule** : quand un display name
+  contenant un espace est suivi d'une virgule et d'un flag (ex:
+  `Nanbeige4.2 3B,--schools=LIGHT`), la reconstitution fusionne tout dans
+  `modelsArg`. On sépare sur la virgule : les parts qui ressemblent à un flag
+  (`--xxx=yyy`) sont réinjectées dans leurs flags respectifs (`--schools`,
+  `--tiers`) si elles n'étaient pas déjà définies. Le reste reste dans
+  `modelsArg`.
+- **Match par préfixe** : si aucune correspondance exacte (modelKey ou
+  displayName normalisé) n'est trouvée, on tente un match par préfixe
+  insensible à la casse/espaces. Un nom tronqué (`nanbeige4.2` au lieu de
+  `nanbeige4.2 3b`) matche un modèle s'il est non ambigu (un seul candidat).
+  Cela rattrape les typos et les coupures shell.
+- **Message d'erreur amélioré** : ajout d'une astuce « Si le nom contient des
+  espaces, quottez-le : `--models="Nanbeige4.2 3B"` » quand aucun modèle n'est
+  trouvé.
+
+### Vérification
+- `node --check night-batch.js` → OK.
+- `node tests/run-tests.js` → 27/27 OK.
+- Scénario reproduit et corrigé : `--models=Nanbeige4.2 3B,--schools=LIGHT`
+  (non quoté) donne maintenant `modelsArg="Nanbeige4.2 3B"`,
+  `schoolsArg="LIGHT"`, `tiersArg="0"`.
+
+### Notes
+- `--yes-teacher` n'est pas un flag reconnu (inconnu, ignoré silencieusement).
+  C'est attendu : le flag correct pour activer le professeur IA est
+  `--no-teacher` (désactive) — par défaut le professeur est actif.
+- Le match par préfixe est intentionnellement limité au cas non ambigu (1
+  seul candidat) pour éviter les surprises : `qwen` seul matcherait plusieurs
+  modèles Qwen et serait rejeté.
+
+## 2026-08-22 — fix(night-batch): isolation CLI, lms load -y, flux interactif réordonné
+
+### Contexte
+Trois problèmes remontés par l'utilisateur (Admin/Tasks1.md) :
+1. Impossible d'isoler/désisoler un modèle sans session TTY interactive. Les
+   commandes `!<num>`/`!!<num>` ne marchent qu'avec `selectModelsInteractive`,
+   or l'utilisateur ne connaît pas le numéro sans d'abord lister. L'astuce du
+   rapport `--lmstudio` mentionnait `--isoler=<numéro>` qui n'existait pas.
+2. `lms load` sans `-y` affichait un sélecteur interactif (« ? Select a model to
+   load ») qui bloquait le batch. Ctrl+C était très difficile à intercepter car
+   le process enfant `lms` capture le terminal via une TUI readline. C'est ce
+   qui a causé le blocage sur Grug 12B (Tasks1.md ligne 162).
+3. Flux interactif inversé : option 7 (manuel-par-modèle) → `main()` demandait
+   mode d'exécution / tiers / passage **PUIS** appelait
+   `selectSchoolsManualPerModel`. L'utilisateur s'attendait à saisir les écoles
+   de ses modèles immédiatement après avoir choisi l'option 7, pas après 3
+   autres questions.
+
+### Changements (`night-batch.js`)
+- **`--isoler=!N` / `--isoler=!!N`** : flag CLI one-shot pour isoler/désisoler
+  un modèle par numéro (position dans la liste `--list-only`). Aucun batch
+  lancé — l'opération s'applique et quitte. Permet le workflow :
+  `node night-batch.js --list-only` → voir les numéros → `--isoler=!4` → quitter.
+- **`loadModel()`** : ajoute `-y` (`--yes`) à `lms load` pour approuver
+  automatiquement les prompts. Élimine le sélecteur interactif bloquant.
+- **`selectSchoolsInteractive()`** : l'appel `selectSchoolsManualPerModel()` est
+  désormais effectué **dès le choix de l'option 7**, AVANT les questions mode
+  d'exécution / tiers / mode de passage. Le plan manuel est retourné dans le
+  résultat (`manualPlan`) et consommé par `main()` sans second appel.
+- `parseArgs()` : expose `isolateArg` (parsing du flag `--isoler=`).
+- Aide `--help` : ajoute les deux lignes `--isoler=!4` / `--isoler=!!6`.
+
+### Changements (`leaderboard.js`)
+- Astuce section « NON APPLICABLE » : corrigée pour refléter la syntaxe réelle
+  `--isoler=!<numéro>` (isoler) / `--isoler=!!<numéro>` (désisoler).
+
+### Vérification
+- `node --check night-batch.js` : OK.
+- `node --check leaderboard.js` : OK.
+- `node tests/run-tests.js` : 27/0 (inchangé).
+- `node scripts/check-inline-js.js` : OK (JS inline valide).
+
 ## 2026-08-22 — fix(night-batch): keep-alive serveur anti-veille pendant le batch
 
 ### Contexte
