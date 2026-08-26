@@ -7,11 +7,14 @@ const benchMetrics = require('./benchmark-metrics');
 // openaiCompat: true  → format OpenAI /v1/chat/completions avec streaming SSE standard
 // openaiCompat: false → format Anthropic Messages API avec streaming SSE propre
 // requiresAuth: false → clé API non requise (serveurs locaux)
+// optionalAuth: true  → clé API recommandée mais tolérée absente (accès anonyme
+//                       limité). Ex: Kilo Gateway (modèles :free anonymes, 200 req/h/IP).
 const CLOUD_PROVIDERS = {
   openai:     { url: 'https://api.openai.com/v1/chat/completions',      envKey: 'OPENAI_API_KEY',      openaiCompat: true,  requiresAuth: true  },
   groq:       { url: 'https://api.groq.com/openai/v1/chat/completions', envKey: 'GROQ_API_KEY',        openaiCompat: true,  requiresAuth: true  },
   together:   { url: 'https://api.together.xyz/v1/chat/completions',    envKey: 'TOGETHER_API_KEY',    openaiCompat: true,  requiresAuth: true  },
   openrouter: { url: 'https://openrouter.ai/api/v1/chat/completions',   envKey: 'OPENROUTER_API_KEY',  openaiCompat: true,  requiresAuth: true  },
+  kilo:       { url: 'https://api.kilo.ai/api/gateway/chat/completions', envKey: 'KILO_API_KEY',        openaiCompat: true,  requiresAuth: true, optionalAuth: true },
   mistral:    { url: 'https://api.mistral.ai/v1/chat/completions',      envKey: 'MISTRAL_API_KEY',     openaiCompat: true,  requiresAuth: true  },
   anthropic:  { url: 'https://api.anthropic.com/v1/messages',           envKey: 'ANTHROPIC_API_KEY',   openaiCompat: false, requiresAuth: true  },
   deepseek:   { url: 'https://api.deepseek.com/v1/chat/completions',    envKey: 'DEEPSEEK_API_KEY',    openaiCompat: true,  requiresAuth: true  },
@@ -264,14 +267,19 @@ async function queryLLM(prompt, difficulty, tierId, isMandatory, spinner, option
     );
   }
 
-  // Clé API : optionnelle pour les serveurs locaux (ollama, lmstudio, custom)
+  // Clé API : optionnelle pour les serveurs locaux (ollama, lmstudio, custom).
+  // Pour Kilo (optionalAuth: true), l'absence de clé est tolérée (accès anonyme
+  // aux modèles :free, limité à 200 req/h/IP) — on avertit mais on ne bloque pas.
   const resolvedKey = apiKey || (provSpec.envKey ? process.env[provSpec.envKey] : null);
-  if (provSpec.requiresAuth && !resolvedKey) {
+  if (provSpec.requiresAuth && !resolvedKey && !provSpec.optionalAuth) {
     throw new Error(
       `Clé API manquante pour '${provider}'.\n` +
       `  Définissez : $env:${provSpec.envKey} = "votre-clé"\n` +
       `  Ou passez  : --api-key=votre-clé  (⚠ visible dans le gestionnaire de tâches)`
     );
+  }
+  if (!resolvedKey && provSpec.optionalAuth) {
+    logger.warn(`${provider} : pas de clé API — accès anonyme (modèles gratuits, 200 req/h/IP).`);
   }
 
   const systemPrompt = getSystemPrompt(difficulty);

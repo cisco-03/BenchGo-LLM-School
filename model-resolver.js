@@ -253,26 +253,26 @@ function preferFreeVariant(matches) {
 //   { resolved: true,  slug, matchedBy, suggestions: [] }   → slug canonique trouvé
 //   { resolved: false, slug: null, suggestions: [...] }     → ambigu ou introuvable
 //   { offline: true,   slug: <saisi>, suggestions: [] }     — réseau indisponible, on passe le slug tel quel
-async function resolveOpenRouterSlug(input) {
-  if (!input || !String(input).trim()) {
-    return { resolved: false, slug: null, suggestions: [], matchedBy: 'empty' };
-  }
-  const raw = String(input).trim();
-  const ids = await getOpenRouterModelIds();
-
-  // Offline : on ne peut pas valider, on laisse passer (comportement historique).
-  if (ids.length === 0) {
-    return { offline: true, slug: raw, suggestions: [], matchedBy: 'offline' };
-  }
-
+// Logique de matching pure : résout un slug saisi contre une liste d'ids.
+// Réutilisée par resolveOpenRouterSlug ET resolveKiloSlug (même format
+// provider/model-name). ids = tableau de slugs (casse d'origine), idsSet =
+// Set des slugs en lowercase pour le lookup O(1).
+//
+// Stratégies (dans l'ordre) :
+//   1. Match exact (insensible casse).
+//   2. Alias courant (gpt4o -> openai/gpt-4o) — seulement si l'id existe.
+//   3. Préfixe de slug.
+//   4. Sous-chaîne normalisée (+ désambiguisateur :free).
+//   5. Suffixe (après le /).
+function _matchSlug(raw, ids, idsSet) {
   const lower = raw.toLowerCase();
 
   // 1. Match exact
-  if (_modelsCache.has(lower)) {
+  if (idsSet.has(lower)) {
     return { resolved: true, slug: raw, matchedBy: 'exact', suggestions: [] };
   }
-  // Certains slugs OpenRouter ont une casse précise (ex: "openai/gpt-4o").
-  // On renvoie la casse d'origine de la liste.
+  // Certains slugs ont une casse précise (ex: "openai/gpt-4o"). On renvoie la
+  // casse d'origine de la liste.
   const exactOrig = ids.find(id => id.toLowerCase() === lower);
   if (exactOrig) {
     return { resolved: true, slug: exactOrig, matchedBy: 'exact', suggestions: [] };
@@ -282,13 +282,13 @@ async function resolveOpenRouterSlug(input) {
   const aliasKey = normalizeSlug(raw);
   if (COMMON_ALIASES[aliasKey]) {
     const candidate = COMMON_ALIASES[aliasKey];
-    if (_modelsCache.has(candidate.toLowerCase())) {
+    if (idsSet.has(candidate.toLowerCase())) {
       return { resolved: true, slug: candidate, matchedBy: 'alias', suggestions: [] };
     }
   }
   // Alias matching normalisé (gpt4o -> openai/gpt-4o)
   for (const [alias, slug] of Object.entries(COMMON_ALIASES)) {
-    if (normalizeSlug(alias) === aliasKey && _modelsCache.has(slug.toLowerCase())) {
+    if (normalizeSlug(alias) === aliasKey && idsSet.has(slug.toLowerCase())) {
       return { resolved: true, slug, matchedBy: 'alias', suggestions: [] };
     }
   }
@@ -373,10 +373,141 @@ async function resolveOpenRouterSlug(input) {
   };
 }
 
+// === Kilo Gateway (api.kilo.ai) ===
+// Même format de slug que OpenRouter (provider/model-name), même structure
+// /models ({ data: [...] }, champ id). Endpoint public sans auth. Les prix
+// sont en $/token (chaînes, "-1" = non défini). On garde un cache séparé pour
+// ne pas mélanger les listes OpenRouter et Kilo.
+const KILO_MODELS_URL = 'https://api.kilo.ai/api/gateway/models';
+const KILO_CACHE_FILE = path.join(__dirname, '.kilo-models-cache.json');
+
+let _kiloCache = null;       // Set des ids (lowercase)
+let _kiloList = null;        // Tableau [{ id }]
+let _kiloLoadedAt = 0;
+
+function loadKiloDiskCache() {
+  try {
+    if (!fs.existsSync(KILO_CACHE_FILE)) return null;
+    const raw = fs.readFileSync(KILO_CACHE_FILE, 'utf8');
+    const arr = JSON.parse(raw);
+    if (Array.isArray(arr)) return arr;
+    if (arr && Array.isArray(arr.ids)) return arr.ids;
+  } catch (_) { /* cache corrompu */ }
+  return null;
+}
+
+async function fetchKiloModels() {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 15000);
+  try {
+    const res = await fetch(KILO_MODELS_URL, {
+      method: 'GET',
+      headers: { 'Content-Type': 'application/json' },
+      signal: controller.signal
+    });
+    clearTimeout(timeoutId);
+    if (!res.ok) {
+      logger.warn('model-resolver: Kilo /models HTTP_' + res.status);
+      return null;
+    }
+    const data = await res.json();
+    const all = Array.isArray(data?.data) ? data.data : [];
+    const ids = [];
+    for (const m of all) {
+      if (m && m.id) ids.push(m.id);
+    }
+    // Sauvegarde un cache disque simple (liste d'ids). TTL 24h vérifié à la lecture.
+    try {
+      const cachePayload = { savedAt: Date.now(), ids };
+      fs.writeFileSync(KILO_CACHE_FILE, JSON.stringify(cachePayload, null, 2) + '\n', 'utf8');
+    } catch (_) { /* disque non inscriptible */ }
+    logger.info('model-resolver: ' + ids.length + ' modèles chargés depuis Kilo Gateway.');
+    return ids;
+  } catch (e) {
+    clearTimeout(timeoutId);
+    logger.warn('model-resolver: impossible de contacter Kilo Gateway — ' + e.message);
+    return null;
+  }
+}
+
+async function getKiloModelIds() {
+  // Cache en mémoire valide ?
+  if (_kiloCache && (Date.now() - _kiloLoadedAt) < CACHE_TTL_MS) {
+    return _kiloList.slice();
+  }
+  // Cache disque valide ?
+  const diskIds = loadKiloDiskCache();
+  if (diskIds && diskIds.length > 0) {
+    _kiloList = diskIds;
+    _kiloCache = new Set(diskIds.map(id => id.toLowerCase()));
+    _kiloLoadedAt = Date.now();
+    // Recharge en arrière-plan si le cache est vieux.
+    try {
+      const stat = fs.statSync(KILO_CACHE_FILE);
+      if (Date.now() - stat.mtimeMs >= CACHE_TTL_MS) {
+        fetchKiloModels().then(fresh => {
+          if (fresh && fresh.length > 0) {
+            _kiloList = fresh;
+            _kiloCache = new Set(fresh.map(id => id.toLowerCase()));
+            _kiloLoadedAt = Date.now();
+          }
+        }).catch(() => {});
+      }
+    } catch (_) {}
+    return _kiloList.slice();
+  }
+  // Pas de cache : fetch réseau (bloquant).
+  const fresh = await fetchKiloModels();
+  if (fresh && fresh.length > 0) {
+    _kiloList = fresh;
+    _kiloCache = new Set(fresh.map(id => id.toLowerCase()));
+    _kiloLoadedAt = Date.now();
+    return fresh.slice();
+  }
+  return [];
+}
+
+async function isOpenRouterExactSlug(slug) {
+  if (!slug) return false;
+  const ids = await getOpenRouterModelIds();
+  if (ids.length === 0) return true; // offline : on ne bloque pas, on fait confiance
+  return _modelsCache.has(slug.toLowerCase());
+}
+
+// Résout un slug saisi vers un slug canonique OpenRouter.
+// Voir _matchSlug pour les stratégies.
+async function resolveOpenRouterSlug(input) {
+  if (!input || !String(input).trim()) {
+    return { resolved: false, slug: null, suggestions: [], matchedBy: 'empty' };
+  }
+  const raw = String(input).trim();
+  const ids = await getOpenRouterModelIds();
+  if (ids.length === 0) {
+    return { offline: true, slug: raw, suggestions: [], matchedBy: 'offline' };
+  }
+  return _matchSlug(raw, ids, _modelsCache);
+}
+
+// Résout un slug saisi vers un slug canonique Kilo Gateway.
+// Même format que OpenRouter (provider/model-name). Réutilise _matchSlug.
+async function resolveKiloSlug(input) {
+  if (!input || !String(input).trim()) {
+    return { resolved: false, slug: null, suggestions: [], matchedBy: 'empty' };
+  }
+  const raw = String(input).trim();
+  const ids = await getKiloModelIds();
+  if (ids.length === 0) {
+    return { offline: true, slug: raw, suggestions: [], matchedBy: 'offline' };
+  }
+  return _matchSlug(raw, ids, _kiloCache);
+}
+
 module.exports = {
   resolveOpenRouterSlug,
+  resolveKiloSlug,
   isOpenRouterExactSlug,
   getOpenRouterModelIds,
+  getKiloModelIds,
   normalizeSlug,
   COMMON_ALIASES
 };

@@ -1,5 +1,172 @@
 # CHANGELOG - Carnet de Notes BenchGo
 
+## 2026-08-26 — feat(provider) : ajout de Kilo Gateway comme provider cloud
+
+### Contexte
+OpenRouter ne passe plus : rate-limits upstream systématiques sur tous les
+modèles free (HTTP 200 vide ou 429). L'utilisateur veut tester les modèles
+gratuits de **Kilo Gateway** (`api.kilo.ai`) en alternative. Kilo est 100%
+compatible OpenAI (même format `/chat/completions`, streaming SSE, auth
+`Bearer`) et propose 19 modèles gratuits (dont `nvidia/nemotron-3.5-lightning:free`
+qui était visé).
+
+### Changements
+- **`cloud-client.js` (`CLOUD_PROVIDERS`)** : ajout de `kilo` avec
+  `url: 'https://api.kilo.ai/api/gateway/chat/completions'`, `envKey: 'KILO_API_KEY'`,
+  `openaiCompat: true`, `requiresAuth: true`, `optionalAuth: true`.
+  - Nouveau champ `optionalAuth: true` → l'absence de clé est tolérée (accès
+    anonyme aux modèles `:free`, limité à 200 req/h/IP). Un warning est loggé
+    mais le run n'est pas bloqué. Avec clé (abonnement) : pas de limite anonyme.
+- **`model-resolver.js`** : refactorisation de la logique de matching dans une
+  fonction pure `_matchSlug(raw, ids, idsSet)` réutilisable. Ajout de
+  `resolveKiloSlug()`, `getKiloModelIds()`, `fetchKiloModels()` (cache disque
+  séparé `.kilo-models-cache.json`, TTL 24h, endpoint public `/models`).
+  - Kilo Gateway a le même format de slug qu'OpenRouter (`provider/model-name`)
+    et la même structure `/models` (`{ data: [...] }`, champ `id`).
+- **`frontier-batch.js`** :
+  - Ajout de `kilo` au menu `CLOUD_PROVIDERS` (option 2).
+  - Ajout de `kilo` à `PROVIDERS_OPTIONAL_KEY` (clé optionnelle).
+  - Résolution de slug étendue à Kilo (`if (provider === 'openrouter' || provider === 'kilo')`).
+- **`runner.js`** :
+  - Import de `resolveKiloSlug`.
+  - Bloc de résolution de slug étendu à Kilo.
+  - Validation dry-run : `kilo` ajouté à la liste des providers tolérant
+    l'absence de clé (`['lmstudio', 'ollama', 'custom', 'kilo']`).
+  - Avertissement "clé non mémorisée" : `kilo` exclu (accès anonyme possible).
+- **`pricing.js`** : ajout d'un cache Kilo parallèle (`.kilo-pricing-cache.json`),
+  `getKiloPricing()`, `refreshKiloPricing()`. Kilo renvoie les prix en chaînes
+  $/token avec `-1` pour les non définis (modèles gratuits auto) → traité comme 0.
+  Intégré dans `findPrice()` (lookup exact + préfixe après OpenRouter). Fallback
+  provider `kilo` générique (1/4 $/1M). Les modèles `:free` coûtent 0$.
+- **`cli-help.js`** : `--provider=` mentionne `kilo`. Messages d'erreur E400/E404
+  mentionnent Kilo Gateway et la résolution automatique des noms familiers.
+
+### Utilisation
+```powershell
+# Avec clé (recommandé, abonnement — pas de limite anonyme)
+node frontier-batch.js --provider=kilo --models=nvidia/nemotron-3.5-lightning:free --profile=FRONTIER --api-key=<kilo_key>
+
+# Sans clé (accès anonyme, 200 req/h/IP — risqué pour un batch complet)
+node frontier-batch.js --provider=kilo --models=nvidia/nemotron-3.5-lightning:free --profile=LIGHT
+
+# Via le runner (résolution de slug automatique : "nemotron" -> slug exact)
+node runner.js all --provider=kilo --model=nvidia/nemotron-3.5-lightning:free --profile=LIGHT --api-key=<kilo_key>
+```
+
+### Modèles gratuits Kilo (19 au 2026-08-26)
+`stepfun/step-3.7-flash:free`, `tencent/hy3:free`, `poolside/laguna-s-2.1:free`,
+`poolside/laguna-xs-2.1:free`, `meituan/longcat-2.0-free`,
+`dots-studio/dots-3-note-preview:free`, `liquid/lfm-2.5-2.6b:free`,
+`nvidia/nemotron-3.5-lightning:free`, `thinkingmachines/inkling-small:free`,
+`thinkingmachines/inkling:free`, `cohere/north-mini-code:free`,
+`nvidia/nemotron-3.5-content-safety:free`, `nvidia/nemotron-3-ultra-550b-a55b:free`,
+`minimax/minimax-m3:free`, `nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free`,
+`minimax/minimax-m2.7:free`, `nvidia/nemotron-3-super-120b-a12b:free`,
+`kilo-auto/free`, `openrouter/free`.
+
+### Pièges
+- **Accès anonyme limité** : 200 requêtes/heure/IP sans clé. Un batch FRONTIER
+  complet (6 classes × ~10 exercices + aide + rattrapage) dépasse largement
+  200 requêtes → l'utilisateur DOIT fournir une clé pour un batch complet.
+  Sans clé, seuls LIGHT (2 classes) passe peut-être.
+- **NVIDIA free endpoints** : usage trial, données journalisées par NVIDIA.
+  Ne pas envoyer de données confidentielles.
+- **Prix `-1`** : Kilo renvoie `-1` pour les prix non définis (modèles auto/free).
+  `pricing.js` traite `-1` comme 0 (gratuit). Si un modèle payant a un prix réel
+  mais l'endpoint renvoie `-1` (bug), le coût affiché sera 0$ (sous-estimé).
+- Le cache disque Kilo (`.kilo-pricing-cache.json`, `.kilo-models-cache.json`)
+  est distinct du cache OpenRouter (`.pricing-cache.json`) pour ne pas mélanger
+  les listes/prix.
+
+## 2026-08-26 — feat(profilage) : test de capacité OUI/NON en remplacement de l'auto-profilage + profilage externe
+
+### Contexte
+L'utilisateur a lancé `Nemotron 3 5 Lighting Free` (Nvidia) sur OpenRouter
+(FRONTIER). L'auto-profilage prenait déjà **10 minutes** (3 tentatives × timeout
+généreux) et le profilage externe (professeur IA) en rajoutait 5-20s. Au total,
+1 à 10 min de profilage avant le moindre exercice. Plusieurs utilisateurs ont
+remonté le problème et certains annulent le run tellement c'est long.
+
+### Décision
+Remplacer l'auto-profilage (`self-profiling.js`, interview JSON sur 4
+compétences, 1-5 min) ET le profilage externe (`external-profiling.js`,
+professeur IA, 5-20s) par un **test de capacité** simple et rapide (~20-30s) :
+un seul appel au modèle élève lui demande s'il est capable de passer l'examen.
+
+- **OUI** → le runner valide et commence les exercices. Plus aucun filtrage des
+  tâches : toutes sont exécutées, quels que soient les compétences déclarées.
+- **NON** → le modèle est **recalé définitivement** : exit 0 propre, pas de
+  pénalité, pas de carnet créé. C'est l'exclusion pure, pas un échec noté.
+
+Le **pre-flight check** (détection des rate-limit 200/400 vides, tâche
+2026-08-26) est **conservé** : il s'exécute juste avant le test de capacité et
+arrête net les modèles qui ne répondent pas du tout.
+
+### Changements
+- **`capability-check.js` (nouveau)** : module de test de capacité.
+  - `runCapabilityCheck(queryFn, providerConfig, contextLimitTokens)` →
+    `{ capable, rawAnswer, attempts }`. Un seul appel, 2 tentatives max,
+    timeout 30s par tentative (pire cas ~60s, attendu ~20-30s).
+  - `interpretCapabilityAnswer(text)` → `'YES' | 'NO' | null`. Parsing robuste :
+    tolérant à la casse, aux accents, au prose autour de la réponse, aux variants
+    FR/EN (oui/yes, non/no, je suis capable, je ne peux pas, peut-être...).
+  - Par prudence, une réponse indéterminée après 2 tentatives → **OUI par défaut**
+    (le modèle bavard/mal formaté aura sa chance à l'examen réel qui le jugera
+    sur preuve). Exclure un modèle fonctionnel mais bavard serait une erreur.
+- **`runner.js`** :
+  - Suppression de l'auto-profilage (`runSelfProfiling`) et du profilage externe
+    (`runExternalProfiling`) — remplacés par `runCapabilityCheck`.
+  - `selfProfile` reste `null` → aucun filtrage des tâches dans `runTierAttempt`
+    (le bloc `if (selfProfile && ...)` ne se déclenche plus).
+  - `filterProfile` forcé à `null` → toutes les tâches exécutées.
+  - L'Indice de Calibration n'est plus calculé (`selfProfile` null → bloc court-
+    circuité). La section calibration disparaît des nouveaux rapports.
+  - Affichage : bannière « TEST DE CAPACITÉ », verdict OUI/NON, et message de
+    recal si NON (exit 0 propre).
+  - Imports nettoyés : `runSelfProfiling` retiré, `runExternalProfiling` retiré,
+    `runCapabilityCheck` ajouté. `filterTasksByProfile`/`SKILL_LABELS` conservés
+    (utilisé par les rapports/leaderboard pour les anciens carnets).
+- **`self-profiling.js` / `external-profiling.js`** : inchangés (conservés pour
+  la rétrocompatibilité des anciens carnets/rapports et du leaderboard qui affiche
+  l'auto-profilage historique). Plus appelés par le runner.
+
+### Comportement
+- Le pre-flight check (cloud uniquement) reste en premier : 3 pings, arrêt net
+  `E505_MODEL_UNRESPONSIVE` si le modèle ne répond pas du tout (rate-limit
+  upstream silencieux).
+- Puis le test de capacité : 1 appel (~20-30s).
+  - NON → `process.exit(0)` avec message de recal, pas de carnet, pas de pénalité.
+  - OUI → exécution de toutes les tâches de tous les tiers, sans filtrage.
+
+### Pour modifier
+1. **Changer le prompt du test** : éditer `CAPABILITY_PROMPT` dans
+   `capability-check.js`.
+2. **Changer le timeout / nombre de tentatives** : éditer
+   `CAPABILITY_TIMEOUT_MS` et `MAX_ATTEMPTS` dans `capability-check.js`.
+3. **Changer la logique de parsing** : éditer `interpretCapabilityAnswer()`
+   (patterns `noPatterns` / `yesPatterns` / `maybePatterns`).
+4. **Changer le comportement NON (exclure + marquer dans carnet au lieu d'exit)** :
+   remplacer le `process.exit(0)` dans `runner.js` par la création d'un carnet
+   marqué « recalé ».
+5. **Réactiver le filtrage** : remettre `filterProfile` à un profil non-null
+   (ex: reconstruire un profil depuis la réponse de capacité).
+6. **Tester** : `node runner.js --provider=openrouter --model=<slug>
+   --profile=LIGHT` (le test de capacité remplace l'auto-profilage).
+
+### Pièges
+- `interpretCapabilityAnswer` teste les patterns NON en **priorité** : un
+  "non, je ne suis pas capable" est non ambigu. "Oui mais non" est rare et serait
+  classé NON (prudence).
+- Le test de capacité ne remplace PAS le pre-flight check : le pre-flight
+  détecte les modèles qui ne répondent **pas du tout** (rate-limit silencieux),
+  le test de capacité détecte les modèles qui répondent **mais refusent**.
+- `selfProfile` null désactive aussi l'Indice de Calibration (métrique qui
+  comparait l'auto-évaluation à la performance réelle). Les anciens carnets
+  conservent leur calibrationIndex ; les nouveaux n'en ont plus.
+- Les anciens rapports/carnets avec auto-profilage restent affichables dans le
+  leaderboard (les modules `self-profiling.js`/`external-profiling.js` sont
+  conservés pour la lecture historique).
+
 ## 2026-08-26 — fix(cloud) : détection des réponses vides (modèles free rate-limités) + pre-flight check
 
 ### Contexte

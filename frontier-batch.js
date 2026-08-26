@@ -48,7 +48,7 @@ const { printEntryHelp, wantsHelp } = require('./cli-help');
 // pas des vectoriseurs/détecteurs. On évite ainsi le bug où un modèle
 // d'embeddings obtenait "TOP DU TOP" à 0/0 (toutes tâches bypassées).
 const { NON_LLM_PATTERNS } = require('./night-batch');
-const { resolveOpenRouterSlug } = require('./model-resolver');
+const { resolveOpenRouterSlug, resolveKiloSlug } = require('./model-resolver');
 
 function isNonLlmCloudModel(slug) {
   if (!slug) return false;
@@ -77,6 +77,7 @@ const CLOUD_PROFILES = [
 // le runner les traite via cloud-client.js. Pour le local, pas de cle requise.
 const CLOUD_PROVIDERS = [
   { key: 'openrouter', label: 'OpenRouter (agregateur, modeles gratuits dispo)' },
+  { key: 'kilo',       label: 'Kilo Gateway (api.kilo.ai, modeles gratuits dispo, cle optionnelle)' },
   { key: 'openai',     label: 'OpenAI (GPT-4o, o1, etc.)' },
   { key: 'anthropic',  label: 'Anthropic (Claude)' },
   { key: 'groq',       label: 'Groq (inference ultra-rapide)' },
@@ -209,7 +210,8 @@ function selectProviderInteractive(defaultProvider) {
 // providers, une cle vide = abandon.
 // Apres saisie d une NOUVELLE cle (non deja memorisee dans .api-keys.json), on
 // propose de la memoriser localement pour les prochains runs (comme le runner).
-const PROVIDERS_OPTIONAL_KEY = new Set(['ollama', 'lmstudio', 'custom']);
+// kilo : cle optionnelle (acces anonyme aux modeles :free, 200 req/h/IP).
+const PROVIDERS_OPTIONAL_KEY = new Set(['ollama', 'lmstudio', 'custom', 'kilo']);
 
 // askYesNo local (le runner ne l exporte pas). Retourne true pour Oui.
 function askYesNoLocal(question, defaultYes) {
@@ -516,18 +518,20 @@ async function main() {
   const models = await selectModelsInteractive(opts.models);
   const profile = await selectProfileInteractive(opts.profile, models);
 
-  // --- Résolution tolérante des slugs (OpenRouter uniquement) ---
-  // L'utilisateur peut saisir un nom familier ("gpt-4o", "llama3.1-8b") au lieu
-  // du slug exact OpenRouter ("openai/gpt-4o", "meta-llama/llama-3.1-8b-instruct").
-  // Sans résolution, OpenRouter renvoie HTTP 400 "X is not a valid model ID" pour
+  // --- Résolution tolérante des slugs (OpenRouter + Kilo Gateway) ---
+  // L'utilisateur peut saisir un nom familier ("gpt-4o", "nemotron 3.5 lightning")
+  // au lieu du slug exact ("openai/gpt-4o", "nvidia/nemotron-3.5-lightning:free").
+  // Sans résolution, le provider renvoie HTTP 400 "X is not a valid model ID" pour
   // chaque appel et le run produit un rapport 0/2752 inutile.
   // On résout chaque slug avant de lancer le batch : exact → alias → préfixe →
   // sous-chaîne. Si ambigu ou introuvable, on propose des suggestions.
-  if (provider === 'openrouter') {
+  // OpenRouter et Kilo Gateway partagent le même format de slug (provider/model).
+  if (provider === 'openrouter' || provider === 'kilo') {
+    const resolver = provider === 'openrouter' ? resolveOpenRouterSlug : resolveKiloSlug;
     const resolvedModels = [];
     for (let i = 0; i < models.length; i++) {
       const input = models[i];
-      const r = await resolveOpenRouterSlug(input);
+      const r = await resolver(input);
       if (r.offline) {
         // Réseau indisponible : on garde le slug tel quel (comportement historique).
         resolvedModels.push(input);

@@ -18,7 +18,9 @@ const logger = require('./logger');
 // Les prix évoluent : cette table est une approximation indicative.
 
 const OPENROUTER_MODELS_URL = 'https://openrouter.ai/api/v1/models';
+const KILO_MODELS_URL = 'https://api.kilo.ai/api/gateway/models';
 const CACHE_FILE = path.join(__dirname, '.pricing-cache.json');
+const KILO_CACHE_FILE = path.join(__dirname, '.kilo-pricing-cache.json');
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24h
 
 // Taux de conversion approximatif $ -> €. Peut être ajusté manuellement.
@@ -164,6 +166,96 @@ async function refreshOpenRouterPricing() {
   }
 }
 
+// === Kilo Gateway (api.kilo.ai) ===
+// Même format de prix qu'OpenRouter (chaînes $/token), mais avec "-1" pour
+// les prix non définis (modèles gratuits auto-routés). On traite "-1" comme 0
+// (gratuit/non facturé). Cache disque séparé (.kilo-pricing-cache.json).
+let _kiloCache = null;
+let _kiloCacheAt = 0;
+let _kiloLoaded = false;
+
+function loadKiloDiskCache() {
+  try {
+    if (fs.existsSync(KILO_CACHE_FILE)) {
+      const raw = JSON.parse(fs.readFileSync(KILO_CACHE_FILE, 'utf8'));
+      if (raw && raw.savedAt && (Date.now() - raw.savedAt) < CACHE_TTL_MS && raw.models) {
+        return raw.models;
+      }
+    }
+  } catch (e) {
+    logger.warn('pricing: cache disque Kilo illisible — ' + e.message);
+  }
+  return null;
+}
+
+function saveKiloDiskCache(models) {
+  try {
+    fs.writeFileSync(KILO_CACHE_FILE, JSON.stringify({ savedAt: Date.now(), models }, null, 2) + '\n', 'utf8');
+  } catch (e) {
+    logger.warn('pricing: impossible de sauvegarder le cache Kilo — ' + e.message);
+  }
+}
+
+function getKiloPricing() {
+  if (_kiloLoaded && _kiloCache && (Date.now() - _kiloCacheAt) < CACHE_TTL_MS) {
+    return _kiloCache;
+  }
+  const disk = loadKiloDiskCache();
+  if (disk) {
+    _kiloCache = disk;
+    _kiloCacheAt = Date.now();
+    _kiloLoaded = true;
+  }
+  if (!_kiloLoaded || (Date.now() - _kiloCacheAt) >= CACHE_TTL_MS) {
+    _kiloLoaded = true;
+    refreshKiloPricing().catch(() => {});
+  }
+  return _kiloCache || {};
+}
+
+async function refreshKiloPricing() {
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000);
+    const res = await fetch(KILO_MODELS_URL, {
+      method: 'GET',
+      headers: { 'Content-Type': 'application/json' },
+      signal: controller.signal
+    });
+    clearTimeout(timeoutId);
+    if (!res.ok) {
+      logger.warn('pricing: Kilo /models HTTP_' + res.status + ' — fallback local uniquement.');
+      return null;
+    }
+    const data = await res.json();
+    const all = Array.isArray(data?.data) ? data.data : [];
+    const map = {};
+    for (const m of all) {
+      if (!m || !m.id) continue;
+      const p = m.pricing || {};
+      // Kilo renvoie les prix en $/token (chaînes). "-1" = non défini (gratuit).
+      let promptPerTok = parseFloat(p.prompt);
+      let completionPerTok = parseFloat(p.completion);
+      if (!Number.isFinite(promptPerTok) || !Number.isFinite(completionPerTok)) continue;
+      // "-1" (prix non disponible) → 0 (modèle gratuit/auto, non facturé).
+      if (promptPerTok < 0) promptPerTok = 0;
+      if (completionPerTok < 0) completionPerTok = 0;
+      map[m.id.toLowerCase()] = {
+        prompt: promptPerTok * 1e6,
+        completion: completionPerTok * 1e6
+      };
+    }
+    _kiloCache = map;
+    _kiloCacheAt = Date.now();
+    saveKiloDiskCache(map);
+    logger.info('pricing: ' + Object.keys(map).length + ' modèles chargés depuis Kilo Gateway.');
+    return map;
+  } catch (e) {
+    logger.warn('pricing: impossible de contacter Kilo Gateway — ' + e.message);
+    return null;
+  }
+}
+
 // Recherche un prix pour un modèle donné (id ou nom) en essayant OpenRouter
 // puis la table de fallback locale. Renvoie { prompt, completion } en $/1M
 // tokens, ou null si introuvable.
@@ -188,6 +280,22 @@ function findPrice(modelId, provider) {
     if (best) return best;
   }
 
+  // 1b. Kilo Gateway : même format de slug (provider/model). Lookup exact + préfixe.
+  // Les modèles Kilo (provider kilo) ne sont pas dans le cache OpenRouter.
+  const kiloMap = getKiloPricing();
+  if (kiloMap && kiloMap[id]) return kiloMap[id];
+  if (kiloMap) {
+    let best = null;
+    let bestLen = 0;
+    for (const key of Object.keys(kiloMap)) {
+      if (id.startsWith(key) && key.length > bestLen) {
+        best = kiloMap[key];
+        bestLen = key.length;
+      }
+    }
+    if (best) return best;
+  }
+
   // 2. Table de fallback locale : correspondance par sous-chaîne (le nom du
   // modèle apparaît dans l'id). On teste la clé la plus longue d'abord.
   const fbKeys = Object.keys(PRICING_FALLBACK).sort((a, b) => b.length - a.length);
@@ -203,6 +311,10 @@ function findPrice(modelId, provider) {
   if (provider === 'groq') return { prompt: 0.3, completion: 0.5 };
   if (provider === 'mistral') return { prompt: 0.5, completion: 1.5 };
   if (provider === 'cohere') return { prompt: 1, completion: 3 };
+  // Kilo Gateway : agrégateur (mêmes modèles que OpenRouter). Fallback générique
+  // moyen — les vrais prix viennent du cache Kilo (/models public). Les modèles
+  // gratuits (:free, kilo-auto/free) coûtent 0$.
+  if (provider === 'kilo') return { prompt: 1, completion: 4 };
 
   return null;
 }
@@ -292,6 +404,8 @@ module.exports = {
   formatEur,
   refreshOpenRouterPricing,
   getOpenRouterPricing,
+  refreshKiloPricing,
+  getKiloPricing,
   USD_TO_EUR,
   PRICING_FALLBACK
 };

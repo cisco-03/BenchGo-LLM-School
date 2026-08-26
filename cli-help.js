@@ -44,7 +44,7 @@ const HELP_TEXT = `
 
 \x1b[1mOPTIONS\x1b[0m
   \x1b[1m--profile=\x1b[0m<N>           Profil/école : LIGHT, STANDARD, EXPERT, DOCTORAT, FRONTIER.
-  \x1b[1m--provider=\x1b[0m<N>         Fournisseur cloud (openai, anthropic, openrouter, mistral, custom...).
+  \x1b[1m--provider=\x1b[0m<N>         Fournisseur cloud (openai, anthropic, openrouter, kilo, mistral, custom...).
   \x1b[1m--model=\x1b[0m<N>            Modèle à tester (mode cloud) ou id modèle LM Studio.
   \x1b[1m--api-key=\x1b[0m<N>          Clé API du provider (préférer --no-save-keys sur machine partagée).
   \x1b[1m--endpoint=\x1b[0m<N>          Endpoint API custom (rare).
@@ -288,11 +288,11 @@ const ERROR_CODES = {
   },
   E400_INVALID_MODEL_ID: {
     label: 'Slug modèle invalide',
-    suggestion: 'Le slug du modèle n\'est pas reconnu par le provider (ex: "node" au lieu de "openai/gpt-4o"). Vérifiez le slug exact sur la page du provider, ou utilisez frontier-batch.js qui résout automatiquement les noms familiers (gpt-4o, llama-3.1-8b...) vers le slug canonique.'
+    suggestion: 'Le slug du modèle n\'est pas reconnu par le provider (ex: "node" au lieu de "openai/gpt-4o"). Vérifiez le slug exact sur la page du provider, ou utilisez frontier-batch.js qui résout automatiquement les noms familiers (gpt-4o, llama-3.1-8b, nemotron 3.5 lightning...) vers le slug canonique (OpenRouter et Kilo Gateway).'
   },
   E404_MODEL_NOT_FOUND: {
     label: 'Modèle introuvable',
-    suggestion: 'Le modèle n\'existe pas ou a été dépublié. Vérifiez la liste des modèles disponibles sur le provider (ex: OpenRouter /api/v1/models), ou utilisez frontier-batch.js pour la résolution automatique.'
+    suggestion: 'Le modèle n\'existe pas ou a été dépublié. Vérifiez la liste des modèles disponibles sur le provider (ex: OpenRouter /api/v1/models, Kilo Gateway /api/gateway/models), ou utilisez frontier-batch.js pour la résolution automatique.'
   },
   E505_MODEL_UNRESPONSIVE: {
     label: 'Modèle ne répond pas',

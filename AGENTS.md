@@ -71,10 +71,12 @@ L'outil `bash` est routé sur PowerShell 5.1. Ça change tout :
 Tous les modules sont à la racine (pas de sous-dossiers pour les sources). Les points d'entrée importants :
 
 - **`runner.js`** — orchestrateur (2689 lignes). Contient `main()`, `runSchool()`, `runTierAttempt()`, `askYesNo()`.
-- **`config.js`** — profils, parse CLI, timeout, auto-profilage.
-- **`cloud-client.js`** — 11 providers cloud (OpenAI compat + Anthropic natif) : openrouter, openai, anthropic, groq, together, mistral, deepseek, cohere, ollama, lmstudio, custom.
+- **`config.js`** — profils, parse CLI, timeout, test de capacité.
+- **`cloud-client.js`** — 12 providers cloud (OpenAI compat + Anthropic natif) : openrouter, kilo, openai, anthropic, groq, together, mistral, deepseek, cohere, ollama, lmstudio, custom.
 - **`lm-studio-client.js`** — client local LM Studio (streaming SSE).
 - **`teacher-client.js`** — professeur IA (correction via OpenRouter Free Router).
+- **`capability-check.js`** — test de capacité OUI/NON (~20-30s) en remplacement de l'auto-profilage. 1 appel, 2 tentatives max, parsing robuste FR/EN.
+- **`self-profiling.js`** / **`external-profiling.js`** — auto-profilage & profilage externe historiques. **Conservés** (leaderboard lit l'auto-profilage des anciens carnets) mais **plus appelés** par le runner (remplacés par `capability-check.js`).
 - **`score-ledger.js`** — carnets persistants dans `Export-Rapports/.carnet/<shortName>.json`.
 - **`leaderboard.js`** — génération HTML/MD, serveur web (~4950 lignes, JS inline côté client).
 - **`tier-loader.js`** — charge les tiers JSON avec fallback : `FRONTIER → DOCTORAT → EXPERT → STANDARD → LIGHT`.
@@ -86,11 +88,11 @@ Tous les modules sont à la racine (pas de sous-dossiers pour les sources). Les 
 - **`http-middleware.js`** — timeout + retry backoff + fallback pour appels HTTP.
 - **`health-sentinels.js`** — vérifications sanitaires.
 - **`hybrid-mode.js`** — auto-soumission GitHub avec file d'attente persistante, seuil à 50%.
-- **`pricing.js`** — tarification cloud estimée (tâche 2026-08-04) : fetch OpenRouter `/api/v1/models` + table fallback locale, calcule coût $/€ des modèles cloud payants d'après les tokens consommés. Cache disque 24h (`.pricing-cache.json`).
+- **`pricing.js`** — tarification cloud estimée (tâche 2026-08-04) : fetch OpenRouter `/api/v1/models` + fetch Kilo Gateway `/api/gateway/models` + table fallback locale, calcule coût $/€ des modèles cloud payants d'après les tokens consommés. Cache disque 24h (`.pricing-cache.json` pour OpenRouter, `.kilo-pricing-cache.json` pour Kilo).
 - **`consolidate-leaderboard.js`** — génère le HTML du classement communautaire. Lancé en local pour tester (`node consolidate-leaderboard.js` → `gh-pages-output/`), et en CI via GitHub Actions pour déployer sur `gh-pages`. Le workflow `consolidate.yml` lit les soumissions, régénère le HTML, commit sur `gh-pages`, GitHub Pages déploie.
 - **`tiers/`** — 18 fichiers `tier{N}_{profile}.json`.
 
-Timeouts clés (`config.js`) : `EVAL_TIMEOUT_MS` = 10s (sandbox VM), `API_TIMEOUT_MS` = 1500s (25 min), `PROFILING_TIMEOUT_MS` = 600s (10 min).
+Timeouts clés (`config.js`) : `EVAL_TIMEOUT_MS` = 10s (sandbox VM), `API_TIMEOUT_MS` = 1500s (25 min). Le test de capacité (`capability-check.js`) a son propre timeout (30s/tentative, 2 tentatives max, ~20-30s attendu). `PROFILING_TIMEOUT_MS` (600s) reste défini pour rétrocompatibilité mais n'est plus appelé par le runner.
 
 ---
 
@@ -155,7 +157,7 @@ Le champ `reportFile` du carnet JSON est sérialisé dans `classement.html` (`va
 Bug undici : `TypeError: Cannot assign to read only property 'name' of object 'Error: socket idle timeout'`. Intercepté globalement dans `runner.js` (ligne 11). L'erreur est loggée, le fetch échoue proprement, le runner continue.
 
 ### Écoles séquentielles
-Si modèle > 3B paramètres, le runner peut enchaîner LIGHT puis STANDARD dans le même run (même clé, auto-profilage partagé, santé réinitialisée).
+Si modèle > 3B paramètres, le runner peut enchaîner LIGHT puis STANDARD dans le même run (même clé, test de capacité partagé, santé réinitialisée).
 
 ### Sortie temps réel du mode nuit + carnets orphelins (tâche 2026-08-10)
 
@@ -424,7 +426,7 @@ Si modèle > 3B paramètres, le runner peut enchaîner LIGHT puis STANDARD dans 
 
 **Pièges :**
 - L'école `auto` (le runner devine le profil) reste en mode classique — on ne peut pas lancer un tier individuel sans connaître le profil.
-- L'auto-profilage est relancé à chaque tier en mode classe-par-classe (overhead ~30s/tier) — compromis acceptable en mode nuit.
+- Le test de capacité (OUI/NON) est relancé à chaque tier en mode classe-par-classe (overhead ~30s/tier) — compromis acceptable en mode nuit.
 - `spawnSync` avec `timeout` tue le process via SIGTERM. Le runner peut ne pas avoir le temps de flusher ses rapports. C'est un compromis : mieux vaut un tier incomplet qu'un batch entier bloqué.
 - `runBenchmark` retourne `timedOut: true` mais `status: null` — tester `bench.timedOut` ET `bench.ok` séparément.
 - **Mode 8 (exercice par exercice) est TOUJOURS en classe-par-classe**, même si l'utilisateur choisit « M » (Manuel). Le mode Manuel active `stopOnFirstFailure` (arrêt au premier échec obligatoire), pas le mode classique sans timeout. Avant ce fix, choisir M désactivait `classByClass` → le `tierFilter` était ignoré et toute l'école tournait d'un coup.
@@ -531,43 +533,110 @@ Si modèle > 3B paramètres, le runner peut enchaîner LIGHT puis STANDARD dans 
 - `--yes-teacher` n'est pas un flag reconnu (ignoré silencieusement). Le flag correct est `--no-teacher` (désactive) ; par défaut le professeur est actif.
 - La reconstitution s'applique à TOUS les flags (`--teacher-model=`, `--teacher-api-key=`, etc.), pas seulement `--models=`. Un `--teacher-model=Llama 3 70B` non quoté sera aussi reconstitué correctement.
 
-### Résolution tolérante des slugs OpenRouter + arrêt net sur slug invalide (tâche 2026-08-26)
+### Résolution tolérante des slugs (OpenRouter + Kilo Gateway) + arrêt net sur slug invalide (tâche 2026-08-26)
 
 **Fichiers touchés :** `model-resolver.js` (nouveau), `frontier-batch.js`, `runner.js`, `cloud-client.js`, `cli-help.js`, `Docs/CHANGELOG.md`, `AGENTS.md`.
 
-**Principe :** L'utilisateur saisit ou colle un nom familier (`gpt-4o`, `llama3.1-8b`, `inkling-small`) au lieu du slug exact OpenRouter (`openai/gpt-4o`). Sans résolution, OpenRouter renvoie HTTP 400 "X is not a valid model ID" pour chaque appel et le runner produit un rapport 0/2752 inutile. Deux mécanismes :
-1. **`model-resolver.js`** : résout un slug saisi vers le slug canonique OpenRouter via 5 stratégies (exact → alias → préfixe → sous-chaîne → suffixe). Désambiguisateur `:free` : si les matchs ne diffèrent que par `:free`, on préfère le variant gratuit. Fetch `/api/v1/models` (cache disque 24h partagé avec `pricing.js`).
+**Principe :** L'utilisateur saisit ou colle un nom familier (`gpt-4o`, `llama3.1-8b`, `nemotron 3.5 lightning`) au lieu du slug exact (`openai/gpt-4o`, `nvidia/nemotron-3.5-lightning:free`). Sans résolution, le provider renvoie HTTP 400 "X is not a valid model ID" pour chaque appel et le runner produit un rapport 0/2752 inutile. Deux mécanismes :
+1. **`model-resolver.js`** : résout un slug saisi vers le slug canonique via 5 stratégies (exact → alias → préfixe → sous-chaîne → suffixe). Désambiguisateur `:free` : si les matchs ne diffèrent que par `:free`, on préfère le variant gratuit. Fonctionne pour OpenRouter (`/api/v1/models`) ET Kilo Gateway (`/api/gateway/models`) — même format de slug `provider/model-name`. La logique de matching est extraite dans `_matchSlug(raw, ids, idsSet)` réutilisable. Cache disque 24h séparé (`.pricing-cache.json` pour OpenRouter, partagé avec `pricing.js` ; `.kilo-models-cache.json` pour Kilo).
 2. **Arrêt net sur slug invalide** : `cloud-client.js` détecte HTTP 400 "not a valid model ID" et HTTP 404 "model not found", marque l'erreur comme fatale (`isFatalSlugError`), et la propage quel que soit `isMandatory`. Le runner s'arrête au 1er appel au lieu de parcourir 6 classes en échec.
 
 **Fonctions :**
-- `resolveOpenRouterSlug(input)` (dans `model-resolver.js`) → `{ resolved, slug, matchedBy, suggestions }` ou `{ offline: true, slug }`. Stratégies : exact, alias (COMMON_ALIASES), prefix, substring, suffix, prefer_free.
-- `getOpenRouterModelIds()` (dans `model-resolver.js`) → liste des slugs OpenRouter (cache disque 24h, sinon fetch réseau).
+- `resolveOpenRouterSlug(input)` / `resolveKiloSlug(input)` (dans `model-resolver.js`) → `{ resolved, slug, matchedBy, suggestions }` ou `{ offline: true, slug }`. Stratégies : exact, alias (COMMON_ALIASES), prefix, substring, suffix, prefer_free.
+- `_matchSlug(raw, ids, idsSet)` (dans `model-resolver.js`) → logique de matching pure, réutilisée par les deux resolveurs.
+- `getOpenRouterModelIds()` / `getKiloModelIds()` (dans `model-resolver.js`) → liste des slugs (cache disque 24h, sinon fetch réseau).
 - `preferFreeVariant(matches)` (dans `model-resolver.js`) → si une paire (free, non-free) existe, renvoie le `:free`.
 - `isFatalSlugError` (flag sur l'erreur dans `cloud-client.js`) → HTTP 400/404 de slug → propagation fatale.
 
 **Pour modifier :**
 1. **Ajouter un alias** : éditer `COMMON_ALIASES` dans `model-resolver.js` (format `'gpt4o': 'openai/gpt-4o'`).
 2. **Changer la préférence `:free`** : éditer `preferFreeVariant()` dans `model-resolver.js` (retourner `null` pour désactiver).
-3. **Désactiver la résolution dans frontier-batch** : commenter le bloc `if (provider === 'openrouter')` dans `main()` de `frontier-batch.js`.
-4. **Désactiver la résolution dans runner** : commenter le bloc `if (resolvedProvider === 'openrouter')` dans `main()` de `runner.js` (~ligne 1572).
+3. **Désactiver la résolution dans frontier-batch** : commenter le bloc `if (provider === 'openrouter' || provider === 'kilo')` dans `main()` de `frontier-batch.js`.
+4. **Désactiver la résolution dans runner** : commenter le bloc `if (resolvedProvider === 'openrouter' || resolvedProvider === 'kilo')` dans `main()` de `runner.js`.
 5. **Revenir au comportement historique (parcourir 6 classes en échec)** : retirer `error.isFatalSlugError` du bloc `catch` dans `cloud-client.js` et `runTierAttempt` dans `runner.js`.
-6. **Tester** : `node -e "const {resolveOpenRouterSlug}=require('./model-resolver'); resolveOpenRouterSlug('gpt-4o').then(r=>console.log(r))"` (daemon réseau requis pour le fetch).
+6. **Tester** : `node -e "const {resolveOpenRouterSlug}=require('./model-resolver'); resolveOpenRouterSlug('gpt-4o').then(r=>console.log(r))"` ou `node -e "const {resolveKiloSlug}=require('./model-resolver'); resolveKiloSlug('nemotron').then(r=>console.log(r))"` (daemon réseau requis pour le fetch).
 
 **Pièges :**
-- `model-resolver.js` ne réécrit le cache disque QUE s'il n'existe pas déjà (évite d'écraser les VRAIS prix de `pricing.js` avec des prix à 0). Le cache `.pricing-cache.json` est partagé entre les deux modules.
-- Si le réseau est indisponible, `resolveOpenRouterSlug()` renvoie `{ offline: true, slug: <saisi> }` — le slug est gardé tel quel, le run démarre sans validation (comportement historique préservé).
+- `model-resolver.js` ne réécrit le cache disque OpenRouter QUE s'il n'existe pas déjà (évite d'écraser les VRAIS prix de `pricing.js` avec des prix à 0). Le cache `.pricing-cache.json` est partagé entre les deux modules. Le cache Kilo (`.kilo-models-cache.json`) est indépendant.
+- Si le réseau est indisponible, `resolveOpenRouterSlug()`/`resolveKiloSlug()` renvoient `{ offline: true, slug: <saisi> }` — le slug est gardé tel quel, le run démarre sans validation (comportement historique préservé).
 - Les alias Claude 3.5 ont été retirés (modèles dépubliés sur OpenRouter). Les alias pointent vers les versions 4.x disponibles.
 - Le désambiguisateur `:free` ne s'active QUE si une paire (free, non-free) existe. Si seul le variant `:free` existe, il est matché normalement (exact/substring).
-- `isFatalSlugError` s'applique à TOUS les providers OpenAI-compat (pas seulement OpenRouter) — tout HTTP 400 "not a valid model ID" est fatal. Pour un provider custom qui renvoie un 400 pour une autre raison, l'erreur sera aussi fatale (c'est voulu : un 400 sur le slug est toujours irrécupérable).
+- `isFatalSlugError` s'applique à TOUS les providers OpenAI-compat (pas seulement OpenRouter/Kilo) — tout HTTP 400 "not a valid model ID" est fatal. Pour un provider custom qui renvoie un 400 pour une autre raison, l'erreur sera aussi fatale (c'est voulu : un 400 sur le slug est toujours irrécupérable).
+
+### Provider Kilo Gateway — accès anonyme + clé optionnelle (tâche 2026-08-26)
+
+**Fichiers touchés :** `cloud-client.js`, `model-resolver.js`, `frontier-batch.js`, `runner.js`, `pricing.js`, `cli-help.js`, `Docs/CHANGELOG.md`, `AGENTS.md`.
+
+**Principe :** Kilo Gateway (`api.kilo.ai`) est un agrégateur 100% compatible OpenAI (même format `/chat/completions`, streaming SSE, auth `Bearer`, slugs `provider/model-name`). Ajouté comme provider cloud pour tester les modèles gratuits en alternative à OpenRouter (rate-limits upstream systématiques). 19 modèles gratuits disponibles (dont `nvidia/nemotron-3.5-lightning:free`, `tencent/hy3:free`, `kilo-auto/free`).
+
+**Authentification :**
+- **Avec clé** (abonnement, JWT récupéré sur https://app.kilo.ai) : pas de limite, recommandé.
+- **Sans clé** (accès anonyme) : toléré via `optionalAuth: true`, limité à 200 req/h/IP. Un batch FRONTIER complet dépasse largement 200 req → une clé est quasi obligatoire pour un run complet. LIGHT (2 classes) passe peut-être.
+- Le header `Authorization` n'est envoyé QUE si une clé est présente (`if (resolvedKey)`).
+
+**Fonctions :**
+- `kilo` dans `CLOUD_PROVIDERS` (`cloud-client.js`) : `url: 'https://api.kilo.ai/api/gateway/chat/completions'`, `envKey: 'KILO_API_KEY'`, `optionalAuth: true`.
+- `resolveKiloSlug()` / `getKiloModelIds()` / `fetchKiloModels()` (dans `model-resolver.js`) : cache disque `.kilo-models-cache.json` (TTL 24h), endpoint public `/models`.
+- `getKiloPricing()` / `refreshKiloPricing()` (dans `pricing.js`) : cache disque `.kilo-pricing-cache.json`. Prix en chaînes $/token, `-1` = non défini → traité comme 0. Intégré dans `findPrice()` après OpenRouter.
+
+**Pour modifier :**
+1. **Changer l'URL de base** : éditer `url` de `kilo` dans `CLOUD_PROVIDERS` (`cloud-client.js`) et `KILO_MODELS_URL` dans `model-resolver.js` + `pricing.js`.
+2. **Rendre la clé obligatoire** (désactiver accès anonyme) : retirer `optionalAuth: true` de `kilo` dans `CLOUD_PROVIDERS` + retirer `kilo` des listes d'exclusion dans `runner.js` (dry-run + avertissement clé) + retirer de `PROVIDERS_OPTIONAL_KEY` dans `frontier-batch.js`.
+3. **Changer le TTL du cache Kilo** : éditer `CACHE_TTL_MS` dans `model-resolver.js`/`pricing.js` (partagé avec OpenRouter).
+4. **Tester** : `node runner.js all --provider=kilo --model=nvidia/nemotron-3.5-lightning:free --profile=LIGHT --dry-run` (valide sans clé). `node -e "const {resolveKiloSlug}=require('./model-resolver'); resolveKiloSlug('nemotron').then(r=>console.log(r))"`.
+
+**Pièges :**
+- L'accès anonyme (sans clé) est limité à 200 req/h/IP. Un batch FRONTIER complet (6 classes × ~10 exercices + aide + rattrapage) dépasse largement ce quota → l'utilisateur DOIT fournir une clé pour un run complet. Sans clé, seul LIGHT passe peut-être.
+- **NVIDIA free endpoints** : usage trial, données journalisées par NVIDIA. Ne pas envoyer de données confidentielles (voir NVIDIA API Trial Terms of Service).
+- Les prix `-1` (non définis, modèles auto/free) sont traités comme 0 par `pricing.js`. Si un modèle payant a un prix réel mais l'endpoint renvoie `-1` (bug), le coût affiché sera 0$ (sous-estimé).
+- Le cache disque Kilo (`.kilo-pricing-cache.json`, `.kilo-models-cache.json`) est distinct du cache OpenRouter (`.pricing-cache.json`) pour ne pas mélanger les listes/prix.
+- Kilo Gateway propose des modèles `kilo-auto/*` (frontier, efficient, free, small) qui routent automatiquement vers un modèle sous-jacent — le modèle résolu peut changer côté serveur sans préavis.
+
+### Test de capacité OUI/NON en remplacement de l'auto-profilage (tâche 2026-08-26)
+
+**Fichiers touchés :** `capability-check.js` (nouveau), `runner.js`, `Docs/CHANGELOG.md`, `AGENTS.md`.
+
+**Principe :** L'auto-profilage (`self-profiling.js`, interview JSON sur 4 compétences, 1-5 min) et le profilage externe (`external-profiling.js`, professeur IA, 5-20s) prenaient 1 à 10 min avant le moindre exercice. Plusieurs utilisateurs annulaient le run tellement c'était long. Remplacés par un **test de capacité** simple (~20-30s) : un seul appel au modèle élève lui demande s'il est capable de passer l'examen.
+
+- **OUI** → le runner valide et commence les exercices. **Plus aucun filtrage** : toutes les tâches de tous les tiers sont exécutées.
+- **NON** → modèle **recalé définitivement** : `process.exit(0)` propre, pas de pénalité, pas de carnet créé.
+
+Le **pre-flight check** (détection rate-limit 200/400 vide, section ci-dessous) est **conservé** et s'exécute juste avant le test de capacité.
+
+**Fonctions :**
+- `runCapabilityCheck(queryFn, providerConfig, contextLimitTokens)` (dans `capability-check.js`) → `{ capable, rawAnswer, attempts }`. 1 appel, 2 tentatives max, timeout 30s/tentative (pire cas ~60s, attendu ~20-30s).
+- `interpretCapabilityAnswer(text)` (dans `capability-check.js`) → `'YES' | 'NO' | null`. Parsing robuste : casse, accents, prose, variants FR/EN. Patterns NON testés en priorité. Réponse indéterminée après 2 tentatives → **OUI par défaut** (prudence : ne pas exclure un modèle bavard/mal formaté).
+
+**Conséquences dans `runner.js` :**
+- `selfProfile` reste `null` → le bloc de filtrage `if (selfProfile && selfProfiling.enabled && !selfProfiling.bypassFilter)` dans `runTierAttempt` ne se déclenche plus (aucune tâche bypassée).
+- `filterProfile` forcé à `null` → toutes les tâches exécutées.
+- L'**Indice de Calibration** n'est plus calculé (`selfProfile` null → bloc `if (selfProfile && allEvalResults.length > 0)` court-circuité). La section calibration disparaît des nouveaux rapports ; les anciens carnets conservent leur `calibrationIndex`.
+- Imports : `runSelfProfiling` et `runExternalProfiling` retirés du runner ; `runCapabilityCheck` ajouté. `filterTasksByProfile`/`SKILL_LABELS` conservés (leaderboard/rapports historiques).
+
+**Pour modifier :**
+1. **Changer le prompt du test** : éditer `CAPABILITY_PROMPT` dans `capability-check.js`.
+2. **Changer le timeout / tentatives** : éditer `CAPABILITY_TIMEOUT_MS` et `MAX_ATTEMPTS` dans `capability-check.js`.
+3. **Changer la logique de parsing** : éditer `interpretCapabilityAnswer()` (`noPatterns` / `yesPatterns` / `maybePatterns`).
+4. **Changer le comportement NON** (exclure + marquer dans carnet au lieu d'exit 0) : remplacer le `process.exit(0)` dans `runner.js` (bloc `if (!capabilityResult.capable)`) par la création d'un carnet marqué « recalé ».
+5. **Réactiver le filtrage** : remettre `filterProfile` à un profil non-null dans `runner.js` (reconstruire un profil depuis la réponse de capacité, ou réimporter `runSelfProfiling`).
+6. **Réactiver l'auto-profilage complet** : restaurer les imports `runSelfProfiling`/`runExternalProfiling` et le bloc historique (cf. git history avant cette tâche).
+7. **Tester** : `node runner.js --provider=openrouter --model=<slug> --profile=LIGHT`. Le test de capacité remplace l'auto-profilage (bannière « TEST DE CAPACITÉ »).
+
+**Pièges :**
+- `interpretCapabilityAnswer` teste les patterns NON en **priorité** : "non, je ne suis pas capable" → NO ; "Oui mais non" (rare) → NO (prudence).
+- Le test de capacité ne remplace PAS le pre-flight check : le pre-flight détecte les modèles qui ne répondent **pas du tout** (rate-limit silencieux 200/400 vide), le test de capacité détecte les modèles qui répondent **mais refusent**.
+- `selfProfile` null désactive l'Indice de Calibration (métrique auto-évaluation vs performance). Les anciens carnets gardent leur calibrationIndex ; les nouveaux n'en ont plus.
+- `self-profiling.js` et `external-profiling.js` sont **conservés** (pas supprimés) : le leaderboard les lit encore pour afficher l'auto-profilage des anciens carnets. Ils ne sont simplement plus appelés par le runner.
+- Une réponse indéterminée (modèle bavard qui ne dit ni OUI ni NON clairement) → OUI par défaut. Le modèle aura sa chance à l'examen réel qui le jugera sur preuve. C'est voulu : exclure un modèle fonctionnel mais mal formaté serait une erreur.
 
 ### Détection des réponses vides (modèles free rate-limités) + pre-flight check (tâche 2026-08-26)
 
 **Fichiers touchés :** `cloud-client.js`, `runner.js`, `cli-help.js`, `Docs/CHANGELOG.md`, `AGENTS.md`.
 
-**Principe :** Les modèles **free** d'OpenRouter passent par un pool partagé vers un provider upstream (ex: Decart). Quand ce pool est saturé, le provider renvoie soit un HTTP 429 (explicite), soit un HTTP 200 avec des chunks SSE **vides** (`delta.content: ""`) — rate limit silencieux. Le parser SSE voyait ça comme un succès (statut=OK, 0 tokens) → le runner continuait → auto-profilage échouait → profilage externe donnait 1/5 → toutes tâches bypassées → rapport 0/0 après ~5 min d'attente. Trois mécanismes de protection :
+**Principe :** Les modèles **free** d'OpenRouter passent par un pool partagé vers un provider upstream (ex: Decart). Quand ce pool est saturé, le provider renvoie soit un HTTP 429 (explicite), soit un HTTP 200 avec des chunks SSE **vides** (`delta.content: ""`) — rate limit silencieux. Le parser SSE voyait ça comme un succès (statut=OK, 0 tokens) → le runner continuait → rapport 0/0 après ~5 min d'attente. Trois mécanismes de protection :
 
 1. **Détection SSE** : `streamOpenAICompatResponse` détecte les chunks d'erreur (`chunk.error`) et les réponses vides (chunks reçus mais 0 contenu) → lève `isEmptyResponse`.
-2. **Pre-flight check** : avant l'auto-profilage, un ping trivial ("Reply with: OK", 8 tokens) vérifie que le modèle répond. 3 tentatives → arrêt net `E505_MODEL_UNRESPONSIVE`.
+2. **Pre-flight check** : avant le test de capacité, un ping trivial ("Reply with: OK", 8 tokens) vérifie que le modèle répond. 3 tentatives → arrêt net `E505_MODEL_UNRESPONSIVE`.
 3. **Compteur de réponses vides** : `runSchool` compte les `isEmptyResponse` consécutives → arrêt après 3.
 
 **Fonctions :**

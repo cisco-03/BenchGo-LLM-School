@@ -37,8 +37,8 @@ const { evaluateTask } = require('./task-evaluator');
 const { buildTierReport, shortenModelName, shortNameWithQuant, buildCalibrationReport } = require('./report-generator');
 const { updateTiers } = require('./auto-updater');
 const scoreLedger = require('./score-ledger');
-const { runSelfProfiling, filterTasksByProfile, SKILL_LABELS } = require('./self-profiling');
-const { runExternalProfiling } = require('./external-profiling');
+const { filterTasksByProfile, SKILL_LABELS } = require('./self-profiling');
+const { runCapabilityCheck } = require('./capability-check');
 const leaderboard = require('./leaderboard');
 const secrets = require('./secrets');
 const cliTable = require('./cli-table');
@@ -58,7 +58,7 @@ const scoringUtils = require('./scoring-utils');
 const { isRattrapageEligibleProfile, shouldReplaceBestResult, explainTechnicalError, getClassName } = scoringUtils;
 const hybridMode = require('./hybrid-mode');
 const { exportCsv: exportRunsCsv, detectUnstableModels } = scoreLedger;
-const { resolveOpenRouterSlug } = require('./model-resolver');
+const { resolveOpenRouterSlug, resolveKiloSlug } = require('./model-resolver');
 
 const DEFAULT_CONTEXT_LIMIT_TOKENS = 16384;
 const MAX_RATTRAPAGE_ATTEMPTS = 1;
@@ -1380,7 +1380,7 @@ async function main() {
       console.log(`  \x1b[1;32m→ Preset '${chosenPreset}' chargé.\x1b[0m`);
       console.log(`  \x1b[90mFournisseur : ${resolvedProvider || '?'} · Modèle : ${resolvedCloudModel || '?'} · Profil : ${resolvedProfileArgExplicit || 'auto'}\x1b[0m`);
       if (resolvedApiKey) console.log(`  \x1b[90mClé ${resolvedProvider} : restaurée (${secrets.maskedForDisplay(resolvedApiKey)})\x1b[0m`);
-      else if (resolvedProvider && !['lmstudio', 'ollama', 'custom'].includes(resolvedProvider)) console.log(`  \x1b[33mClé ${resolvedProvider} : non mémorisée — elle sera demandée.\x1b[0m`);
+      else if (resolvedProvider && !['lmstudio', 'ollama', 'custom', 'kilo'].includes(resolvedProvider)) console.log(`  \x1b[33mClé ${resolvedProvider} : non mémorisée — elle sera demandée.\x1b[0m`);
       console.log('');
     } else {
       logger.info('Aucun flag CLI détecté — lancement du questionnaire interactif.');
@@ -1577,30 +1577,32 @@ async function main() {
     if (!resolvedCloudModel) {
       throw new BenchgoError('E601_NO_MODEL', `--provider=${resolvedProvider} sans --model`);
     }
-    // --- Résolution auto du slug OpenRouter (tâche 2026-08-26) ---
-    // Si le slug saisi n'est pas un id exact OpenRouter, on tente une résolution
-    // tolérante (alias, préfixe, sous-chaîne) pour éviter un HTTP 400 sur tous
-    // les appels. Non bloquant si offline (on garde le slug tel quel).
-    if (resolvedProvider === 'openrouter') {
+    // --- Résolution auto du slug (OpenRouter + Kilo Gateway) ---
+    // Si le slug saisi n'est pas un id exact, on tente une résolution tolérante
+    // (alias, préfixe, sous-chaîne) pour éviter un HTTP 400 sur tous les appels.
+    // Non bloquant si offline (on garde le slug tel quel).
+    // OpenRouter et Kilo Gateway partagent le même format de slug (provider/model).
+    if (resolvedProvider === 'openrouter' || resolvedProvider === 'kilo') {
+      const resolver = resolvedProvider === 'openrouter' ? resolveOpenRouterSlug : resolveKiloSlug;
       try {
-        const r = await resolveOpenRouterSlug(resolvedCloudModel);
+        const r = await resolver(resolvedCloudModel);
         if (r.offline) {
-          logger.info(`Résolution slug OpenRouter : offline, slug gardé tel quel (${resolvedCloudModel}).`);
+          logger.info(`Résolution slug ${resolvedProvider} : offline, slug gardé tel quel (${resolvedCloudModel}).`);
         } else if (r.resolved && r.slug !== resolvedCloudModel) {
-          logger.info(`Résolution slug OpenRouter : "${resolvedCloudModel}" -> "${r.slug}" (${r.matchedBy}).`);
+          logger.info(`Résolution slug ${resolvedProvider} : "${resolvedCloudModel}" -> "${r.slug}" (${r.matchedBy}).`);
           console.log(`  \x1b[90mRésolution slug  : "${resolvedCloudModel}" -> "${r.slug}" (${r.matchedBy})\x1b[0m`);
           resolvedCloudModel = r.slug;
         } else if (!r.resolved) {
           // Slug non reconnu ET non résolu : on avertit mais on laisse passer
           // (l'erreur HTTP 400 fatale arrêtera net le run au 1er appel).
-          console.log(`  \x1b[33m⚠ Slug OpenRouter non reconnu : "${resolvedCloudModel}".\x1b[0m`);
+          console.log(`  \x1b[33m⚠ Slug ${resolvedProvider} non reconnu : "${resolvedCloudModel}".\x1b[0m`);
           if (r.suggestions && r.suggestions.length > 0) {
             console.log(`  \x1b[90mSuggestions proches : ${r.suggestions.slice(0, 5).join(', ')}\x1b[0m`);
           }
           console.log(`  \x1b[90mLe run va démarrer mais s'arrêtera si le slug est invalide (HTTP 400).\x1b[0m`);
         }
       } catch (resolveErr) {
-        logger.warn(`Résolution slug OpenRouter échouée : ${resolveErr.message}. Slug gardé tel quel.`);
+        logger.warn(`Résolution slug ${resolvedProvider} échouée : ${resolveErr.message}. Slug gardé tel quel.`);
       }
     }
     logger.info(`Mode cloud : provider=${resolvedProvider}, modèle=${resolvedCloudModel}`);
@@ -1758,7 +1760,7 @@ async function main() {
     if (!PROFILES[profileArg]) {
       problems.push(`Profil inconnu : ${profileArg}.`);
     }
-    if (isCloudMode && !resolvedApiKey && !['lmstudio', 'ollama', 'custom'].includes(resolvedProvider)) {
+    if (isCloudMode && !resolvedApiKey && !['lmstudio', 'ollama', 'custom', 'kilo'].includes(resolvedProvider)) {
       problems.push(`Provider ${resolvedProvider} sans clé API (requis en cloud).`);
     }
     console.log(`  \x1b[1;36m━━━ DRY-RUN — VALIDATION DE LA CONFIGURATION ━━━\x1b[0m`);
@@ -1810,14 +1812,14 @@ async function main() {
     }
   }
 
-  // --- Auto-profilage (Self-Profiling) ---
-  // Interroge le modèle au démarrage pour qu'il s'auto-évalue sur 4 compétences clés.
-  // Le profil obtenu sert ensuite à filtrer les tâches trop difficiles et à calculer
-  // l'Indice de Calibration en fin de run. Échec non fatal (graceful degradation).
-  //
-  // IMPORTANT : on annonce explicitement à l'utilisateur que l'auto-profilage va
-  // commencer et peut prendre 10-15s. Sans cela, l'utilisateur croit que le CLI a
-  // planté pendant que le modèle réfléchit en silence.
+  // --- Test de capacité (Capability Check) ---
+  // Remplace l'auto-profilage + profilage externe (1-10 min) qui bloquaient les
+  // utilisateurs. Un SEUL appel au modèle lui demande s'il est capable de passer
+  // l'examen (~20-30s max).
+  //   - OUI  → le runner valide et commence les exercices (toutes les tâches, aucun filtrage).
+  //   - NON  → modèle recalé définitivement (exit 0 propre, pas de pénalité, pas de carnet).
+  // Le pre-flight check (rate-limit 200/400 vide) reste actif juste au-dessus.
+  // selfProfile reste null → pas de filtrage des tâches, pas d'Indice de Calibration.
   let selfProfile = null;
 
   // --- Pre-flight check (tâche 2026-08-26) ---
@@ -1883,136 +1885,43 @@ async function main() {
     console.log('');
   }
 
-  if (selfProfiling.enabled) {
-    console.log(`  \x1b[1;35m━━━ AUTO-PROFILAGE DU MODÈLE ━━━\x1b[0m`);
-    console.log(`  \x1b[35mLe modèle va s'auto-évaluer sur 4 compétences (niveau 1 à 5).\x1b[0m`);
-    console.log(`  \x1b[35mCette étape prend ~1-3min (jusqu'à 5min max) — merci de patienter.\x1b[0m`);
-    console.log(`  \x1b[90mCompétences évaluées : JavaScript Bases, Async, Algorithmes avancés, Débogage/Sécurité.\x1b[0m\n`);
+  // --- Test de capacité : OUI/NON (~20-30s) ---
+  // Un seul appel au modèle élève. Pas de filtrage, pas d'Indice de Calibration.
+  console.log(`  \x1b[1;35m━━━ TEST DE CAPACITÉ ━━━\x1b[0m`);
+  console.log(`  \x1b[35mOn demande au modèle s'il est capable de passer l'examen (~20-30s).\x1b[0m\n`);
 
-    const profileSpinner = new Spinner('Auto-profilage : interview JSON du modèle en cours');
-    // Messages pédagogiques rotatifs PENDANT l'auto-profilage (temps mort de 10-90s).
-    // Tournent toutes les ~7s pour tenir l'utilisateur en haleine et lui expliquer
-    // ce que fait le modèle. Sans cela, l'utilisateur croit que le CLI a planté.
-    profileSpinner.setWaitingMessages(PROFILING_WAITING_MESSAGES);
-    profileSpinner.start();
-    const profileStartTime = Date.now();
-    try {
-      selfProfile = await runSelfProfiling(queryFn, providerConfig, contextLimitTokens);
-    } catch (e) {
-      logger.warn(`Auto-profilage échoué : ${e.message}. Continuation sans filtrage.`);
-    }
-    const profileDurationMs = Date.now() - profileStartTime;
-    const profileDurationSec = (profileDurationMs / 1000).toFixed(1);
+  const capSpinner = new Spinner('Test de capacité : question au modèle');
+  capSpinner.start();
+  const capStart = Date.now();
+  let capabilityResult;
+  try {
+    capabilityResult = await runCapabilityCheck(queryFn, providerConfig, contextLimitTokens);
+  } catch (e) {
+    logger.warn(`Test de capacité échoué : ${e.message}. Continuation par prudence (OUI par défaut).`);
+    capabilityResult = { capable: true, rawAnswer: '', attempts: 0 };
+  }
+  const capDurationSec = ((Date.now() - capStart) / 1000).toFixed(1);
+  capSpinner.stop(`Test de capacité : ${capabilityResult.capable ? 'OUI (capable)' : 'NON (incapable)'} en ${capDurationSec}s`);
 
-    if (selfProfile) {
-      profileSpinner.stop(`Auto-profilage réussi en ${profileDurationSec}s`);
-      const skills = selfProfile.skills || {};
-      console.log('');
-      console.log(`  \x1b[1;36m━━━ RÉSULTAT DE L'AUTO-PROFILAGE ━━━\x1b[0m`);
-      console.log(`  \x1b[36mCompétences déclarées par le modèle :\x1b[0m`);
-      let levelSum = 0;
-      let levelCount = 0;
-      for (const [skill, label] of Object.entries(SKILL_LABELS)) {
-        const lvl = skills[skill] ? skills[skill].level : '?';
-        if (typeof lvl === 'number') { levelSum += lvl; levelCount++; }
-        const bar = typeof lvl === 'number' ? '█'.repeat(lvl) + '░'.repeat(5 - lvl) : '░░░░░';
-        const lvlStr = typeof lvl === 'number' ? String(lvl) : '?';
-        console.log(`    \x1b[90m${label.padEnd(48)}\x1b[0m \x1b[1;33m[${bar}] ${lvlStr}/5\x1b[0m`);
-      }
-      if (levelCount > 0) {
-        const avg = (levelSum / levelCount).toFixed(2);
-        console.log(`    \x1b[90m${'Niveau moyen déclaré'.padEnd(48)}\x1b[0m \x1b[1;33m${avg}/5\x1b[0m`);
-      }
-      if (selfProfile.justification) {
-        console.log(`  \x1b[36mJustification du modèle :\x1b[0m \x1b[90m${selfProfile.justification}\x1b[0m`);
-      }
-      const bypassedNote = selfProfiling.bypassFilter
-        ? `Filtrage DÉSACTIVÉ (bypassFilter=true) — toutes les tâches seront exécutées malgré le profil.`
-        : `Les tâches dont la compétence est déclarée < ${selfProfiling.minLevelToTest}/5 seront bypassées.`;
-      console.log(`  \x1b[90mFiltrage : ${bypassedNote}\x1b[0m`);
-      console.log('');
-    } else {
-      profileSpinner.stop(`Auto-profilage échoué en ${profileDurationSec}s (fallback : toutes les tâches seront exécutées)`);
-      console.log(`  \x1b[90mLe modèle n'a pas pu s'auto-évaluer — continuons sans filtrage ni calibration.\x1b[0m\n`);
-    }
+  if (!capabilityResult.capable) {
+    // Le modèle a explicitement répondu NON → recalé définitivement, pas de
+    // pénalité, pas de carnet. Exit 0 propre.
+    console.log('');
+    console.log(`  \x1b[1;33m━━━ MODÈLE RECALÉ ━━━\x1b[0m`);
+    console.log(`  \x1b[33mLe modèle "${preKnownModelName || resolvedCloudModel || '(inconnu)'}" a déclaré NE PAS être capable de passer l'examen.\x1b[0m`);
+    console.log(`  \x1b[33mRéponse : ${(capabilityResult.rawAnswer || '').trim().substring(0, 200) || '(vide)'}\x1b[0m`);
+    console.log(`  \x1b[90mRecalé définitivement — pas de pénalité, pas de carnet créé.\x1b[0m\n`);
+    logger.info(`Modèle recalé : a répondu NON au test de capacité (${capabilityResult.attempts} tentative(s), ${capDurationSec}s).`);
+    logger.close();
+    process.exit(0);
   }
 
-  // --- Profilage externe (par un professeur IA) ---
-  // L'auto-profilage par le modèle lui-même comporte un risque d'erreur
-  // d'appréciation (surconfiance, fausse modestie). Pour fiabiliser le filtrage
-  // des tâches, on demande à un PROFESSEUR IA externe d'évaluer les compétences
-  // de l'élève à partir de son auto-évaluation. Le profil externe remplace
-  // l'auto-profilage pour le FILTRAGE des tâches ; l'auto-profilage est conservé
-  // pour le calcul de l'Indice de Calibration (écart auto vs réel).
-  // Sans professeur activé → repli sur l'auto-profilage pour le filtrage.
-  let filterProfile = selfProfile; // profil utilisé pour filtrer les tâches
-  if (teacherConfigResolved && teacherConfigResolved.enabled && selfProfiling.enabled) {
-    console.log(`  \x1b[1;35m━━━ PROFILAGE EXTERNE PAR LE PROFESSEUR IA ━━━\x1b[0m`);
-    console.log(`  \x1b[35mLe professeur IA va évaluer objectivement les compétences de l'élève.\x1b[0m`);
-    console.log(`  \x1b[35mCette étape prend ~5-20s — merci de patienter.\x1b[0m`);
-    console.log(`  \x1b[90mLe profil externe remplace l'auto-profilage pour le filtrage des tâches.\x1b[0m`);
-    console.log(`  \x1b[90mL'auto-profilage est conservé pour calculer l'Indice de Calibration.\x1b[0m\n`);
+  console.log(`  \x1b[32mLe modèle se déclare capable — début de l'examen (toutes les tâches, aucun filtrage).\x1b[0m`);
+  console.log(`  \x1b[90mRéponse : ${(capabilityResult.rawAnswer || '').trim().substring(0, 120)}\x1b[0m\n`);
+  logger.info(`Test de capacité : OUI (capable) en ${capDurationSec}s (${capabilityResult.attempts} tentative(s)).`);
 
-    const extSpinner = new Spinner('Profilage externe : le professeur évalue l\'élève');
-    extSpinner.start();
-    const extStartTime = Date.now();
-    let externalProfile = null;
-    try {
-      externalProfile = await runExternalProfiling({
-        teacherConfig: teacherConfigResolved,
-        studentSelfProfile: selfProfile,
-        studentModelName: preKnownModelName || resolvedCloudModel || null
-      });
-    } catch (e) {
-      logger.warn(`Profilage externe échoué : ${e.message}. Repli sur l'auto-profilage.`);
-    }
-    const extDurationSec = ((Date.now() - extStartTime) / 1000).toFixed(1);
-
-    if (externalProfile) {
-      extSpinner.stop(`Profilage externe réussi en ${extDurationSec}s`);
-      filterProfile = externalProfile;
-      const skills = externalProfile.skills || {};
-      console.log('');
-      console.log(`  \x1b[1;36m━━━ PROFIL EXTERNE (PROFESSEUR IA) ━━━\x1b[0m`);
-      console.log(`  \x1b[36mCompétences évaluées par le professeur :\x1b[0m`);
-      let levelSum = 0;
-      let levelCount = 0;
-      for (const [skill, label] of Object.entries(SKILL_LABELS)) {
-        const lvl = skills[skill] ? skills[skill].level : '?';
-        if (typeof lvl === 'number') { levelSum += lvl; levelCount++; }
-        const bar = typeof lvl === 'number' ? '█'.repeat(lvl) + '░'.repeat(5 - lvl) : '░░░░░';
-        const lvlStr = typeof lvl === 'number' ? String(lvl) : '?';
-        console.log(`    \x1b[90m${label.padEnd(48)}\x1b[0m \x1b[1;33m[${bar}] ${lvlStr}/5\x1b[0m`);
-      }
-      if (levelCount > 0) {
-        const avg = (levelSum / levelCount).toFixed(2);
-        console.log(`    \x1b[90m${'Niveau moyen externe'.padEnd(48)}\x1b[0m \x1b[1;33m${avg}/5\x1b[0m`);
-      }
-      if (externalProfile.justification) {
-        console.log(`  \x1b[36mJustification du professeur :\x1b[0m \x1b[90m${externalProfile.justification}\x1b[0m`);
-      }
-      // Comparaison auto vs externe si les deux existent
-      if (selfProfile && selfProfile.skills) {
-        const diffs = [];
-        for (const skill of Object.keys(SKILL_LABELS)) {
-          const a = selfProfile.skills[skill] ? selfProfile.skills[skill].level : null;
-          const e = externalProfile.skills[skill] ? externalProfile.skills[skill].level : null;
-          if (a !== null && e !== null && a !== e) {
-            diffs.push(`${skill}: auto=${a} → externe=${e}`);
-          }
-        }
-        if (diffs.length > 0) {
-          console.log(`  \x1b[33mÉcarts auto vs externe : ${diffs.join(', ')}\x1b[0m`);
-        } else {
-          console.log(`  \x1b[32mAuto-évaluation et évaluation externe concordent.\x1b[0m`);
-        }
-      }
-      console.log('');
-    } else {
-      extSpinner.stop(`Profilage externe échoué en ${extDurationSec}s (repli sur l'auto-profilage)`);
-      console.log(`  \x1b[90mLe professeur n'a pas pu évaluer l'élève — filtrage basé sur l'auto-profilage.\x1b[0m\n`);
-    }
-  }
+  // filterProfile reste null → aucun filtrage des tâches (toutes exécutées).
+  const filterProfile = null;
 
   // --- runSchool : exécute UNE école (un profil) de bout en bout.
   // Fonction imbriquée dans main() pour hériter (closure) de toute la config
