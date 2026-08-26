@@ -58,6 +58,7 @@ const scoringUtils = require('./scoring-utils');
 const { isRattrapageEligibleProfile, shouldReplaceBestResult, explainTechnicalError, getClassName } = scoringUtils;
 const hybridMode = require('./hybrid-mode');
 const { exportCsv: exportRunsCsv, detectUnstableModels } = scoreLedger;
+const { resolveOpenRouterSlug } = require('./model-resolver');
 
 const DEFAULT_CONTEXT_LIMIT_TOKENS = 16384;
 const MAX_RATTRAPAGE_ATTEMPTS = 1;
@@ -520,6 +521,15 @@ async function runTierAttempt({ tierNum, tierData, isMandatory, profileArg, cont
           }
           // Timeout avéré : on laisse la boucle passer au tierAttempt suivant.
         } catch (tierCallErr) {
+          // Erreur fatale de slug invalide (HTTP 400 "not a valid model ID") :
+          // on remonte IMMÉDIATEMENT au caller (runSchool) sans retry ni relance
+          // mandatory. Sans ça, le runner relance avec isMandatory=true (exit)
+          // puis parcourt les classes suivantes. On propage l'erreur pour que
+          // runTierAttempt la remonte à runSchool qui arrête le run entier.
+          if (tierCallErr && tierCallErr.isFatalSlugError) {
+            spinner.fail(`Classe ${classNum} — slug modèle invalide : ${tierCallErr.message}`);
+            throw tierCallErr;
+          }
           // Récupéré ici (isMandatory=false). Si timeout → retry ; sinon on remonte.
           const isTimeoutErr = tierCallErr && tierCallErr.name === 'AbortError';
           if (tierAttempt === 1 && isTimeoutErr) {
@@ -1558,6 +1568,32 @@ async function main() {
     // Mode cloud : pas d'auto-détection LM Studio, le modèle est fourni explicitement
     if (!resolvedCloudModel) {
       throw new BenchgoError('E601_NO_MODEL', `--provider=${resolvedProvider} sans --model`);
+    }
+    // --- Résolution auto du slug OpenRouter (tâche 2026-08-26) ---
+    // Si le slug saisi n'est pas un id exact OpenRouter, on tente une résolution
+    // tolérante (alias, préfixe, sous-chaîne) pour éviter un HTTP 400 sur tous
+    // les appels. Non bloquant si offline (on garde le slug tel quel).
+    if (resolvedProvider === 'openrouter') {
+      try {
+        const r = await resolveOpenRouterSlug(resolvedCloudModel);
+        if (r.offline) {
+          logger.info(`Résolution slug OpenRouter : offline, slug gardé tel quel (${resolvedCloudModel}).`);
+        } else if (r.resolved && r.slug !== resolvedCloudModel) {
+          logger.info(`Résolution slug OpenRouter : "${resolvedCloudModel}" -> "${r.slug}" (${r.matchedBy}).`);
+          console.log(`  \x1b[90mRésolution slug  : "${resolvedCloudModel}" -> "${r.slug}" (${r.matchedBy})\x1b[0m`);
+          resolvedCloudModel = r.slug;
+        } else if (!r.resolved) {
+          // Slug non reconnu ET non résolu : on avertit mais on laisse passer
+          // (l'erreur HTTP 400 fatale arrêtera net le run au 1er appel).
+          console.log(`  \x1b[33m⚠ Slug OpenRouter non reconnu : "${resolvedCloudModel}".\x1b[0m`);
+          if (r.suggestions && r.suggestions.length > 0) {
+            console.log(`  \x1b[90mSuggestions proches : ${r.suggestions.slice(0, 5).join(', ')}\x1b[0m`);
+          }
+          console.log(`  \x1b[90mLe run va démarrer mais s'arrêtera si le slug est invalide (HTTP 400).\x1b[0m`);
+        }
+      } catch (resolveErr) {
+        logger.warn(`Résolution slug OpenRouter échouée : ${resolveErr.message}. Slug gardé tel quel.`);
+      }
     }
     logger.info(`Mode cloud : provider=${resolvedProvider}, modèle=${resolvedCloudModel}`);
     console.log(`  Mode              : \x1b[1;35mCLOUD\x1b[0m`);

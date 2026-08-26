@@ -1,5 +1,85 @@
 # CHANGELOG - Carnet de Notes BenchGo
 
+## 2026-08-26 — feat(model-resolver) : résolution tolérante des slugs OpenRouter + arrêt net sur slug invalide
+
+### Contexte
+Bug remonté par l'utilisateur (Admin/Tasks.md) : en testant des modèles OpenRouter
+via `frontier-batch.js`, AUCUN modèle ne passait. Deux problèmes distincts :
+1. Le slug `thinkingmachines/inkling-small:free` échouait silencieusement (0 tokens,
+   toutes tâches bypassées) — modèle probablement dépublié ou slug corrompu.
+2. Le slug `node` (saisie tronquée/erronée) renvoyait `HTTP 400 "node is not a valid
+   model ID"` pour CHAQUE appel API, mais le runner parcourait quand même les 6
+   classes en échec → rapport 0/2752 inutile au lieu d'arrêter net.
+
+### Cause racine
+1. **Aucune validation/tolérance du slug** : l'utilisateur saisit ou colle un nom
+   familier (`gpt-4o`, `llama3.1-8b`, `inkling-small`) au lieu du slug exact
+   OpenRouter (`openai/gpt-4o`, `meta-llama/llama-3.1-8b-instruct`). OpenRouter
+   rejette avec HTTP 400, mais BenchGo ne prévenait pas ni ne corrigeait.
+2. **`cloud-client.js` traitait l'erreur HTTP 400 comme "optionnelle"** (via
+   `isMandatory=false` dans `runTierAttempt`) → `return null` → le runner
+   continuait à la classe suivante. Aucune distinction entre "timeout transitoire"
+   et "slug fondamentalement invalide".
+
+### Changements
+- **`model-resolver.js`** (nouveau) : module de résolution tolérante des slugs
+  OpenRouter. Fetch l'endpoint public `/api/v1/models` (cache disque 24h partagé
+  avec `pricing.js` via `.pricing-cache.json`). Stratégies de matching dans
+  l'ordre : exact → alias courant (`gpt-4o` → `openai/gpt-4o`) → préfixe →
+  sous-chaîne → suffixe. Désambiguisateur `:free` : si les matchs ne diffèrent que
+  par le suffixe `:free` (ex: `inkling-small` + `inkling-small:free`), on préfère
+  automatiquement le variant gratuit (BenchGo cible les modèles gratuits). Table
+  d'alias courants (GPT, Claude, Llama, Mistral, DeepSeek, Qwen, Gemini).
+- **`frontier-batch.js`** : après saisie des modèles, si le provider est OpenRouter,
+  chaque slug est résolu via `resolveOpenRouterSlug()`. Si résolu → remplacement
+  silencieux avec affichage (`gpt-4o -> openai/gpt-4o (alias)`). Si ambigu ou
+  introuvable → suggestions proches + choix interactif (garder tel quel, pick
+  numéro, ou saisir le slug exact). Si offline → slug gardé tel quel (repli).
+- **`runner.js`** : résolution auto du slug OpenRouter au démarrage du run (avant
+  l'auto-profilage). Si le slug est résolu → remplacement + log. Si non résolu →
+  avertissement + suggestions, mais le run démarre (l'erreur HTTP 400 fatale
+  arrêtera net au 1er appel si le slug est vraiment invalide).
+- **`cloud-client.js`** : détection des erreurs fatales de slug invalide. HTTP 400
+  "not a valid model ID" → `error.isFatalSlugError = true` + code
+  `E400_INVALID_MODEL_ID`. HTTP 404 "model not found" → `E404_MODEL_NOT_FOUND`.
+  Ces erreurs sont TOUJOURS propagées comme fatales (même `isMandatory=false`),
+  arrêtant le run au 1er appel au lieu de parcourir 6 classes en échec.
+- **`runner.js` (`runTierAttempt`)** : le bloc `catch` détecte `isFatalSlugError`
+  et propage immédiatement (sans retry ni relance mandatory) → remonte à
+  `runSchool` → `main().catch()` → `process.exit(1)` avec message clair.
+- **`cli-help.js`** : nouveaux codes d'erreur `E400_INVALID_MODEL_ID` et
+  `E404_MODEL_NOT_FOUND` avec suggestions (vérifier le slug, utiliser
+  frontier-batch.js pour la résolution auto).
+
+### Tests
+- `node --check` sur les 5 fichiers modifiés + model-resolver.js : OK.
+- `node tests/run-tests.js` : 27/27 passés.
+- `resolveOpenRouterSlug('node')` → `not_found` (slug invalide, pas de suggestion).
+- `resolveOpenRouterSlug('gpt-4o')` → `openai/gpt-4o` (alias).
+- `resolveOpenRouterSlug('GPT-4o')` → `openai/gpt-4o` (alias, insensible casse).
+- `resolveOpenRouterSlug('llama3.1-8b')` → `meta-llama/llama-3.1-8b-instruct` (alias).
+- `resolveOpenRouterSlug('inkling-small')` → `thinkingmachines/inkling-small:free`
+  (prefer_free — désambiguisateur :free).
+- `resolveOpenRouterSlug('thinkingmachines/inkling-small:free')` → exact.
+- Cache disque partagé avec pricing.js : `getOpenRouterModelIds()` charge 417
+  modèles depuis `.pricing-cache.json` sans écraser les prix.
+
+### Pièges
+- `model-resolver.js` ne réécrit le cache disque QUE s'il n'existe pas déjà
+  (évite d'écraser les VRAIS prix de `pricing.js` avec des prix à 0). Le cache est
+  partagé : `pricing.js` et `model-resolver.js` lisent le même `.pricing-cache.json`.
+- Les alias Claude 3.5 (`claude-3.5-sonnet`) ont été retirés (modèles dépubliés sur
+  OpenRouter, remplacés par 4.x). Les alias pointent maintenant vers les versions
+  disponibles (`claude-sonnet-4`, `claude-opus-4.5`, etc.).
+- Le désambiguisateur `:free` ne s'active QUE si une paire (free, non-free) existe.
+  Si seul le variant `:free` existe, il est matché normalement (exact/substring).
+  Si seuls des variants non-:free existent, aucun n'est forcé en :free.
+- Si le réseau est indisponible (offline), `resolveOpenRouterSlug()` renvoie
+  `{ offline: true, slug: <saisi> }` — le slug est gardé tel quel, le run démarre
+  sans validation (comportement historique préservé).
+
+---
+
 ## 2026-08-26 — fix(frontier-batch + leaderboard) : modèles non-LLM testés et classés TOP DU TOP à 0/0
 
 ### Contexte

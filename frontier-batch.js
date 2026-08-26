@@ -48,6 +48,7 @@ const { printEntryHelp, wantsHelp } = require('./cli-help');
 // pas des vectoriseurs/détecteurs. On évite ainsi le bug où un modèle
 // d'embeddings obtenait "TOP DU TOP" à 0/0 (toutes tâches bypassées).
 const { NON_LLM_PATTERNS } = require('./night-batch');
+const { resolveOpenRouterSlug } = require('./model-resolver');
 
 function isNonLlmCloudModel(slug) {
   if (!slug) return false;
@@ -514,6 +515,75 @@ async function main() {
   const apiKey = await promptApiKey(provider, opts.apiKey);
   const models = await selectModelsInteractive(opts.models);
   const profile = await selectProfileInteractive(opts.profile, models);
+
+  // --- Résolution tolérante des slugs (OpenRouter uniquement) ---
+  // L'utilisateur peut saisir un nom familier ("gpt-4o", "llama3.1-8b") au lieu
+  // du slug exact OpenRouter ("openai/gpt-4o", "meta-llama/llama-3.1-8b-instruct").
+  // Sans résolution, OpenRouter renvoie HTTP 400 "X is not a valid model ID" pour
+  // chaque appel et le run produit un rapport 0/2752 inutile.
+  // On résout chaque slug avant de lancer le batch : exact → alias → préfixe →
+  // sous-chaîne. Si ambigu ou introuvable, on propose des suggestions.
+  if (provider === 'openrouter') {
+    const resolvedModels = [];
+    for (let i = 0; i < models.length; i++) {
+      const input = models[i];
+      const r = await resolveOpenRouterSlug(input);
+      if (r.offline) {
+        // Réseau indisponible : on garde le slug tel quel (comportement historique).
+        resolvedModels.push(input);
+        continue;
+      }
+      if (r.resolved) {
+        if (r.slug !== input) {
+          console.log(`  ${C.green}✔${C.reset} ${C.bold}${input}${C.reset} ${C.gray}->${C.reset} ${C.bold}${r.slug}${C.reset} ${C.gray}(${r.matchedBy})${C.reset}`);
+        }
+        resolvedModels.push(r.slug);
+        continue;
+      }
+      // Non résolu : on affiche les suggestions et demande quoi faire.
+      console.log(`\n  ${C.yellow}━━━ MODÈLE NON RECONNU : ${input} ━━━${C.reset}`);
+      if (r.suggestions && r.suggestions.length > 0) {
+        console.log(`  ${C.gray}Suggestions proches :${C.reset}`);
+        r.suggestions.forEach((s, j) => console.log(`    ${C.gray}${j + 1}.${C.reset} ${s}`));
+        const choice = await askYesNoLocal(`  Garder "${input}" tel quel ? (sinon tapez le slug exact)`, false);
+        if (choice) {
+          resolvedModels.push(input);
+        } else {
+          const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+          const picked = await new Promise(resolve => {
+            rl.question(`  ${C.cyan}Slug à utiliser (ou numéro de suggestion, ou vide pour ignorer) :${C.reset} `, ans => {
+              rl.close();
+              resolve((ans || '').trim());
+            });
+          });
+          if (!picked) {
+            console.log(`  ${C.gray}Modèle "${input}" ignoré.${C.reset}`);
+            continue;
+          }
+          const n = parseInt(picked, 10);
+          if (Number.isInteger(n) && n >= 1 && n <= r.suggestions.length) {
+            resolvedModels.push(r.suggestions[n - 1]);
+          } else {
+            resolvedModels.push(picked);
+          }
+        }
+      } else {
+        console.log(`  ${C.red}Aucune suggestion trouvée.${C.reset}`);
+        const choice = await askYesNoLocal(`  Garder "${input}" tel quel ?`, false);
+        if (choice) {
+          resolvedModels.push(input);
+        } else {
+          console.log(`  ${C.gray}Modèle "${input}" ignoré.${C.reset}`);
+        }
+      }
+    }
+    if (resolvedModels.length === 0) {
+      console.log(`\n  ${C.red}Aucun modèle valide après résolution. Abandon.${C.reset}`);
+      process.exit(1);
+    }
+    models.length = 0;
+    for (const m of resolvedModels) models.push(m);
+  }
 
   // --- Filtrage des modèles non-LLM (embeddings, OCR, rerank, vision-only) ---
   // BenchGo évalue des LLM génératifs : un modèle d'embeddings (ex:

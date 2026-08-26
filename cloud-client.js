@@ -311,7 +311,21 @@ async function queryLLM(prompt, difficulty, tierId, isMandatory, spinner, option
       clearTimeout(timeoutId);
       let errorBody = '';
       try { errorBody = await response.text(); } catch (_) {}
-      throw new Error(`HTTP_${response.status} — ${errorBody.substring(0, 300)}`);
+      const status = response.status;
+      const msg = `HTTP_${status} — ${errorBody.substring(0, 300)}`;
+      // Erreur de slug invalide (ex: "node is not a valid model ID") : FATALE.
+      // Sans ça, le runner parcours les 6 classes en échec (0/2752, rapport
+      // inutile) au lieu d'arrêter net. On marque l'erreur pour que le runner
+      // l'interprète comme un arrêt immédiat (isFatalSlugError).
+      const isInvalidModelId = status === 400 && /not a valid model/i.test(errorBody);
+      const isInvalidModel = status === 404 && /model.*not found|does not exist|no such model/i.test(errorBody);
+      if (isInvalidModelId || isInvalidModel) {
+        const err = new Error(msg);
+        err.isFatalSlugError = true;
+        err.code = isInvalidModelId ? 'E400_INVALID_MODEL_ID' : 'E404_MODEL_NOT_FOUND';
+        throw err;
+      }
+      throw new Error(msg);
     }
 
     const streamResult = provSpec.openaiCompat
@@ -374,12 +388,16 @@ async function queryLLM(prompt, difficulty, tierId, isMandatory, spinner, option
       status: isTimeout ? 'TIMEOUT' : 'ERREUR'
     });
 
-    if (isMandatory) {
+    if (error.isFatalSlugError || isMandatory) {
       // Erreur code-court propagée au runner (affichage propre + log).
-      const code = isTimeout ? 'E502_LM_TIMEOUT'
+      // isFatalSlugError (slug invalide) : TOUJOURS fatale, même en
+      // isMandatory=false, pour arrêter net au lieu de parcourir 6 classes.
+      const code = error.isFatalSlugError
+        ? (error.code || 'E400_INVALID_MODEL_ID')
+        : isTimeout ? 'E502_LM_TIMEOUT'
         : /ECONNRESET|ECONNREFUSED|ENOTFOUND|EHOSTUNREACH/.test(error.code || reason) ? 'E503_LM_UNREACHABLE'
         : 'E504_LM_HTTP_ERROR';
-      throw new BenchgoError(code, `Cloud Tier ${tierId} (obligatoire) — ${reason}`);
+      throw new BenchgoError(code, `Cloud Tier ${tierId} — ${reason}`);
     } else {
       console.error(`\n  \x1b[33m[WARN]\x1b[0m Cloud Tier ${tierId} échoué (optionnel) : ${reason}`);
       return null;

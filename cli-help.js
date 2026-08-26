@@ -285,6 +285,14 @@ const ERROR_CODES = {
   E901_CONFIG_INVALID: {
     label: 'Configuration invalide',
     suggestion: 'La configuration passée en CLI est incohérente. Lancez node runner.js help pour voir les options.'
+  },
+  E400_INVALID_MODEL_ID: {
+    label: 'Slug modèle invalide',
+    suggestion: 'Le slug du modèle n\'est pas reconnu par le provider (ex: "node" au lieu de "openai/gpt-4o"). Vérifiez le slug exact sur la page du provider, ou utilisez frontier-batch.js qui résout automatiquement les noms familiers (gpt-4o, llama-3.1-8b...) vers le slug canonique.'
+  },
+  E404_MODEL_NOT_FOUND: {
+    label: 'Modèle introuvable',
+    suggestion: 'Le modèle n\'existe pas ou a été dépublié. Vérifiez la liste des modèles disponibles sur le provider (ex: OpenRouter /api/v1/models), ou utilisez frontier-batch.js pour la résolution automatique.'
   }
 };
 

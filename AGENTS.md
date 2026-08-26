@@ -531,6 +531,35 @@ Si modèle > 3B paramètres, le runner peut enchaîner LIGHT puis STANDARD dans 
 - `--yes-teacher` n'est pas un flag reconnu (ignoré silencieusement). Le flag correct est `--no-teacher` (désactive) ; par défaut le professeur est actif.
 - La reconstitution s'applique à TOUS les flags (`--teacher-model=`, `--teacher-api-key=`, etc.), pas seulement `--models=`. Un `--teacher-model=Llama 3 70B` non quoté sera aussi reconstitué correctement.
 
+### Résolution tolérante des slugs OpenRouter + arrêt net sur slug invalide (tâche 2026-08-26)
+
+**Fichiers touchés :** `model-resolver.js` (nouveau), `frontier-batch.js`, `runner.js`, `cloud-client.js`, `cli-help.js`, `Docs/CHANGELOG.md`, `AGENTS.md`.
+
+**Principe :** L'utilisateur saisit ou colle un nom familier (`gpt-4o`, `llama3.1-8b`, `inkling-small`) au lieu du slug exact OpenRouter (`openai/gpt-4o`). Sans résolution, OpenRouter renvoie HTTP 400 "X is not a valid model ID" pour chaque appel et le runner produit un rapport 0/2752 inutile. Deux mécanismes :
+1. **`model-resolver.js`** : résout un slug saisi vers le slug canonique OpenRouter via 5 stratégies (exact → alias → préfixe → sous-chaîne → suffixe). Désambiguisateur `:free` : si les matchs ne diffèrent que par `:free`, on préfère le variant gratuit. Fetch `/api/v1/models` (cache disque 24h partagé avec `pricing.js`).
+2. **Arrêt net sur slug invalide** : `cloud-client.js` détecte HTTP 400 "not a valid model ID" et HTTP 404 "model not found", marque l'erreur comme fatale (`isFatalSlugError`), et la propage quel que soit `isMandatory`. Le runner s'arrête au 1er appel au lieu de parcourir 6 classes en échec.
+
+**Fonctions :**
+- `resolveOpenRouterSlug(input)` (dans `model-resolver.js`) → `{ resolved, slug, matchedBy, suggestions }` ou `{ offline: true, slug }`. Stratégies : exact, alias (COMMON_ALIASES), prefix, substring, suffix, prefer_free.
+- `getOpenRouterModelIds()` (dans `model-resolver.js`) → liste des slugs OpenRouter (cache disque 24h, sinon fetch réseau).
+- `preferFreeVariant(matches)` (dans `model-resolver.js`) → si une paire (free, non-free) existe, renvoie le `:free`.
+- `isFatalSlugError` (flag sur l'erreur dans `cloud-client.js`) → HTTP 400/404 de slug → propagation fatale.
+
+**Pour modifier :**
+1. **Ajouter un alias** : éditer `COMMON_ALIASES` dans `model-resolver.js` (format `'gpt4o': 'openai/gpt-4o'`).
+2. **Changer la préférence `:free`** : éditer `preferFreeVariant()` dans `model-resolver.js` (retourner `null` pour désactiver).
+3. **Désactiver la résolution dans frontier-batch** : commenter le bloc `if (provider === 'openrouter')` dans `main()` de `frontier-batch.js`.
+4. **Désactiver la résolution dans runner** : commenter le bloc `if (resolvedProvider === 'openrouter')` dans `main()` de `runner.js` (~ligne 1572).
+5. **Revenir au comportement historique (parcourir 6 classes en échec)** : retirer `error.isFatalSlugError` du bloc `catch` dans `cloud-client.js` et `runTierAttempt` dans `runner.js`.
+6. **Tester** : `node -e "const {resolveOpenRouterSlug}=require('./model-resolver'); resolveOpenRouterSlug('gpt-4o').then(r=>console.log(r))"` (daemon réseau requis pour le fetch).
+
+**Pièges :**
+- `model-resolver.js` ne réécrit le cache disque QUE s'il n'existe pas déjà (évite d'écraser les VRAIS prix de `pricing.js` avec des prix à 0). Le cache `.pricing-cache.json` est partagé entre les deux modules.
+- Si le réseau est indisponible, `resolveOpenRouterSlug()` renvoie `{ offline: true, slug: <saisi> }` — le slug est gardé tel quel, le run démarre sans validation (comportement historique préservé).
+- Les alias Claude 3.5 ont été retirés (modèles dépubliés sur OpenRouter). Les alias pointent vers les versions 4.x disponibles.
+- Le désambiguisateur `:free` ne s'active QUE si une paire (free, non-free) existe. Si seul le variant `:free` existe, il est matché normalement (exact/substring).
+- `isFatalSlugError` s'applique à TOUS les providers OpenAI-compat (pas seulement OpenRouter) — tout HTTP 400 "not a valid model ID" est fatal. Pour un provider custom qui renvoie un 400 pour une autre raison, l'erreur sera aussi fatale (c'est voulu : un 400 sur le slug est toujours irrécupérable).
+
 ---
 
 ## Vérifications après modification
