@@ -293,6 +293,10 @@ const ERROR_CODES = {
   E404_MODEL_NOT_FOUND: {
     label: 'Modèle introuvable',
     suggestion: 'Le modèle n\'existe pas ou a été dépublié. Vérifiez la liste des modèles disponibles sur le provider (ex: OpenRouter /api/v1/models), ou utilisez frontier-batch.js pour la résolution automatique.'
+  },
+  E505_MODEL_UNRESPONSIVE: {
+    label: 'Modèle ne répond pas',
+    suggestion: 'Le modèle ne renvoie aucun contenu (HTTP 200 mais 0 tokens). Probablement rate-limité upstream (modèle free surchargé) ou temporairement indisponible. Réessayez plus tard ou utilisez un autre modèle.'
   }
 };
 

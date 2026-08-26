@@ -530,6 +530,14 @@ async function runTierAttempt({ tierNum, tierData, isMandatory, profileArg, cont
             spinner.fail(`Classe ${classNum} — slug modèle invalide : ${tierCallErr.message}`);
             throw tierCallErr;
           }
+          // Réponse vide (HTTP 200 mais 0 contenu) : modèle free rate-limité
+          // upstream. On NE relance pas en mandatory (ça ferait un exit inutile).
+          // On propage l'erreur avec isEmptyResponse pour que runSchool compte
+          // les réponses vides consécutives et arrête net après un seuil.
+          if (tierCallErr && tierCallErr.isEmptyResponse) {
+            spinner.fail(`Classe ${classNum} — réponse vide (modèle indisponible/rate-limité upstream)`);
+            throw tierCallErr;
+          }
           // Récupéré ici (isMandatory=false). Si timeout → retry ; sinon on remonte.
           const isTimeoutErr = tierCallErr && tierCallErr.name === 'AbortError';
           if (tierAttempt === 1 && isTimeoutErr) {
@@ -1811,6 +1819,70 @@ async function main() {
   // commencer et peut prendre 10-15s. Sans cela, l'utilisateur croit que le CLI a
   // planté pendant que le modèle réfléchit en silence.
   let selfProfile = null;
+
+  // --- Pre-flight check (tâche 2026-08-26) ---
+  // Avant de lancer l'auto-profilage (qui prend 1-5 min) et le run complet, on
+  // vérifie que le modèle répond réellement. Un modèle free sur OpenRouter peut
+  // renvoyer HTTP 200 avec 0 contenu (rate-limit upstream silencieux). Sans ce
+  // check, le runner passe 5+ min en auto-profilage (3 tentatives à ~60s chacune),
+  // puis le profilage externe donne un profil bas (1/5) → toutes les tâches
+  // bypassées → rapport 0/0 inutile.
+  // Le pre-flight envoie un ping trivial ("Reply with: OK", max_tokens 8) et
+  // vérifie qu'on reçoit du contenu. 3 échecs consécutifs → arrêt net.
+  if (isCloudMode) {
+    console.log(`  \x1b[1;35m━━━ VÉRIFICATION DU MODÈLE ━━━\x1b[0m`);
+    console.log(`  \x1b[35mPing de vérification : le modèle répond-il ?\x1b[0m\n`);
+
+    const pingSpinner = new Spinner('Vérification : ping du modèle en cours');
+    pingSpinner.start();
+    const pingStart = Date.now();
+    let pingOk = false;
+    let pingAttempts = 0;
+    const MAX_PING_ATTEMPTS = 3;
+
+    while (pingAttempts < MAX_PING_ATTEMPTS && !pingOk) {
+      pingAttempts++;
+      try {
+        const pingResult = await queryFn(
+          'Reply with exactly: OK',
+          'EASY',
+          'PING',
+          false,
+          { start(){}, stop(){}, fail(){}, updateTokens(){}, _modelName: null,
+            beginStreaming(){}, appendStreamChunk(){}, endStreaming(){} },
+          { contextLimitTokens, providerConfig, timeoutMs: 30000, maxTokens: 8 }
+        );
+        if (pingResult && pingResult.content && pingResult.content.trim().length > 0) {
+          pingOk = true;
+          pingSpinner.stop(`Vérification : modèle opérationnel (réponse reçue en ${((Date.now() - pingStart) / 1000).toFixed(1)}s)`);
+          logger.info(`Pre-flight check : OK (tentative ${pingAttempts}/${MAX_PING_ATTEMPTS}, contenu="${pingResult.content.trim().substring(0, 50)}").`);
+        } else {
+          logger.warn(`Pre-flight check tentative ${pingAttempts}/${MAX_PING_ATTEMPTS} : réponse vide ou null.`);
+        }
+      } catch (pingErr) {
+        logger.warn(`Pre-flight check tentative ${pingAttempts}/${MAX_PING_ATTEMPTS} : ${pingErr.message}`);
+      }
+      if (!pingOk && pingAttempts < MAX_PING_ATTEMPTS) {
+        console.log(`  \x1b[33mTentative ${pingAttempts} échouée — nouvelle tentative dans 3s...\x1b[0m`);
+        await new Promise(r => setTimeout(r, 3000));
+      }
+    }
+
+    if (!pingOk) {
+      pingSpinner.fail(`Vérification : ${MAX_PING_ATTEMPTS} tentatives échouées — le modèle ne répond pas`);
+      console.log(`\n  \x1b[31m━━━ ARRÊT : le modèle "${resolvedCloudModel}" ne répond pas (${MAX_PING_ATTEMPTS} tentatives).\x1b[0m`);
+      console.log(`  \x1b[33mCauses possibles :\x1b[0m`);
+      console.log(`  \x1b[90m  • Modèle free rate-limité upstream sur OpenRouter (HTTP 200, 0 contenu)\x1b[0m`);
+      console.log(`  \x1b[90m  • Modèle temporairement indisponible chez le provider\x1b[0m`);
+      console.log(`  \x1b[90m  • Quota gratuit épuisé / clé API invalide\x1b[0m`);
+      console.log(`  \x1b[90mAstuce : réessayez plus tard, utilisez un autre modèle, ou ajoutez votre propre clé provider (BYOK).\x1b[0m\n`);
+      logger.error(`Pre-flight check : ${MAX_PING_ATTEMPTS} tentatives échouées — modèle indisponible.`);
+      throw new BenchgoError('E505_MODEL_UNRESPONSIVE',
+        `Le modèle "${resolvedCloudModel}" ne répond pas (${MAX_PING_ATTEMPTS} tentatives) — probablement rate-limité upstream ou indisponible`);
+    }
+    console.log('');
+  }
+
   if (selfProfiling.enabled) {
     console.log(`  \x1b[1;35m━━━ AUTO-PROFILAGE DU MODÈLE ━━━\x1b[0m`);
     console.log(`  \x1b[35mLe modèle va s'auto-évaluer sur 4 compétences (niveau 1 à 5).\x1b[0m`);
@@ -2059,6 +2131,14 @@ async function main() {
   // sans interruption.
   let rattrapageQueue = []; // { tierNum, tierData, isMandatory, attemptNumber }
 
+  // --- Compteur de réponses vides consécutives (tâche 2026-08-26) ---
+  // Un modèle free sur OpenRouter peut renvoyer HTTP 200 avec 0 contenu (chunks
+  // vides, rate-limit upstream silencieux). Au lieu de parcourir toutes les
+  // classes en échec (0/0), on compte les réponses vides et on arrête net après
+  // MAX_EMPTY_RESPONSES consécutives — le modèle est manifestement indisponible.
+  const MAX_EMPTY_RESPONSES = 3;
+  let consecutiveEmptyResponses = 0;
+
   for (const tierNum of tierKeys) {
     const tierData = tiers[tierNum];
     const isMandatory = profile.mandatory.includes(tierNum);
@@ -2066,21 +2146,48 @@ async function main() {
     let attemptNumber = 1;
     let bestResult = null;
 
-    const attemptResult = await runTierAttempt({
-      tierNum,
-      tierData,
-      isMandatory,
-      profileArg,
-      contextLimitTokens,
-      attemptNumber,
-      queryFn,
-      providerConfig: isCloudMode ? { provider: resolvedProvider, model: resolvedCloudModel, apiKey: resolvedApiKey, endpoint: resolvedEndpoint } : null,
-      gameState,
-      selfProfile: filterProfile,
-      teacherConfig: teacherConfigResolved,
-      forceFlag,
-      isCloudMode
-    });
+    let attemptResult;
+    try {
+      attemptResult = await runTierAttempt({
+        tierNum,
+        tierData,
+        isMandatory,
+        profileArg,
+        contextLimitTokens,
+        attemptNumber,
+        queryFn,
+        providerConfig: isCloudMode ? { provider: resolvedProvider, model: resolvedCloudModel, apiKey: resolvedApiKey, endpoint: resolvedEndpoint } : null,
+        gameState,
+        selfProfile: filterProfile,
+        teacherConfig: teacherConfigResolved,
+        forceFlag,
+        isCloudMode
+      });
+      // Appel réussi : on réinitialise le compteur de réponses vides.
+      consecutiveEmptyResponses = 0;
+    } catch (tierErr) {
+      // Réponse vide (HTTP 200, 0 contenu) : modèle free rate-limité upstream.
+      // On compte les échecs consécutifs et on arrête net après le seuil.
+      if (tierErr && tierErr.isEmptyResponse) {
+        consecutiveEmptyResponses++;
+        logger.warn(`Réponse vide consécutive #${consecutiveEmptyResponses}/${MAX_EMPTY_RESPONSES} — Tier ${tierNum} (classe ${tierToClasseNum(profileArg, tierNum)}).`);
+        if (consecutiveEmptyResponses >= MAX_EMPTY_RESPONSES) {
+          console.log(`\n  \x1b[31m━━━ ARRÊT : ${consecutiveEmptyResponses} réponses vides consécutives — le modèle "${resolvedCloudModel}" est indisponible/rate-limité upstream.\x1b[0m`);
+          console.log(`  \x1b[33mLe modèle renvoie HTTP 200 mais 0 contenu (chunks SSE vides). Cause probable :\x1b[0m`);
+          console.log(`  \x1b[90m  • Rate-limit upstream sur OpenRouter Free (modèle surchargé)\x1b[0m`);
+          console.log(`  \x1b[90m  • Modèle temporairement indisponible chez le provider\x1b[0m`);
+          console.log(`  \x1b[90m  • Quota gratuit épuisé pour cette période\x1b[0m`);
+          console.log(`  \x1b[90mAstuce : réessayez plus tard, ou utilisez un autre modèle free, ou ajoutez votre propre clé provider (BYOK).\x1b[0m\n`);
+          stopGlobalEval = true;
+          globalReport += `\n> **⚠️ ARRÊT : ${consecutiveEmptyResponses} réponses vides consécutives** — le modèle est indisponible/rate-limité upstream (HTTP 200, 0 contenu).\n`;
+          break;
+        }
+        // On passe au tier suivant (ne pas casser le run pour 1-2 réponses vides).
+        continue;
+      }
+      // isFatalSlugError ou autre erreur fatale : on remonte.
+      throw tierErr;
+    }
 
     if (attemptResult.responseModelName && modelName === "Modele_En_Attente") {
       modelName = attemptResult.responseModelName;

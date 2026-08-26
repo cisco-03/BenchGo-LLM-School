@@ -1,5 +1,78 @@
 # CHANGELOG - Carnet de Notes BenchGo
 
+## 2026-08-26 — fix(cloud) : détection des réponses vides (modèles free rate-limités) + pre-flight check
+
+### Contexte
+Suite de la tâche précédente (résolution des slugs). Nouveau bug remonté par
+l'utilisateur (Admin/Tasks.md) : le modèle `z-ai/glm-5.2:free` (slug valide, pas
+de HTTP 400) produisait un rapport **0/0** avec toutes les tâches bypassées. Le
+log montrait `statut=OK` mais `0 chunks, 0 chars` — l'API répondait HTTP 200 avec
+des chunks SSE valides mais **tous vides** (`delta.content: ""`).
+
+### Cause racine
+Les modèles **free** d'OpenRouter passent par un pool partagé vers un provider
+upstream (ex: Decart). Quand ce pool est saturé (trop d'utilisateurs gratuits
+simultanés), le provider upstream renvoie :
+- Soit un HTTP 429 direct (rate limit explicite)
+- Soit un HTTP 200 avec des chunks SSE vides (`delta.content: ""`) — **rate limit
+  silencieux** : le stream s'ouvre, tourne pendant 20-60s, puis se termine sans
+  aucun contenu.
+
+Le parser SSE (`streamOpenAICompatResponse`) comptait les chunks (statut=OK) mais
+ne détectait pas que le contenu était vide → le runner considérait la réponse
+comme un succès à 0 tokens → l'auto-profilage échouait en 3×60s → le profilage
+externe (professeur) donnait un profil bas (1/5) → toutes les tâches bypassées →
+rapport 0/0 inutile après ~5 min d'attente.
+
+### Changements
+- **`cloud-client.js` (`streamOpenAICompatResponse`)** :
+  - Détection des **chunks d'erreur SSE** (`chunk.error`) noyés dans le stream —
+    OpenRouter envoie parfois l'erreur dans un chunk au lieu d'un HTTP 4xx/5xx.
+  - Comptage des chunks bruts (`rawChunkCount`) et du `finish_reason`.
+  - **Détection de réponse vide** : si HTTP 200, chunks reçus mais 0 contenu →
+    erreur `isEmptyResponse` levée (au lieu de retourner un succès vide).
+    Deux cas : chunks d'erreur SSE présents (rate limit explicite) ou chunks vides
+    (rate limit silencieux).
+- **`cloud-client.js` (`queryLLM`)** : propagation de `isEmptyResponse` même
+  en `isMandatory=false` (pour que le runner puisse compter et arrêter net).
+- **`runner.js` (pre-flight check)** : avant l'auto-profilage, en mode cloud, un
+  **ping trivial** ("Reply with: OK", `max_tokens: 8`, timeout 30s) vérifie que
+  le modèle répond réellement. 3 tentatives avec pause de 3s. Si toutes échouent →
+  `E505_MODEL_UNRESPONSIVE` avec message clair expliquant les causes possibles
+  (rate-limit upstream, modèle indisponible, quota épuisé). Évite de gaspiller
+  5+ min en auto-profilage pour un modèle qui ne répond pas.
+- **`runner.js` (`runTierAttempt`)** : le catch détecte `isEmptyResponse` et la
+  propage (sans relance mandatory) au lieu de la traiter comme une erreur
+  optionnelle.
+- **`runner.js` (`runSchool`)** : compteur `consecutiveEmptyResponses` (seuil
+  `MAX_EMPTY_RESPONSES = 3`). Après 3 réponses vides consécutives → arrêt net
+  avec message explicatif (modèle indisponible/rate-limité upstream).
+- **`cli-help.js`** : nouveau code `E505_MODEL_UNRESPONSIVE` avec suggestion
+  (réessayer plus tard, autre modèle, BYOK).
+
+### Tests
+- `node --check` sur les 3 fichiers modifiés : OK.
+- `node tests/run-tests.js` : 27/27 passés.
+- Test direct API : `z-ai/glm-5.2:free` renvoie soit HTTP 429 (rate limit
+  explicite), soit HTTP 200 avec chunks vides (rate limit silencieux) — les deux
+  sont maintenant détectés et arrêtent le run proprement.
+
+### Pièges
+- Le pre-flight check ne s'active qu'en mode cloud (`isCloudMode`), pas en local
+  (LM Studio répond toujours si le serveur tourne).
+- Le ping utilise `max_tokens: 8` — certains modèles free peuvent renvoyer
+  plus de tokens que demandé (overshoot) ; on teste juste `content.length > 0`,
+  pas le contenu exact.
+- `isEmptyResponse` est propagée même en non-mandatory, ce qui change le
+  comportement historique (les erreurs optionnelles retournaient `null` sans
+  propager). Mais c'est voulu : une réponse vide n'est pas "optionnelle", c'est
+  un échec réel.
+- Les modèles free d'OpenRouter peuvent alterner entre 429 (explicite) et 200
+  vide (silencieux) selon la charge du moment. Le pre-flight check capte les
+  deux cas.
+
+---
+
 ## 2026-08-26 — feat(model-resolver) : résolution tolérante des slugs OpenRouter + arrêt net sur slug invalide
 
 ### Contexte

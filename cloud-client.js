@@ -46,6 +46,12 @@ async function streamOpenAICompatResponse(response, spinner) {
   let reasoningContent = '';
   let tokenCount = 0;
   let sseBuffer = '';
+  // Suivi des chunks reçus (pour diagnostic si réponse vide) et des erreurs
+  // SSE noyées dans le stream (OpenRouter envoie parfois l'erreur dans un
+  // chunk data: {"error":...} au lieu d'un HTTP 4xx/5xx).
+  let rawChunkCount = 0;
+  let lastFinishReason = null;
+  let streamErrors = [];
 
   let streamingStarted = false;
 
@@ -71,10 +77,26 @@ async function streamOpenAICompatResponse(response, spinner) {
       if (!trimmed.startsWith('data: ')) continue;
       const payload = trimmed.slice(6);
       if (payload === '[DONE]') continue;
+      rawChunkCount++;
       try {
         const chunk = JSON.parse(payload);
+
+        // --- Détection des erreurs SSE noyées dans le stream ---
+        // OpenRouter peut renvoyer HTTP 200 puis envoyer un chunk d'erreur
+        // (rate limit upstream, modèle indisponible, etc.) au lieu d'un
+        // HTTP 4xx. Sans cette détection, le runner voit une "réponse OK"
+        // avec 0 contenu et continue comme si tout allait bien.
+        if (chunk.error) {
+          const errMsg = chunk.error.message || chunk.error.error || JSON.stringify(chunk.error);
+          streamErrors.push(errMsg);
+          logger.warn('Cloud SSE : chunk d erreur reçu — ' + String(errMsg).substring(0, 300));
+          continue;
+        }
+
         const delta = chunk.choices?.[0]?.delta?.content;
         const reasoning = chunk.choices?.[0]?.delta?.reasoning_content;
+        const finishReason = chunk.choices?.[0]?.finish_reason;
+        if (finishReason) lastFinishReason = finishReason;
 
         if (!streamingStarted && (delta || reasoning)) {
           spinner.beginStreaming();
@@ -114,6 +136,34 @@ async function streamOpenAICompatResponse(response, spinner) {
 
   if (!fullContent.trim() && reasoningContent.trim()) {
     fullContent = reasoningContent;
+  }
+
+  // --- Détection des réponses vides (tâche 2026-08-26) ---
+  // Le modèle free renvoie HTTP 200 avec N chunks valides mais chaque chunk a
+  // delta.content = "" (vide). Le stream se termine sans erreur, mais il n'y a
+  // AUCUN contenu exploitable. Sans cette détection, le runner considère la
+  // réponse comme un succès (statut=OK, 0 tokens) et continue → toutes les
+  // tâches bypassées, rapport 0/0.
+  if (!fullContent.trim() && !reasoningContent.trim()) {
+    if (streamErrors.length > 0) {
+      // Erreur SSE explicite dans le stream (rate limit, modèle indisponible...)
+      const msg = streamErrors.join(' | ');
+      const err = new Error('Réponse vide — erreur SSE : ' + msg.substring(0, 500));
+      err.isEmptyResponse = true;
+      err.streamErrors = streamErrors;
+      throw err;
+    }
+    if (rawChunkCount > 0) {
+      // Chunks reçus mais tous vides : modèle probablement rate-limité upstream
+      // ou incapable de générer (modèle free surchargé). On lève une erreur pour
+      // que le runner puisse retry ou arrêter net au lieu de produire un 0/0.
+      logger.warn('Cloud streaming : ' + rawChunkCount + ' chunks reçus mais contenu vide (0 chars). finish_reason=' + (lastFinishReason || 'null') + '. Modèle probablement rate-limité ou indisponible upstream.');
+      const err = new Error('Réponse vide — ' + rawChunkCount + ' chunks SSE reçus mais 0 contenu généré (modèle probablement rate-limité upstream sur OpenRouter Free)');
+      err.isEmptyResponse = true;
+      err.rawChunkCount = rawChunkCount;
+      err.finishReason = lastFinishReason;
+      throw err;
+    }
   }
 
   return { content: fullContent, tokenCount };
@@ -399,6 +449,14 @@ async function queryLLM(prompt, difficulty, tierId, isMandatory, spinner, option
         : 'E504_LM_HTTP_ERROR';
       throw new BenchgoError(code, `Cloud Tier ${tierId} — ${reason}`);
     } else {
+      // isEmptyResponse (réponse vide 200 OK) : on propage l'erreur avec le
+      // flag pour que le runner puisse compter les réponses vides consécutives
+      // et arrêter net après un seuil (modèle free systématiquement vide).
+      if (error.isEmptyResponse) {
+        console.error(`\n  \x1b[33m[WARN]\x1b[0m Cloud Tier ${tierId} : ${reason}`);
+        error.isEmptyResponse = true; // préservé pour le caller
+        throw error;
+      }
       console.error(`\n  \x1b[33m[WARN]\x1b[0m Cloud Tier ${tierId} échoué (optionnel) : ${reason}`);
       return null;
     }

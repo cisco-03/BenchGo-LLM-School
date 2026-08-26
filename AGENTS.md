@@ -560,6 +560,35 @@ Si modèle > 3B paramètres, le runner peut enchaîner LIGHT puis STANDARD dans 
 - Le désambiguisateur `:free` ne s'active QUE si une paire (free, non-free) existe. Si seul le variant `:free` existe, il est matché normalement (exact/substring).
 - `isFatalSlugError` s'applique à TOUS les providers OpenAI-compat (pas seulement OpenRouter) — tout HTTP 400 "not a valid model ID" est fatal. Pour un provider custom qui renvoie un 400 pour une autre raison, l'erreur sera aussi fatale (c'est voulu : un 400 sur le slug est toujours irrécupérable).
 
+### Détection des réponses vides (modèles free rate-limités) + pre-flight check (tâche 2026-08-26)
+
+**Fichiers touchés :** `cloud-client.js`, `runner.js`, `cli-help.js`, `Docs/CHANGELOG.md`, `AGENTS.md`.
+
+**Principe :** Les modèles **free** d'OpenRouter passent par un pool partagé vers un provider upstream (ex: Decart). Quand ce pool est saturé, le provider renvoie soit un HTTP 429 (explicite), soit un HTTP 200 avec des chunks SSE **vides** (`delta.content: ""`) — rate limit silencieux. Le parser SSE voyait ça comme un succès (statut=OK, 0 tokens) → le runner continuait → auto-profilage échouait → profilage externe donnait 1/5 → toutes tâches bypassées → rapport 0/0 après ~5 min d'attente. Trois mécanismes de protection :
+
+1. **Détection SSE** : `streamOpenAICompatResponse` détecte les chunks d'erreur (`chunk.error`) et les réponses vides (chunks reçus mais 0 contenu) → lève `isEmptyResponse`.
+2. **Pre-flight check** : avant l'auto-profilage, un ping trivial ("Reply with: OK", 8 tokens) vérifie que le modèle répond. 3 tentatives → arrêt net `E505_MODEL_UNRESPONSIVE`.
+3. **Compteur de réponses vides** : `runSchool` compte les `isEmptyResponse` consécutives → arrêt après 3.
+
+**Fonctions :**
+- `isEmptyResponse` (flag sur l'erreur dans `cloud-client.js`) → réponse vide HTTP 200 → propagation au runner.
+- Pre-flight check (dans `main()` de `runner.js`) → ping `queryFn('Reply with: OK')` × 3 → `E505_MODEL_UNRESPONSIVE` si toutes échouent.
+- `consecutiveEmptyResponses` / `MAX_EMPTY_RESPONSES = 3` (dans `runSchool`) → arrêt net après 3 réponses vides consécutives.
+
+**Pour modifier :**
+1. **Changer le seuil de réponses vides** : éditer `MAX_EMPTY_RESPONSES` dans `runSchool()` de `runner.js`.
+2. **Changer le nombre de tentatives du pre-flight** : éditer `MAX_PING_ATTEMPTS` dans `main()` de `runner.js`.
+3. **Changer le prompt du ping** : éditer `'Reply with: OK'` dans le pre-flight check de `runner.js`.
+4. **Désactiver le pre-flight** : commenter le bloc `if (isCloudMode) { ... pre-flight ... }` dans `main()` de `runner.js`.
+5. **Désactiver la détection de réponse vide** : retirer le bloc `if (!fullContent.trim() && !reasoningContent.trim())` dans `streamOpenAICompatResponse` de `cloud-client.js`.
+6. **Tester** : `node runner.js --provider=openrouter --model=z-ai/glm-5.2:free --profile=LIGHT` (si le modèle est rate-limité, le pre-flight arrête en <30s avec un message clair).
+
+**Pièges :**
+- Le pre-flight check ne s'active qu'en mode cloud (`isCloudMode`), pas en local.
+- Les modèles free peuvent alterner entre 429 (explicite) et 200 vide (silencieux) selon la charge. Le pre-flight capte les deux.
+- `isEmptyResponse` est propagée même en `isMandatory=false` — comportement différent de l'historique (les erreurs optionnelles retournaient `null`). Mais une réponse vide n'est pas "optionnelle", c'est un échec réel.
+- Le rate-limit upstream est **passager** (minutes à heures), pas permanent. Un modèle qui échoue maintenant peut fonctionner dans 10 min. Ce n'est PAS un bug de BenchGo ni un modèle défectueux — c'est la nature des pools gratuits partagés.
+
 ---
 
 ## Vérifications après modification
