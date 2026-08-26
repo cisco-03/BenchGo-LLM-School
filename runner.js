@@ -1407,7 +1407,17 @@ async function main() {
       // Si le provider n'est pas imposé par --teacher-provider, on demande
       // interactivement lequel utiliser (openrouter, openai, ollama, etc.).
       // Même si une clé est déjà mémorisée, l'utilisateur peut vouloir changer.
-      if (!teacherProvider && process.stdin.isTTY && process.stdout.isTTY) {
+      //
+      // IMPORTANT (mode batch / nuit) : night-batch.js lance runner.js avec
+      // stdio: 'inherit' pour streamer la sortie en temps réel. Cela rend
+      // process.stdin.isTTY / process.stdout.isTTY TRUE dans le runner enfant
+      // MÊME en mode non-interactif. Sans le test !forceFlag, le runner
+      // déclencherait ce prompt en plein batch → hang indéfini (et si stdout est
+      // redirigé vers un fichier, le terminal reste vide = "logs vides").
+      // --force est le marqueur officiel du mode batch (cf. AGENTS.md) : on
+      // l'utilise pour court-circuiter TOUTES les invites interactives du
+      // professeur, comme on le fait déjà pour les askYesNo de re-test.
+      if (!teacherProvider && !forceFlag && process.stdin.isTTY && process.stdout.isTTY) {
         console.log(`\n  \x1b[36m━━ PROFESSEUR CORRECTEUR ━━\x1b[0m`);
         console.log(`  \x1b[90mAprès chaque échec définitif, l'élève s'auto-analyse. Un professeur IA indépendant peut relire cette analyse et démontrer la vraie cause racine.\x1b[0m`);
         console.log(`  \x1b[90mProviders disponibles :${'\x1b[0m'}`);
@@ -1441,7 +1451,12 @@ async function main() {
 
       // Sinon : aucune clé mémorisée pour ce provider. On demande si l'utilisateur
       // veut l'activer et saisir sa clé.
-      if (!process.stdin.isTTY || !process.stdout.isTTY) {
+      // En mode --force (batch/nuit) on ne peut pas interagir : on repli sur
+      // l'auto-analyse classique (base, enabled=false) sans bloquer le batch.
+      // (Même raison que le prompt de provider ci-dessus : stdio: 'inherit' rend
+      // isTTY true même en mode non-interactif.)
+      if (forceFlag || !process.stdin.isTTY || !process.stdout.isTTY) {
+        if (forceFlag) console.log(`  \x1b[90mProfesseur : aucune clé mémorisée pour ${tProvider} — repli sur auto-analyse classique (mode --force).${'\x1b[0m'}`);
         return base;
       }
       console.log(`  \x1b[90m(A) Professeur ${tProvider} — ${isLocalTeacher ? 'local, sans clé' : 'nécessite une clé API'}.${'\x1b[0m'}`);

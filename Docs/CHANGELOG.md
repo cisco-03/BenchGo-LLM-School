@@ -1,5 +1,48 @@
 # CHANGELOG - Carnet de Notes BenchGo
 
+## 2026-08-26 — fix(runner): mode nuit bloqué sur le prompt du professeur
+
+### Contexte
+Bug remonté par l'utilisateur (Admin/Tasks.md) : en mode nuit (batch `auto`),
+le runner s'arrêtait net **en plein milieu des exercices** et demandait
+interactivement « Provider du professeur (défaut: openrouter) : ». Le terminal
+restait muet (logs vides) et le batch ne repartait jamais.
+
+### Cause racine
+`night-batch.js` lance `runner.js` avec `stdio: 'inherit'` (depuis la tâche
+2026-08-10) pour streamer la sortie du runner en temps réel. Or `inherit` rend
+`process.stdin.isTTY` et `process.stdout.isTTY` **true** dans le process enfant,
+même en mode batch non-interactif.
+
+Le bloc « Professeur correcteur » de `runner.js` (mode CLI historique) ne testait
+que `process.stdin.isTTY && process.stdout.isTTY` pour décider d'afficher le
+prompt interactif `askFreeText("Provider du professeur...")`. Avec `inherit`,
+ce test passait en plein batch → le runner se mettait en attente d'une saisie
+clavier qui ne venait jamais → **hang indéfini**. Si stdout était redirigé
+(`node night-batch.js > nuit.log`), le prompt partait dans le fichier →
+terminal vide = « logs vides ».
+
+`--force` est le marqueur officiel du mode batch (cf. AGENTS.md), déjà utilisé
+pour court-circuiter les `askYesNo` de re-test et de pénalité. Le prompt du
+professeur ne l'utilisait pas — c'est l'oubli.
+
+### Changements (`runner.js`)
+- **Prompt du provider professeur** : gated sur `!forceFlag` en plus du test
+  TTY. En mode `--force`, le professeur reste sur son provider par défaut
+  (`openrouter`) sans demander interactivement.
+- **Prompt `askYesNo("Utiliser le professeur...")`** (sans clé mémorisée) :
+  gated sur `!forceFlag` également. En mode `--force` sans clé mémorisée pour le
+  provider, repli immédiat sur l'auto-analyse classique (`enabled: false`) sans
+  bloquer le batch. Log informatif affiché.
+- Comportement inchangé en mode interactif (`--force` absent) : l'utilisateur
+  peut toujours choisir le provider et saisir sa clé.
+
+### Vérification
+- `node --check runner.js` → OK.
+- Le mode nuit reprend son flux automatique : pas de prompt en plein exercice.
+
+---
+
 ## 2026-08-22 — fix(night-batch): health check + modèles de raisonnement (thinking)
 
 ### Contexte
