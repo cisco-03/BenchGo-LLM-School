@@ -1,5 +1,94 @@
 # CHANGELOG - Carnet de Notes BenchGo
 
+## 2026-08-26 — fix(frontier-batch + leaderboard) : modèles non-LLM testés et classés TOP DU TOP à 0/0
+
+### Contexte
+Bug remonté par l'utilisateur (Admin/Tasks.md) : un modèle d'embeddings
+(`liquid/lfm-2.5-embedding-350m:free` via OpenRouter) a été testé par
+`frontier-batch.js`, n'a réellement passé AUCUN exercice (toutes les tâches
+bypassées par l'auto-profilage, score 0/0), puis a été classé **TOP DU TOP** dans
+le classement cloud (rang 1, seul de sa catégorie).
+
+### Cause racine
+Deux bugs distincts :
+1. **`frontier-batch.js` n'avait aucune détection des modèles non-LLM**
+   (embeddings, OCR, rerank, vision-only). Contrairement à `night-batch.js`
+   qui les marque « NON APPLICABLE », le batch cloud acceptait n'importe quel
+   slug — y compris un vectoriseur incapable de générer du code.
+2. **`getVerdict` / `getCategory` donnaient « TOP DU TOP » au rang ≤ 3 sans
+   vérifier qu'au moins un exercice avait été réellement tenté.** Un modèle à
+   `max === 0` (tout bypassé) mais classé rang 1 (seul cloud testé) obtenait la
+   mention d'excellence.
+
+### Changements
+- **`frontier-batch.js`** : import de `NON_LLM_PATTERNS` depuis `night-batch.js`
+  et nouvelle fonction `isNonLlmCloudModel(slug)`. Après saisie/sélection des
+  modèles, les slugs détectés comme non-LLM sont rejetés avec un avertissement
+  explicite ; si tous sont rejetés, abandon propre (exit 1).
+- **`night-batch.js`** : export de `NON_LLM_PATTERNS` (centralisation, évite la
+  duplication de la liste de regex).
+- **`leaderboard.js`** (`getVerdict` + `getCategory`, versions serveur et JS
+  inline `_getCategory`) : nouveau verdict « NON TESTÉ » (gris, rang 99) quand
+  `entry.max === 0`. Le podium ne s'applique plus aux modèles n'ayant rien
+  réellement passé. Couleur ANSI gris dédiée (`\x1b[90m`) dans le print CLI.
+- **`consolidate-leaderboard.js`** : même correction sur `getVerdict`,
+  `getCategory` (serveur) et `_getCategory` (JS inline), avec passage du `max`
+  aux appels concernés.
+
+### Tests
+- `node --check` sur les 4 fichiers modifiés : OK.
+- `node tests/run-tests.js` : 27/27 passés.
+- `node scripts/check-inline-js.js` : JS inline valide (classement local +
+  communautaire).
+- `node leaderboard.js` : `liquid/lfm-2.5-embedding-350m:free` affiche désormais
+  « NON TESTÉ » (gris) au lieu de « TOP DU TOP ».
+- `node frontier-batch.js --provider=openrouter --models=liquid/lfm-2.5-embedding-350m:free`
+  : le modèle est rejeté (« MODÈLES NON-LLM REJETÉS ») et le batch abandonne
+  proprement.
+
+---
+
+## 2026-08-26 — fix(leaderboard): modèles LM Studio classés à tort en cloud
+
+### Contexte
+Bug remonté par l'utilisateur (Admin/Tasks.md) : `node leaderboard.js` affichait
+« MODÈLES LOCAUX · LM Studio (0) » alors que des modèles locaux avaient été
+testés, et `node leaderboard.js --lmstudio` annonçait « Aucun modèle LM Studio
+testé trouvé dans les carnets ».
+
+### Cause racine
+`night-batch.js` lance `runner.js` avec `--provider=lmstudio`. Dans
+`score-ledger.js`, `isCloud` était calculé comme `(provider !== 'local')`, donc
+tout provider autre que la valeur littérale `'local'` — y compris `'lmstudio'`,
+`'ollama'`, `'custom'` — était marqué `isCloud: true`. Les modèles LM Studio
+testés en mode nuit se retrouvaient donc relégués dans la section « cloud » du
+classement, et le rapport `--lmstudio` (qui filtre `!isCloud`) les masquait.
+
+### Changements
+- **`score-ledger.js`** : `isCloud` est désormais `!LOCAL_PROVIDERS.has(provider)`
+  où `LOCAL_PROVIDERS = { local, lmstudio, ollama, custom }`. Les serveurs
+  OpenAI-compat locaux restent locaux.
+- **`leaderboard.js`** (`aggregateLedger` + `providerDisplay`) : `isCloud` est
+  déduit du provider quand il est présent ; `lmstudio`/`ollama`/`custom` sont
+  traités comme locaux même si un ancien carnet porte `isCloud: true`
+  (réparation rétroactive sans re-run).
+- **`consolidate-leaderboard.js`** (`aggregateCarnet` + `providerDisplay`) :
+  même correction pour le classement communautaire.
+- **`night-batch.js`** (`detectOrphanLedgers`) : ne se fie plus au champ
+  `isCloud` brut du carnet ; il déduit le cloud depuis le provider, sinon un
+  carnet LM Studio mal marqué ne serait jamais détecté comme orphelin.
+- **Carnets sur disque** : `qwen3.8_4b_distilled_gguf_q5_k_m` et
+  `internlm3-8b-instruct_q4_k_m` passés de `isCloud: true` à `isCloud: false`
+  (données locales, non versionnées).
+
+### Vérification
+- `node leaderboard.js` → les 2 modèles LM Studio apparaissent dans
+  « MODÈLES LOCAUX · LM Studio (2) » avec badge vert 🏠 ; section cloud vide.
+- `node leaderboard.js --lmstudio` → Bloc 1 affiche le modèle testé.
+- `node scripts/check-inline-js.js` → OK. `node tests/run-tests.js` → 27/27 OK.
+
+---
+
 ## 2026-08-26 — fix(runner): mode nuit bloqué sur le prompt du professeur
 
 ### Contexte

@@ -40,6 +40,24 @@ const RUNNER = path.join(PROJECT_ROOT, 'runner.js');
 const { PROFILES, detectProfileFromModelName } = require('./config');
 const { printEntryHelp, wantsHelp } = require('./cli-help');
 
+// Détection des modèles cloud non-LLM (embeddings, OCR, rerank, vision-only).
+// Les slugs cloud (ex: "liquid/lfm-2.5-embedding-350m:free") ne sont pas des
+// objets LM Studio : on applique directement NON_LLM_PATTERNS (exporté depuis
+// night-batch.js, qui les définit de façon centralisée). Un modèle détecté
+// comme non-LLM est refusé et non testé : BenchGo évalue des LLM génératifs,
+// pas des vectoriseurs/détecteurs. On évite ainsi le bug où un modèle
+// d'embeddings obtenait "TOP DU TOP" à 0/0 (toutes tâches bypassées).
+const { NON_LLM_PATTERNS } = require('./night-batch');
+
+function isNonLlmCloudModel(slug) {
+  if (!slug) return false;
+  const s = String(slug);
+  for (const re of NON_LLM_PATTERNS) {
+    if (re.test(s)) return true;
+  }
+  return false;
+}
+
 // Profils d'école sélectionnables pour les modèles cloud. FRONTIER (Post-Doctorat)
 // reste le défaut pour les gros modèles, mais les petits modèles cloud (< 15B)
 // peuvent être testés à un niveau adapté à leur capacité.
@@ -496,6 +514,32 @@ async function main() {
   const apiKey = await promptApiKey(provider, opts.apiKey);
   const models = await selectModelsInteractive(opts.models);
   const profile = await selectProfileInteractive(opts.profile, models);
+
+  // --- Filtrage des modèles non-LLM (embeddings, OCR, rerank, vision-only) ---
+  // BenchGo évalue des LLM génératifs : un modèle d'embeddings (ex:
+  // liquid/lfm-2.5-embedding-350m) ne produit pas de code et échoue toutes les
+  // tâches (bypassées par le profilage) → score 0/0, classé à tort "TOP DU TOP".
+  // On les détecte via NON_LLM_PATTERNS et on les exclut du batch.
+  const rejected = [];
+  const filteredModels = [];
+  for (const m of models) {
+    if (isNonLlmCloudModel(m)) rejected.push(m);
+    else filteredModels.push(m);
+  }
+  if (rejected.length > 0) {
+    console.log(`\n  ${C.yellow}━━━ MODÈLES NON-LLM REJETÉS (${rejected.length}) ━━━${C.reset}`);
+    console.log(`  ${C.gray}Modèles d'embeddings / OCR / rerank / vision-only — non testables par BenchGo.${C.reset}`);
+    rejected.forEach(m => console.log(`  ${C.red}✘${C.reset} ${m}`));
+    console.log(`  ${C.gray}Astuce : si le modèle est bien un LLM génératif, le slug contient un mot-clé${C.reset}`);
+    console.log(`  ${C.gray}        qui déclenche le filtre (ex: 'embed', 'ocr', 'rerank'). Renommez le slug.${C.reset}\n`);
+    if (filteredModels.length === 0) {
+      console.log(`  ${C.red}Aucun modèle LLM à tester après filtrage. Abandon.${C.reset}`);
+      process.exit(1);
+    }
+  }
+  // On remplace la liste par la version filtrée pour la suite du batch.
+  models.length = 0;
+  for (const m of filteredModels) models.push(m);
 
   const profileLabel = (CLOUD_PROFILES.find(p => p.key === profile) || {}).label || profile;
 

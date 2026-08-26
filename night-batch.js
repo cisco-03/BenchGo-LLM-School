@@ -686,7 +686,13 @@ function detectOrphanLedgers() {
   const orphanLedgers = [];
   for (const l of ledgers) {
     // Les carnets cloud ne dépendent pas de LM Studio → jamais orphelins.
-    if (l.raw && l.raw.isCloud) continue;
+    // On NE se fie PAS au champ isCloud brut du carnet : les carnets écrits par
+    // night-batch (--provider=lmstudio) portent isCloud=true à tort (bug
+    // 2026-08-26). On déduit le cloud depuis le provider : local, lmstudio,
+    // ollama et custom sont LOCAUX ; tout autre provider est cloud.
+    const prov = (l.raw && l.raw.provider ? String(l.raw.provider).toLowerCase() : null);
+    const isLocalProvider = !prov || ['local', 'lmstudio', 'ollama', 'custom'].includes(prov);
+    if (!isLocalProvider) continue;
     // Si le carnet matche un modelKey connu de lms ls, il n'est pas orphelin.
     // On teste via matchLedger (même logique que le reste de BenchGo) pour
     // gérer les variantes de nommage (quantif dans shortName, suffixes...).
@@ -2522,7 +2528,8 @@ module.exports = {
   recordRun,
   runStatusFromHistory,
   healthCheck,
-  autoBlacklist
+  autoBlacklist,
+  NON_LLM_PATTERNS
 };
 
 if (require.main === module) {

@@ -91,9 +91,13 @@ const PROVIDER_DISPLAY = {
   custom:      { label: 'Custom',    icon: '⚙️', color: '#8b949e' },
 };
 
+// Providers LOCAUX (serveurs OpenAI-compat locaux, aucune clé requise).
+// Cohérent avec LOCAL_PROVIDERS de score-ledger.js et leaderboard.js.
+const LOCAL_PROVIDERS = new Set(['local', 'lmstudio', 'ollama', 'custom']);
+
 function providerDisplay(provider, isCloud) {
   if (provider && PROVIDER_DISPLAY[provider]) return PROVIDER_DISPLAY[provider];
-  if (provider && provider !== 'local') {
+  if (provider && !LOCAL_PROVIDERS.has(String(provider).toLowerCase())) {
     return { label: provider, icon: '☁️', color: '#d29922' };
   }
   if (isCloud) return { label: 'Cloud', icon: '☁️', color: '#d29922' };
@@ -205,7 +209,11 @@ function aggregateCarnet(carnet) {
   // Détection de l'origine (cloud vs local) : priorité aux champs explicites du
   // carnet (provider/isCloud). Pour les carnets soumis sans ces champs, on
   // utilise l'heuristique (slug :free, profil FRONTIER) pour départager.
-  const isCloud = Boolean(carnet.isCloud || (carnet.provider && carnet.provider !== 'local') || detectIsCloudFromCarnet(carnet));
+  // Les providers locaux (lmstudio, ollama, custom) sont traités comme locaux
+  // même si un ancien carnet porte isCloud=true (bug 2026-08-26).
+  const isCloud = carnet.provider
+    ? !LOCAL_PROVIDERS.has(String(carnet.provider).toLowerCase())
+    : Boolean(carnet.isCloud || detectIsCloudFromCarnet(carnet));
 
   return {
     model: carnet.model || carnet.shortName || 'Inconnu',
@@ -317,7 +325,10 @@ function buildConsolidatedHTML(entries) {
   }
 
   // Catégories (identiques au leaderboard principal — leaderboard.js#getCategory)
-  function getCategory(pct, rank) {
+  function getCategory(pct, rank, max) {
+    // Modèle non réellement testé (max = 0 : tous exercices bypassés) → pas
+    // de mention de performance pour éviter "Top du top" à 0/0 (cf. getVerdict).
+    if (!max || max === 0) return { key: 'non_teste', icon: '⏸️', label: 'Non testé' };
     if (rank <= 3) return { key: 'top', icon: '🏆', label: 'Top du top' };
     if (pct >= 90) return { key: 'recommande', icon: '✅', label: 'Recommandé' };
     if (pct >= 75) return { key: 'moyenne', icon: '📊', label: 'Dans la moyenne' };
@@ -452,6 +463,12 @@ function buildConsolidatedHTML(entries) {
 
   function getVerdict(entry, rank) {
     const p = entry.pct;
+    // Modèle non réellement testé (max = 0 : tous exercices bypassés, ex:
+    // modèle d'embeddings) → pas de mention, sinon le podium lui donnerait
+    // "TOP DU TOP" à 0/0 (cf. bug liquid/lfm-2.5-embedding-350m).
+    if (!entry.max || entry.max === 0) {
+      return { label: 'NON TESTÉ', color: '#6c757d', rank: 99 }
+    }
     if (typeof rank === 'number' && rank <= 3) return { label: 'TOP DU TOP', color: '#ffd700', rank: 0 }
     if (p >= 90) return { label: 'RECOMMANDÉ', color: '#28a745', rank: 1 }
     if (p >= 75) return { label: 'DANS LA MOYENNE', color: '#17a2b8', rank: 2 }
@@ -461,7 +478,7 @@ function buildConsolidatedHTML(entries) {
 
   const modelsJson = safeForScript(JSON.stringify(entries.map((e, idx) => {
     const rank = idx + 1
-    const cat = getCategory(e.pct, rank)
+    const cat = getCategory(e.pct, rank, e.max)
     const psize = getParamSize(e.model)
     const verdict = getVerdict(e, idx + 1)
     const grade = gradeLetter(e.pct)
@@ -1448,7 +1465,8 @@ function fmtCostEur(usd) {
 // d un modele en fonction de son rang (position) dans l ensemble affiche.
 // Le rang est celui de l ensemble filtre (pas le rang global), pour que
 // Top du top = les 3 premiers du filtre actif (ex: 3 premiers cloud).
-function _getCategory(pct, rank) {
+function _getCategory(pct, rank, max) {
+  if (!max || max === 0) return { key: 'non_teste', icon: '\u23F8\uFE0F', label: 'Non teste' };
   if (rank && rank <= 3) return { key: 'top', icon: '\u{1F3C6}', label: 'Top du top' };
   if (pct >= 90) return { key: 'recommande', icon: '\u2705', label: 'Recommande' };
   if (pct >= 75) return { key: 'moyenne', icon: '\u{1F4CA}', label: 'Dans la moyenne' };
@@ -1508,7 +1526,7 @@ function renderCards() {
   for (var fi = 0; fi < _preFiltered.length; fi++) {
     var fm = _preFiltered[fi];
     var fRank = fi + 1;
-    var dCat = _getCategory(fm.pct, fRank);
+    var dCat = _getCategory(fm.pct, fRank, fm.max);
     _modelCat[fm.shortName] = dCat;
     _dynamicCats[dCat.key] = (_dynamicCats[dCat.key] || 0) + 1;
   }
@@ -2264,7 +2282,7 @@ function copyLeaderboard() {
   }
   var _mc = {};
   for (var fi = 0; fi < _preF.length; fi++) {
-    _mc[_preF[fi].shortName] = _getCategory(_preF[fi].pct, fi + 1);
+    _mc[_preF[fi].shortName] = _getCategory(_preF[fi].pct, fi + 1, _preF[fi].max);
   }
 
   for (var i = 0; i < MODELS.length; i++) {

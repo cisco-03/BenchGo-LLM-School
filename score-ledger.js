@@ -8,6 +8,14 @@ const LEDGER_DIR = path.join(__dirname, 'Export-Rapports', '.carnet');
 const LEDGER_BACKUP_DIR = path.join(__dirname, 'Export-Rapports', '.carnet-backup');
 const CSV_EXPORT_FILE = path.join(__dirname, 'Export-Rapports', 'runs_export.csv');
 
+// Providers considérés comme LOCAUX (serveurs OpenAI-compat sur localhost) :
+// 'local' (LM Studio historique), 'lmstudio', 'ollama', 'custom'. Tout autre
+// provider (openrouter, openai, anthropic, groq, together, mistral, deepseek,
+// cohere) est un provider cloud distant. Cette liste doit rester cohérente
+// avec LOCAL_PROVIDERS de startup-questionnaire.js et les CLOUD_PROVIDERS de
+// cloud-client.js dont requiresAuth:false.
+const LOCAL_PROVIDERS = new Set(['local', 'lmstudio', 'ollama', 'custom']);
+
 function ledgerPath(shortName) {
   return path.join(LEDGER_DIR, shortName + '.json');
 }
@@ -128,9 +136,14 @@ function saveResult(shortName, modelName, result, quantization, publisher, provi
     ledger.provider = provider;
   }
   // Drapeau booléen pratique pour le filtrage côté leaderboard.
-  // Un modèle est "cloud" si provider est défini et différent de 'local'.
+  // Un modèle est "cloud" UNIQUEMENT si le provider est un vrai provider
+  // distant. Les providers locaux (local, lmstudio, ollama, custom) sont des
+  // serveurs OpenAI-compat locaux : ils doivent rester isCloud=false, sinon
+  // night-batch.js (qui lance runner.js avec --provider=lmstudio) marque les
+  // modèles LM Studio comme cloud et ils disparaissent de la section locale
+  // du classement ET du rapport --lmstudio (bug 2026-08-26).
   if (provider) {
-    ledger.isCloud = (provider !== 'local');
+    ledger.isCloud = !LOCAL_PROVIDERS.has(String(provider).toLowerCase());
   }
   // Horodatage précis (ms) du résultat (§6 Données) : permet l'analyse de
   // convergence temporelle et la comparaison inter-modèles fine. Stocké en plus

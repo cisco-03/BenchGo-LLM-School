@@ -360,10 +360,11 @@ function aggregateLedger(ledger) {
     // via l'heuristique detectIsCloudFromLedger (slug :free, profil FRONTIER
     // dans les attempts, format org/model sans quantization).
     provider: ledger.provider || detectProviderFromLedger(ledger) || null,
-    isCloud: (ledger.isCloud === true)
-      || (ledger.provider && ledger.provider !== 'local')
-      || ecoles.some(e => e.ecole === 'Post-Doctorat')
-      || (ledger.provider ? false : detectIsCloudFromLedger(ledger)),
+    isCloud: (ledger.provider
+        ? !LOCAL_PROVIDERS.has(String(ledger.provider).toLowerCase())
+        : ((ledger.isCloud === true)
+          || ecoles.some(e => e.ecole === 'Post-Doctorat')
+          || detectIsCloudFromLedger(ledger))),
     // --- Tarif cloud estimé (tâche 2026-08-04) ---
     // Les tokens estimés servent au calcul du coût. Si les champs détaillés
     // sont absents (anciens carnets), on estime promptTokens ≈ 3×completion
@@ -442,12 +443,19 @@ const PROVIDER_DISPLAY = {
   custom:      { label: 'Custom',    icon: '⚙️', color: '#8b949e' },
 };
 
+// Providers LOCAUX (serveurs OpenAI-compat locaux, aucune clé requise). Sert à
+// corriger les carnets écrits par night-batch.js qui lance runner.js avec
+// --provider=lmstudio : l'ancien code marquait isCloud=true pour tout provider
+// != 'local', reléguant à tort les modèles LM Studio en section cloud.
+// Cohérent avec LOCAL_PROVIDERS de score-ledger.js et startup-questionnaire.js.
+const LOCAL_PROVIDERS = new Set(['local', 'lmstudio', 'ollama', 'custom']);
+
 // Retourne les infos d'affichage d'un provider depuis son nom.
 // Fallbacks : 'local' (LM Studio local sans provider explicite) et
 // 'cloud' (provider inconnu mais isCloud=true).
 function providerDisplay(provider, isCloud) {
   if (provider && PROVIDER_DISPLAY[provider]) return PROVIDER_DISPLAY[provider];
-  if (provider && provider !== 'local') {
+  if (provider && !LOCAL_PROVIDERS.has(String(provider).toLowerCase())) {
     return { label: provider, icon: '☁️', color: '#d29922' };
   }
   if (isCloud) return { label: 'Cloud', icon: '☁️', color: '#d29922' };
@@ -558,6 +566,13 @@ function modelKeyDisplayLabel(m) {
 // l'accepte optionnellement pour marquer le podium.
 function getVerdict(entry, rank) {
   const p = entry.pct;
+  // Modèle non réellement testé : tous les exercices ont été bypassés
+  // (auto-profilage trop bas, modèle d'embeddings, etc.) → max = 0. On ne
+  // lui attribue AUCUNE mention (le podium lui donnerait "TOP DU TOP" à 0/0,
+  // cf. bug modèle liquid/lfm-2.5-embedding-350m classé rang 1 cloud).
+  if (!entry.max || entry.max === 0) {
+    return { label: 'NON TESTÉ', color: '#6c757d', rank: 99 };
+  }
   if (typeof rank === 'number' && rank <= 3) return { label: 'TOP DU TOP', color: '#ffd700', rank: 0 };
   if (p >= 90) return { label: 'RECOMMANDÉ', color: '#28a745', rank: 1 };
   if (p >= 75) return { label: 'DANS LA MOYENNE', color: '#17a2b8', rank: 2 };
@@ -576,6 +591,10 @@ function getVerdict(entry, rank) {
 // Seuils identiques à getVerdict (synchroniser les deux si modification).
 function getCategory(entry, rank = null) {
   const p = entry.pct;
+  // Modèle non réellement testé (max = 0 : tous exercices bypassés) → pas
+  // de catégorie de performance, on le regroupe dans une catégorie dédiée
+  // pour éviter "Top du top" à 0/0 (cf. getVerdict).
+  if (!entry.max || entry.max === 0) return { key: 'non_teste', label: 'Non testé', icon: '⏸️', color: '#6c757d' };
   if (rank && rank <= 3) return { key: 'top', label: 'Top du top', icon: '🏆', color: '#ffd700' };
   if (p >= 90) return { key: 'recommande', label: 'Recommandés', icon: '✅', color: '#28a745' };
   if (p >= 75) return { key: 'moyenne', label: 'Dans la moyenne', icon: '📊', color: '#17a2b8' };
@@ -2110,7 +2129,8 @@ function providerDisplay(provider, isCloud) {
 // d un modele en fonction de son rang (position) dans l ensemble affiche.
 // Le rang est celui de l ensemble filtre (pas le rang global), pour que
 // Top du top = les 3 premiers du filtre actif (ex: 3 premiers cloud).
-function _getCategory(pct, rank) {
+function _getCategory(pct, rank, max) {
+  if (!max || max === 0) return { key: 'non_teste', label: 'Non testé', icon: '\u23F8\uFE0F' };
   if (rank && rank <= 3) return { key: 'top', label: 'Top du top', icon: '\u{1F3C6}' };
   if (pct >= 90) return { key: 'recommande', label: 'Recommandes', icon: '\u2705' };
   if (pct >= 75) return { key: 'moyenne', label: 'Dans la moyenne', icon: '\u{1F4CA}' };
@@ -2329,7 +2349,7 @@ function renderCards() {
   for (var fi = 0; fi < _preFiltered.length; fi++) {
     var fm = _preFiltered[fi];
     var fRank = fi + 1;
-    var dCat = _getCategory(fm.pct, fRank);
+    var dCat = _getCategory(fm.pct, fRank, fm.max);
     _modelCat[fm.shortName] = dCat;
     _dynamicCats[dCat.key] = (_dynamicCats[dCat.key] || 0) + 1;
   }
@@ -4762,7 +4782,7 @@ function printCloudLeaderboard() {
     const e = visibleEntries[i];
     const verdict = getVerdict(e, i + 1);
     const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : '  ';
-    const vColor = verdict.rank === 0 ? '\x1b[93m' : verdict.rank === 1 ? '\x1b[32m' : verdict.rank === 2 ? '\x1b[36m' : verdict.rank === 3 ? '\x1b[33m' : '\x1b[31m';
+    const vColor = verdict.rank === 0 ? '\x1b[93m' : verdict.rank === 1 ? '\x1b[32m' : verdict.rank === 2 ? '\x1b[36m' : verdict.rank === 3 ? '\x1b[33m' : verdict.rank === 99 ? '\x1b[90m' : '\x1b[31m';
     const providerLabel = e.provider && e.provider !== 'cloud'
       ? `\x1b[33m${e.provider}\x1b[0m`
       : '\x1b[90mcloud\x1b[0m';
@@ -5220,7 +5240,7 @@ function printLeaderboardSection(title, sectionEntries) {
     const e = sectionEntries[i];
     const verdict = getVerdict(e, i + 1);
     const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : '  ';
-    const vColor = verdict.rank === 0 ? '\x1b[93m' : verdict.rank === 1 ? '\x1b[32m' : verdict.rank === 2 ? '\x1b[36m' : verdict.rank === 3 ? '\x1b[33m' : '\x1b[31m';
+    const vColor = verdict.rank === 0 ? '\x1b[93m' : verdict.rank === 1 ? '\x1b[32m' : verdict.rank === 2 ? '\x1b[36m' : verdict.rank === 3 ? '\x1b[33m' : verdict.rank === 99 ? '\x1b[90m' : '\x1b[31m';
     const quant = e.quantization ? `\x1b[35m${e.quantization}\x1b[0m` : '\x1b[90m—\x1b[0m';
     // Colonne Provider : label coloré par provider (openrouter, openai, ollama...)
     // pour différencier les origines au lieu de tout mélanger sous "cloud".
