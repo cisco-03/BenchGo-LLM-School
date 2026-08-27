@@ -1,5 +1,87 @@
 # CHANGELOG - Carnet de Notes BenchGo
 
+## 2026-08-27 — fix(night-batch) : carnet non sauvegardé en mode classe-par-classe
+
+### Contexte
+Le mode classe-par-classe (`--class-by-class` / `--cbc`) lance chaque tier
+dans un process séparé (`node runner.js --force --profile=X <tierNum>`). Or le
+runner ne sauvegarde le carnet de scores QUE si `tierArg === "all"`
+(`runner.js:2654`). En mode classe-par-classe, `tierArg` vaut le numéro du
+tier (ex: `"0"`), jamais `"all"` → le carnet n'est jamais écrit. Les rapports
+Markdown sont créés (écriture inconditionnelle), mais le leaderboard
+(`matchLedger`) ne trouve aucun carnet → les modèles testés apparaissent
+comme "JAMAIS TESTÉS" malgré des rapports valides et un bilan de session
+annonçant des succès.
+
+### Changements
+- **`night-batch.js` (`runSchoolClassByClass`)** : après la boucle des tiers,
+  si tous les tiers obligatoires ont réussi ET qu'aucun filtre de tier n'a
+  restreint la sélection ET que l'école ne s'est pas arrêtée (mode Manuel),
+  on lance un run `all` de consolidation (`runBenchmark` sans `tierNum`).
+  Ce run re-teste toute l'école d'un coup : c'est le seul chemin qui écrit
+  le carnet correctement (`saveAndBuildBilan`). Le surcoût est un run
+  complet additionnel par modèle/école, acceptable en mode nuit.
+- La consolidation est désactivée si `tierFilter` est défini (tiers précis
+  demandés par l'utilisateur) ou si `stopped` (mode Manuel arrêté) — on ne
+  consolide que les écoles complètes et réussies.
+
+### Pour modifier
+1. **Désactiver la consolidation** : commenter le bloc `if (allMandatoryOk
+   && !tierFilter && !stopped)` dans `runSchoolClassByClass()`.
+2. **Consolider même en cas d'échec partiel** : retirer la condition
+   `allMandatoryOk` (le carnet sauvegarderait alors un score d'école échoué).
+3. **Éviter le re-test complet** : implémenter dans `runner.js` une
+   sauvegarde du carnet en mode tier unique (résultat partiel), ce qui
+   nécessite de revoir `saveAndBuildBilan` pour gérer les résultats par
+   tier plutôt que par école complète.
+
+### Pièges
+- Le run de consolidation re-teste TOUTE l'école (tous les tiers) — il
+  double le temps d'exécution par modèle. C'est volontaire : le carnet
+  est un cumul multi-écoles qui nécessite un run complet pour être cohérent.
+- Si le run de consolidation échoue (modèle instable entre les deux runs),
+  le carnet peut être absent ou incomplet. Un avertissement est affiché.
+- La consolidation ne se déclenche qu'avec `--class-by-class` (pas en mode
+  classique, qui lance déjà un run `all` et sauvegarde le carnet).
+
+## 2026-08-27 — fix(tiers) : énoncés manquants « contrainte_negative_* » dans les prompts
+
+### Contexte
+Les exercices `contrainte_negative_0`, `contrainte_negative_1` et
+`contrainte_negative_2` (tiers 0, 1, 2 LIGHT) figuraient dans le tableau
+`tasks` (donc étaient évalués) mais **n'étaient jamais demandés dans le
+`prompt`** envoyé aux modèles. Conséquence : tous les modèles échouaient
+avec `ReferenceError: sansLettreE is not defined` (ou `exactementNMots` /
+`sansMarkdown`) car ils ne pouvaient pas deviner qu'il fallait définir ces
+fonctions. Bug de définition des tiers, pas des modèles — confirmé par les
+demandes du carnet professeur (`Carnet-Professeur/2026-08-27/Primaire/demandes.md`)
+où le professeur IA a lui-même donné un diagnostic erroné (blâmant l'élève
+alors que l'énoncé était fautif).
+
+### Changements
+- **`tiers/tier0_light.json`** : ajout de l'énoncé
+  `[EXERCISE contrainte_negative_0]` décrivant `sansLettreE(c)` (bannir la
+  lettre 'e', insensible à la casse) à la fin du `prompt`.
+- **`tiers/tier1_light.json`** : ajout de l'énoncé
+  `[EXERCISE contrainte_negative_1]` décrivant `exactementNMots(phrase, n)`
+  (compter les mots séparés par espaces) à la fin du `prompt`.
+- **`tiers/tier2_light.json`** : ajout de l'énoncé
+  `[EXERCISE contrainte_negative_2]` décrivant `sansMarkdown(c)` (vérifier
+  l'absence de marqueurs Markdown) à la fin du `prompt`.
+
+### Vérification
+- `verify_tiers.js` : `contrainte_negative_0` (4 exec OK),
+  `contrainte_negative_1` (4 exec OK), `contrainte_negative_2` (5 exec OK).
+- Les fonctions de référence dans `verify_tiers.js` (lignes 117-121)
+  restaient inchangées et valides.
+- `tests/run-tests.js` : 27/27 passés.
+
+### Impact
+Les modèles testés avant cette correction ont subi une pénalité injuste
+de -34/-37 points sur l'exercice `contrainte_negative_0`. Leurs carnets ne
+sont pas rétrocorrectement mis à jour (les anciens résultats restent). Les
+prochains runs appliqueront l'énoncé complet.
+
 ## 2026-08-26 — feat(provider) : ajout de Kilo Gateway comme provider cloud
 
 ### Contexte

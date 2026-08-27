@@ -658,6 +658,43 @@ Le **pre-flight check** (détection rate-limit 200/400 vide, section ci-dessous)
 - `isEmptyResponse` est propagée même en `isMandatory=false` — comportement différent de l'historique (les erreurs optionnelles retournaient `null`). Mais une réponse vide n'est pas "optionnelle", c'est un échec réel.
 - Le rate-limit upstream est **passager** (minutes à heures), pas permanent. Un modèle qui échoue maintenant peut fonctionner dans 10 min. Ce n'est PAS un bug de BenchGo ni un modèle défectueux — c'est la nature des pools gratuits partagés.
 
+### Énoncés manquants « contrainte_negative_* » dans les prompts (tâche 2026-08-27)
+
+**Fichiers touchés :** `tiers/tier0_light.json`, `tiers/tier1_light.json`, `tiers/tier2_light.json`, `Docs/CHANGELOG.md`, `AGENTS.md`.
+
+**Principe :** Les exercices `contrainte_negative_0/1/2` figuraient dans le tableau `tasks` des tiers LIGHT (donc étaient évalués) mais **n'étaient jamais demandés dans le `prompt`** envoyé aux modèles. Tous les modèles échouaient avec `ReferenceError: sansLettreE is not defined` (ou `exactementNMots` / `sansMarkdown`) car ils ne pouvaient pas deviner qu'il fallait définir ces fonctions. Bug de définition des tiers, pas des modèles — le professeur IA lui-même a donné un diagnostic erroné (blâmant l'élève).
+
+**Changements :**
+- `tier0_light.json` : ajout de `[EXERCISE contrainte_negative_0]` décrivant `sansLettreE(c)`.
+- `tier1_light.json` : ajout de `[EXERCISE contrainte_negative_1]` décrivant `exactementNMots(phrase, n)`.
+- `tier2_light.json` : ajout de `[EXERCISE contrainte_negative_2]` décrivant `sansMarkdown(c)`.
+
+**Pour modifier :**
+1. **Vérifier qu'un exercice du tableau `tasks` a bien son énoncé dans le `prompt`** : `node -e "const fs=require('fs'); const j=JSON.parse(fs.readFileSync('tiers/tier0_light.json','utf8')); j.tasks.forEach(t=>{if(!j.prompt.includes(t.id))console.log('MANQUANT: '+t.id)})"`. Tous les IDs de `tasks` doivent apparaître dans le `prompt`.
+2. **Ajouter un énoncé** : ajouter `[EXERCISE <id>]` + description dans le `prompt`, à la fin (après les exercices algorithmiques).
+
+**Pièges :**
+- Les exercices de base (`tache_0a` etc.) utilisent des IDs différents dans le prompt (`0-A`, `0-B`) — c'est historique, le parser extrait les fonctions par nom (`direBonjour`), pas par ID. Seuls les exercices algorithmiques et `contrainte_negative_*` utilisent leur ID dans le prompt.
+- Les fonctions de référence dans `verify_tiers.js` (lignes 117-121) doivent rester cohérentes avec les évaluateurs `exec` des tiers.
+
+### Carnet non sauvegardé en mode classe-par-classe (tâche 2026-08-27)
+
+**Fichiers touchés :** `night-batch.js`, `Docs/CHANGELOG.md`, `AGENTS.md`.
+
+**Principe :** Le mode classe-par-classe (`--class-by-class` / `--cbc`) lance chaque tier dans un process séparé avec `tierArg = numéro du tier`. Or le runner ne sauvegarde le carnet QUE si `tierArg === "all"` (`runner.js:2654`). En mode classe-par-classe, le carnet n'est jamais écrit → le leaderboard affiche les modèles comme "JAMAIS TESTÉS" malgré des rapports valides.
+
+**Changement :** `runSchoolClassByClass()` lance désormais un run `all` de consolidation après les tiers, si : (1) tous les obligatoires ont réussi, (2) aucun filtre de tier, (3) l'école ne s'est pas arrêtée. Ce run re-teste toute l'école d'un coup pour sauvegarder le carnet correctement.
+
+**Pour modifier :**
+1. **Désactiver la consolidation** : commenter le bloc `if (allMandatoryOk && !tierFilter && !stopped)` dans `runSchoolClassByClass()`.
+2. **Consolider même en cas d'échec** : retirer `allMandatoryOk` (le carnet sauvegarderait un score incomplet).
+3. **Éviter le re-test complet** : implémenter la sauvegarde du carnet en mode tier unique dans `runner.js` (modifier `saveAndBuildBilan` pour gérer les résultats partiels par tier).
+
+**Pièges :**
+- Le run de consolidation double le temps par modèle (re-test complet). C'est volontaire : le carnet est un cumul multi-écoles qui nécessite un run complet.
+- Si la consolidation échoue (modèle instable entre les runs), le carnet peut être absent. Un avertissement est affiché.
+- La consolidation ne se déclenche qu'avec `--class-by-class`. Le mode classique lance déjà un run `all`.
+
 ---
 
 ## Vérifications après modification

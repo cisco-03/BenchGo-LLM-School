@@ -1884,6 +1884,29 @@ function runSchoolClassByClass(modelKey, schoolKey, schoolCli, extraArgs, tierFi
   const okCount = tierResults.filter(t => t.ok).length;
   const tiersLabel = tierFilter && tierFilter.length > 0 ? `tiers ${tierFilter.join(',')}` : `${tierResults.length} tiers`;
   console.log(`\n  ${allMandatoryOk ? C.green : C.red}[${nowClock()}] École ${schoolKey} terminée : ${okCount}/${tierResults.length} tiers réussis (${tiersLabel}) en ${(durationMs / 60000).toFixed(1)} min.${C.reset}`);
+
+  // --- Consolidation du carnet (run "all") ---
+  // Le carnet de scores n'est sauvegardé par le runner QUE si tierArg === "all"
+  // (runner.js ~ligne 2654). En mode classe-par-classe, chaque tier tourne dans
+  // un process séparé avec tierArg = numéro du tier → le carnet n'est JAMAIS
+  // écrit, et le leaderboard affiche le modèle comme "JAMAIS TESTÉ" bien que
+  // les rapports existent. On lance donc un run "all" de consolidation après les
+  // tiers, UNIQUEMENT si : (1) tous les obligatoires ont réussi, (2) aucun
+  // filtre de tier n'a restreint la sélection (sinon le run "all" re-testerait
+  // des tiers non demandés), (3) l'école ne s'est pas arrêtée (mode Manuel).
+  // Ce run re-teste toute l'école d'un coup : c'est le seul chemin qui écrit le
+  // carnet. Le surcoût est un run complet additionnel, acceptable en mode nuit.
+  if (allMandatoryOk && !tierFilter && !stopped) {
+    console.log(`\n  ${C.cyan}--- Consolidation du carnet (run all) ---${C.reset}`);
+    console.log(`  ${C.gray}Sauvegarde du carnet de scores via un run complet (tierArg=all).${C.reset}`);
+    const consolBench = runBenchmark(modelKey, schoolCli, extraArgs, { tierNum: null, timeoutMs: 0 });
+    const consolMins = (consolBench.durationMs / 60000).toFixed(1);
+    console.log(`  ${consolBench.ok ? C.green : C.red}[${nowClock()}] Consolidation terminée en ${consolMins} min (status=${consolBench.status}).${C.reset}`);
+    if (!consolBench.ok) {
+      console.log(`  ${C.yellow}Attention : la consolidation a échoué — le carnet peut être incomplet.${C.reset}`);
+    }
+  }
+
   return { ok: allMandatoryOk, durationMs, tierResults, stopped };
 }
 
