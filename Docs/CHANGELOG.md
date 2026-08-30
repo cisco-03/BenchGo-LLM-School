@@ -1,5 +1,102 @@
 # CHANGELOG - Carnet de Notes BenchGo
 
+## 2026-08-30 — fix(exercices) : audit complet des tiers — 8 bugs critiques corrigés
+
+### Contexte
+Audit exhaustif de TOUS les fichiers `tiers/*.json` + évaluateurs custom :
+l'utilisateur exige « aucune erreur » dans les exercices car un bug d'exercice
+met en échec TOUS les modèles (élèves). L'audit a croisé 3 sources :
+(1) le carnet des demandes d'élèves
+(`Carnet-Professeur/2026-08-27/Primaire/demandes.md` — 2 demandes sur
+`contrainte_negative_0` dont une correction erronée du professeur IA),
+(2) un scan systématique tâche↔prompt↔évaluateur, (3) des tests avec des
+solutions CANONIQUES (celles qu'un modèle compétent écrit spontanément).
+`verify_tiers.js` passait 368/388 mais masquait les bugs : ses solutions de
+référence contournaient les défauts (ex: `__proto__` construit via join()).
+
+### Bugs corrigés
+1. **Régression énoncés `contrainte_negative_*`** (tier0/1/2_light.json) :
+   le working tree avait annulé le fix 1f9874d (2026-08-27) — les tâches
+   `sansLettreE`/`exactementNMots`/`sansMarkdown` étaient à nouveau évaluées
+   sans énoncé → échec systématique « X is not defined ». Restaurés depuis
+   HEAD via script Node (jamais via shell PowerShell).
+2. **Énoncés n'ayant jamais existé** : `contrainte_stricte_3`
+   (tier3_standard), `contexte_long_5` (tier5_standard), `tache_4i` +
+   `tache_4j` (tier4_frontier) — tâches évaluées, jamais demandées.
+   Énoncés `[EXERCISE ...]` ajoutés, alignés sur les évaluateurs.
+3. **Contrat tache_2a (tier2_expert) incohérent** : le prompt demandait
+   `executerEnPool(taches, concurrence)` mais l'évaluateur custom attend
+   `chargerEnParallele(urls, chargement)` → `{succes, echecs}`. Énoncé [2-A]
+   réécrit sur le contrat réel (chargement parallèle sans fail-fast),
+   format de réponse JSON corrigé, solution verify_tiers.js alignée.
+4. **Énoncés tier3_expert trop vagues vs patterns exigés** : [3-A] PowerShell
+   (production_backup.db, try/catch, sqlite3 non mentionnés), [3-B] FloodFill
+   (« returns the matrix » manquant), [3-C] middleware (Authorization, 403
+   « Access Denied », fetch(request) non mentionnés), [3-E] retry (backoff
+   impossible à cause de #6), [3-F] fusionnerConfig. Tous réécrits précis.
+5. **vm-sandbox.js — faux positif `__proto__` (CRITIQUE)** : la regex
+   `/__proto__/i` bloquait même la comparaison défensive
+   `if (k === '__proto__') continue;` — LA solution canonique de l'exercice
+   anti-pollution 3-F → exercice infaisable pour tout modèle standard.
+   Remplacée par des regex ciblant uniquement les ÉCRITURES (assignation
+   directe/bracket, Object.setPrototypeOf) ; lectures/comparaisons autorisées.
+   Vérifié : pollution réelle bloquée, garde canonique acceptée.
+6. **custom-evaluators.js — `setTimeout` absent de la sandbox** : l'évaluateur
+   Retry (3-E) échouait « setTimeout is not defined » pour toute solution avec
+   délai de backoff. Ajout de `creerSetTimeoutSur()` : setTimeout SÛR (délégue
+   au timer hôte Node, callback thunké, délai plafonné 5s, objet gelé) injecté
+   dans `exposerFonctionVM` — le code étudiant ne peut pas récupérer le
+   Function constructor via ce timer.
+7. **evaluateFloodFill — mutation in-place refusée** : la matrice était
+   sérialisée en littéral JSON dans la VM (la VM mutait une copie) →
+   « Obtenu : undefined » pour toute solution in-place sans return. La matrice
+   est désormais passée par référence (`sandbox.__mat__`) et l'évaluateur
+   accepte retour OU mutation in-place. Le diagnostic d'inversion x/y
+   reste fonctionnel.
+8. **verify_tiers.js — solution 3f contournée** : la solution de référence
+   construisait `__proto__` via `join()` pour contourner le bloqueur (#5) et
+   masquait le bug. Remplacée par la forme canonique.
+
+### Vérifications (tout passe)
+- `node verify_tiers.js` → 368 exec OK / 388 testés (20 skip pattern/custom), 0 problème
+- Évaluateurs custom avec solutions canoniques → 10/10 PASS
+- E2E tier3_expert (réponse Markdown réaliste → extraction → évaluation) → 6/6 PASS
+- `node tests/run-tests.js` → 27/27 OK
+- Scan « fonction exec absente du prompt » → 0 manquant sur les 18 fichiers
+- Scan « pattern required non mentionné » → 0 manquant
+- Chargement des profils LIGHT/STANDARD/EXPERT/FRONTIER (7 tiers chacun) → OK
+
+### Pour modifier
+1. **Vérifier qu'une tâche a son énoncé** : `node -e "const fs=require('fs');
+   const j=JSON.parse(fs.readFileSync('tiers/tierX.json','utf8'));
+   j.tasks.forEach(t=>{if(!j.prompt.includes(t.id))console.log('MANQUANT: '+t.id)})"`.
+2. **Désactiver le setTimeout sûr** : retirer `sandbox.setTimeout =
+   creerSetTimeoutSur();` dans `exposerFonctionVM` (custom-evaluators.js) —
+   les solutions avec backoff échoueront à nouveau.
+3. **Re-bloquer toute mention de __proto__** : restaurer l'ancienne regex
+   `/__proto__/i` dans `detectSandboxEscape` (vm-sandbox.js:82) — l'exercice
+   3-F redevient infaisable avec la solution canonique.
+4. **Re-exiger le return du FloodFill** : dans `evaluateFloodFill`
+   (custom-evaluators.js), supprimer le repli `return matrix;` (in-place).
+5. **Tester** : `node verify_tiers.js` + tests canoniques custom-evaluators
+   (voir `BenchGo-LLM-School/2026-08-30` dans Logseq).
+
+### Pièges
+- Les IDs historiques (`math`, `francais`, `tache_0a`...) n'apparaissent pas
+  littéralement dans les prompts (`[EXERCISE Math]`, `[EXERCISE 0-A]`) : c'est
+  voulu (extraction par nom de fonction), PAS des bugs.
+- `verify_tiers.js` ne couvre que les évaluations `exec` : les évaluations
+  `pattern`/`custom` ne sont pas vérifiées par cet outil — les tester avec des
+  solutions canoniques réalistes, pas des solutions contournées.
+- Toujours vérifier `git status` avant de modifier les tiers : la régression #1
+  est survenue car le working tree avait annulé un commit sans que personne
+  ne le voie.
+- Le setTimeout sûr est plafonné à 5000 ms : un backoff réaliste passe, un
+  sleep volontairement long est raccourci (protection anti-hang).
+- L'ancienne page Logseq `BenchGo/Vérifications/Audit exercices 2026-08-30`
+  (créée en début de session) contient le diagnostic complet ; le journal
+  officiel est `BenchGo-LLM-School/2026-08-30`.
+
 ## 2026-08-27 — fix(night-batch) : carnet non sauvegardé en mode classe-par-classe
 
 ### Contexte

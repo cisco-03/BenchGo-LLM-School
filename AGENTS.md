@@ -695,6 +695,36 @@ Le **pre-flight check** (détection rate-limit 200/400 vide, section ci-dessous)
 - Si la consolidation échoue (modèle instable entre les runs), le carnet peut être absent. Un avertissement est affiché.
 - La consolidation ne se déclenche qu'avec `--class-by-class`. Le mode classique lance déjà un run `all`.
 
+### Audit complet des exercices — 8 bugs corrigés (tâche 2026-08-30)
+
+**Fichiers touchés :** `tiers/tier0_light.json`, `tiers/tier1_light.json`, `tiers/tier2_light.json`, `tiers/tier3_standard.json`, `tiers/tier5_standard.json`, `tiers/tier4_frontier.json`, `tiers/tier2_expert.json`, `tiers/tier3_expert.json`, `vm-sandbox.js`, `custom-evaluators.js`, `verify_tiers.js`, `Docs/CHANGELOG.md`, `AGENTS.md`.
+
+**Principe :** Audit exhaustif des 18 fichiers de tiers + évaluateurs. Un bug d'exercice met en échec TOUS les modèles (élèves) — les exercices doivent être irréprochables. 3 sources croisées : demandes d'élèves (`Carnet-Professeur/`), scan systématique tâche↔prompt↔évaluateur, tests avec solutions canoniques. `verify_tiers.js` passait 368/388 mais MASQUAIT les bugs car ses solutions de référence contournaient les défauts (ex: `__proto__` construit via `join()`).
+
+**Corrections :**
+1. **Régression énoncés `contrainte_negative_*`** : le working tree avait annulé le fix 1f9874d — `sansLettreE`/`exactementNMots`/`sansMarkdown` étaient évalués sans énoncé dans les 3 tiers light. Restaurés depuis HEAD.
+2. **Énoncés jamais existé** : ajout de `contrainte_stricte_3` (tier3_standard), `contexte_long_5` (tier5_standard), `tache_4i` + `tache_4j` (tier4_frontier).
+3. **Contrat tache_2a (tier2_expert)** : le prompt demandait `executerEnPool(taches, concurrence)` mais l'évaluateur attend `chargerEnParallele(urls, chargement)` → `{succes, echecs}`. Énoncé [2-A] réécrit sur le contrat réel.
+4. **Énoncés tier3_expert précisés** : [3-A] PowerShell (backup `production_backup.db`, try/catch, sqlite3), [3-B] FloodFill (doit retourner la matrice), [3-C] middleware (Authorization, 403 « Access Denied », `fetch(request)`), [3-E] retry (délai optionnel), [3-F] anti-pollution (`__proto__` ignoré).
+5. **`vm-sandbox.js` faux positif `__proto__`** : la regex `/__proto__/i` bloquait même la garde défensive `if (k === '__proto__') continue;` → exercice 3-F infaisable. Désormais seules les ÉCRITURES sont bloquées (assignation directe/bracket, `Object.setPrototypeOf`) ; lectures/comparaisons autorisées.
+6. **`custom-evaluators.js` setTimeout sûr** : `creerSetTimeoutSur()` (délégation timer hôte, callback thunké, délai ≤ 5s, objet gelé) injecté dans `exposerFonctionVM` — les solutions avec backoff passent (« setTimeout is not defined » résolu) sans exposer le Function constructor.
+7. **`evaluateFloodFill` in-place** : la matrice est passée par référence (`sandbox.__mat__`) ; l'évaluateur accepte retour OU mutation in-place.
+8. **`verify_tiers.js` solution 3f canonique** : `if (k === "__proto__") continue;` remplace le contournement `join()`.
+
+**Pour modifier :**
+1. **Vérifier qu'une tâche a son énoncé** : `node -e "const fs=require('fs'); const j=JSON.parse(fs.readFileSync('tiers/tierX.json','utf8')); j.tasks.forEach(t=>{if(!j.prompt.includes(t.id))console.log('MANQUANT: '+t.id)})"`.
+2. **Désactiver le setTimeout sûr** : retirer `sandbox.setTimeout = creerSetTimeoutSur();` dans `exposerFonctionVM` (custom-evaluators.js).
+3. **Re-bloquer toute mention `__proto__`** : restaurer la regex `/__proto__/i` dans `detectSandboxEscape` (vm-sandbox.js ~ligne 82) — l'exercice 3-F redevient infaisable avec la solution canonique.
+4. **Re-exiger le return du FloodFill** : supprimer le repli `return matrix;` dans `runFloodFill` (custom-evaluators.js).
+5. **Tester** : `node verify_tiers.js` + tests canoniques des évaluateurs custom (le verify ne couvre QUE les `exec`, pas les `pattern`/`custom`).
+
+**Pièges :**
+- Toujours vérifier `git status` avant de toucher aux tiers : la régression #1 est passée inaperçue parce que le working tree avait annulé un commit.
+- Les IDs historiques (`math`, `francais`, `tache_0a`) n'apparaissent pas littéralement dans les prompts (`[EXERCISE Math]`) — voulu (extraction par nom de fonction), PAS des bugs.
+- `verify_tiers.js` ne couvre que les évaluations `exec` : les `pattern`/`custom` doivent être testées avec des solutions canoniques réalistes.
+- Le setTimeout sûr est plafonné 5000 ms : backoff réaliste OK, sleep long volontaire raccourci.
+- L'anti-pollution 3-F teste `({}).polluted` APRÈS l'appel : une solution qui recopie `{...base}` sans filtrer `__proto__` pollue réellement le prototype → l'échec est légitime.
+
 ---
 
 ## Vérifications après modification

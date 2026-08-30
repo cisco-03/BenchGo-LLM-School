@@ -79,7 +79,14 @@ function detectSandboxEscape(code) {
     { re: /\beval\s*\(/i, msg: 'utilisation d\'eval interdite dans la sandbox' },
     { re: /\bimport\s*\(/i, msg: 'utilisation d\'import dynamique interdite dans la sandbox' },
     // proto et prototype.constructor
-    { re: /__proto__/i, msg: 'manipulation de __proto__ interdite dans la sandbox' },
+    // Écritures sur __proto__ (assignation, bracket-set, Object.setPrototypeOf).
+    // Les LECTURES/COMPARAISONS (k === '__proto__' pour se PROTÉGER de la
+    // pollution de prototype) sont légitimes et ne doivent pas être bloquées —
+    // sinon un exercice de sécurité (fusionnerConfig anti-pollution) devient
+    // infaisable avec la solution canonique.
+    { re: /(\.|[\["'`]\s*)__proto__\s*=/i, msg: 'assignation interdite sur __proto__' },
+    { re: /\[\s*['"`]__proto__['"`]\s*\]\s*=/i, msg: 'assignation interdite sur __proto__ (bracket)' },
+    { re: /Object\.setPrototypeOf/i, msg: 'Object.setPrototypeOf interdit dans la sandbox' },
     { re: /prototype\s*[\[.\s]*\s*constructor/i, msg: 'tentative d\'évasion via prototype.constructor' },
     // .constructor() appel direct
     { re: /\.constructor\s*\(/i, msg: 'tentative d\'évasion via .constructor()' },

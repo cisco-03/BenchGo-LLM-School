@@ -177,16 +177,22 @@ function evaluateFloodFill(code) {
   const errors = [];
   const stripped = stripTS(code);
 
+  // Exécute remplirMatrice sur la matrice passée PAR RÉFÉRENCE (pas une copie
+  // sérialisée) : on peut ainsi accepter les deux contrats valides —
+  // (1) la fonction RETOURNE la matrice modifiée, (2) la fonction mute la
+  // matrice en place (et retourne undefined). On renvoie la matrice finale
+  // obtenue par l'un ou l'autre chemin.
   function runFloodFill(matrix, x, y, newVal) {
     const sandbox = buildSandbox();
     const ctx = vm.createContext(sandbox);
+    sandbox.__mat__ = matrix;
     vm.runInContext(`
       ${stripped}
-      this.__ffResult__ = remplirMatrice(
-        ${JSON.stringify(matrix)}, ${x}, ${y}, ${newVal}
-      );
+      this.__ffResult__ = remplirMatrice(this.__mat__, ${x}, ${y}, ${newVal});
     `, ctx, { timeout: 2000 });
-    return ctx.__ffResult__;
+    const returned = ctx.__ffResult__;
+    if (returned !== undefined && returned !== null) return returned;
+    return matrix;
   }
 
   try {
@@ -406,6 +412,27 @@ function safeInspect(value) {
  * `extraGlobals` permet d'injecter des mocks (ex: Response, fetch) accessibles
  * par le code étudiant au moment de l'appel.
  */
+/**
+ * setTimeout "sûr" pour la VM : délégue au setTimeout du contexte hôte (Node),
+ * en enveloppant le callback pour qu'il s'exécute dans le contexte VM. Le code
+ * étudiant ne peut PAS récupérer le Function constructor natif via ce timer
+ * (le callback est un thunk vide, et l'objet timer exposé est gelé et dépouillé
+ * de toute propriété exploitable).
+ * Raison d'être : les exercices async (retry avec backoff, concurrence) ont
+ * légitimement besoin d'un délai ; sans timer, toute solution avec `await new
+ * Promise(r => setTimeout(r, d))` échoue avec "setTimeout is not defined".
+ */
+function creerSetTimeoutSur() {
+  const hostSetTimeout = setTimeout;
+  const safeTimer = (callback, delay) => {
+    const cb = typeof callback === 'function' ? callback : () => {};
+    const d = Number(delay);
+    hostSetTimeout(cb, (isNaN(d) || d < 0) ? 0 : Math.min(d, 5000));
+    return Object.freeze({ _unref: () => {} });
+  };
+  return Object.freeze(safeTimer);
+}
+
 function exposerFonctionVM(code, nomParDefaut, extraGlobals) {
   const stripped = stripTS(code);
   const { detectSandboxEscape } = require('./vm-sandbox');
@@ -421,6 +448,7 @@ function exposerFonctionVM(code, nomParDefaut, extraGlobals) {
   }
   const fnName = detecterNomFonction(stripped, nomParDefaut);
   const sandbox = buildSandbox();
+  sandbox.setTimeout = creerSetTimeoutSur();
   if (extraGlobals) Object.assign(sandbox, extraGlobals);
   const ctx = vm.createContext(sandbox);
 

@@ -55,7 +55,7 @@ const SOLUTIONS = {
   tache_2d_std: 'const compterPays = (t) => t.length;',
   tache_2e_std: 'const SimpleComponent = (props) => "<div>" + props.titre + "</div>";',
   // Tier 2 expert
-  tache_2a_expert: 'async function executerEnPool(taches, c) { const r = new Array(taches.length); let i = 0; async function run() { while (i < taches.length) { const idx = i++; r[idx] = await taches[idx]().catch(e => ({ error: e })); } } await Promise.all(Array.from({length: Math.min(c, taches.length)}, run)); return r; }',
+  tache_2a_expert: 'async function chargerEnParallele(urls, chargement) { const res = await Promise.allSettled(urls.map(u => chargement(u))); const succes = []; const echecs = []; res.forEach((r, i) => { if (r.status === "fulfilled") succes.push(urls[i]); else echecs.push(urls[i]); }); return { succes, echecs }; }',
   tache_2b_expert: 'const creerSubject = () => { const subs = []; let closed = false; return { subscribe: (o) => subs.push(o), next: (v) => { if(!closed) subs.forEach(s=>s.next&&s.next(v)); }, error: (e) => { if(!closed) subs.forEach(s=>s.error&&s.error(e)); closed=true; }, complete: () => { if(!closed) subs.forEach(s=>s.complete&&s.complete()); closed=true; } }; };',
   tache_2c_expert: 'const memoiserAsync = (fn) => { const cache = new Map(); return (x) => { if (cache.has(x)) return cache.get(x); const p = fn(x); cache.set(x, p); return p; }; };',
   tache_2d_expert: 'async function chargerUtilisateur(id) { const r = await fetch("/api/user/" + id); return r.json(); }',
@@ -76,7 +76,7 @@ const SOLUTIONS = {
   tache_3b_expert: 'function remplirMatrice(grille, x, y, nv) { const ancien = grille[y][x]; if (ancien === nv) return; const pile = [[x, y]]; while (pile.length) { const [cx, cy] = pile.pop(); if (grille[cy] && grille[cy][cx] === ancien) { grille[cy][cx] = nv; pile.push([cx+1,cy],[cx-1,cy],[cx,cy+1],[cx,cy-1]); } } }',
   tache_3d_expert: 'const rechercherUtilisateurSecurise = (db, nom) => db.query("SELECT * FROM users WHERE nom = ?", [nom]);',
   tache_3e_expert: 'async function executerAvecRetry(op, max) { for (let i = 0; i < max; i++) { try { return await op(); } catch (e) { if (i === max - 1) throw e; await new Promise(r => setTimeout(r, Math.pow(2, i) * 100)); } } }',
-  tache_3f_expert: 'const p = ["_","_","p","r","o","t","o","_","_"].join(""); const fusionnerConfig = (base, override) => { const r = Array.isArray(base) ? [...base] : {...base}; for (const k in override) { if (k === p) continue; if (typeof override[k] === "object" && override[k] !== null && !Array.isArray(override[k]) && typeof r[k] === "object" && r[k] !== null && !Array.isArray(r[k])) { r[k] = fusionnerConfig(r[k], override[k]); } else { r[k] = override[k]; } } return r; };',
+  tache_3f_expert: 'const fusionnerConfig = (base, override) => { const r = Array.isArray(base) ? [...base] : {...base}; for (const k in override) { if (k === "__proto__") continue; if (typeof override[k] === "object" && override[k] !== null && !Array.isArray(override[k]) && typeof r[k] === "object" && r[k] !== null && !Array.isArray(r[k])) { r[k] = fusionnerConfig(r[k], override[k]); } else { r[k] = override[k]; } } return r; };',
   // Tier 4 light
   tache_4a: 'const trouverMaximum = (t) => t.length ? Math.max(...t) : -Infinity;',
   tache_4b: 'const inverserChaine = (c) => c.split("").reverse().join("");',
