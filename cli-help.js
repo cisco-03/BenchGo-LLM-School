@@ -297,6 +297,10 @@ const ERROR_CODES = {
   E505_MODEL_UNRESPONSIVE: {
     label: 'Modèle ne répond pas',
     suggestion: 'Le modèle ne renvoie aucun contenu (HTTP 200 mais 0 tokens). Probablement rate-limité upstream (modèle free surchargé) ou temporairement indisponible. Réessayez plus tard ou utilisez un autre modèle.'
+  },
+  E506_KEY_LIMIT_EXCEEDED: {
+    label: 'Limite de dépense de la clé atteinte',
+    suggestion: 'HTTP 403 « Key limit exceeded » : le modèle testé est PAYANT (slug sans suffixe :free) et la clé OpenRouter a atteint sa limite de dépense (ex: 0$). Les modèles :free ne consomment rien — testez-les avec le suffixe :free. Ne déverrouillez PAS la limite pour un modèle payant.'
   }
 };
 

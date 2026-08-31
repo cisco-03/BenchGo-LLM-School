@@ -1404,7 +1404,21 @@ async function main() {
       if (resolvedApiKey) secrets.rememberSecret(resolvedProvider, resolvedApiKey, true);
     }
   } else {
-    // --- Mode CLI historique : professeur (provider configurable) ---
+    // --- Mode CLI historique ---
+    // Restaure la clé élève depuis le magasin local (.api-keys.json) si elle
+    // n'a pas été fournie par --api-key. apiKeysStore.restoreIntoSession() a
+    // déjà peuplé secrets (ligne ~1219) — il suffit de la lire. Sans ça, un run
+    // direct `node runner.js all --provider=openrouter --model=X` échouait au
+    // dry-run et au run avec « Provider openrouter sans clé API » alors que la
+    // clé ÉTAIT mémorisée (le professeur la trouvait, mais pas l'élève).
+    if (!resolvedApiKey && resolvedProvider) {
+      const stored = secrets.getSecret(resolvedProvider);
+      if (stored) {
+        resolvedApiKey = stored;
+        console.log(`  \x1b[90mClé API ${resolvedProvider} : restaurée depuis .api-keys.json (${secrets.maskedForDisplay(stored)}).\x1b[0m`);
+      }
+    }
+    // Professeur (provider configurable) ---
     // Par défaut : OpenRouter (Free Router, modèles gratuits). --teacher-provider
     // permet de choisir un autre provider (openai, groq, ollama, lmstudio, etc.).
     // Pour les providers locaux (ollama, lmstudio, custom), aucune clé n'est
@@ -1611,7 +1625,7 @@ async function main() {
     console.log(`  Modèle            : \x1b[1;35m${resolvedCloudModel}\x1b[0m`);
     if (resolvedApiKey) {
       // Affichage masqué systématique — plus jamais la clé en clair dans le CLI.
-      const source = secrets.isCliProvided(resolvedProvider) ? 'argument CLI' : 'session';
+      const source = secrets.isCliProvided(resolvedProvider) ? 'argument CLI' : 'session / .api-keys.json';
       console.log(`  Clé API           : ${secrets.maskedForDisplay(resolvedApiKey)} \x1b[90m(${source})\x1b[0m`);
     }
     if (resolvedProfileArgExplicit) {
@@ -1840,6 +1854,7 @@ async function main() {
     const pingStart = Date.now();
     let pingOk = false;
     let pingAttempts = 0;
+    let keyLimitExceeded = false;
     const MAX_PING_ATTEMPTS = 3;
 
     while (pingAttempts < MAX_PING_ATTEMPTS && !pingOk) {
@@ -1852,7 +1867,12 @@ async function main() {
           false,
           { start(){}, stop(){}, fail(){}, updateTokens(){}, _modelName: null,
             beginStreaming(){}, appendStreamChunk(){}, endStreaming(){} },
-          { contextLimitTokens, providerConfig, timeoutMs: 30000, maxTokens: 8 }
+          // max_tokens 512 (pas 8) : les modèles de raisonnement (:free thinking)
+          // consomment d'abord le budget en phase de pensée (delta.reasoning)
+          // avant de produire le contenu. Avec 8 tokens, tout est mangé par le
+          // raisonnement → content vide → faux E505 (modèle déclaré mort alors
+          // qu'il fonctionne). 512 laisse largement raisonner puis répondre.
+          { contextLimitTokens, providerConfig, timeoutMs: 30000, maxTokens: 512 }
         );
         if (pingResult && pingResult.content && pingResult.content.trim().length > 0) {
           pingOk = true;
@@ -1863,6 +1883,15 @@ async function main() {
         }
       } catch (pingErr) {
         logger.warn(`Pre-flight check tentative ${pingAttempts}/${MAX_PING_ATTEMPTS} : ${pingErr.message}`);
+        // HTTP 403 "Key limit exceeded" : la limite de dépense de la clé
+        // OpenRouter est atteinte (ex: 0$ configuré). Ce n'est PAS un défaut du
+        // modèle : les :free passeraient, mais ce slug est PAYANT (sans :free).
+        // On distingue ce cas dans le diagnostic final pour éviter la confusion
+        // « tous les modèles gratuits échouent » alors que seul le modèle payant
+        // est rejeté par la limite de clé.
+        if (/Key limit exceeded/i.test(pingErr.message || '')) {
+          keyLimitExceeded = true;
+        }
       }
       if (!pingOk && pingAttempts < MAX_PING_ATTEMPTS) {
         console.log(`  \x1b[33mTentative ${pingAttempts} échouée — nouvelle tentative dans 3s...\x1b[0m`);
@@ -1873,14 +1902,23 @@ async function main() {
     if (!pingOk) {
       pingSpinner.fail(`Vérification : ${MAX_PING_ATTEMPTS} tentatives échouées — le modèle ne répond pas`);
       console.log(`\n  \x1b[31m━━━ ARRÊT : le modèle "${resolvedCloudModel}" ne répond pas (${MAX_PING_ATTEMPTS} tentatives).\x1b[0m`);
-      console.log(`  \x1b[33mCauses possibles :\x1b[0m`);
-      console.log(`  \x1b[90m  • Modèle free rate-limité upstream sur OpenRouter (HTTP 200, 0 contenu)\x1b[0m`);
-      console.log(`  \x1b[90m  • Modèle temporairement indisponible chez le provider\x1b[0m`);
-      console.log(`  \x1b[90m  • Quota gratuit épuisé / clé API invalide\x1b[0m`);
-      console.log(`  \x1b[90mAstuce : réessayez plus tard, utilisez un autre modèle, ou ajoutez votre propre clé provider (BYOK).\x1b[0m\n`);
-      logger.error(`Pre-flight check : ${MAX_PING_ATTEMPTS} tentatives échouées — modèle indisponible.`);
-      throw new BenchgoError('E505_MODEL_UNRESPONSIVE',
-        `Le modèle "${resolvedCloudModel}" ne répond pas (${MAX_PING_ATTEMPTS} tentatives) — probablement rate-limité upstream ou indisponible`);
+      if (keyLimitExceeded) {
+        console.log(`  \x1b[33mDiagnostic : LIMITE DE CLÉ atteinte (HTTP 403 « Key limit exceeded »).\x1b[0m`);
+        console.log(`  \x1b[90m  • Ce modèle est PAYANT (le slug n'a pas de suffixe :free).\x1b[0m`);
+        console.log(`  \x1b[90m  • Ta clé OpenRouter a une limite de dépense (0$) : OpenRouter refuse de le servir.\x1b[0m`);
+        console.log(`  \x1b[90m  • Les modèles :free NE consomment RIEN et passent ce contrôle — teste-les avec le suffixe :free.\x1b[0m`);
+        console.log(`  \x1b[90m  • NE PAS déverrouiller la limite : elle protège ton porte-monnaie. Les :free coûtent 0$.\x1b[0m`);
+      } else {
+        console.log(`  \x1b[33mCauses possibles :\x1b[0m`);
+        console.log(`  \x1b[90m  • Modèle free rate-limité upstream sur OpenRouter (HTTP 200, 0 contenu)\x1b[0m`);
+        console.log(`  \x1b[90m  • Modèle temporairement indisponible chez le provider\x1b[0m`);
+        console.log(`  \x1b[90m  • Quota gratuit épuisé / clé API invalide\x1b[0m`);
+        console.log(`  \x1b[90mAstuce : réessayez plus tard, utilisez un autre modèle, ou ajoutez votre propre clé provider (BYOK).\x1b[0m\n`);
+      }
+      if (keyLimitExceeded) console.log('');
+      logger.error(`Pre-flight check : ${MAX_PING_ATTEMPTS} tentatives échouées — modèle indisponible${keyLimitExceeded ? ' (limite de clé OpenRouter atteinte — modèle payant)' : ''}.`);
+      throw new BenchgoError(keyLimitExceeded ? 'E506_KEY_LIMIT_EXCEEDED' : 'E505_MODEL_UNRESPONSIVE',
+        `Le modèle "${resolvedCloudModel}" ne répond pas (${MAX_PING_ATTEMPTS} tentatives) — ${keyLimitExceeded ? 'limite de dépense de la clé OpenRouter atteinte (modèle payant, clé limitée à 0$)' : 'probablement rate-limité upstream ou indisponible'}`);
     }
     console.log('');
   }
@@ -2750,7 +2788,12 @@ async function main() {
   const isFrontier = (profileArg === 'FRONTIER'); // cloud frontier → pas d'écoles séquentielles
   const isInteractive = process.stdin.isTTY && process.stdout.isTTY;
 
-  if (tierArg === "all" && modelIsBigEnough && isInteractive && !isFrontier) {
+  // --force (mode batch/nuit) : on n'affiche AUCUN prompt interactif. stdio:
+  // 'inherit' rend isTTY true même en non-interactif → sans le test !forceFlag,
+  // le prompt « Lancer les deux écoles ? » bloquait la file d'attente de nuit.
+  // En batch multi-écoles, c'est le script appelant (night-batch.js) qui décide
+  // de l'enchaînement — le runner n'a pas à redemander.
+  if (tierArg === "all" && modelIsBigEnough && isInteractive && !isFrontier && !forceFlag) {
     console.log(`\n  \x1b[1;36m━━━ ÉCOLES À ÉVALUER ━━━\x1b[0m`);
     console.log(`  \x1b[90mLe modèle (${profile.label}) est supérieur à 3B paramètres : il peut être évalué sur plusieurs écoles.\x1b[0m`);
     console.log(`  \x1b[90m(A) ${profile.label} uniquement (école courante)\x1b[0m`);
@@ -2832,7 +2875,12 @@ async function main() {
   // Cela alimente le classement consolidé visible par tous. --submit force la
   // proposition (sans confirmation) ; sinon on demande en interactif.
   if (lastResult && lastResult.shortName && tierArg === 'all') {
-    await proposeCommunitySubmission(lastResult.shortName, { submitFlag, cliGithubToken });
+    // --force (mode batch/nuit/cloud) : on ne propose RIEN. stdio: 'inherit'
+    // rend isTTY true même en non-interactif → sans ce court-circuit, le prompt
+    // « Envoyer vos résultats ? » bloquait la file d'attente toute la nuit.
+    if (!forceFlag) {
+      await proposeCommunitySubmission(lastResult.shortName, { submitFlag, cliGithubToken });
+    }
   }
 
   // --- Résumé de fin de run (§1 CLI/UX) ---

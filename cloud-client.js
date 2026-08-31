@@ -97,7 +97,13 @@ async function streamOpenAICompatResponse(response, spinner) {
         }
 
         const delta = chunk.choices?.[0]?.delta?.content;
-        const reasoning = chunk.choices?.[0]?.delta?.reasoning_content;
+        // Modèles de raisonnement : OpenRouter expose le raisonnement via
+        // delta.reasoning (majorité des :free thinking) OU delta.reasoning_content
+        // (DeepSeek-R1, GLM...). On collecte les DEUX — un seul est présent par
+        // chunk selon le provider, l'autre est undefined.
+        const reasoning = chunk.choices?.[0]?.delta?.reasoning
+          || chunk.choices?.[0]?.delta?.reasoning_content
+          || null;
         const finishReason = chunk.choices?.[0]?.finish_reason;
         if (finishReason) lastFinishReason = finishReason;
 

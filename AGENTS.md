@@ -13,6 +13,8 @@ OS : Windows, PowerShell 5.1. Projet Node.js 18+ **sans `package.json`** (module
 | Mode nuit classe-par-classe (robustesse anti-hang) | `node night-batch.js --class-by-class` (ou `--cbc`) |
 | Mode batch cloud (frontière) | `node frontier-batch.js` |
 | Mode batch cloud (petits modèles) | `node frontier-batch.js --profile=STANDARD` (ou `LIGHT`) |
+| Mode batch cloud (profil par modèle) | `node frontier-batch.js --profile=AUTO` |
+| Mode batch cloud non-interactif | `node frontier-batch.js --yes` (aucun prompt, mode nuit/CI) |
 | Valider config sans exécuter | `node runner.js all --dry-run` |
 | Tests unitaires | `node tests/run-tests.js` |
 | Classement HTML/MD | `node leaderboard.js` |
@@ -723,7 +725,35 @@ Le **pre-flight check** (détection rate-limit 200/400 vide, section ci-dessous)
 - Les IDs historiques (`math`, `francais`, `tache_0a`) n'apparaissent pas littéralement dans les prompts (`[EXERCISE Math]`) — voulu (extraction par nom de fonction), PAS des bugs.
 - `verify_tiers.js` ne couvre que les évaluations `exec` : les `pattern`/`custom` doivent être testées avec des solutions canoniques réalistes.
 - Le setTimeout sûr est plafonné 5000 ms : backoff réaliste OK, sleep long volontaire raccourci.
-- L'anti-pollution 3-F teste `({}).polluted` APRÈS l'appel : une solution qui recopie `{...base}` sans filtrer `__proto__` pollue réellement le prototype → l'échec est légitime.
+- L'anti-pollution 3-F teste `({}).pollued` APRÈS l'appel : une solution qui recopie `{...base}` sans filtrer `__proto__` pollue réellement le prototype → l'échec est légitime.
+
+### Modèles gratuits : faux échecs + mode AUTO + batch non-bloquant (tâche 2026-08-31)
+
+**Fichiers touchés :** `cloud-client.js`, `runner.js`, `capability-check.js`, `cli-help.js`, `frontier-batch.js`, `Docs/CHANGELOG.md`, `AGENTS.md`.
+
+**Principe :** Trois corrections distinctes :
+1. **Faux E505 sur les modèles thinking free** : le pre-flight ping (8 tokens) et le test de capacité (16 tokens) étaient intégralement consommés par la phase de raisonnement (`delta.reasoning`) → réponse vide → modèle déclaré mort. Budgets passés à 512 tokens, et `streamOpenAICompatResponse` collecte maintenant `delta.reasoning` (OpenRouter) en plus de `delta.reasoning_content` (DeepSeek/GLM). Vérifié en live : `ling-3.0-flash-fin:free` répond « OK ».
+2. **HTTP 403 « Key limit exceeded »** : un slug SANS suffixe `:free` est PAYANT sur OpenRouter — la limite de dépense de la clé (0$ configurée par l'utilisateur) le rejette. C'est un comportement protecteur : les `:free` passent ce gate et ne consomment RIEN. Nouveau code `E506_KEY_LIMIT_EXCEEDED` avec diagnostic explicite (« modèle payant + clé limitée, utilisez un slug :free, NE déverrouillez PAS la limite »).
+3. **Batch de nuit gelé par des prompts** : `stdio: 'inherit'` rend `isTTY` true même en batch → les prompts de résolution de slug (frontier-batch), de soumission communautaire et d'écoles séquentielles (runner) bloquaient la file jusqu'au matin. Neutralisés sous `--force` / `--yes` / non-TTY.
+
+**Fonctions :**
+- `profileForModel(model)` (dans `frontier-batch.js`) → profil détecté depuis le slug (`detectProfileFromModelName`), FRONTIER si taille inconnue. Utilisé par le mode `--profile=AUTO`.
+- E506 : détection `/Key limit exceeded/i` sur l'erreur du ping → `keyLimitExceeded=true` → message E506 au lieu de E505 (dans `main()` de `runner.js`).
+- `--yes` (frontier-batch) : `opts.yes` + implicite en non-TTY → aucun prompt de résolution de slug, slug gardé tel quel avec avertissement.
+
+**Pour modifier :**
+1. **Changer le budget du ping** : éditer `maxTokens: 512` dans le pre-flight de `runner.js` (~ligne 1860).
+2. **Changer le budget capacité** : éditer `CAPABILITY_MAX_TOKENS` dans `capability-check.js`.
+3. **Désactiver le mode AUTO** : retirer l'entrée `AUTO` de `CLOUD_PROFILES` (frontier-batch.js) — `profileForModel` ne sera plus appelée.
+4. **Réactiver les prompts en batch** : retirer les tests `!forceFlag` sur `proposeCommunitySubmission` et les écoles séquentielles dans `runner.js` ; retirer le bloc `nonInteractive` dans la résolution de slug de `frontier-batch.js`.
+5. **Tester** : `node runner.js all --provider=openrouter --model=<slug:free> --profile=LIGHT --dry-run` (clé restaurée depuis .api-keys.json), puis ping live via cloud-client.
+
+**Pièges :**
+- **Un slug sans `:free` sur OpenRouter est PAYANT par défaut.** Toujours vérifier le suffixe. La limite 0$ de la clé protège — ne JAMAIS demander de la déverrouiller pour un modèle payant.
+- `delta.reasoning` et `delta.reasoning_content` : selon le provider, l'UN ou l'AUTRE est présent par chunk. Le code collecte les deux avec `||` — un seul est non-nul.
+- `--yes` est implicite en non-TTY : un slug non résolu est gardé tel quel et échouera avec l'erreur HTTP 400 fatale sur CE modèle uniquement (la file continue).
+- La clé élève est restaurée depuis `.api-keys.json` en mode CLI direct (`node runner.js --provider=X --model=Y`) depuis cette tâche — avant, seul le questionnaire/preset la restaurait → dry-run « sans clé » erroné.
+- Le mode AUTO de frontier-batch choisit le PROFIL par modèle ; il ne remplace pas `--class-by-class` de night-batch (isolation par TIER, anti-hang local).
 
 ---
 

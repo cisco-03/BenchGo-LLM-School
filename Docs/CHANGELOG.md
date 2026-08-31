@@ -1,5 +1,94 @@
 # CHANGELOG - Carnet de Notes BenchGo
 
+## 2026-08-31 — fix(cloud) : modèles gratuits OpenRouter faussement échoués + mode AUTO + batch non-bloquant
+
+### Contexte
+Trois problèmes remontés (Memories-BenchGo/Tasks.md) :
+1. « Tous les modèles gratuits OpenRouter échouent » — diagnostic erroné : les
+   logs révélaient DEUX causes distinctes confondues.
+2. Le menu CLI de `frontier-batch.js` ne proposait pas de mode « Auto » pour
+   attribuer le profil selon la taille de chaque modèle.
+3. « night-batch.js s'arrête en chemin et demande de garder ce modèle » — un
+   prompt interactif (`Garder ce slug tel quel ?` dans frontier-batch, prompt
+   de soumission communautaire / écoles séquentielles dans runner.js) gelait
+   la file d'attente de nuit jusqu'au réveil de l'utilisateur.
+
+### Causes racines identifiées (logs du 2026-08-31 05:03-05:05)
+- **HTTP 403 « Key limit exceeded »** sur `google/gemma-4-26b-a4b-it` : ce
+  slug est PAYANT (pas de suffixe `:free`) et la clé OpenRouter de
+  l'utilisateur a une limite de dépense à 0$. OpenRouter refuse — c'est le
+  comportement protecteur attendu. Les modèles `:free` passent ce gate sans
+  rien consommer. Le diagnostic BenchGo disait « rate-limité » → confusion.
+- **Ping pre-flight à 8 tokens** : `inclusionai/ling-3.0-flash-fin:free`
+  (modèle thinking) répondait HTTP 200 avec `finish_reason=length` et 0
+  contenu : le budget de 8 tokens était intégralement consommé par la phase
+  de raisonnement → faux `E505_MODEL_UNRESPONSIVE` → modèle déclaré mort
+  alors qu'il fonctionne. Même bug que celui corrigé dans
+  `healthCheck()` (night-batch.js, 2026-08-10) mais jamais reporté au runner.
+- **`delta.reasoning` non collecté** : `streamOpenAICompatResponse` ne
+  lisait que `delta.reasoning_content` (DeepSeek-R1, GLM) ; OpenRouter
+  expose souvent le raisonnement via `delta.reasoning` → le raisonnement des
+  modèles thinking était perdu, aggravant les réponses « vides ».
+
+### Corrections
+1. **cloud-client.js — raisonnement OpenRouter** : collecte
+   `delta.reasoning` OU `delta.reasoning_content` (l'un OU l'autre selon le
+   provider). Les réponses thinking ne sont plus perdues.
+2. **runner.js — pre-flight ping 512 tokens** : `maxTokens: 8` → `512`
+   (même correction que healthCheck). Un modèle thinking peut raisonner puis
+   répondre. Vérifié en live : `ling-3.0-flash-fin:free` répond « OK ».
+3. **capability-check.js — budget 512 tokens** : `CAPABILITY_MAX_TOKENS`
+   `16` → `512`. Le test OUI/NON ne finit plus en INDETERMINE pour les
+   modèles thinking.
+4. **runner.js — E506_KEY_LIMIT_EXCEEDED** : nouveau code d'erreur dédié au
+   HTTP 403 « Key limit exceeded ». Le diagnostic explique clairement :
+   modèle PAYANT + limite de clé 0$ → utiliser un slug `:free` (0$, jamais
+   facturés) ; NE PAS déverrouiller la limite. Ajouté à
+   `cli-help.js` ERROR_CODES.
+5. **frontier-batch.js — mode --yes / non-TTY** : flag `--yes` (implicite en
+   non-TTY) qui supprime TOUT prompt de résolution de slug. Un slug non
+   reconnu est gardé tel quel avec un avertissement — la file continue, le
+   runner arrêtera CE modèle proprement (erreur HTTP 400 fatale) sans
+   bloquer les autres.
+6. **frontier-batch.js — profil AUTO** : nouvelle option `AUTO` dans le menu
+   NIVEAU D'ÉCOLE (+ `--profile=AUTO`). Chaque modèle reçoit le profil
+   détecté depuis son slug (2.6B→LIGHT, 550B→DOCTORAT, taille inconnue→
+   FRONTIER). Recommandé automatiquement quand la liste mélange des tailles
+   différentes. Affichage de l'attribution `[PROFIL]` par modèle dans le
+   résumé.
+7. **runner.js — restauration de la clé élève en CLI direct** :
+   `node runner.js all --provider=openrouter --model=X` ne restaurait JAMAIS
+   la clé depuis `.api-keys.json` (seuls preset/questionnaire le faisaient)
+   → dry-run « sans clé API » erroné. La clé est maintenant restaurée depuis
+   `secrets` (peuplé par `apiKeysStore.restoreIntoSession`).
+8. **runner.js — prompts neutralisés sous --force** : le prompt de soumission
+   communautaire (`proposeCommunitySubmission`) et le prompt d'écoles
+   séquentielles (A/B) ne s'affichent plus quand `--force` est actif.
+   `stdio: 'inherit'` rend `isTTY` true même en batch → ces prompts gelaien
+   la file de nuit. C'est la cause du « mode nuit s'arrête en chemin ».
+
+### Vérifications
+- `node --check` OK sur runner.js, cloud-client.js, capability-check.js,
+  frontier-batch.js, cli-help.js.
+- `node tests/run-tests.js` : 27/27 passés.
+- Ping live sur `inclusionai/ling-3.0-flash-fin:free` avec clé réelle :
+  réponse « OK » reçue (le modèle échouait avant le fix).
+- Résolution de slug : les 10 `:free` testés résolvent en `exact`.
+- Dry-run openrouter avec clé mémorisée : « Configuration valide ».
+- `frontier-batch.js --yes` avec slugs inconnus : aucun prompt, file continue.
+
+### Pièges
+- **NE PAS déverrouiller la limite 0$ de la clé** : elle protège contre les
+  modèles payants. Les slugs `:free` coûtent 0$ et ne sont jamais facturés.
+- Un slug sans suffixe `:free` sur OpenRouter est PAYANT par défaut — toujours
+  vérifier le suffixe avant de tester.
+- `--yes` est implicite en non-TTY (CI, redirection, planificateur) : les
+  slugs non résolus passent tels quels et échoueront avec l'erreur HTTP 400
+  fatale sur CE modèle uniquement.
+- Le mode AUTO de frontier-batch ne remplace pas `--class-by-class` de
+  night-batch : AUTO choisit le PROFIL par modèle, `--class-by-class` isole
+  chaque TIER dans un process séparé (anti-hang local).
+
 ## 2026-08-30 — fix(exercices) : audit complet des tiers — 8 bugs critiques corrigés
 
 ### Contexte

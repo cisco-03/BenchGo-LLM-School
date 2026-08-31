@@ -27,7 +27,12 @@ const CAPABILITY_PROMPT =
 
 // Budget temps : on veut ~20-30s maximum. Timeout par tentative court.
 const CAPABILITY_TIMEOUT_MS = 30000;
-const CAPABILITY_MAX_TOKENS = 16;   // OUI/NON ne demande pas beaucoup de tokens
+// max_tokens 512 (pas 16) : les modèles de raisonnement (:free thinking)
+// consomment d'abord le budget en phase de pensée (delta.reasoning) avant de
+// produire la réponse. Avec 16 tokens, tout est mangé par le raisonnement →
+// content vide → verdict INDETERMINE systématique (OUI par défaut au bout de
+// 2 tentatives gaspillées). 512 laisse raisonner puis répondre OUI/NON.
+const CAPABILITY_MAX_TOKENS = 512;
 const MAX_ATTEMPTS = 2;              // 2 tentatives max (déjà ~30s pire cas)
 
 // Détecte si la réponse exprime une capacité (OUI) ou une incapacité (NON).

@@ -68,8 +68,22 @@ const CLOUD_PROFILES = [
   { key: 'STANDARD', label: 'STANDARD — Collège/Lycée (3B-15B)', ecole: 'Collège-Lycée' },
   { key: 'EXPERT',   label: 'EXPERT — Université (15B-30B)',     ecole: 'Université' },
   { key: 'DOCTORAT', label: 'DOCTORAT — Thèse (> 30B)',         ecole: 'Thèse' },
-  { key: 'FRONTIER', label: 'FRONTIER — Post-Doctorat (cloud, tous niveaux)', ecole: 'Post-Doctorat' }
+  { key: 'FRONTIER', label: 'FRONTIER — Post-Doctorat (cloud, tous niveaux)', ecole: 'Post-Doctorat' },
+  // AUTO : chaque modèle reçoit le profil adapté à SA taille (détection via
+  // detectProfileFromModelName). Taille indétectable → FRONTIER (défaut cloud).
+  // Résout le problème d'une liste mélangée : un 2.6B finit en LIGHT, un 550B
+  // en DOCTORAT — sans choisir manuellement pour chacun.
+  { key: 'AUTO',     label: 'AUTO — profil selon la taille de chaque modèle', ecole: '(auto)' }
 ];
+
+// Résout le profil d'UN modèle en mode AUTO : profil détecté depuis le nom du
+// slug (ex: "liquid/lfm-2.5-2.6b:free" → LIGHT, "nemotron-3-ultra-550b" →
+// DOCTORAT). Taille indétectable → FRONTIER (comportement historique cloud).
+function profileForModel(model) {
+  const { detected } = detectProfileFromModelName(model);
+  if (detected && CLOUD_PROFILES.find(p => p.key === detected)) return detected;
+  return 'FRONTIER';
+}
 
 // Providers cloud supportes (reprend la liste de cloud-client.js).
 // On inclut aussi les serveurs OpenAI-compatibles (ollama, lmstudio, custom) :
@@ -116,10 +130,11 @@ function nowDate() {
 }
 
 // Parse les arguments CLI : --provider=, --models=, --no-teacher, --api-key=,
-// --profile= (niveau d'école : LIGHT, STANDARD, EXPERT, DOCTORAT, FRONTIER).
+// --profile= (niveau d'école : LIGHT, STANDARD, EXPERT, DOCTORAT, FRONTIER, AUTO),
+// --yes (mode non-interactif : jamais demander, garder les modèles non résolus).
 function parseCliArgs() {
   const args = process.argv.slice(2);
-  const opts = { provider: null, models: null, noTeacher: false, apiKey: null, endpoint: null, profile: null };
+  const opts = { provider: null, models: null, noTeacher: false, apiKey: null, endpoint: null, profile: null, yes: false };
   for (const a of args) {
     if (a.startsWith('--provider=')) opts.provider = a.slice('--provider='.length);
     else if (a.startsWith('--models=')) opts.models = a.slice('--models='.length);
@@ -127,11 +142,16 @@ function parseCliArgs() {
     else if (a.startsWith('--endpoint=')) opts.endpoint = a.slice('--endpoint='.length);
     else if (a.startsWith('--profile=')) opts.profile = a.slice('--profile='.length).toUpperCase();
     else if (a === '--no-teacher') opts.noTeacher = true;
+    else if (a === '--yes' || a === '-y') opts.yes = true;
     else if (wantsHelp([a])) {
       printFrontierHelp();
       process.exit(0);
     }
   }
+  // Mode non-interactif (redirection, CI, planificateur de nuit) : --yes implicite.
+  // Sans ça, les prompts « Garder ce modèle ? » bloqueraient le batch à l'infini
+  // alors que l'utilisateur dort — c'est le bug « le mode nuit s'arrête en chemin ».
+  if (!process.stdin.isTTY || !process.stdout.isTTY) opts.yes = true;
   return opts;
 }
 
@@ -143,12 +163,16 @@ function printFrontierHelp() {
     { cmd: 'node frontier-batch.js --provider=openrouter --models=m1,m2', desc: 'Provider + modèles combinés.' },
     { cmd: 'node frontier-batch.js --profile=STANDARD', desc: 'Niveau Collège/Lycée (petits modèles < 15B).' },
     { cmd: 'node frontier-batch.js --profile=LIGHT', desc: 'Niveau Primaire (très petits modèles < 3B).' },
+    { cmd: 'node frontier-batch.js --profile=AUTO', desc: 'Profil individuel selon la taille de CHAQUE modèle (listes mélangées).' },
+    { cmd: 'node frontier-batch.js --yes', desc: 'Mode non-interactif : aucun prompt (garder les slugs non résolus, batch de nuit).' },
     { cmd: 'node frontier-batch.js --no-teacher', desc: 'Désactive le professeur IA (correcteur externe).' },
     { cmd: 'node frontier-batch.js --api-key=sk-...', desc: 'Clé API fournie (sinon .api-keys.json ou saisie).' },
     { cmd: 'node frontier-batch.js --provider=ollama --endpoint=https://...', desc: 'Endpoint custom (ollama/lmstudio/custom).' },
     { cmd: 'node frontier-batch.js --help  |  help  |  -h', desc: 'Affiche cette aide.' }
   ], [
-    'Défaut : --profile=FRONTIER (Post-Doctorat). Pour un petit modèle cloud (< 15B), utiliser STANDARD ou LIGHT.',
+    'Défaut : --profile=FRONTIER (Post-Doctorat). Pour un petit modèle cloud (< 15B), utiliser STANDARD, LIGHT ou AUTO.',
+    '--profile=AUTO : chaque modèle reçoit le profil adapté à sa taille (détection depuis le slug). Taille inconnue → FRONTIER.',
+    '--yes (ou non-TTY) : aucun prompt interactif — les slugs non reconnus sont gardés tels quels, la file continue (mode nuit).',
     '--force est transmis au runner (neutralise les confirmations en mode non-TTY).',
     '--submit, --github-token et --hybrid sont transmis au runner (cf. node runner.js --help).',
     'Classement communautaire : soumettez vos carnets avec : node runner.js --submit'
@@ -408,30 +432,41 @@ function selectProfileInteractive(cliProfile, models) {
     // Profil recommande : celui detecte, sinon FRONTIER par defaut.
     // FRONTIER n est jamais renvoye par detectProfileFromModelName (reserve au
     // cloud manuel), donc un modele cloud de taille inconnue reste en FRONTIER.
+    // AUTO est recommande des que la liste melange des tailles differentes :
+    // chaque modele aura son profil individuel au lieu d'un niveau uniforme.
     const recommended = detectedProfile || 'FRONTIER';
+    const sizes = models.map(m => detectProfileFromModelName(m)).filter(r => r.paramSize !== null);
+    const distinctProfiles = [...new Set(sizes.map(r => r.detected))];
+    const autoIsBetter = distinctProfiles.length > 1
+      || (distinctProfiles.length === 1 && detectedProfile !== null && distinctProfiles[0] !== 'FRONTIER');
+    const autoRecommended = autoIsBetter ? 'AUTO' : recommended;
     const recIdx = CLOUD_PROFILES.findIndex(p => p.key === recommended);
+    const autoIdx = CLOUD_PROFILES.findIndex(p => p.key === 'AUTO');
 
     console.log(`\n  ${C.bold}${C.cyan}=== NIVEAU D ECOLE (PROFIL) ===${C.reset}`);
     console.log(`  ${C.gray}Choisissez le niveau d examen. FRONTIER = Post-Doctorat (le plus dur).${C.reset}`);
+    console.log(`  ${C.gray}AUTO = profil individuel selon la taille de CHAQUE modèle (mélanges de tailles).${C.reset}`);
     if (maxParamSize !== null) {
-      console.log(`  ${C.gray}Taille detectee : ~${maxParamSize}B parametres -> profil recommande : ${recommended}${C.reset}`);
+      console.log(`  ${C.gray}Taille max detectee : ~${maxParamSize}B parametres -> profil recommande : ${autoRecommended === 'AUTO' ? 'AUTO (tailles mixtes)' : recommended}${C.reset}`);
     } else {
-      console.log(`  ${C.gray}Taille non detectee. Pour un petit modele cloud (< 15B), preferer STANDARD ou LIGHT.${C.reset}`);
+      console.log(`  ${C.gray}Taille non detectee. Pour un petit modele cloud (< 15B), preferer STANDARD, LIGHT ou AUTO.${C.reset}`);
     }
     console.log('');
     CLOUD_PROFILES.forEach((p, i) => {
       const idx = String(i + 1).padStart(2);
-      const marker = (i === recIdx) ? `${C.green}[recommande]${C.reset} ` : '  ';
+      const marker = (i === autoIdx && autoRecommended === 'AUTO') ? `${C.green}[recommande]${C.reset} `
+        : (i === recIdx && autoRecommended !== 'AUTO') ? `${C.green}[recommande]${C.reset} `
+        : '  ';
       console.log(`  ${C.bold}${idx}.${C.reset} ${marker} ${p.label}`);
     });
     console.log('');
 
     const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-    const defaultNum = recIdx >= 0 ? String(recIdx + 1) : '5';
-    rl.question(`  ${C.cyan}Niveau (numero ou nom) [defaut: ${recommended}] :${C.reset} `, answer => {
+    const defaultKey = autoRecommended === 'AUTO' ? 'AUTO' : recommended;
+    rl.question(`  ${C.cyan}Niveau (numero ou nom) [defaut: ${defaultKey}] :${C.reset} `, answer => {
       rl.close();
       const raw = (answer || '').trim().toLowerCase();
-      if (!raw) { resolve(recommended); return; }
+      if (!raw) { resolve(defaultKey); return; }
       // Par numero
       const n = parseInt(raw, 10);
       if (Number.isInteger(n) && n >= 1 && n <= CLOUD_PROFILES.length) {
@@ -444,8 +479,8 @@ function selectProfileInteractive(cliProfile, models) {
         resolve(upper);
         return;
       }
-      console.log(`  ${C.red}Niveau inconnu : ${raw}. Utilisation de ${recommended}.${C.reset}`);
-      resolve(recommended);
+      console.log(`  ${C.red}Niveau inconnu : ${raw}. Utilisation de ${defaultKey}.${C.reset}`);
+      resolve(defaultKey);
     });
   });
 }
@@ -529,6 +564,7 @@ async function main() {
   if (provider === 'openrouter' || provider === 'kilo') {
     const resolver = provider === 'openrouter' ? resolveOpenRouterSlug : resolveKiloSlug;
     const resolvedModels = [];
+    const nonInteractive = opts.yes || !process.stdin.isTTY || !process.stdout.isTTY;
     for (let i = 0; i < models.length; i++) {
       const input = models[i];
       const r = await resolver(input);
@@ -544,7 +580,20 @@ async function main() {
         resolvedModels.push(r.slug);
         continue;
       }
-      // Non résolu : on affiche les suggestions et demande quoi faire.
+      // Non résolu : en mode --yes / non-TTY (batch de nuit), on NE DEMANDE RIEN.
+      // On garde le slug tel quel et on continue — le runner affichera un
+      // avertissement puis l'erreur HTTP 400 fatale arrêtera CE modèle proprement,
+      // sans bloquer toute la file d'attente. Un prompt en mode nuit = batch figé
+      // jusqu'au réveil de l'utilisateur (bug signalé : « il s'arrête en chemin »).
+      if (nonInteractive) {
+        console.log(`  ${C.yellow}⚠ MODÈLE NON RECONNU : ${input} — gardé tel quel (mode --yes, aucune interaction).${C.reset}`);
+        if (r.suggestions && r.suggestions.length > 0) {
+          console.log(`  ${C.gray}Suggestions proches : ${r.suggestions.slice(0, 3).join(', ')}${C.reset}`);
+        }
+        resolvedModels.push(input);
+        continue;
+      }
+      // Interactif (TTY sans --yes) : on affiche les suggestions et demande quoi faire.
       console.log(`\n  ${C.yellow}━━━ MODÈLE NON RECONNU : ${input} ━━━${C.reset}`);
       if (r.suggestions && r.suggestions.length > 0) {
         console.log(`  ${C.gray}Suggestions proches :${C.reset}`);
@@ -616,12 +665,19 @@ async function main() {
   for (const m of filteredModels) models.push(m);
 
   const profileLabel = (CLOUD_PROFILES.find(p => p.key === profile) || {}).label || profile;
+  // En mode AUTO, chaque modèle reçoit son profil individuel (résolu au moment
+  // du run). On affiche l'attribution dès le résumé pour validation visuelle.
+  const isAutoProfile = profile === 'AUTO';
+  const modelProfiles = models.map(m => isAutoProfile ? profileForModel(m) : profile);
 
   console.log(`\n  ${C.bold}${C.green}=== RESUME DE LA SESSION ===${C.reset}`);
   console.log(`  ${C.bold}Provider  :${C.reset} ${provider}`);
   if (endpoint) console.log(`  ${C.bold}Endpoint  :${C.reset} ${endpoint}`);
   console.log(`  ${C.bold}Modeles  :${C.reset} ${models.length} modele(s)`);
-  models.forEach((m, i) => console.log(`    ${C.gray}${i + 1}.${C.reset} ${m}`));
+  models.forEach((m, i) => {
+    const profTag = isAutoProfile ? ` ${C.magenta}[${modelProfiles[i]}]${C.reset}` : '';
+    console.log(`    ${C.gray}${i + 1}.${C.reset} ${m}${profTag}`);
+  });
   console.log(`  ${C.bold}Profil    :${C.reset} ${profileLabel}`);
   console.log(`  ${C.bold}Professeur:${C.reset} ${opts.noTeacher ? 'desactive' : 'active'}`);
   console.log(`  ${C.bold}Heure     :${C.reset} ${nowClock()}\n`);
@@ -634,8 +690,12 @@ async function main() {
 
   for (let i = 0; i < models.length; i++) {
     const model = models[i];
+    const runProfile = modelProfiles[i];
     console.log(`\n  ${C.cyan}━━━ Modele ${i + 1}/${models.length} ━━━${C.reset}`);
-    const res = runModel(provider, model, apiKey, opts.noTeacher, endpoint, profile);
+    if (isAutoProfile) {
+      console.log(`  ${C.gray}Profil AUTO pour ${model} : ${runProfile}${C.reset}`);
+    }
+    const res = runModel(provider, model, apiKey, opts.noTeacher, endpoint, runProfile);
     results.push({ model, ...res });
     console.log(`  ${C.gray}Heure de fin : ${nowClock()} — duree : ${fmtDuration(res.durationMs)}${C.reset}`);
     if (!res.ok) {
