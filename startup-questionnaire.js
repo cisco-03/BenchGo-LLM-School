@@ -137,7 +137,24 @@ async function _tryAutoDetectModel(provider) {
 async function _ensureApiKey(providerName, { label = 'API', revealMs = 3000 } = {}) {
   const secretKey = providerName;
   if (secrets.hasSecret(secretKey)) {
-    // Déjà mémorisée pour la session — on n'affiche qu'un rappel masqué.
+    // Clé déjà mémorisée pour la session (restaurée de .api-keys.json au
+    // démarrage, ou saisie plus tôt). On propose de la garder OU d'en saisir
+    // une nouvelle : une clé révoquée/invalide ne doit pas piéger
+    // l'utilisateur (sinon il doit connaître --forget-key pour s'en sortir).
+    if (process.stdin.isTTY && process.stdout.isTTY) {
+      console.log(`  \x1b[32mClé ${label} déjà mémorisée pour cette session :\x1b[0m ${secrets.maskedForDisplay(secrets.getSecret(secretKey))}`);
+      const keep = await _askYesNo('  Utiliser cette clé mémorisée ?', true);
+      if (!keep) {
+        const newKey = await secrets.askSecret(`  Collez votre NOUVELLE clé ${label} (saisie masquée) :`, { revealMs });
+        if (newKey) {
+          secrets.rememberSecret(secretKey, newKey);
+          apiKeysStore.saveKey(secretKey, newKey);
+          console.log(`  \x1b[32mNouvelle clé ${label} mémorisée :\x1b[0m ${secrets.maskedForDisplay(newKey)}`);
+          return newKey;
+        }
+        console.log(`  \x1b[33mNouvelle clé vide — utilisation de la clé précédente.\x1b[0m`);
+      }
+    }
     console.log(`  \x1b[32mClé ${label} déjà mémorisée pour cette session :\x1b[0m ${secrets.maskedForDisplay(secrets.getSecret(secretKey))}`);
     return secrets.getSecret(secretKey);
   }

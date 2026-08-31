@@ -1436,8 +1436,32 @@ async function main() {
     if (!resolvedApiKey && resolvedProvider) {
       const stored = secrets.getSecret(resolvedProvider);
       if (stored) {
-        resolvedApiKey = stored;
-        console.log(`  \x1b[90mClé API ${resolvedProvider} : restaurée depuis .api-keys.json (${secrets.maskedForDisplay(stored)}).\x1b[0m`);
+        // Clé mémorisée trouvée : on propose de la garder OU d'en saisir une
+        // nouvelle. Une clé révoquée/invalide ne doit pas piéger l'utilisateur
+        // (il devrait sinon connaître --forget-key pour s'en sortir). En mode
+        // batch/non-TTY (night-batch, --force), on garde la clé silencieusement.
+        const isTTY = process.stdin.isTTY && process.stdout.isTTY;
+        let useStored = true;
+        if (isTTY && !dryRunFlag) {
+          console.log(`  \x1b[90mClé API ${resolvedProvider} mémorisée dans .api-keys.json : ${secrets.maskedForDisplay(stored)}\x1b[0m`);
+          useStored = await askYesNo(`  Utiliser cette clé mémorisée ?`, false);
+          if (!useStored) {
+            const newKey = await secrets.askSecret(`  Collez votre NOUVELLE clé API ${resolvedProvider} (saisie masquée)`, { revealMs: 3000 });
+            if (newKey) {
+              resolvedApiKey = newKey;
+              secrets.rememberSecret(resolvedProvider, newKey, true);
+              apiKeysStore.saveKey(resolvedProvider, newKey);
+              console.log(`  \x1b[32mNouvelle clé API ${resolvedProvider} mémorisée : ${secrets.maskedForDisplay(newKey)}\x1b[0m`);
+            } else {
+              console.log(`  \x1b[33mNouvelle clé vide — utilisation de la clé mémorisée.\x1b[0m`);
+              useStored = true;
+            }
+          }
+        }
+        if (useStored && !resolvedApiKey) {
+          resolvedApiKey = stored;
+          console.log(`  \x1b[90mClé API ${resolvedProvider} : restaurée depuis .api-keys.json (${secrets.maskedForDisplay(stored)}).\x1b[0m`);
+        }
       }
     }
     // Professeur (provider configurable) ---
@@ -1551,7 +1575,7 @@ async function main() {
   }
 
   const isCloudMode = Boolean(resolvedProvider);
-  const providerConfig = isCloudMode ? { provider: resolvedProvider, model: resolvedCloudModel, apiKey: resolvedApiKey } : null;
+  const providerConfig = isCloudMode ? { provider: resolvedProvider, model: resolvedCloudModel, apiKey: resolvedApiKey, endpoint: resolvedEndpoint } : null;
   const queryFn = isCloudMode ? queryLLMCloud : queryLLMLocal;
   let profileArg = resolvedProfileArgExplicit || (isCloudMode ? 'FRONTIER' : 'STANDARD');
   const contextLimitTokens = resolvedContextLimit || DEFAULT_CONTEXT_LIMIT_TOKENS;

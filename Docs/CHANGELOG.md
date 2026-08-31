@@ -1,5 +1,102 @@
 # CHANGELOG - Carnet de Notes BenchGo
 
+## 2026-08-31 (d) — feat(cli) : demander « garder la clé mémorisée ou nouvelle ? »
+
+### Contexte
+Suite au fix (c) : la clé ollama.com stockée dans `.api-keys.json` était
+invalide (HTTP 401). Impossible de la remplacer sans connaître la commande
+`--forget-key=ollama` — le CLI ne posait JAMAIS la question : clé stockée =
+reprise silencieuse (`frontier-batch.js` : `getStoredApiKey` → resolve
+direct ; `startup-questionnaire.js` : `secrets.hasSecret` → rappel masqué ;
+`runner.js` : restauration silencieuse en mode CLI direct).
+
+### Changements
+Quand une clé mémorisée existe, les 3 points d'entrée demandent désormais :
+`Utiliser cette clé mémorisée ? [O/n]` (défaut OUI). Si NON → saisie
+masquée d'une nouvelle clé, qui **remplace** l'ancienne dans `.api-keys.json`
+immédiatement (l'utilisateur vient de la saisir explicitement : la
+mémorisation est l'action attendue). Si saisie vide → repli sur la clé
+mémorisée.
+
+- **`frontier-batch.js`** (`promptApiKey`) : question TTY uniquement.
+  Nouveau helper `maskKeyForDisplay()` (`d1f8...960b`) + `promptNewApiKey()`
+  (saisie masquée factorisée, mémorisation proposée comme avant). En
+  non-TTY/`--yes` (batch de nuit), la clé stockée est gardée silencieusement —
+  aucun prompt ne doit bloquer la file.
+- **`startup-questionnaire.js`** (`_ensureApiKey`) : question TTY quand la
+  clé est en mémoire de session. Nouvelle clé → `secrets.rememberSecret` +
+  `apiKeysStore.saveKey` (remplace).
+- **`runner.js`** (mode CLI direct, restauration depuis `.api-keys.json`) :
+  question TTY si pas `--dry-run`. Nouvelle clé → remplace dans le magasin.
+  Non-TTY (night-batch, `--force`) : comportement inchangé (silencieux).
+
+### Pièges
+- La question ne s'affiche qu'en TTY : les batchs de nuit (`--yes`, pipes,
+  planificateur) ne bloquent jamais — la clé stockée est utilisée telle
+  quelle (comportement historique préservé).
+- La saisie vide au prompt « nouvelle clé » ne supprime PAS l'ancienne : on
+  revient à la clé mémorisée (annulation implicite).
+- `--api-key=` (CLI) court-circuite toujours tout : la clé passée en flag
+  est utilisée sans question (elle est ensuite auto-sauvée par le runner).
+- Pour toujours remplacer une clé sans interaction :
+  `node runner.js --forget-key=<provider>` puis relancer.
+
+## 2026-08-31 (c) — fix(cloud) : --endpoint= ignoré par le runner (Ollama Cloud inaccessible)
+
+### Contexte
+L'utilisateur teste les modèles cloud d'Ollama via `node frontier-batch.js`
+(provider 10 + `--endpoint=https://ollama.com/v1/chat/completions` + clé API
+ollama.com + modèle `minimax-m3`). Le run échouait en E505_MODEL_UNRESPONSIVE
+en 6,5 s (3 pings instantanés) avec le diagnostic trompeur « rate-limité
+upstream ».
+
+### Cause racine — le flag `--endpoint=` n'était JAMAIS transmis à l'appel API
+Deux bugs complémentaires :
+1. **`runner.js` (ligne ~1554)** : le `providerConfig` principal — celui du
+   pre-flight ping et du test de capacité — était construit SANS `endpoint` :
+   `{ provider, model, apiKey }`. Le ping partait donc vers l'URL par défaut
+   du provider ollama (`http://localhost:11434/v1/chat/completions`), une
+   instance locale éteinte → échec instantané → E505. Les appels d'exercices
+   (runTierAttempt) construisaient bien un providerConfig AVEC endpoint
+   (lignes ~2128/2317), mais voir point 2.
+2. **`cloud-client.js` (queryLLM, ligne ~255)** : la déstructure
+   `const { provider, model, apiKey } = providerConfig` ignorait `endpoint`,
+   et l'URL était résolue via `options.endpoint` (jamais défini par le
+   runner). Résultat : même les appels d'exercices n'utilisaient PAS le
+   `--endpoint=` — il servait uniquement au dry-run et à l'affichage.
+
+### Changements
+- **`runner.js`** : `providerConfig` inclut désormais `endpoint` :
+  `{ provider, model, apiKey, endpoint }`.
+- **`cloud-client.js`** : `queryLLM` déstructure `endpoint` de
+  `providerConfig` et la résolution d'URL devient
+  `endpoint || options.endpoint || provSpec.url` (le flag --endpoint= du
+  runner est enfin appliqué aux appels réels).
+
+### Vérification
+- `node runner.js all --provider=ollama --model=minimax-m3 --profile=LIGHT
+  --endpoint=https://ollama.com/v1/chat/completions --no-teacher --force` :
+  le ping atteint désormais ollama.com (HTTP_401 « Unauthorized » remonté au
+  lieu d'un échec instantané localhost) — l'endpoint est bien propagé.
+- Catalogue cloud vérifié en direct (`https://ollama.com/v1/models`, 19
+  modèles) : les IDs cloud sont SANS suffixe (`minimax-m3`, pas
+  `minimax-m3:cloud` — le tag `:cloud` ne vaut que pour le CLI local
+  `ollama run`).
+
+### Pièges
+- **Clé API ollama.com** : la clé stockée dans `.api-keys.json`
+  (`d1f8...960b`, 32 hex) est rejetée en HTTP 401 sur tous les endpoints de
+  génération (testée brute, en UUID à tirets, en majuscules, préfixée
+  `ollama_` — toujours 401 ; `/v1/models` est public et ne prouve rien).
+  Si un run ollama cloud échoue en 401 : régénérer la clé sur
+  https://ollama.com/settings/keys puis
+  `node runner.js --forget-key=ollama` et ressaisir.
+- L'API directe ollama.com exige l'URL complète OpenAI-compat
+  `https://ollama.com/v1/chat/completions` (le natif `/api/chat` renvoie
+  aussi 401 sans clé valide — les deux surfaces existent).
+- `--endpoint=` n'affecte QUE l'URL du provider : le nom du modèle doit
+  matcher le catalogue cloud (pas le registre local `ollama.com/library`).
+
 ## 2026-08-31 (b) — fix(cli) : --submit autonome + énoncés 4i/4j régressés + améliorations dynamiques
 
 ### Contexte

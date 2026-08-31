@@ -251,28 +251,19 @@ function askYesNoLocal(question, defaultYes) {
   });
 }
 
-function promptApiKey(provider, cliApiKey) {
+// Masque une clé pour l'affichage : "d1f8...960b" (jamais la clé complète).
+function maskKeyForDisplay(key) {
+  if (!key || key.length < 10) return '***';
+  return key.substring(0, 4) + '...' + key.substring(key.length - 4);
+}
+
+// Demande (saisie masquée) une NOUVELLE clé pour le provider. Retourne la clé
+// ou null si vide. Factorise le prompt de saisie masquée de promptApiKey.
+function promptNewApiKey(provider, optionalKey) {
   return new Promise(resolve => {
-    if (cliApiKey) { resolve(cliApiKey); return; }
-    const stored = getStoredApiKey(provider);
-    if (stored) {
-      console.log(`  ${C.gray}Cle API ${provider} recuperee depuis .api-keys.json.${C.reset}`);
-      resolve(stored);
-      return;
-    }
-    const optionalKey = PROVIDERS_OPTIONAL_KEY.has(provider);
-    console.log(`\n  ${C.bold}${C.cyan}=== CLE API ${provider.toUpperCase()} ===${C.reset}`);
-    console.log(`  ${C.gray}Aucune cle memorisee pour ${provider}.${C.reset}`);
-    if (optionalKey) {
-      console.log(`  ${C.gray}Pour ${provider} en local : laissez vide (pas d'authentification).${C.reset}`);
-      console.log(`  ${C.gray}Pour ${provider} en mode cloud payant : saisissez votre cle.${C.reset}`);
-    } else {
-      console.log(`  ${C.gray}Saisissez votre cle API (elle restera en memoire pour cette session).${C.reset}`);
-    }
     const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
     // Masque la saisie pour eviter que la cle s_affiche en clair.
     const stdin = process.stdin;
-    const origWrite = process.stdout.write.bind(process.stdout);
     const maskedChars = [];
     stdin.on('data', (char) => {
       const c = char.toString();
@@ -308,6 +299,58 @@ function promptApiKey(provider, cliApiKey) {
       }
       resolve(key || null);
     });
+  });
+}
+
+function promptApiKey(provider, cliApiKey) {
+  return new Promise(async resolve => {
+    if (cliApiKey) { resolve(cliApiKey); return; }
+    const stored = getStoredApiKey(provider);
+    const optionalKey = PROVIDERS_OPTIONAL_KEY.has(provider);
+    if (stored) {
+      // Clé mémorisée trouvée : on propose de la garder OU d'en saisir une
+      // nouvelle. Sans ça, une clé révoquée/invalide bloque l'utilisateur
+      // (il ne peut plus la remplacer sans --forget-key, commande qu'il ne
+      // connaît pas forcément). En non-TTY (batch de nuit, --yes), on garde
+      // la clé stockée silencieusement — aucun prompt ne doit bloquer la file.
+      const isTTY = process.stdin.isTTY && process.stdout.isTTY;
+      if (isTTY) {
+        console.log(`\n  ${C.bold}${C.cyan}=== CLE API ${provider.toUpperCase()} ===${C.reset}`);
+        console.log(`  ${C.gray}Clé mémorisée trouvée dans .api-keys.json : ${maskKeyForDisplay(stored)}${C.reset}`);
+        const keep = await askYesNoLocal(`  Utiliser cette clé mémorisée ?`, true);
+        if (!keep) {
+          const newKey = await promptNewApiKey(provider, optionalKey);
+          if (newKey) {
+            // Remplace la clé stockée par la nouvelle (l'utilisateur vient de
+            // la saisir explicitement : la mémorisation est l'action attendue).
+            try {
+              const store = require('./api-keys-store');
+              store.saveKey(provider, newKey);
+              console.log(`  ${C.green}Nouvelle clé mémorisée dans .api-keys.json (${maskKeyForDisplay(newKey)}).${C.reset}\n`);
+            } catch (_) { /* store indisponible */ }
+            resolve(newKey);
+            return;
+          }
+          console.log(`  ${C.yellow}Nouvelle clé vide — utilisation de la clé mémorisée (${maskKeyForDisplay(stored)}).${C.reset}\n`);
+        } else {
+          console.log(`  ${C.gray}Clé mémorisée utilisée pour cette session.${C.reset}\n`);
+        }
+      } else {
+        console.log(`  ${C.gray}Cle API ${provider} recuperee depuis .api-keys.json (${maskKeyForDisplay(stored)}).${C.reset}`);
+      }
+      resolve(stored);
+      return;
+    }
+    console.log(`\n  ${C.bold}${C.cyan}=== CLE API ${provider.toUpperCase()} ===${C.reset}`);
+    console.log(`  ${C.gray}Aucune cle memorisee pour ${provider}.${C.reset}`);
+    if (optionalKey) {
+      console.log(`  ${C.gray}Pour ${provider} en local : laissez vide (pas d'authentification).${C.reset}`);
+      console.log(`  ${C.gray}Pour ${provider} en mode cloud payant : saisissez votre cle.${C.reset}`);
+    } else {
+      console.log(`  ${C.gray}Saisissez votre cle API (elle restera en memoire pour cette session).${C.reset}`);
+    }
+    const key = await promptNewApiKey(provider, optionalKey);
+    resolve(key);
   });
 }
 

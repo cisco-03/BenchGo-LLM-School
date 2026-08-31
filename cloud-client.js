@@ -252,7 +252,7 @@ async function streamAnthropicResponse(response, spinner) {
 async function queryLLM(prompt, difficulty, tierId, isMandatory, spinner, options = {}) {
   const startTime = Date.now();
   const { providerConfig = {} } = options;
-  const { provider, model, apiKey } = providerConfig;
+  const { provider, model, apiKey, endpoint } = providerConfig;
 
   if (!provider) throw new Error('cloud-client: providerConfig.provider manquant.');
   if (!model)    throw new Error('cloud-client: providerConfig.model manquant.');
@@ -265,8 +265,9 @@ async function queryLLM(prompt, difficulty, tierId, isMandatory, spinner, option
     );
   }
 
-  // URL : --endpoint= en priorité (pour 'custom' ou override d'un provider existant)
-  const resolvedUrl = options.endpoint || provSpec.url;
+  // URL : providerConfig.endpoint (flag --endpoint=) en priorité, sinon options.endpoint
+  // (compatibilité), sinon l'URL par défaut du provider.
+  const resolvedUrl = endpoint || options.endpoint || provSpec.url;
   if (!resolvedUrl) {
     throw new Error(
       `Fournisseur '${provider}' nécessite --endpoint=<url>.\n  Exemple : --endpoint=http://localhost:8080/v1/chat/completions`
