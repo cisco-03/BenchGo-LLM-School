@@ -1,5 +1,103 @@
 # CHANGELOG - Carnet de Notes BenchGo
 
+## 2026-08-31 (b) — fix(cli) : --submit autonome + énoncés 4i/4j régressés + améliorations dynamiques
+
+### Contexte
+Trois demandes (Memories-BenchGo/Tasks.md) :
+1. « node runner.js --submit ne fonctionne pas » — la commande seule tombait
+   dans le QUESTIONNAIRE DE DÉMARRAGE (choix du fournisseur, saisie du
+   modèle) au lieu de soumettre les carnets existants.
+2. « Les AMÉLIORATIONS ACTIVES CE RUN doivent être dynamiques avec les
+   derniers changements » — la liste était figée depuis des semaines et
+   s'était désynchronisée des commits réels.
+3. « Vérifier la demande de l'élève » (tache_4i, prompt injection,
+   `inclusionai/ling-3.0-flash-fin:free`) — l'élève échouait avec
+   « Attendu 4 commentaires légitimes, obtenu 6 ».
+
+### Cause racine de la demande de l'élève (tache_4i) — L'ÉLÈVE AVAIT RAISON
+Régression des énoncés par le commit 0a7c5f3 (2026-08-31 07:46) : les
+prompts de 6 fichiers tiers ont été TRONQUÉS à la fin, supprimant les
+énoncés `[EXERCISE ...]` restaurés par l'audit 62e7e4b (2026-08-30) :
+- `contrainte_negative_0` (tier0_light), `contrainte_negative_1`
+  (tier1_light), `contrainte_negative_2` (tier2_light) — 2e régression
+  du même bug (déjà perdu puis restauré par 1f9874d le 2026-08-27).
+- `contrainte_stricte_3` (tier3_standard), `contexte_long_5`
+  (tier5_standard).
+- `tache_4i` + `tache_4j` (tier4_frontier) — c'est pourquoi l'élève
+  n'a JAMAIS vu l'énoncé `filtrerCommentaires` : il improvisait des
+  regex au hasard sans connaître les injections exactes à filtrer.
+  Le professeur IA avait tort de le blâmer (« ton code est naïf ») —
+  l'exercice était infaisable sans énoncé, pas d'échec de compétence.
+
+**CAUSE RÉELLE de la récurrence (découverte pendant le fix) : la
+« machine à régressions » était `updateTiers()` (auto-updater.js).**
+À CHAQUE run, le runner appelle `updateTiers()` qui reconstruit le
+prompt : il coupe tout à partir du header `[ALGORITHMIC EXERCISES...]`
+et réattache le bloc algo de la banque — OR les énoncés custom
+(contrainte_negative_*, tache_4i/4j, etc.) sont placés APRÈS ce bloc.
+Chaque run les effaçait donc silencieusement du disque ; les commits
+0a7c5f3 puis le dry-run de test les ont simplement commités/validés
+dans leur état tronqué. C'est pourquoi le bug est « revenu » 2 fois
+sans que personne ne touche aux fichiers manuellement.
+
+### Corrections
+1. **auto-updater.js — updateTiers() préserve le suffixe custom (CAUSE
+   RACINE)** : le prompt reconstruit est désormais `base + algoPrompt +
+   suffix` où `suffix` est le contenu suivant le DERNIER exercice de la
+   banque algo (énoncés `[EXERCISE ...]` custom ajoutés après). Testé :
+   updateTiers() est idempotent et un dry-run complet ne supprime plus
+   les énoncés (scan 18 fichiers : 0 manquant avant/après).
+2. **tiers/ — restauration des 6 prompts complets** depuis 62e7e4b
+   (dernier commit sain). Vérifié : HEAD était un préfixe strict des
+   prompts 62e7e4b (seule la fin était perdue), tasks identiques.
+   Scan post-fix : 0 énoncé manquant sur les 18 fichiers.
+   `node verify_tiers.js` : 368 OK / 0 problème.
+3. **submit-action.js (nouveau) — --submit autonome** : `node runner.js
+   --submit` seul soumet désormais DIRECTEMENT un carnet existant sans
+   passer par le questionnaire. Résolution du carnet : `--model=<nom>`
+   (match sur model/shortName/displayName) > dernier carnet modifié >
+   sélection interactive numérotée (TTY). Exclut les fichiers
+   utilitaires sans `ecoles` (classement_snapshot.json). Token :
+   `--github-token` > profil local > saisie interactive validée.
+   Combiné à un run (`all --provider=X --submit`), --submit garde son
+   sens historique de confirmation post-run.
+4. **cli-help.js — getRecentImprovements() + printActiveImprovements()** :
+   la section « AMÉLIORATIONS ACTIVES CE RUN » affiche désormais les 5
+   dernières entrées du CHANGELOG (format `## AAAA-MM-JJ — titre`), plus
+   les lignes permanentes (export CSV, dashboard) et la ligne hybride si
+   `--hybrid`. Repli sur la liste figée si le CHANGELOG est absent.
+   Testé en live : la sortie reflète les entrées 08-26 à 08-31.
+
+### Vérifications
+- `node --check` OK sur runner.js, submit-action.js, cli-help.js,
+  auto-updater.js.
+- `node tests/run-tests.js` : 27/27 passés.
+- `node verify_tiers.js` : 368 exec OK / 388 testés, 0 problème.
+- updateTiers() idempotent : 2 passages consécutifs → 0 énoncé perdu.
+- Dry-run complet post-fix → scan 18 tiers : 0 énoncé manquant (avant
+  le fix, UN dry-run suffisait à perdre les 7 énoncés custom).
+- E2E `--submit` non-TTY : dernier carnet (`inclusionai_ling-3.0-flash-fin_free`)
+  soumis → PR #120 créée ET mergée automatiquement sur cisco-03/BenchGo-LLM-School.
+- E2E `--submit --model=gemma-4-e4b-it` : ciblage par nom → soumission réussie.
+- E2E `--submit --model=inconnu` : rejet propre (« Aucun carnet ne correspond »).
+- Run normal (`all --provider=... --dry-run`) : le benchmark démarre bien
+  (l'action --submit ne le déclenche pas quand d'autres flags de run sont présents).
+
+### Pièges
+- `--submit` seul = action autonome ; `--submit` + flags de run
+  (--provider/--model/positional tier/--preset) = confirmation post-run.
+  Ne pas « simplifier » le test `hasRunIntent` sans mesurer l'impact.
+- Le carnet le plus récent de `.carnet/` peut être un fichier utilitaire
+  (classement_snapshot.json) — le filtrage par champ `ecoles` est requis.
+- **updateTiers() reconstruit le prompt à chaque run** : tout énoncé custom
+  doit être placé APRÈS le dernier exercice algo de la banque (suffixe
+  désormais préservé). Si un énoncé est ajouté AVANT le header algo, il
+  reste intact ; l'essentiel est de ne plus rien mettre à compter perdu
+  après le bloc algo — c'est exactement ce que le fix protège.
+- Le professeur IA peut donner un diagnostic FAUX quand l'énoncé manque :
+  il blâme l'élève alors que l'exercice était infaisable. Toujours
+  vérifier l'énoncé AVANT de lire sa correction.
+
 ## 2026-08-31 — fix(cloud) : modèles gratuits OpenRouter faussement échoués + mode AUTO + batch non-bloquant
 
 ### Contexte

@@ -435,8 +435,30 @@ function updateTiers() {
       if (algoPrompt) {
         let basePrompt = data.prompt || '';
         const idx = basePrompt.indexOf(ALGO_HEADER);
-        if (idx !== -1) basePrompt = basePrompt.slice(0, idx);
-        const newPrompt = basePrompt + algoPrompt;
+        // Le bloc algo de la banque se termine par l'énoncé du DERNIER
+        // exercice algo du tier. Tout ce qui suit (énoncés custom ajoutés
+        // après la banque : contrainte_negative_*, tache_4i/4j,
+        // contrainte_stricte_3, contexte_long_5...) doit être PRÉSERVÉ —
+        // sinon updateTiers() les supprime à chaque run (machine à
+        // régressions : c'est ainsi que les énoncés restaurés par
+        // 1f9874d/62e7e4b ont été reperdus, 2 fois).
+        let suffix = '';
+        if (idx !== -1) {
+          const bank = EXERCISE_BANK[tierNum];
+          const oldBlock = basePrompt.slice(idx);
+          const lastBankId = bank && bank.length > 0 ? bank[bank.length - 1].id : null;
+          const lastIdx = oldBlock.indexOf('[EXERCISE ' + lastBankId + ']');
+          if (lastIdx !== -1) {
+            // Cherche le prochain [EXERCISE ...] après le dernier de la banque.
+            const afterLast = oldBlock.slice(lastIdx);
+            const nextEx = afterLast.match(/\n\n\[EXERCISE /);
+            if (nextEx && nextEx.index !== undefined) {
+              suffix = afterLast.slice(nextEx.index);
+            }
+          }
+          basePrompt = basePrompt.slice(0, idx);
+        }
+        const newPrompt = basePrompt + algoPrompt + suffix;
         if (newPrompt !== (data.prompt || '')) {
           data.prompt = newPrompt;
           modified = true;

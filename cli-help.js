@@ -56,7 +56,8 @@ const HELP_TEXT = `
   \x1b[1m--teacher-model=\x1b[0m<N>     Override du modèle professeur (requis si provider != openrouter).
   \x1b[1m--teacher-api-key=\x1b[0m<N>    Clé API du professeur (OpenRouter par défaut, sinon le provider choisi).
   \x1b[1m--teacher-endpoint=\x1b[0m<N>   Endpoint custom du professeur (pour custom/ollama/lmstudio).
-  \x1b[1m--submit\x1b[0m              Force la soumission communautaire (PR GitHub).
+  \x1b[1m--submit\x1b[0m              Seul : soumet directement un carnet existant (PR GitHub).
+                          Avec un run : force la soumission communautaire post-run.
   \x1b[1m--no-telemetry\x1b[0m        Désactive le ping anonyme (compteur d'utilisateurs).
   \x1b[1m--github-token=\x1b[0m<N>       PAT GitHub pour la soumission (évite la saisie interactive).
   \x1b[1m--preset=\x1b[0m<N>           Charge un preset de configuration (fichier local).
@@ -83,6 +84,8 @@ const HELP_TEXT = `
   node runner.js --preset=mon-modele
   \x1b[90m# Voir le dernier run\x1b[0m
   node runner.js status
+  \x1b[90m# Soumettre un carnet existant sur le classement communautaire\x1b[0m
+  node runner.js --submit
   \x1b[90m# Valider la config sans lancer le benchmark\x1b[0m
   node runner.js all --profile=STANDARD --dry-run
 
@@ -192,6 +195,59 @@ function printStatus() {
   }
   console.log('');
   process.exit(0);
+}
+
+// ============================================================
+// Améliorations récentes (dynamiques, depuis Docs/CHANGELOG.md)
+// ============================================================
+
+// Extrait les N dernières entrées du CHANGELOG (format "## AAAA-MM-JJ — titre").
+// Chaque entrée est résumée en une ligne lisible : "• 08-31 — fix(cloud) : ...".
+// Retourne [] si le CHANGELOG est absent/illisible (repli silencieux).
+function getRecentImprovements(maxEntries) {
+  const n = Number.isInteger(maxEntries) && maxEntries > 0 ? maxEntries : 5;
+  try {
+    const p = path.join(__dirname, 'Docs', 'CHANGELOG.md');
+    if (!fs.existsSync(p)) return [];
+    const txt = fs.readFileSync(p, 'utf8');
+    const re = /^## (\d{4}-\d{2}-\d{2})\s+—\s+(.+)$/gm;
+    const entries = [];
+    let m;
+    while ((m = re.exec(txt)) !== null && entries.length < n) {
+      const date = m[1];
+      const title = m[2].trim();
+      // Raccourcit les titres trop longs pour tenir sur une ligne de console.
+      const short = title.length > 90 ? title.slice(0, 87) + '…' : title;
+      entries.push({ date, title: short });
+    }
+    return entries;
+  } catch (_) {
+    return [];
+  }
+}
+
+// Affiche le bloc « AMÉLIORATIONS ACTIVES CE RUN » dynamique : les dernières
+// évolutions du CHANGELOG remplacent la liste historique figée qui se
+// désynchronisait des commits réels. Complète par des lignes permanentes
+// (dashboard, export CSV) qui restent d'actualité à chaque run.
+// opts.hybrid : ajoute la ligne mode hybride quand --hybrid est actif.
+function printActiveImprovements(maxEntries, opts) {
+  const o = opts || {};
+  console.log(`  \x1b[1;36m━━━ AMÉLIORATIONS ACTIVES CE RUN ━━━\x1b[0m`);
+  const recent = getRecentImprovements(maxEntries || 5);
+  if (recent.length > 0) {
+    console.log(`  \x1b[90mDernières évolutions (Docs/CHANGELOG.md) :\x1b[0m`);
+    for (const e of recent) {
+      console.log(`  \x1b[90m• ${e.date.slice(5)} — ${e.title}\x1b[0m`);
+    }
+  } else {
+    console.log(`  \x1b[90m• Cache LRU évaluation + cache tiers par profil\x1b[0m`);
+    console.log(`  \x1b[90m• Retry/backoff API (timeout, 429, 5xx) + benchmarking latence/tokens\x1b[0m`);
+  }
+  if (o.hybrid) console.log(`  \x1b[90m• Mode hybride : auto-soumission GitHub (seuil ≥ 50%) + file persistante\x1b[0m`);
+  console.log(`  \x1b[90m• Export CSV des runs → Export-Rapports/runs_export.csv (comparaison inter-modèles)\x1b[0m`);
+  console.log(`  \x1b[90m• Dashboard : node leaderboard.js --serve → http://localhost:3939/dashboard\x1b[0m`);
+  console.log('');
 }
 
 // ============================================================
@@ -401,5 +457,7 @@ module.exports = {
   ERROR_CODES,
   saveLastRun,
   LAST_RUN_FILE,
-  readVersion
+  readVersion,
+  getRecentImprovements,
+  printActiveImprovements
 };

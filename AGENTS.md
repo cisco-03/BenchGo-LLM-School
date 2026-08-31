@@ -37,6 +37,7 @@ OS : Windows, PowerShell 5.1. Projet Node.js 18+ **sans `package.json`** (module
 | Effacer une clé API mémorisée | `node runner.js --forget-key=<provider>` |
 | Lister les clés API mémorisées | `node runner.js --list-keys` |
 | Restaurer les carnets disparus depuis le backup | `node runner.js --restore-carnets` |
+| Soumettre un carnet existant (sans run) | `node runner.js --submit` (dernier carnet) / `--submit --model=<nom>` (ciblé) |
 | Professeur IA avec provider custom | `node runner.js --teacher-provider=<provider> --teacher-model=<model>` |
 | Liste LM Studio triée par score local | `node night-batch.js --list-only` |
 | Forcer la détection (réindexer les GGUF orphelins) | `node night-batch.js --force-detect` |
@@ -754,6 +755,36 @@ Le **pre-flight check** (détection rate-limit 200/400 vide, section ci-dessous)
 - `--yes` est implicite en non-TTY : un slug non résolu est gardé tel quel et échouera avec l'erreur HTTP 400 fatale sur CE modèle uniquement (la file continue).
 - La clé élève est restaurée depuis `.api-keys.json` en mode CLI direct (`node runner.js --provider=X --model=Y`) depuis cette tâche — avant, seul le questionnaire/preset la restaurait → dry-run « sans clé » erroné.
 - Le mode AUTO de frontier-batch choisit le PROFIL par modèle ; il ne remplace pas `--class-by-class` de night-batch (isolation par TIER, anti-hang local).
+
+### --submit autonome + régression énoncés 4i/4j + améliorations dynamiques (tâche 2026-08-31b)
+
+**Fichiers touchés :** `submit-action.js` (nouveau), `runner.js`, `cli-help.js`, `auto-updater.js`, `tiers/tier{0,1,2}_light.json`, `tiers/tier3_standard.json`, `tiers/tier4_frontier.json`, `tiers/tier5_standard.json`, `Docs/CHANGELOG.md`, `AGENTS.md`.
+
+**Principe :** Quatre corrections distinctes :
+1. **`node runner.js --submit` seul tombait dans le questionnaire** : --submit n'était qu'un flag de confirmation post-run, jamais une action unitaire. Nouveau module `submit-action.js` : soumission directe d'un carnet existant (PR GitHub + merge auto) sans benchmark.
+2. **Machine à régressions `updateTiers()` (auto-updater.js) — CAUSE RACINE des énoncés perdus** : à chaque run, `updateTiers()` reconstruisait le prompt en coupant tout à partir du header `[ALGORITHMIC EXERCISES...]` et en réattachant le bloc algo de la banque — les énoncés custom placés APRÈS ce bloc (`contrainte_negative_0/1/2`, `contrainte_stricte_3`, `contexte_long_5`, `tache_4i/4j`) étaient effacés du disque à CHAQUE run. C'est pourquoi le bug « revenait » après chaque restauration (1f9874d puis 62e7e4b) sans que personne ne touche aux fichiers. Le prompt reconstruit est désormais `base + algoPrompt + suffix` où `suffix` = contenu suivant le dernier exercice de la banque algo.
+3. **Régression des énoncés par le commit 0a7c5f3** : les prompts de 6 tiers ont été tronqués à la fin (perdant les énoncés restaurés par 62e7e4b). Cause de la demande de l'élève `inclusionai/ling-3.0-flash-fin:free` sur tache_4i : l'énoncé `filtrerCommentaires` n'existait pas, l'exercice était infaisable — le professeur IA a eu tort de le blâmer.
+4. **Section « AMÉLIORATIONS ACTIVES CE RUN » figée** : désormais dynamique — les 5 dernières entrées de `Docs/CHANGELOG.md` (regex `^## (date) — (titre)$`) sont affichées à chaque run.
+
+**Fonctions :**
+- `runSubmitAction(cliArgs)` (dans `submit-action.js`) → action autonome : liste les carnets avec `ecoles` non vides, cible via `--model=` (match model/shortName/displayName) > dernier modifié > choix interactif (TTY), soumet via `communitySync.submitResults`.
+- `listLocalLedgers()` / `findLedgerByName(ledgers, name)` (dans `submit-action.js`) → scan `.carnet/*.json` (exclut les utilitaires comme `classement_snapshot.json` via le champ `ecoles`) et résolution de nom tolérante (casse, tirets/underscores).
+- `getRecentImprovements(n)` / `printActiveImprovements(n, {hybrid})` (dans `cli-help.js`) → parse le CHANGELOG, affiche le bloc dynamique avec repli sur la liste figée si absent.
+- Déclencheur dans `main()` de `runner.js` : `--submit` SANS autre flag de run (`--provider=`, `--preset=`, argument positionnel tier) → action autonome + exit. Avec flags de run → sens historique (confirmation post-run).
+
+**Pour modifier :**
+1. **Changer le nombre d'entrées affichées** : `cliHelp.printActiveImprovements(5, ...)` dans `runner.js` (fin de run).
+2. **Changer la résolution du carnet** : `findLedgerByName()` dans `submit-action.js` (insensible casse/espaces, repli non ambigu par sous-chaîne).
+3. **Désactiver l'action autonome** : retirer le bloc `if (rawCli.includes('--submit') && !hasRunIntent)` dans `main()` de `runner.js` — `--submit` redevient purement post-run.
+4. **Revenir à l'ancien updateTiers() (destructeur)** : remplacer le bloc `suffix` dans `updateTiers()` de `auto-updater.js` par l'ancien `basePrompt.slice(0, idx)` — les énoncés custom seront de nouveau effacés à chaque run.
+5. **Ajouter un énoncé custom** : l'ajouter APRÈS le dernier exercice algo de la banque dans le `prompt` du tier JSON — il sera préservé par le suffixe. Vérifier avec `node -e "const j=require('./tiers/tierX.json'); j.tasks.forEach(t=>{if(!j.prompt.includes(t.id))console.log('MANQUANT: '+t.id)})"` après un run.
+6. **Tester** : `node runner.js --submit` (non-TTY : dernier carnet modifié), `node runner.js --submit --model=<nom>`, `node runner.js --submit --model=inconnu` (rejet propre).
+
+**Pièges :**
+- `--submit` combiné à des flags de run (`all --provider=X --submit`) reste une CONFIRMATION post-run — ne pas retirer le test `hasRunIntent`.
+- Le carnet le plus récent de `.carnet/` peut être un utilitaire sans `ecoles` (`classement_snapshot.json`) — le filtrage par `ecoles` est obligatoire.
+- **updateTiers() réécrit les fichiers tiers à chaque run** : le suffixe après le bloc algo est désormais préservé, mais tout énoncé placé à un autre endroit non conventionnel pourrait être réorganisé. Après ajout d'énoncé, relancer un dry-run puis le scan des manquants.
+- Le professeur IA donne des diagnostics FAUX quand l'énoncé manque (blâme l'élève pour un exercice infaisable) — toujours vérifier l'énoncé AVANT de lire sa correction.
 
 ---
 

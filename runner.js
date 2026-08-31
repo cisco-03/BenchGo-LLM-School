@@ -59,6 +59,7 @@ const { isRattrapageEligibleProfile, shouldReplaceBestResult, explainTechnicalEr
 const hybridMode = require('./hybrid-mode');
 const { exportCsv: exportRunsCsv, detectUnstableModels } = scoreLedger;
 const { resolveOpenRouterSlug, resolveKiloSlug } = require('./model-resolver');
+const { runSubmitAction } = require('./submit-action');
 
 const DEFAULT_CONTEXT_LIMIT_TOKENS = 16384;
 const MAX_RATTRAPAGE_ATTEMPTS = 1;
@@ -1131,6 +1132,27 @@ async function main() {
   if (cliHelp.handleSingleAction(process.argv.slice(2))) {
     logger.close();
     return;
+  }
+
+  // --- --submit autonome (sans autre flag de run) : soumission directe ---
+  // `node runner.js --submit` seul doit soumettre un carnet EXISTANT, pas
+  // lancer le questionnaire de démarrage. On ne déclenche l'action que si
+  // AUCUN flag de benchmark n'est présent (--provider/--model/--preset/positional
+  // tier) : combiné à un run (`all --provider=X --submit`), --submit garde son
+  // sens historique de confirmation post-run.
+  {
+    const rawCli = process.argv.slice(2);
+    const hasRunIntent = rawCli.some(a => a.startsWith('--provider=') || a.startsWith('--preset=')) ||
+                         rawCli.some(a => !a.startsWith('--'));
+    if (rawCli.includes('--submit') && !hasRunIntent) {
+      const preCli = parseCliArgs();
+      logger.info('CLI: action autonome --submit (sans run)');
+      console.log('\n  \x1b[1;36m━━━ COMMUNAUTÉ BENCHGO ━━━\x1b[0m');
+      console.log('  \x1b[90mVos carnets peuvent alimenter le classement public visible par tous les utilisateurs.\x1b[0m\n');
+      await runSubmitAction(preCli);
+      logger.close();
+      return;
+    }
   }
 
   console.log('\n\x1b[36m\u2554\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2557\x1b[0m');
@@ -2927,17 +2949,10 @@ async function main() {
   console.log('');
 
   // --- Objectif visible (§7 Stratégie) ---
-  // Rappelle à l'utilisateur les améliorations actives ce run pour que la
-  // progression soit mesurable à chaque exécution (gain de temps, lisibilité,
-  // fiabilité, données nouvelles). Concret et succinct.
-  console.log(`  \x1b[1;36m━━━ AMÉLIORATIONS ACTIVES CE RUN ━━━\x1b[0m`);
-  console.log(`  \x1b[90m• Cache LRU évaluation (hit-rate journalisé) + cache tiers par profil\x1b[0m`);
-  console.log(`  \x1b[90m• Retry/backoff API (timeout, 429, 5xx) + benchmarking latence/tokens\x1b[0m`);
-  console.log(`  \x1b[90m• Sentinelles sanitaires (NaN, cohérence sommes) en arrière-plan\x1b[0m`);
-  if (hybridFlag) console.log(`  \x1b[90m• Mode hybride : auto-soumission GitHub (seuil ≥ 50%) + file persistante\x1b[0m`);
-  console.log(`  \x1b[90m• Export CSV des runs → Export-Rapports/runs_export.csv (comparaison inter-modèles)\x1b[0m`);
-  console.log(`  \x1b[90m• Dashboard : node leaderboard.js --serve → http://localhost:3939/dashboard\x1b[0m`);
-  console.log('');
+  // Rappelle à l'utilisateur les améliorations actives ce run. DYNAMIQUE :
+  // les 5 dernières entrées du CHANGELOG (Docs/CHANGELOG.md) sont affichées —
+  // la liste historique figée s'était désynchronisée des commits réels.
+  cliHelp.printActiveImprovements(5, { hybrid: hybridFlag });
 
   // Récupère le rapport du dernier run pour le stocker dans le résumé.
   let lastReportFile = null;
