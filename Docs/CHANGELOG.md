@@ -1,5 +1,35 @@
 # CHANGELOG - Carnet de Notes BenchGo
 
+## 2026-08-31 (e) — fix(leaderboard) : modèles cloud FRONTIER classés à tort dans les modèles locaux
+
+### Contexte
+Un modèle cloud testé via `frontier-batch.js` avec un provider local
+(`ollama`, `custom`...) se retrouvait dans la section « 🏠 MODÈLES LOCAUX ·
+LM Studio » du classement CLI. Exemple : `kimi-k2.7-code` (Ollama cloud,
+profil FRONTIER, école Post-Doctorat) classé 1er des modèles locaux alors
+qu'il n'a rien à voir avec LM Studio.
+
+### Cause racine
+Dans `aggregateLedger()` (`leaderboard.js`), `isCloud` était calculé ainsi :
+si le carnet a un `provider`, on ne se fiait QU'À la table `LOCAL_PROVIDERS`
+(`local`, `lmstudio`, `ollama`, `custom`). Or `ollama` y figure (pour les
+serveurs Ollama locaux) → un Ollama **distant** (cloud) était donc classé
+local, en ignorant le signal fort « école Post-Doctorat / profil FRONTIER »
+qui est réservé au cloud.
+
+### Changement
+Le signal FRONTIER (école `Post-Doctorat`) et l'heuristique
+`detectIsCloudFromLedger` (slug `:free`, tentative FRONTIER) priment
+désormais sur la classification par provider. Un modèle testé en FRONTIER
+est TOUJOURS cloud, quel que soit son provider.
+
+### Pièges
+- Un modèle Ollama **local** testé en LIGHT/STANDARD (jamais FRONTIER) reste
+  correctement classé local : le signal FRONTIER est absent.
+- Le fix est rétroactif : les carnets existants sans `provider` (anciens)
+  comme ceux avec `provider: "ollama"` sont reclassés au prochain
+  `node leaderboard.js`.
+
 ## 2026-08-31 (d) — feat(cli) : demander « garder la clé mémorisée ou nouvelle ? »
 
 ### Contexte

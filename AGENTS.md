@@ -786,6 +786,23 @@ Le **pre-flight check** (détection rate-limit 200/400 vide, section ci-dessous)
 - **updateTiers() réécrit les fichiers tiers à chaque run** : le suffixe après le bloc algo est désormais préservé, mais tout énoncé placé à un autre endroit non conventionnel pourrait être réorganisé. Après ajout d'énoncé, relancer un dry-run puis le scan des manquants.
 - Le professeur IA donne des diagnostics FAUX quand l'énoncé manque (blâme l'élève pour un exercice infaisable) — toujours vérifier l'énoncé AVANT de lire sa correction.
 
+### Modèles cloud FRONTIER classés à tort dans les modèles locaux (tâche 2026-08-31e)
+
+**Fichiers touchés :** `leaderboard.js`, `Docs/CHANGELOG.md`, `AGENTS.md`.
+
+**Principe :** Un modèle cloud testé via `frontier-batch.js` avec un provider local (`ollama`, `custom`...) se retrouvait dans la section « 🏠 MODÈLES LOCAUX · LM Studio » du classement CLI. Exemple : `kimi-k2.7-code` (Ollama cloud, profil FRONTIER, école Post-Doctorat) classé 1er des locaux. Cause : dans `aggregateLedger()`, `isCloud` ne se fiait QU'À `LOCAL_PROVIDERS` quand le carnet a un `provider` — or `ollama` y figure (serveurs locaux) → un Ollama distant était classé local, en ignorant le signal FRONTIER.
+
+**Changement :** Le signal FRONTIER (école `Post-Doctorat`) et `detectIsCloudFromLedger` (slug `:free`, tentative FRONTIER) priment désormais sur la classification par provider. Un modèle testé en FRONTIER est TOUJOURS cloud, quel que soit son provider.
+
+**Pour modifier :**
+1. **Revenir à la classification par provider seul** : remplacer le bloc `isCloud` dans `aggregateLedger()` (`leaderboard.js`) par l'ancien `ledger.provider ? !LOCAL_PROVIDERS.has(...) : (...)`.
+2. **Tester** : `node leaderboard.js` — un modèle cloud FRONTIER avec provider `ollama`/`custom` doit apparaître dans la section cloud, jamais dans les locaux.
+
+**Pièges :**
+- Un modèle Ollama **local** testé en LIGHT/STANDARD (jamais FRONTIER) reste correctement classé local : le signal FRONTIER est absent.
+- Le fix est rétroactif : les carnets existants (avec ou sans `provider`) sont reclassés au prochain `node leaderboard.js`.
+- `LOCAL_PROVIDERS` (`local`, `lmstudio`, `ollama`, `custom`) sert à distinguer les serveurs OpenAI-compat locaux des API distantes — mais un provider local peut être utilisé en mode cloud (Ollama distant). Le signal FRONTIER est le seul discriminant fiable.
+
 ---
 
 ## Vérifications après modification

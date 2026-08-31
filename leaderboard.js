@@ -360,11 +360,16 @@ function aggregateLedger(ledger) {
     // via l'heuristique detectIsCloudFromLedger (slug :free, profil FRONTIER
     // dans les attempts, format org/model sans quantization).
     provider: ledger.provider || detectProviderFromLedger(ledger) || null,
-    isCloud: (ledger.provider
-        ? !LOCAL_PROVIDERS.has(String(ledger.provider).toLowerCase())
-        : ((ledger.isCloud === true)
-          || ecoles.some(e => e.ecole === 'Post-Doctorat')
-          || detectIsCloudFromLedger(ledger))),
+    // Un modèle testé en FRONTIER (école "Post-Doctorat") est TOUJOURS cloud,
+    // quel que soit son provider (ex: Ollama distant via frontier-batch). Ce
+    // signal fort prime sur la classification par provider, sinon un modèle
+    // cloud dont le provider est dans LOCAL_PROVIDERS (ollama, custom...) se
+    // retrouverait à tort dans la section des modèles locaux.
+    isCloud: (ecoles.some(e => e.ecole === 'Post-Doctorat')
+      || detectIsCloudFromLedger(ledger)
+      || (ledger.provider
+          ? !LOCAL_PROVIDERS.has(String(ledger.provider).toLowerCase())
+          : (ledger.isCloud === true))),
     // --- Tarif cloud estimé (tâche 2026-08-04) ---
     // Les tokens estimés servent au calcul du coût. Si les champs détaillés
     // sont absents (anciens carnets), on estime promptTokens ≈ 3×completion
