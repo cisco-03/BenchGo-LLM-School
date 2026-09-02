@@ -4680,6 +4680,11 @@ function printUntestedLmStudioModels() {
       let missing = nightBatch.missingSchoolsLabel(m.status) || '—';
       if (m.status.failedSchool) {
         missing = '⚠ ' + m.status.failedSchool + ' : échec run';
+      } else if (m.status.noCarnet && m.status.reason) {
+        // PARTIEL sans carnet (bug 2026-09-02) : testé par tiers mais aucune
+        // école validée — la raison est plus informative que la liste brute
+        // des écoles manquantes.
+        missing = m.status.reason;
       }
       rows.push([modelKeyDisplayLabel(m), m.params || '?', m.quant || '?', badge.label, missing]);
     }
@@ -4692,6 +4697,10 @@ function printUntestedLmStudioModels() {
     }
     if (failed.length > 0) {
       console.log(`  \x1b[90m${failed.length} modèle(s) en échec (load_failed / run KO). Repassez-les après vérification, ou isolez-les (!<num>) s'ils ne sont pas testables.\x1b[0m`);
+    }
+    const noCarnetCount = partial.filter(m => m.status.noCarnet).length;
+    if (noCarnetCount > 0) {
+      console.log(`  \x1b[90m${noCarnetCount} modèle(s) PARTIEL « sans carnet » : exercices déjà passés (rapports de tiers) mais aucune école consolidée dans le carnet — relancez node night-batch.js pour générer le carnet.\x1b[0m`);
     }
     console.log(`  \x1b[90mAstuce : node night-batch.js pour tester ces modèles automatiquement.\x1b[0m`);
   }

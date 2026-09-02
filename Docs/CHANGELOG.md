@@ -1,5 +1,127 @@
 # CHANGELOG - Carnet de Notes BenchGo
 
+## 2026-09-02 (b) — feat(night-batch) : --skip (passer au modèle suivant) + --resume (reprendre où la session s'était arrêtée)
+
+### Contexte (1) : Ctrl+C tuait tout le batch
+Ctrl+C reste réservé à l'arrêt COMPLET (décharge des modèles LM Studio +
+arrêt du serveur) — comportement historique volontairement préservé. Mais il
+n'existait AUCUN moyen d'écourter UN modèle sans tout arrêter : un modèle
+lent/verbeux en milieu de nuit condamnait la session (tout tuer = perdre la
+file, laisser tourner = perdre des heures).
+
+### Changement (1) : sentinelle `--skip`
+`node night-batch.js --skip` (dans un second terminal) écrit la sentinelle
+`.benchgo-skip`. Le batch en cours la détecte en ≤3 s (`SKIP_POLL_MS`),
+kill l'arbre du runner (`taskkill /T /F` sous Windows), consigne le résultat
+« passé avec --skip » (ni échec ni auto-blacklist ni `run_ko` dans
+l'historique — un modèle écourté n'est pas un modèle défaillant) et enchaîne
+sur le modèle suivant. La file continue intégralement.
+
+**Prérequis technique** : `runBenchmark()` est passé de `spawnSync` à `spawn`
+asynchrone — l'event loop du batch doit rester vivante pour poller la
+sentinelle ET le timeout pendant le run. Le timeout est désormais géré par le
+poll (kill déterministe, plus de signal SIGTERM à interpréter : sous Windows
+`taskkill /F` ne produit pas de signal exploitable) ; la cause du kill
+('skip'/'timeout') est tracée par le poll lui-même.
+
+### Contexte (2) : un modèle arrêté repartait de zéro
+Une session interrompue (Ctrl+C, plantage, nuit trop courte) ou un
+tier-by-tier filtré laissait le modèle sans carnet ; le relancer la nuit
+suivante rejouait TOUT depuis le début (écoles déjà validées comprises).
+
+### Changement (2) : `--resume` à l'exercice près
+- **Écoles** : les écoles déjà présentes au carnet (`ledgerSchoolKeys` via
+  `matchLedger`) sont ignorées — pas de double emploi.
+- **Tiers** (mode classe-par-classe) : chaque tier réellement passé
+  (réussi OU échoué — interrompu ≠ passé) est mémorisé dans
+  `.benchgo-progress.json` (`{ "<modelKey>|<schoolKey>": { done: [tiers],
+  updatedAt } }`, purge auto des entrées > 30 jours). Avec `--resume`, ces
+  tiers sont sautés ; le batch reprend exactement là où il s'était arrêté,
+  puis la consolidation « all » écrit le carnet complet de l'école.
+- La progression est purgée quand l'école est consolidée (carnet écrit) ;
+  un kill `--skip`/timeout pendant la consolidation la préserve.
+
+### Pièges
+- `--skip` interrompt AUSSI la consolidation — la progression des tiers est
+  conservée pour une reprise `--resume` ultérieure.
+- Un tier killé (timeout ou `--skip`) n'est PAS mémorisé dans la progression :
+  interrompu doit être rejoué.
+- `--resume` sans `--class-by-class` ignore uniquement les écoles du carnet
+  (pas de reprise intra-école en mode classique : le runner ne sauvegarde
+  pas les résultats par tier).
+- La sentinelle est consommée par le batch ; un `--skip` tapé sans batch en
+  cours reste sur disque et sera consommé au prochain batch (délai ≤3 s).
+- `runBenchmark` est devenu asynchrone : tout appelant futur doit l'`await`.
+
+## 2026-09-02 — fix(gitignore + night-batch) : GGUF Tracker 404 sur GitHub Pages + modèles testés affichés « JAMAIS TESTÉ »
+
+### Contexte (1) : 404 sur gguf-tracker.html
+La modale « 📡 GGUF Tracker » du classement communautaire en ligne renvoyait
+`404 File not found` : le fichier `gguf-tracker.html` n'existait pas sur la
+branche `gh-pages`. `consolidate-leaderboard.js` le copie bien dans
+`gh-pages-output/`, mais le workflow CI (`consolidate.yml`) fait un checkout
+du dépôt avant de générer — et `scripts/gguf-tracker.html` n'était **pas
+versionné** : le `.gitignore` ignore tout par défaut (`*`) et ne ré-autorise
+que `!*.js`. Le seul fichier HTML du projet était donc invisible pour git, la
+copie CI échouait silencieusement (le `copyFileSync` est protégé par
+`existsSync`) et GitHub Pages servait un 404.
+
+### Changement (1)
+`.gitignore` : nouvelle exception `!scripts/gguf-tracker.html` (section 4bis).
+Le fichier est désormais trackable. **Il reste à le commit/push** puis relancer
+`gh workflow run consolidate.yml` pour réparer le 404 en ligne.
+
+### Contexte (2) : 5 modèles testés affichés « JAMAIS TESTÉ »
+`node leaderboard.js` listait HarnessLLM SFT Qwen3 4B, Kai Os Grug 12B (IQ4_NL
+et Q6_K_L) et Ornith 1.5 9B (Q6_K) comme jamais testés, alors que des sessions
+tier-by-tier les avaient réellement faits passer (rapports `Classe-N-*` des
+31/08 et 01/09) et que l'historique des runs (`.benchgo-run-history.json`)
+les enregistrait `ok`. Ornith Q4_K_M apparaissait PARTIEL à juste titre.
+
+### Cause racine (2)
+Le carnet de scores n'est écrit par le runner QUE si `tierArg === "all"`. En
+mode classe-par-classe, chaque tier tourne dans un process séparé
+(`tierArg = <numéro>`) → aucun carnet. La consolidation « run all » de
+`runSchoolClassByClass()` était le seul chemin vers le carnet, mais elle était
+sautée dès qu'un filtre de tiers existait (même couvrant tous les
+obligatoires) ou qu'un tier obligatoire échouait. Résultat : des écoles
+entières passées sans aucune trace dans les carnets, et un affichage
+« JAMAIS TESTÉ » mensonger.
+
+### Changements (2)
+- **`night-batch.js` — consolidation** : le run « all » post-tiers se
+  déclenche désormais dès que la sélection couvre TOUS les tiers obligatoires
+  du profil (filtre ou pas), et même si un obligatoire a échoué (parité avec
+  le mode classique : un échec d'école laisse quand même une tentative dans
+  le carnet). Timeout de sécurité ajouté : `TIER_TIMEOUT_MS × nb tiers du
+  profil` (le run « all » ne doit pas réintroduire le hang infini).
+  Si la sélection ne couvre pas les obligatoires, un avertissement explicite
+  explique que le modèle restera sans carnet.
+- **`night-batch.js` — statut PARTIEL sans carnet** : `listLlmModels()` classe
+  désormais en `partial` (raison « Tiers testés, carnet absent ») un modèle
+  sans carnet mais dont l'historique des runs contient une entrée `ok` OU dont
+  des rapports de tiers existent sur disque (nouveau scan
+  `scanTierReportShortNames()` sur les noms de fichiers
+  `rapport_v3_*_tier<N>_*.md` — noms seuls, pas de contenu, cache module).
+  Un modèle réellement jamais passé reste « JAMAIS TESTÉ ».
+- **`leaderboard.js` + `night-batch.js` (affichage)** : la colonne
+  « Écoles manquantes » montre la raison pour ces PARTIEL sans carnet, plus
+  une ligne de synthèse (« relancez node night-batch.js pour générer le
+  carnet »).
+
+### Pièges
+- La consolidation re-teste l'école EN ENTIER (c'est le seul chemin qui écrit
+  le carnet) : une session tier-by-class avec tous les obligatoires coûte
+  ~2× le temps. Compromis assumé en mode nuit.
+- Le scan des rapports ne lit que les NOMS de fichiers ; un rapport de tier
+  renommé manuellement ou supprimé n'est plus détecté.
+- `scanTierReportShortNames()` met en cache le résultat pour le process :
+  dans un `--list-only` Fraîchement lancé après suppression de rapports, le
+  cache est recalculé (nouveau process).
+- Les 5 modèles concernés gardent leurs carnets VIDES : le statut PARTIEL est
+  désormais honnête, mais pour qu'ils entrent au classement il faut relancer
+  `node night-batch.js` (la consolidation réécrit le carnet automatiquement).
+
 ## 2026-08-31 (e) — fix(leaderboard) : modèles cloud FRONTIER classés à tort dans les modèles locaux
 
 ### Contexte

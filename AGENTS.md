@@ -11,6 +11,8 @@ OS : Windows, PowerShell 5.1. Projet Node.js 18+ **sans `package.json`** (module
 | Benchmark interactif | `node runner.js all` |
 | Mode nuit (batch local) | `node night-batch.js` |
 | Mode nuit classe-par-classe (robustesse anti-hang) | `node night-batch.js --class-by-class` (ou `--cbc`) |
+| Écourter le modèle en cours sans tuer le batch | `node night-batch.js --skip` (second terminal, sentinelle ≤3 s) |
+| Reprendre une session interrompue (écoles au carnet + tiers passés sautés) | `node night-batch.js --resume` |
 | Mode batch cloud (frontière) | `node frontier-batch.js` |
 | Mode batch cloud (petits modèles) | `node frontier-batch.js --profile=STANDARD` (ou `LIGHT`) |
 | Mode batch cloud (profil par modèle) | `node frontier-batch.js --profile=AUTO` |
@@ -347,6 +349,7 @@ Si modèle > 3B paramètres, le runner peut enchaîner LIGHT puis STANDARD dans 
 - L'iframe charge `gguf-tracker.html` en **chemin relatif**. Sur le serveur local, cela pointe vers la route `/gguf-tracker.html`. Sur GitHub Pages, vers `gh-pages-output/gguf-tracker.html`. Si le fichier est absent → iframe 404 (pas de crash).
 - Le tracker fait des `fetch()` vers `huggingface.co` depuis le navigateur (CORS ouvert sur l'API HF publique, pas de clé nécessaire).
 - `consolidate-leaderboard.js` copie le tracker avec `fs.copyFileSync`. Si `scripts/gguf-tracker.html` est absent, un avertissement est loggé mais la génération continue.
+- **Le fichier DOIT être versionné dans git** (exception `.gitignore` `!scripts/gguf-tracker.html`, section 4bis). La CI fait un checkout du dépôt AVANT de lancer `consolidate-leaderboard.js` : un fichier non-commité n'existe pas en CI → copie silencieusement sautée → **404 GitHub Pages** (bug 2026-09-02). Après toute modification du tracker : commit + push + `gh workflow run consolidate.yml -R cisco-03/BenchGo-LLM-School`.
 
 ### Bandeaux → Badges dans l'en-tête (tâche 2026-08-08)
 
@@ -680,23 +683,63 @@ Le **pre-flight check** (détection rate-limit 200/400 vide, section ci-dessous)
 - Les exercices de base (`tache_0a` etc.) utilisent des IDs différents dans le prompt (`0-A`, `0-B`) — c'est historique, le parser extrait les fonctions par nom (`direBonjour`), pas par ID. Seuls les exercices algorithmiques et `contrainte_negative_*` utilisent leur ID dans le prompt.
 - Les fonctions de référence dans `verify_tiers.js` (lignes 117-121) doivent rester cohérentes avec les évaluateurs `exec` des tiers.
 
-### Carnet non sauvegardé en mode classe-par-classe (tâche 2026-08-27)
+### Carnet non sauvegardé en mode classe-par-classe (tâche 2026-08-27, renforcée 2026-09-02)
 
-**Fichiers touchés :** `night-batch.js`, `Docs/CHANGELOG.md`, `AGENTS.md`.
+**Fichiers touchés :** `night-batch.js`, `leaderboard.js`, `.gitignore`, `Docs/CHANGELOG.md`, `AGENTS.md`.
 
 **Principe :** Le mode classe-par-classe (`--class-by-class` / `--cbc`) lance chaque tier dans un process séparé avec `tierArg = numéro du tier`. Or le runner ne sauvegarde le carnet QUE si `tierArg === "all"` (`runner.js:2654`). En mode classe-par-classe, le carnet n'est jamais écrit → le leaderboard affiche les modèles comme "JAMAIS TESTÉS" malgré des rapports valides.
 
-**Changement :** `runSchoolClassByClass()` lance désormais un run `all` de consolidation après les tiers, si : (1) tous les obligatoires ont réussi, (2) aucun filtre de tier, (3) l'école ne s'est pas arrêtée. Ce run re-teste toute l'école d'un coup pour sauvegarder le carnet correctement.
+**Changement :** `runSchoolClassByClass()` lance un run `all` de consolidation après les tiers, si : (1) la sélection (filtre compris) couvre TOUS les tiers obligatoires du profil — `mandatoryCovered` (renfort 2026-09-02 : avant, un filtre de tiers bloquait la consolidation même quand tous les obligatoires étaient couverts → HarnessLLM/Grug/Ornith passés par tiers puis affichés « JAMAIS TESTÉ »), (2) l'école ne s'est pas arrêtée (mode Manuel). Un tier obligatoire échoué ne bloque plus la consolidation : parité avec le mode classique (un échec d'école laisse quand même une tentative dans le carnet). Timeout de sécurité : `TIER_TIMEOUT_MS × (mandatory + optional)` pour ne pas réintroduire le hang infini.
+
+**Statut PARTIEL « sans carnet » (2026-09-02) :** `listLlmModels()` classe désormais en `partial` (raison « Tiers testés, carnet absent », flag `noCarnet: true`) un modèle sans carnet mais (a) ayant une entrée `ok` dans `.benchgo-run-history.json`, OU (b) ayant des rapports de tiers sur disque — `scanTierReportShortNames()` scanne les NOMS de fichiers `rapport_v3_<shortName>_<profil>_tier<N>_*.md` sous `Export-Rapports/` (cache module, noms seuls). La colonne « Écoles manquantes » de `--list-only` et du leaderboard affiche la raison au lieu de la liste brute.
 
 **Pour modifier :**
-1. **Désactiver la consolidation** : commenter le bloc `if (allMandatoryOk && !tierFilter && !stopped)` dans `runSchoolClassByClass()`.
-2. **Consolider même en cas d'échec** : retirer `allMandatoryOk` (le carnet sauvegarderait un score incomplet).
+1. **Désactiver la consolidation** : commenter le bloc `if (mandatoryCovered && !stopped)` dans `runSchoolClassByClass()`.
+2. **Revenir à l'ancienne condition** : remplacer `mandatoryCovered` par `allMandatoryOk && !tierFilter` (consolidation seulement si tous les obligatoires réussissent ET pas de filtre).
 3. **Éviter le re-test complet** : implémenter la sauvegarde du carnet en mode tier unique dans `runner.js` (modifier `saveAndBuildBilan` pour gérer les résultats partiels par tier).
+4. **Changer la raison affichée** : éditer la chaîne `'Tiers testés, carnet absent'` dans `listLlmModels()` (night-batch.js) — largeur de colonne recalculée dessus.
+5. **Désactiver le scan des rapports** : commenter l'appel `modelHasTierReports(modelKey)` dans `listLlmModels()` (le statut retombe sur l'historique des runs seul).
 
 **Pièges :**
 - Le run de consolidation double le temps par modèle (re-test complet). C'est volontaire : le carnet est un cumul multi-écoles qui nécessite un run complet.
-- Si la consolidation échoue (modèle instable entre les runs), le carnet peut être absent. Un avertissement est affiché.
-- La consolidation ne se déclenche qu'avec `--class-by-class`. Le mode classique lance déjà un run `all`.
+- Si la consolidation échoue ou timeout (kill SIGTERM), le carnet est possiblement absent pour cette école. Un avertissement est affiché.
+- La consolidation ne se déclen qu'avec `--class-by-class`. Le mode classique lance déjà un run `all`.
+- Le scan des rapports ne détecte que les fichiers `*_tier<N>_*` NON renommés ; un rapport supprimé n'est plus une preuve de test.
+- Un modèle dont la sélection ne couvre PAS les obligatoires reste volontairement sans carnet (test rapide) — le statut PARTIEL « sans carnet » l'indique honnêtement.
+- GGUF Tracker : `scripts/gguf-tracker.html` DOIT être versionné (exception `.gitignore` `!scripts/gguf-tracker.html`). Sans commit du fichier, la CI ne le copie pas dans `gh-pages-output/` → 404 GitHub Pages (bug 2026-09-02).
+
+### --skip (passer au modèle suivant) + --resume (reprise à l'exercice près) (tâche 2026-09-02b)
+
+**Fichiers touchés :** `night-batch.js`, `Docs/CHANGELOG.md`, `AGENTS.md`.
+
+**Principe :** Ctrl+C reste l'arrêt COMPLET (décharge + serveur) — comportement historique préservé, ne pas le détourner. Deux nouveaux mécanismes :
+
+1. **`--skip`** (one-shot, second terminal) : écrit la sentinelle `.benchgo-skip`. Le batch la détecte en ≤3 s (`SKIP_POLL_MS`), kill l'arbre du runner (`taskkill /T /F` sous Windows — pas de signal SIGTERM exploitable), consigne « passé avec --skip » (PAS de run_ko, PAS d'auto-blacklist — un modèle écourté n'est pas défaillant) et passe au modèle suivant. Fonctionne en mode classique ET classe-par-classe, pendant un tier OU pendant la consolidation (dans ce cas la progression est préservée).
+
+2. **`--resume`** : (a) ignore les écoles déjà au carnet (`matchLedger` + `ledgerSchoolKeys`), (b) en classe-par-classe, saute les tiers mémorisés dans `.benchgo-progress.json` — chaque tier réellement passé (réussi OU échoué) est enregistré par `recordProgressTier()` après chaque run non-killé. Le batch reprend à l'exercice près, puis la consolidation « all » écrit le carnet et purge la progression (`clearProgress()`).
+
+**Fonctions :**
+- `skipRequested()` / `consumeSkip()` / `killActiveRunner()` → sentinelle fichier `.benchgo-skip` (cross-process, aucun stdin — le runner enfant monopolise le clavier via stdio inherit).
+- `runBenchmark(modelKey, schoolCli, extraArgs, { tierNum, timeoutMs })` → **async depuis cette tâche** (spawn + poll sentinelle/timeout). Retourne `{ ok, status, durationMs, timedOut, skipped, signal }`. La cause du kill est déterminée par le poll (`killReason`), pas par le signal.
+- `runSchoolClassByClass(..., resumeTiersDone)` → async, 7e paramètre = tiers déjà passés (--resume). Retour ajoute `skippedByUser`.
+- `loadProgress()/saveProgress()/getProgressTiers()/recordProgressTier()/clearProgress()` → `.benchgo-progress.json`, clé `<modelKey>|<schoolKey>`, purge auto > 30 jours.
+
+**Pour modifier :**
+1. **Changer le délai de réaction du --skip** : éditer `SKIP_POLL_MS` (night-batch.js, const en haut).
+2. **Désactiver la reprise par tier** : commenter l'appel `getProgressTiers()` dans main() et le paramètre `resumeTiersDone` (la reprise écoles-au-carnet fonctionne toujours).
+3. **Désactiver la mémorisation des tiers passés** : commenter `recordProgressTier()` dans `runSchoolClassByClass()`.
+4. **Changer la rétention de la progression** : éditer le cutoff `30 * 24 * 3600 * 1000` dans `loadProgress()`.
+5. **Revenir au spawnSync (pas de --skip possible)** : réécrire `runBenchmark()` avec `spawnSync` — les appelants devront retirer les `await`.
+6. **Tester** : `--skip` → lancer un batch, `node night-batch.js --skip` dans un autre terminal, vérifier « écourté — passage au modèle suivant » + bilan « passé avec --skip ». `--resume` → relancer le même modèle/école : « N tier(s) déjà passé(s) ignoré(s) » et 0.0 min si tout était fait.
+
+**Pièges :**
+- `--skip` pendant la consolidation : `skippedByUser` est remonté APRÈS la consolidation → pas de recordRun mensonger, progression préservée (pas de clearProgress).
+- Un tier killé (timeout OU --skip) n'est PAS mémorisé dans `.benchgo-progress.json` — interrompu ≠ passé, il sera rejoué.
+- `--resume` sans `--class-by-class` ne fait que sauter les écoles du carnet (le runner ne sauvegarde rien par tier en mode classique).
+- Un `--skip` tapé sans batch en cours reste sur disque → consommé au prochain batch (démarrage ≤3 s après le lancement du 1er run). Supprimer `.benchgo-skip` pour l'annuler.
+- `runBenchmark` est ASYNC : tout nouvel appelant doit `await` (les 3 sites actuels : tiers cbc, consolidation, mode classique).
+- La sentinelle ne traverse PAS `--list-only`/`--isoler` (one-shot quittent avant tout run) — seul un batch avec runs actifs la consomme.
+- Ne PAS utiliser Ctrl+C pour « passer au suivant » : le handler SIGINT décharge les modèles et quitte le process entier (c'est son rôle).
 
 ### Audit complet des exercices — 8 bugs corrigés (tâche 2026-08-30)
 

@@ -27,6 +27,12 @@ analyze_and_fix.js
 generate_tiers.js
 update_tiers_script.js
 
+# --- 4bis. GGUF Tracker (asset HTML publié sur GitHub Pages via consolidate-leaderboard.js) ---
+# Le tracker est copié dans gh-pages-output/ à chaque consolidation, mais le
+# workflow CI ne le voit que s'il est versionné dans le dépôt. Sans cette
+# exception, GitHub Pages renvoie 404 sur gguf-tracker.html (bug 2026-09-02).
+!scripts/gguf-tracker.html
+
 # --- 5. Données du benchmark : configuration des tiers ---
 !/tiers/
 tiers/**

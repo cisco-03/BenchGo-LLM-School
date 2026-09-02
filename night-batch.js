@@ -45,6 +45,45 @@ const LMSTUDIO_HOST = 'http://localhost:1234';
 const HTTP_TIMEOUT_MS = 4000;
 const LEDGER_DIR = path.join(PROJECT_ROOT, 'Export-Rapports', '.carnet');
 
+// --- Skip du modèle en cours (commande one-shot `--skip`) ---
+// Ctrl+C reste réservé à l'arrêt COMPLET du batch (décharge des modèles + arrêt
+// du serveur LM Studio) — comportement historique qu'il ne faut pas casser.
+// Pour passer au modèle suivant SANS tout arrêter (modèle lent, verbeux,
+// conversation sans intérêt), on écrit un fichier sentinelle depuis un
+// SECOND terminal : `node night-batch.js --skip`. Le batch détecte la
+// sentinelle (poll toutes les SKIP_POLL_MS), tue le runner en cours (kill de
+// l'arbre du process enfant), consigne un résultat 'skipped' et enchaîne sur
+// le modèle suivant. Aucune interaction stdin : le runner enfant tourne avec
+// stdio 'inherit' et monopoliserait le clavier — la sentinelle fichier est le
+// seul canal fiable cross-process sous Windows/PowerShell.
+const SKIP_FILE = path.join(PROJECT_ROOT, '.benchgo-skip');
+const SKIP_POLL_MS = 3000;
+let _activeRunner = null; // child_process du runner en cours (null si aucun)
+
+function skipRequested() {
+  try { return fs.existsSync(SKIP_FILE); }
+  catch (_) { return false; }
+}
+
+function consumeSkip() {
+  try { fs.unlinkSync(SKIP_FILE); } catch (_) {}
+}
+
+// Kill de l'arbre du runner enfant (Windows : taskkill /T /F sinon SIGTERM).
+function killActiveRunner() {
+  if (!_activeRunner || _activeRunner.killed || _activeRunner.exitCode !== null) return false;
+  const pid = _activeRunner.pid;
+  if (!pid) return false;
+  try {
+    if (process.platform === 'win32') {
+      spawnSync('taskkill', ['/PID', String(pid), '/T', '/F'], { windowsHide: true, timeout: 15000 });
+    } else {
+      try { _activeRunner.kill('SIGTERM'); } catch (_) {}
+    }
+  } catch (_) {}
+  return true;
+}
+
 // Mappe un nom d'ecole humain (ex: "Primaire", "College-Lycee") vers la cle
 // SCHOOLS correspondante (ex: "LIGHT", "STANDARD"). Sert a afficher quelles
 // ecoles ont deja ete passees par un modele depuis son carnet de scores.
@@ -835,6 +874,80 @@ function buildMtpAssociations(allModels) {
   return assoc;
 }
 
+// Scan les NOMS de fichiers des rapports tier-by-tier (mode classe-par-classe)
+// dans Export-Rapports/ et collecte les shortNames normalisés des modèles
+// ayant au moins un rapport de tier. Seuls les noms de fichiers sont lus (pas
+// le contenu) : le scan reste rapide même avec des semaines de rapports.
+//
+// But : distinguer un modèle « JAMAIS TESTÉ » réel d'un modèle testé par tiers
+// mais sans carnet d'école complet. Les sessions tier-by-tier interrompues
+// (Ctrl+C, timeout, tiers filtrés) ne passent jamais par le run "all" qui
+// seul écrit le carnet → le modèle apparaissait à tort comme jamais testé
+// (bug 2026-09-02). Les rapports de tiers sont la seule trace restante.
+//
+// Format des fichiers : rapport_v3_<shortName>_<profil>_tier<N>_<hh-mm-ss>.md
+// ex: rapport_v3_ornith-1.5-9b_q4_k_m_standard_tier0_07-33-10.md
+// Le shortName extrait contient le suffixe de quantification (ex: _q4_k_m).
+const EXPORTS_ROOT = path.join(PROJECT_ROOT, 'Export-Rapports');
+let _tierReportShortNamesCache = null;
+
+function scanTierReportShortNames() {
+  if (_tierReportShortNamesCache) return _tierReportShortNamesCache;
+  const seen = new Set();
+  try {
+    if (fs.existsSync(EXPORTS_ROOT)) {
+      for (const dateDir of fs.readdirSync(EXPORTS_ROOT)) {
+        const datePath = path.join(EXPORTS_ROOT, dateDir);
+        let stat;
+        try { stat = fs.statSync(datePath); } catch (_) { continue; }
+        if (!stat.isDirectory()) continue;
+        if (dateDir.startsWith('.') || dateDir === '.carnet' || dateDir === '.carnet-backup') continue;
+        for (const ecoleDir of fs.readdirSync(datePath)) {
+          const ecolePath = path.join(datePath, ecoleDir);
+          let st2;
+          try { st2 = fs.statSync(ecolePath); } catch (_) { continue; }
+          if (!st2.isDirectory()) continue;
+          for (const classeDir of fs.readdirSync(ecolePath)) {
+            const classePath = path.join(ecolePath, classeDir);
+            let st3;
+            try { st3 = fs.statSync(classePath); } catch (_) { continue; }
+            if (!st3.isDirectory()) continue;
+            for (const f of fs.readdirSync(classePath)) {
+              const m = f.match(/^rapport_v3_(.+)_tier(\d+)_\d{2}-\d{2}-\d{2}\.md$/);
+              if (!m) continue;
+              // Le shortName capturé inclut le token de profil final
+              // (ex: "..._standard") : on le retire.
+              const sn = m[1].replace(/_(light|standard|expert|doctorat|frontier)$/i, '');
+              if (sn) seen.add(normalizeForMatch(sn));
+            }
+          }
+        }
+      }
+    }
+  } catch (_) { /* Export-Rapports illisible : pas de repli, ensemble vide */ }
+  _tierReportShortNamesCache = seen;
+  return seen;
+}
+
+// Indique si des rapports de tiers existent pour un modelKey lms ls donné.
+// Stratégie : égalité normalisée stricte (le shortName des rapports embarque
+// la quantification, comme le modelKey) ; à défaut, inclusion du nom de base
+// sans quantif (pour les modelKey lms sans @quant — le shortName du rapport
+// porte alors un suffixe _quant que le modelKey n'a pas).
+function modelHasTierReports(modelKey) {
+  const seen = scanTierReportShortNames();
+  if (seen.size === 0) return false;
+  const nk = normalizeForMatch(modelKey);
+  if (nk && seen.has(nk)) return true;
+  const base = normalizeForMatch(String(modelKey || '').split('@')[0]);
+  if (base && base.length >= 4) {
+    for (const sn of seen) {
+      if (sn.includes(base)) return true;
+    }
+  }
+  return false;
+}
+
 // Liste les modeles LLM telecharges via lms ls --json --llm. Chaque modele est
 // enrichi d'un statut de test (deja teste / partiel / jamais teste) calcule en
 // croisant son modelKey avec les carnets de scores existants. Les fichiers MTP
@@ -918,7 +1031,28 @@ function listLlmModels() {
             attempts: failedRun.attempts || 1
           };
         } else {
-          status = { kind: 'never', tested: [], missing: relevantKeys.slice(), quant: ledger ? ledger.quantization : null };
+          // Bug 2026-09-02 : un modèle peut avoir été réellement testé (run
+          // historique OK, ou rapports de tiers sur disque) sans qu'aucun
+          // carnet d'école n'ait été écrit — sessions tier-by-tier avec
+          // filtre, interruption Ctrl+C, ou tiers obligatoire échoué avant
+          // le fix de consolidation. L'afficher « JAMAIS TESTÉ » est faux et
+          // pousse à retester un modèle déjà passé. On le classe PARTIEL
+          // sans école validée, avec la raison explicite.
+          const histEntry = runHistory[modelKey] || null;
+          const hasTierReports = modelHasTierReports(modelKey);
+          if (histEntry || hasTierReports) {
+            status = {
+              kind: 'partial', tested: [], missing: relevantKeys.slice(),
+              quant: ledger ? ledger.quantization : null,
+              // Raison compacte : affichée telle quelle dans la colonne
+              // « Écoles manquantes » (largeur calculée sur ces labels).
+              reason: 'Tiers testés, carnet absent',
+              lastAttempt: histEntry ? histEntry.lastAttempt : null,
+              noCarnet: true
+            };
+          } else {
+            status = { kind: 'never', tested: [], missing: relevantKeys.slice(), quant: ledger ? ledger.quantization : null };
+          }
         }
       } else if (missingSchools.length === 0) {
         status = { kind: 'complete', tested: relevantTested, missing: [], quant: ledger.quantization };
@@ -1191,7 +1325,9 @@ function printModelsList(models, { interactive = true } = {}) {
     const mt = m.metrics;
     return mt && mt.elapsedMs > 0 ? fmtDuration(mt.elapsedMs).length : 0;
   }));
-  const missW = Math.max(22, ...models.map(m => (missingSchoolsLabel(m.status) || '').length));
+  const missW = Math.max(22, ...models.map(m => (m.status.noCarnet && m.status.reason)
+    ? m.status.reason.length
+    : (missingSchoolsLabel(m.status) || '').length));
 
   // Séparateurs visuels entre groupes de colonnes. '│' delimite les groupes
   // logiques : Identité | Statut | Performance | Reste à faire.
@@ -1233,9 +1369,12 @@ function printModelsList(models, { interactive = true } = {}) {
     // Statut : padEnd sur le label SIMPLE puis couleur autour → largeur visible stable.
     const statusStr = `${badge.color}${badge.label.padEnd(statusW)}${C.reset}`;
     const missing = missingSchoolsLabel(m.status);
-    const missStr = missing
+    // Modèles « PARTIEL sans carnet » (bug 2026-09-02) : la liste des écoles
+    // manquantes liste TOUTES les écoles (aucune validée) — on affiche plutôt
+    // la raison compacte pour expliquer le PARTIEL.
+    const missStr = missing && !m.status.noCarnet
       ? `${C.gray}${missing.padEnd(missW)}${C.reset}`
-      : (m.status.kind === 'nonllm' && m.status.reason)
+      : m.status.reason
         ? `${C.gray}${m.status.reason.slice(0, missW).padEnd(missW)}${C.reset}`
         : ' '.repeat(missW);
     const mtpTag = m.mtpModelKey ? `${C.cyan}[MTP]${C.reset} ` : '';
@@ -1766,11 +1905,11 @@ function autoBlacklist(modelKey, reason) {
   return true;
 }
 
-function runBenchmark(modelKey, schoolCli, extraArgs, opts = {}) {
+async function runBenchmark(modelKey, schoolCli, extraArgs, opts = {}) {
   // opts.tierNum : si défini, lance uniquement CE tier (mode classe-par-classe).
   //   Le runner supporte un argument positionnel = numéro de tier. On l'insère
   //   juste après --force et --profile. Ex : runner.js --force --profile=STANDARD 2
-  // opts.timeoutMs : timeout global du spawnSync. 0 = pas de timeout (défaut).
+  // opts.timeoutMs : timeout global du spawn. 0 = pas de timeout (défaut).
   //   En mode classe-par-classe, on met un timeout par tier pour éviter qu'un
   //   modèle gelé bloque toute la nuit (bug constaté : un hang infini sur un
   //   tier arrêtait tout le batch sans jamais passer au modèle suivant).
@@ -1788,20 +1927,56 @@ function runBenchmark(modelKey, schoolCli, extraArgs, opts = {}) {
   // terminal restait muet pendant tout le benchmark (parfois 30+ min), sans
   // aucun feedback sur l'exercice en cours. L'utilisateur ne savait pas où en
   // était le modèle. Avec inherit, on voit exactement ce que runner.js affiche.
-  const r = spawnSync(process.execPath, args, {
-    encoding: 'utf8',
+  //
+  // spawn ASYNC (depuis 2026-09-02) : le batch doit rester réactif pendant le
+  // run — poll de la sentinelle --skip (passage au modèle suivant) ET du
+  // timeout global. L'ancien spawnSync bloquait l'event loop : impossible
+  // d'interrompre un run sans tuer tout le batch (Ctrl+C historique).
+  const child = spawn(process.execPath, args, {
     cwd: PROJECT_ROOT,
     stdio: 'inherit',
-    windowsHide: false,
-    timeout: timeoutMs || 0
+    windowsHide: false
   });
-  const durationMs = Date.now() - start;
-  // stdio: 'inherit' ne capture pas stdout/stderr (ils vont directement au
-  // terminal). On ne peut donc pas les réécrire ici — c'est attendu.
-  // Détection du timeout : spawnSync renvoie status=null et signal='SIGTERM'
-  // quand le timeout est atteint (le process est tué).
-  const timedOut = r.status === null && r.signal === 'SIGTERM' && timeoutMs > 0;
-  return { ok: r.status === 0, status: r.status, durationMs, timedOut };
+  _activeRunner = child;
+  const result = await new Promise(resolve => {
+    let settled = false;
+    let killReason = null; // 'skip' | 'timeout' — déterministe (sur Windows,
+    // taskkill /F ne produit PAS de signal SIGTERM visible : la détection du
+    // timeout via signal==='SIGTERM' de l'ancien spawnSync ne marche pas ici).
+    const finish = (r) => { if (!settled) { settled = true; clearInterval(pollTimer); resolve(r); } };
+    // Poll : sentinelle --skip (kill arbre enfant) + timeout (kill aussi).
+    // Interval (et non setTimeout) : la sentinelle doit être vérifiée
+    // périodiquement PENDANT le run, pas seulement à son expiration.
+    const pollTimer = setInterval(() => {
+      if (skipRequested()) {
+        killReason = 'skip';
+        console.log(`\n  ${C.yellow}[--skip] Sentinelle détectée — interruption du run en cours...${C.reset}`);
+        killActiveRunner();
+        // finish() est déclenché par le handler 'exit' du child (kill async).
+        return;
+      }
+      if (timeoutMs > 0 && Date.now() - start >= timeoutMs) {
+        killReason = 'timeout';
+        console.log(`\n  ${C.red}[TIMEOUT] ${Math.round(timeoutMs / 60000)} min atteintes — kill du run.${C.reset}`);
+        killActiveRunner();
+      }
+    }, SKIP_POLL_MS);
+    child.on('error', (err) => finish({ ok: false, status: null, durationMs: Date.now() - start, timedOut: false, skipped: false, error: err.message }));
+    child.on('exit', (code, signal) => {
+      const durationMs = Date.now() - start;
+      finish({
+        ok: code === 0, status: code, durationMs,
+        timedOut: killReason === 'timeout',
+        skipped: killReason === 'skip',
+        signal
+      });
+    });
+  });
+  _activeRunner = null;
+  // Consomme la sentinelle APRÈS le run pour ne pas la propager au modèle
+  // suivant (le kill vient d'être consommé).
+  consumeSkip();
+  return result;
 }
 
 // --- Mode classe-par-classe (tâche 2026-08-11, Tasks1.md #2a) ---
@@ -1833,7 +2008,73 @@ function runBenchmark(modelKey, schoolCli, extraArgs, opts = {}) {
 // ne comptent pas comme échec global).
 const TIER_TIMEOUT_MS = 45 * 60 * 1000; // 45 min par tier (sécurité anti-hang)
 
-function runSchoolClassByClass(modelKey, schoolKey, schoolCli, extraArgs, tierFilter = null, stopOnFirstFailure = false) {
+// --- Progression de reprise (--resume, tâche 2026-09-02) ---
+// Fichier .benchgo-progress.json : mémorise, par modèle+école, les tiers déjà
+// PASSÉS lors des sessions précédentes (mode classe-par-classe). Avec --resume,
+// ces tiers sont ignorés et le batch reprend exactement là où il s'était
+// arrêté (Ctrl+C, plantage, nuit trop courte) — puis la consolidation "all"
+// écrit le carnet complet de l'école.
+//
+// Structure : { "<modelKey>|<schoolKey>": { "done": [<tiers>], "updatedAt": iso } }
+const PROGRESS_FILE = path.join(PROJECT_ROOT, '.benchgo-progress.json');
+
+function loadProgress() {
+  try {
+    const d = JSON.parse(fs.readFileSync(PROGRESS_FILE, 'utf8'));
+    if (!d || typeof d !== 'object') return {};
+    // Purge des entrées périmées (> 30 jours) : une progression ancienne n'a
+    // plus de sens (tiers probablement modifiés depuis) et le fichier ne doit
+    // pas croître indéfiniment avec des couples modèle|école obsolètes.
+    const cutoff = Date.now() - 30 * 24 * 3600 * 1000;
+    let purged = false;
+    for (const k of Object.keys(d)) {
+      const t = Date.parse(d[k] && d[k].updatedAt);
+      if (!Number.isFinite(t) || t < cutoff) { delete d[k]; purged = true; }
+    }
+    if (purged) saveProgress(d);
+    return d;
+  } catch (_) { return {}; }
+}
+
+function saveProgress(progress) {
+  try { fs.writeFileSync(PROGRESS_FILE, JSON.stringify(progress, null, 2), 'utf8'); }
+  catch (_) { /* non bloquant : la reprise est un confort, pas une garantie */ }
+}
+
+function progressKey(modelKey, schoolKey) {
+  return `${modelKey}|${schoolKey}`;
+}
+
+function getProgressTiers(modelKey, schoolKey) {
+  const p = loadProgress();
+  const e = p[progressKey(modelKey, schoolKey)];
+  return (e && Array.isArray(e.done)) ? e.done : [];
+}
+
+// Enregistre qu'un tier vient d'être exécuté (réussi OU échoué — dans les deux
+// cas l'exercice a été passé et n'a pas à être rejoué en --resume). `failed`
+// (timeout/kill) n'est PAS enregistré : un tier interrompu doit être rejoué.
+function recordProgressTier(modelKey, schoolKey, tierNum) {
+  const p = loadProgress();
+  const k = progressKey(modelKey, schoolKey);
+  const e = p[k] || { done: [] };
+  if (!e.done.includes(tierNum)) e.done.push(tierNum);
+  e.done.sort((a, b) => a - b);
+  e.updatedAt = new Date().toISOString();
+  p[k] = e;
+  saveProgress(p);
+}
+
+// Nettoie l'entrée de progression quand l'école est FINIE (consolidation
+// écrite ou stop) : une prochaine session --resume repartira de zéro si
+// l'utilisateur RETESTE ce modèle/école (les carnets gardent l'historique).
+function clearProgress(modelKey, schoolKey) {
+  const p = loadProgress();
+  const k = progressKey(modelKey, schoolKey);
+  if (p[k]) { delete p[k]; saveProgress(p); }
+}
+
+async function runSchoolClassByClass(modelKey, schoolKey, schoolCli, extraArgs, tierFilter = null, stopOnFirstFailure = false, resumeTiersDone = null) {
   const profile = PROFILES[schoolKey];
   if (!profile) {
     console.log(`  ${C.red}Profil inconnu : ${schoolKey}${C.reset}`);
@@ -1846,16 +2087,30 @@ function runSchoolClassByClass(modelKey, schoolKey, schoolCli, extraArgs, tierFi
   if (tierFilter && Array.isArray(tierFilter) && tierFilter.length > 0) {
     tierNums = tierNums.filter(t => tierFilter.includes(t));
   }
+  // --resume : saute les tiers déjà passés lors des sessions précédentes.
+  // Si TOUT est déjà passé (remaining vide), la boucle ne fait rien et c'est
+  // la consolidation qui prend le relais (si les obligatoires sont couverts
+  // par l'union selection∪déjà-passés) — le carnet est enfin écrit.
+  let skippedByResume = [];
+  if (resumeTiersDone && Array.isArray(resumeTiersDone) && resumeTiersDone.length > 0) {
+    skippedByResume = tierNums.filter(t => resumeTiersDone.includes(t));
+    tierNums = tierNums.filter(t => !resumeTiersDone.includes(t));
+  }
   const tierResults = [];
   const startMs = Date.now();
   let allMandatoryOk = true;
   let stopped = false;
+  let skippedByUser = false;
+
+  if (skippedByResume.length > 0) {
+    console.log(`  ${C.green}[--resume] ${skippedByResume.length} tier(s) déjà passé(s) ignoré(s) : ${skippedByResume.join(', ')}${C.reset}`);
+  }
 
   for (const tierNum of tierNums) {
     const isMandatory = profile.mandatory.includes(tierNum);
     const tierLabel = isMandatory ? `${C.bold}obligatoire${C.reset}` : `${C.gray}optionnel${C.reset}`;
     console.log(`\n  ${C.bold}${C.cyan}--- Classe tier ${tierNum} (${tierLabel}) ---${C.reset}`);
-    const bench = runBenchmark(modelKey, schoolCli, extraArgs, {
+    const bench = await runBenchmark(modelKey, schoolCli, extraArgs, {
       tierNum,
       timeoutMs: TIER_TIMEOUT_MS
     });
@@ -1865,6 +2120,13 @@ function runSchoolClassByClass(modelKey, schoolKey, schoolCli, extraArgs, tierFi
       console.log(`  ${C.red}[TIMEOUT] Tier ${tierNum} a dépassé ${TIER_TIMEOUT_MS / 60000} min — killé, passage au tier suivant.${C.reset}`);
     }
     console.log(`  ${bench.ok ? C.green : C.red}[${nowClock()}] Tier ${tierNum} terminé en ${mins} min (status=${bench.status}).${C.reset}`);
+    // Progression de reprise : le tier a été passé (même échoué) → on le
+    // mémorise pour qu'un --resume futur ne le rejoue pas. Un tier killé
+    // (timeout OU --skip) n'est PAS mémorisé : interrompu ≠ passé, il doit
+    // être rejoué à la reprise.
+    if (!bench.timedOut && !bench.skipped) {
+      recordProgressTier(modelKey, schoolKey, tierNum);
+    }
     // Un tier obligatoire échoué marque l'école comme échouée. En mode
     // stopOnFirstFailure (mode 8 Manuel), on s'arrête IMMÉDIATEMENT ici : on
     // ne lance pas les tiers suivants et on remonte le flag stopped pour que
@@ -1878,6 +2140,15 @@ function runSchoolClassByClass(modelKey, schoolKey, schoolCli, extraArgs, tierFi
         break;
       }
     }
+    // --skip demandé pendant ce tier : on n'envoie PAS les tiers restants ni
+    // la consolidation — on rend la main à la boucle des modèles.
+    // NB : la sentinelle est déjà consommée par runBenchmark (après le kill),
+    // c'est donc le flag bench.skipped qui fait foi, pas un 2e test fichier.
+    if (bench.skipped) {
+      console.log(`  ${C.yellow}[--skip] Passage au modèle suivant demandé — tiers restants de ${schoolKey} ignorés.${C.reset}`);
+      skippedByUser = true;
+      break;
+    }
   }
 
   const durationMs = Date.now() - startMs;
@@ -1890,24 +2161,58 @@ function runSchoolClassByClass(modelKey, schoolKey, schoolCli, extraArgs, tierFi
   // (runner.js ~ligne 2654). En mode classe-par-classe, chaque tier tourne dans
   // un process séparé avec tierArg = numéro du tier → le carnet n'est JAMAIS
   // écrit, et le leaderboard affiche le modèle comme "JAMAIS TESTÉ" bien que
-  // les rapports existent. On lance donc un run "all" de consolidation après les
-  // tiers, UNIQUEMENT si : (1) tous les obligatoires ont réussi, (2) aucun
-  // filtre de tier n'a restreint la sélection (sinon le run "all" re-testerait
-  // des tiers non demandés), (3) l'école ne s'est pas arrêtée (mode Manuel).
-  // Ce run re-teste toute l'école d'un coup : c'est le seul chemin qui écrit le
-  // carnet. Le surcoût est un run complet additionnel, acceptable en mode nuit.
-  if (allMandatoryOk && !tierFilter && !stopped) {
+  // les rapports existent (bug 2026-09-02 : HarnessLLM, Grug 12B ×2, Ornith
+  // testés par tiers puis affichés jamais testés).
+  //
+  // On lance donc un run "all" de consolidation après les tiers si :
+  //   (1) TOUS les tiers obligatoires du profil sont dans la sélection (sans
+  //       filtre, c'est toujours vrai ; avec un filtre, on consolide quand
+  //       même dès que les obligatoires sont couverts — c'est le cas qui
+  //       produisait des sessions tier-by-tier complètes sans aucun carnet) ;
+  //   (2) l'école ne s'est pas arrêtée (mode Manuel).
+  // Un tier obligatoire échoué ne bloque PLUS la consolidation : le run "all"
+  // ré-enregistre une tentative (même échouée) dans le carnet, exactement
+  // comme le ferait un run classique non-classe-par-classe. Parité de
+  // comportement : un échec d'école doit quand même laisser une trace.
+  //
+  // Ce run re-teste toute l'école d'un coup : c'est le seul chemin qui écrit
+  // le carnet. Le surcoût est un run complet additionnel, acceptable en mode
+  // nuit. Timeout de sécurité : un run "all" peut être 7× plus long qu'un
+  // tier seul → cap à TIER_TIMEOUT_MS × nb tiers pour ne pas réintroduire le
+  // hang infini que le mode classe-par-classe est censé prévenir.
+  const mandatoryCovered = profile.mandatory.every(t => tierNums.includes(t) || skippedByResume.includes(t));
+  if (mandatoryCovered && !stopped && !skippedByUser) {
     console.log(`\n  ${C.cyan}--- Consolidation du carnet (run all) ---${C.reset}`);
     console.log(`  ${C.gray}Sauvegarde du carnet de scores via un run complet (tierArg=all).${C.reset}`);
-    const consolBench = runBenchmark(modelKey, schoolCli, extraArgs, { tierNum: null, timeoutMs: 0 });
+    const consolBench = await runBenchmark(modelKey, schoolCli, extraArgs, {
+      tierNum: null,
+      timeoutMs: TIER_TIMEOUT_MS * Math.max(1, profile.mandatory.length + profile.optional.length)
+    });
     const consolMins = (consolBench.durationMs / 60000).toFixed(1);
     console.log(`  ${consolBench.ok ? C.green : C.red}[${nowClock()}] Consolidation terminée en ${consolMins} min (status=${consolBench.status}).${C.reset}`);
-    if (!consolBench.ok) {
-      console.log(`  ${C.yellow}Attention : la consolidation a échoué — le carnet peut être incomplet.${C.reset}`);
+    if (consolBench.skipped) {
+      // --skip pendant la consolidation : on préserve la progression (les
+      // tiers passés ne doivent PAS être rejoués à la reprise) et on remonte
+      // skippedByUser pour que la boucle des modèles passe au suivant SANS
+      // enregistrer de run_ko mensonger dans l'historique.
+      console.log(`  ${C.yellow}[--skip] Consolidation interrompue — la progression des tiers est conservée pour une reprise --resume.${C.reset}`);
+      skippedByUser = true;
+    } else if (consolBench.timedOut) {
+      console.log(`  ${C.yellow}TIMEOUT consolidation : le run complet a été killé — le carnet est possiblement absent pour cette école.${C.reset}`);
+    } else if (!consolBench.ok) {
+      console.log(`  ${C.yellow}Attention : la consolidation a échoué — le carnet enregistre tout de même la tentative.${C.reset}`);
     }
+    // L'école est consolidée (carnet écrit ou tentative échouée enregistrée) :
+    // la progression de reprise n'a plus de raison d'être pour ce couple.
+    // Un kill --skip/timedOut laisse la progression en place (reprise future).
+    if (!consolBench.timedOut && !consolBench.skipped) {
+      clearProgress(modelKey, schoolKey);
+    }
+  } else if (!mandatoryCovered) {
+    console.log(`  ${C.yellow}Pas de consolidation du carnet : la sélection ne couvre pas tous les tiers obligatoires (${profile.mandatory.join(',')}) — le modèle restera sans carnet pour ${schoolKey}.${C.reset}`);
   }
 
-  return { ok: allMandatoryOk, durationMs, tierResults, stopped };
+  return { ok: allMandatoryOk, durationMs, tierResults, stopped, skippedByUser };
 }
 
 function parseArgs() {
@@ -1939,6 +2244,8 @@ function parseArgs() {
   const listOnly = raw.includes('--list-only');
   const classByClass = raw.includes('--class-by-class') || raw.includes('--cbc');
   const forceDetect = raw.includes('--force-detect');
+  const skipFlag = raw.includes('--skip');
+  const resumeFlag = raw.includes('--resume');
   const teacherProviderArg = flagValue('--teacher-provider=');
   const teacherModelArg = flagValue('--teacher-model=');
   let teacherApiKeyArg = flagValue('--teacher-api-key=');
@@ -1982,7 +2289,7 @@ function parseArgs() {
   if (teacherModelArg) extraRunnerArgs.push(`--teacher-model=${teacherModelArg}`);
   if (teacherApiKeyArg) extraRunnerArgs.push(`--teacher-api-key=${teacherApiKeyArg}`);
   if (teacherEndpointArg) extraRunnerArgs.push(`--teacher-endpoint=${teacherEndpointArg}`);
-  return { modelsArg, schoolsArg, tiersArg, noTeacher, listOnly, hybridFlag, forceDetect, classByClass, isolateArg, teacherProviderArg, teacherModelArg, extraRunnerArgs };
+  return { modelsArg, schoolsArg, tiersArg, noTeacher, listOnly, hybridFlag, forceDetect, classByClass, isolateArg, skipFlag, resumeFlag, teacherProviderArg, teacherModelArg, extraRunnerArgs };
 }
 
 function resolveSchoolsFromArg(schoolsArg) {
@@ -2010,6 +2317,8 @@ async function main() {
       { cmd: 'node night-batch.js --force-detect', desc: 'Réindexe les GGUF orphelins (modèles sur disque absents de lms ls) puis liste.' },
       { cmd: 'node night-batch.js --class-by-class', desc: 'Mode classe-par-classe : chaque tier dans un process séparé avec timeout (robustesse anti-hang).' },
       { cmd: 'node night-batch.js --class-by-class --tiers=0', desc: 'Filtre rapide : ne teste que le 1er exercice (tier 0) de chaque école. Virer les modèles qui échouent.' },
+      { cmd: 'node night-batch.js --resume', desc: 'Reprise : ignore les écoles déjà au carnet et, en classe-par-classe, les tiers déjà passés (reprend où la session s\'était arrêtée).' },
+      { cmd: 'node night-batch.js --skip', desc: 'Pendant un batch EN COURS (autre terminal) : interrompt le modèle en cours (≤3s) et passe au suivant. Ne quitte PAS le batch.' },
       { cmd: 'Pendant la sélection : !<num>  /  !!<num>', desc: 'Isoler (!) ou désisoler (!!) un modèle de la liste noire.' },
       { cmd: 'Pendant la sélection : detect  /  force-detect', desc: 'Force la détection des modèles manquants (scan + lms import).' },
       { cmd: 'node night-batch.js --help  |  help  |  -h', desc: 'Affiche cette aide.' }
@@ -2021,7 +2330,10 @@ async function main() {
       'Mode interactif : après le choix des écoles, le mode « Exercice par exercice » (B) propose automatiquement de choisir les tiers et le mode de passage (A=auto / M=manuel).',
       'Les rapports vont dans Export-Rapports/<date>/<ecole>/<niveau>/rapport_v3_*.md',
       'Classement communautaire : soumettez vos carnets avec : node runner.js --submit',
-      'Pré-test de santé : chaque modèle reçoit un ping après chargement ; les modèles défectueux (load_failed, health check KO, run KO systémique) sont auto-blacklistés.'
+      'Pré-test de santé : chaque modèle reçoit un ping après chargement ; les modèles défectueux (load_failed, health check KO, run KO systémique) sont auto-blacklistés.',
+      'Ctrl+C reste l\'arrêt COMPLET (décharge + serveur). Pour ÉCOURTER un modèle sans tout arrêter : node night-batch.js --skip dans un second terminal.',
+      '--skip est consommé par le batch (≤3s) : le run en cours est killé, le modèle est consigné « passé avec --skip » (ni échec ni blacklist), et la file continue.',
+      '--resume se combine avec --models/--schools/--class-by-class : les tiers déjà passés sont mémorisés dans .benchgo-progress.json et sautés.'
     ]);
     process.exit(0);
   }
@@ -2031,7 +2343,7 @@ async function main() {
   console.log(`${C.bold}${C.cyan}   File d'attente automatique de modeles LM Studio   ${C.reset}`);
   console.log(`${C.bold}${C.cyan}==================================================${C.reset}\n`);
 
-  const { modelsArg, schoolsArg, tiersArg, listOnly, hybridFlag, forceDetect, isolateArg, classByClass: cbcFromCli, extraRunnerArgs } = parseArgs();
+  const { modelsArg, schoolsArg, tiersArg, listOnly, hybridFlag, forceDetect, isolateArg, classByClass: cbcFromCli, skipFlag, resumeFlag, extraRunnerArgs } = parseArgs();
   let classByClass = cbcFromCli;
   let tierFilter = null;
   // Mode 8 Manuel : stoppe la file au premier tier obligatoire échoué.
@@ -2049,6 +2361,24 @@ async function main() {
     process.exit(1);
   }
   console.log(`  ${C.green}Daemon LM Studio actif.${C.reset}`);
+
+  // --- Action one-shot : --skip (passage au modèle suivant) ---
+  // Écrit la sentinelle .benchgo-skip et quitte. Le batch en cours (autre
+  // terminal) la détecte en ≤3s (SKIP_POLL_MS), kill le runner, consigne un
+  // résultat 'skipped' et enchaîne sur le modèle suivant. Ctrl+C reste réservé
+  // à l'arrêt COMPLET (décharge + serveur) — ne pas confondre les deux.
+  if (skipFlag) {
+    try {
+      fs.writeFileSync(SKIP_FILE, String(Date.now()), 'utf8');
+      console.log(`  ${C.green}Sentinelle --skip écrite (.benchgo-skip).${C.reset}`);
+      console.log(`  ${C.gray}Le batch en cours interrompra le modèle en cours en ≤ ${SKIP_POLL_MS / 1000}s et passera au suivant.${C.reset}`);
+      console.log(`  ${C.gray}(Ctrl+C reste l'arrêt complet : décharge des modèles + arrêt du serveur.)${C.reset}`);
+    } catch (e) {
+      console.log(`  ${C.red}Impossible d'écrire la sentinelle : ${e.message}${C.reset}`);
+      process.exit(1);
+    }
+    process.exit(0);
+  }
 
   let serverHandle = { startedByUs: false };
   if (await isServerUp()) {
@@ -2343,7 +2673,11 @@ async function main() {
     });
   }
   console.log(`\n  ${C.gray}Debut a ${nowClock()}. Laissez tourner, les rapports seront dans Export-Rapports/.${C.reset}`);
-  console.log(`  ${C.gray}Ctrl+C pour interrompre (le modele en cours finira son tier en cours).${C.reset}\n`);
+  console.log(`  ${C.gray}Ctrl+C = arrêt complet (décharge + serveur). Pour passer au modèle suivant : node night-batch.js --skip dans un autre terminal.${C.reset}`);
+  if (resumeFlag) {
+    console.log(`  ${C.green}Mode --resume ACTIVÉ : écoles déjà au carnet ignorées, tiers déjà passés sautés (reprise à l'exercice près).${C.reset}`);
+  }
+  console.log('');
 
   const results = [];
   const batchStart = Date.now();
@@ -2365,6 +2699,26 @@ async function main() {
       modelSchools = plan[i].schools;
     } else {
       modelSchools = schools;
+    }
+
+    // --resume (1/2) : ignore les écoles DÉJÀ au carnet. Un modèle dont
+    // l'école a un run complet enregistré (tentative écrite par une
+    // consolidation) n'a rien à reprendre sur cette école — la reprendre
+    // ferait double emploi et doublerait le temps de nuit.
+    if (resumeFlag) {
+      const ledgers = loadAllLedgers();
+      const ledger = matchLedger(m.modelKey, ledgers);
+      const doneSchools = ledgerSchoolKeys(ledger);
+      const remainingSchools = modelSchools.filter(s => !doneSchools.includes(s.key));
+      if (remainingSchools.length < modelSchools.length) {
+        const doneLabels = modelSchools.filter(s => doneSchools.includes(s.key)).map(s => s.key).join(', ');
+        console.log(`  ${C.green}[--resume] École(s) déjà au carnet ignorée(s) pour ${m.displayName} : ${doneLabels}${C.reset}`);
+        modelSchools = remainingSchools;
+      }
+      if (modelSchools.length === 0) {
+        console.log(`  ${C.green}[--resume] ${m.displayName} : toutes les écoles demandées sont déjà au carnet — modèle ignoré.${C.reset}`);
+        continue;
+      }
     }
 
     console.log(`  ${C.gray}[${nowClock()}] Dechargement des modeles precedents...${C.reset}`);
@@ -2400,6 +2754,7 @@ async function main() {
     console.log(`  ${C.green}Health check OK — le modèle répond (${String(health.content).slice(0, 40).trim()}).${C.reset}`);
 
     let modelOk = true;
+    let modelSkipped = false;
     // Arguments runner supplementaires propres a CE modele : on passe la
     // quantification explicitement pour que le shortName du carnet l'integre.
     // Sans cela, deux quantifications du meme modele ecrasent le meme carnet
@@ -2421,17 +2776,35 @@ async function main() {
         // En mode 8 Manuel (stopOnFirstFailure), un tier obligatoire échoué
         // stoppe l'école ET la file entière (bench.stopped = true).
         console.log(`  ${C.gray}Mode classe-par-classe : chaque tier dans un process séparé (timeout ${TIER_TIMEOUT_MS / 60000} min/tier).${C.reset}`);
-        bench = runSchoolClassByClass(m.modelKey, school.key, school.cli, modelExtraArgs, tierFilter, stopOnFirstFailure);
+        // --resume (2/2) : en mode classe-par-classe, on reprend AU TIER près.
+        // Les tiers mémorisés dans .benchgo-progress.json (passés lors d'une
+        // session interrompue) sont sautés ; le batch reprend exactement là où
+        // il s'était arrêté, puis la consolidation écrit le carnet complet.
+        const resumeTiersDone = resumeFlag ? getProgressTiers(m.modelKey, school.key) : null;
+        bench = await runSchoolClassByClass(m.modelKey, school.key, school.cli, modelExtraArgs, tierFilter, stopOnFirstFailure, resumeTiersDone);
         if (bench.stopped) { stopBatch = true; batchStopped = true; }
+        if (bench.skippedByUser) {
+          results.push({ model: m, school: school.key, ok: false, reason: 'skipped', durationMs: bench.durationMs });
+          modelSkipped = true;
+          break;
+        }
       } else {
         // Mode classique : toute l'école dans un seul process (comportement
         // historique). Pas de timeout (timeout=0) — un modèle gelé peut
         // bloquer indéfiniment. En mode --class-by-class, on n'utilise cette
         // branche que pour l'école 'auto' (le runner devine le profil).
-        bench = runBenchmark(m.modelKey, school.cli, modelExtraArgs);
+        bench = await runBenchmark(m.modelKey, school.cli, modelExtraArgs);
       }
       const mins = (bench.durationMs / 60000).toFixed(1);
       if (!bench.ok) modelOk = false;
+      // Skip demandé PENDANT ce run (mode classique) : on n'enchaîne pas sur
+      // l'école suivante du même modèle.
+      if (bench.skipped) {
+        console.log(`\n  ${C.yellow}[--skip] ${m.displayName} / ${school.label} interrompu après ${mins} min — passage au modèle suivant.${C.reset}`);
+        results.push({ model: m, school: school.key, ok: false, reason: 'skipped', durationMs: bench.durationMs });
+        modelSkipped = true;
+        break;
+      }
       // Enregistre le résultat (succès OU échec) dans l'historique des runs
       // pour distinguer JAMAIS TESTE d'un échec réel (load_failed / run KO).
       recordRun(m.modelKey, bench.ok ? 'ok' : 'run_ko', school.key);
@@ -2440,6 +2813,10 @@ async function main() {
       // Mode 8 Manuel : arrêt immédiat de la file au premier échec obligatoire.
       if (stopBatch) break;
     }
+    if (modelSkipped) {
+      console.log(`\n  ${C.yellow}[--skip] Modele ${m.displayName} écourté — passage au modèle suivant.${C.reset}`);
+      continue;
+    }
     console.log(`\n  ${modelOk ? C.green : C.red}[${nowClock()}] Modele ${m.displayName} termine (${modelSchools.length} ecole(s)).${C.reset}`);
 
     // Auto-blacklist si TOUTES les écoles ont échoué en run_ko (et aucune n'a
@@ -2447,10 +2824,12 @@ async function main() {
     // (crash moteur, instabilité) : on le blackliste pour épargner les nuits
     // futures. Si au moins une école a réussi, on garde le modèle (il fonctionne
     // partiellement). L'utilisateur peut toujours désisoler avec !!<num>.
-    if (!modelOk) {
-      const allFailed = results.filter(r => r.model && r.model.modelKey === m.modelKey && r.reason !== 'load_failed' && r.reason !== 'health_failed')
+    // Un modèle SKIPPÉ n'est PAS un échec : il n'a pas fini son examen, on ne
+    // tire aucune conclusion sur sa santé.
+    if (!modelOk && !modelSkipped) {
+      const allFailed = results.filter(r => r.model && r.model.modelKey === m.modelKey && r.reason !== 'load_failed' && r.reason !== 'health_failed' && r.reason !== 'skipped')
                                .every(r => !r.ok);
-      if (allFailed) {
+      if (allFailed && results.some(r => r.model && r.model.modelKey === m.modelKey && r.reason !== 'load_failed' && r.reason !== 'health_failed' && r.reason !== 'skipped')) {
         autoBlacklist(m.modelKey, 'toutes les écoles ont échoué (run KO systémique)');
       }
     }
@@ -2488,7 +2867,7 @@ async function main() {
   for (const r of results) {
     const mins = (r.durationMs / 60000).toFixed(1);
     const icon = r.ok ? `${C.green}OK${C.reset}` : `${C.red}KO${C.reset}`;
-    const reasonMap = { 'load_failed': 'chargement échoué', 'health_failed': 'health check échoué', 'run_ko': 'run KO' };
+    const reasonMap = { 'load_failed': 'chargement échoué', 'health_failed': 'health check échoué', 'run_ko': 'run KO', 'skipped': 'passé avec --skip' };
     const reason = r.reason ? ` ${C.gray}(${reasonMap[r.reason] || r.reason})${C.reset}` : '';
     const schoolTag = r.school ? ` ${C.gray}[${r.school}]${C.reset}` : '';
     // Quantification affichée si disponible (ex: Q5_K_L). Indispensable quand
