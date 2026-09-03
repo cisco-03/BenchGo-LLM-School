@@ -91,7 +91,7 @@ function profileForModel(model) {
 // le runner les traite via cloud-client.js. Pour le local, pas de cle requise.
 const CLOUD_PROVIDERS = [
   { key: 'openrouter', label: 'OpenRouter (agregateur, modeles gratuits dispo)' },
-  { key: 'kilo',       label: 'Kilo Gateway (api.kilo.ai, modeles gratuits dispo, cle optionnelle)' },
+  { key: 'kilo',       label: 'Kilo Gateway (api.kilo.ai, modeles :free via pools OpenRouter upstream, cle optionnelle)' },
   { key: 'openai',     label: 'OpenAI (GPT-4o, o1, etc.)' },
   { key: 'anthropic',  label: 'Anthropic (Claude)' },
   { key: 'groq',       label: 'Groq (inference ultra-rapide)' },
@@ -234,7 +234,10 @@ function selectProviderInteractive(defaultProvider) {
 // providers, une cle vide = abandon.
 // Apres saisie d une NOUVELLE cle (non deja memorisee dans .api-keys.json), on
 // propose de la memoriser localement pour les prochains runs (comme le runner).
-// kilo : cle optionnelle (acces anonyme aux modeles :free, 200 req/h/IP).
+// kilo : cle optionnelle (acces anonyme aux modeles :free, 200 req/h/IP) — MAIS
+// les :free de Kilo routent vers les pools OpenRouter upstream (rate-limits
+// partages ~60 req/min, cf. log 2026-09-03). Une cle kilo est quasi requise
+// pour un run complet.
 const PROVIDERS_OPTIONAL_KEY = new Set(['ollama', 'lmstudio', 'custom', 'kilo']);
 
 // askYesNo local (le runner ne l exporte pas). Retourne true pour Oui.
@@ -343,7 +346,20 @@ function promptApiKey(provider, cliApiKey) {
     }
     console.log(`\n  ${C.bold}${C.cyan}=== CLE API ${provider.toUpperCase()} ===${C.reset}`);
     console.log(`  ${C.gray}Aucune cle memorisee pour ${provider}.${C.reset}`);
-    if (optionalKey) {
+    if (provider === 'kilo') {
+      // Kilo Gateway est un agregateur CLOUD : il n'y a PAS de mode local kilo
+      // (contrairement a ollama/lmstudio). Le message historique « Pour kilo en
+      // local : laissez vide » etait FAUX et destabilisait l'utilisateur.
+      // Sans cle : acces anonyme TOLERE mais limite (200 req/h/IP) — et les
+      // modeles :free de Kilo routent vers les pools OpenRouter upstream, avec
+      // leurs propres rate-limits partages (60 req/min constate). Une cle
+      // (https://app.kilo.ai) reste quasi indispensable pour un run complet.
+      console.log(`  ${C.gray}Kilo Gateway est un agregateur cloud (api.kilo.ai) — il n'y a pas de mode local.${C.reset}`);
+      console.log(`  ${C.gray}Sans cle : acces anonyme aux modeles :free, limite a 200 req/h/IP.${C.reset}`);
+      console.log(`  ${C.yellow}Attention : les modeles :free de Kilo routent vers les pools OpenRouter upstream${C.reset}`);
+      console.log(`  ${C.yellow}(meme slugs, meme rate-limits partages, ~60 req/min) — un run complet depasse largement.${C.reset}`);
+      console.log(`  ${C.gray}Avec une cle (abonnement, https://app.kilo.ai) : pas de limite stricte — recommande.${C.reset}`);
+    } else if (optionalKey) {
       console.log(`  ${C.gray}Pour ${provider} en local : laissez vide (pas d'authentification).${C.reset}`);
       console.log(`  ${C.gray}Pour ${provider} en mode cloud payant : saisissez votre cle.${C.reset}`);
     } else {

@@ -846,6 +846,30 @@ Le **pre-flight check** (détection rate-limit 200/400 vide, section ci-dessous)
 - Le fix est rétroactif : les carnets existants (avec ou sans `provider`) sont reclassés au prochain `node leaderboard.js`.
 - `LOCAL_PROVIDERS` (`local`, `lmstudio`, `ollama`, `custom`) sert à distinguer les serveurs OpenAI-compat locaux des API distantes — mais un provider local peut être utilisé en mode cloud (Ollama distant). Le signal FRONTIER est le seul discriminant fiable.
 
+### Kilo :free route vers OpenRouter upstream + retry 429 + message « kilo local » (tâche 2026-09-03)
+
+**Fichiers touchés :** `cloud-client.js`, `frontier-batch.js`, `Docs/CHANGELOG.md`, `AGENTS.md`.
+
+**Principe :** Le soupçon utilisateur est CONFIRMÉ par les logs : les modèles `:free` de Kilo Gateway routent vers les pools OpenRouter upstream (mêmes slugs, mêmes rate-limits partagés ~60 req/min). Preuve dans `benchgo_2026-09-03T12-14-28.log` : le 429 renvoyé par `api.kilo.ai` dit « High demand for minimax/minimax-m3:free **on OpenRouter** - limited to 60 requests per minute ». Trois corrections :
+
+1. **Retry HTTP 429** : `queryLLM` retente désormais un 429 jusqu'à 3 fois avec backoff linéaire (5 s, 10 s, 15 s). Avant, un 429 transitoire (~300 ms après le début de l'appel) tuait le tier obligatoire → rattrapage → élimination, alors que le Tier 0 venait de passer 10/10. Après épuisement : comportement historique (E504).
+2. **Message « Pour kilo en local : laissez vide » était FAUX** : Kilo n'a pas de mode local (contrairement à ollama/lmstudio). Prompt de clé API de `frontier-batch.js` avec branche dédiée kilo : agrégateur cloud, anonyme = 200 req/h/IP + rate-limits upstream, clé recommandée (https://app.kilo.ai).
+3. **Avertissement anonyme clarifié** (cloud-client.js) : précise le routage upstream et le risque 429 ; affiché UNE fois par session (`_anonWarned`) au lieu de chaque requête.
+
+**Pour modifier :**
+1. **Changer le nombre/délai de retries 429** : éditer `MAX_RATE_LIMIT_RETRIES` et `RATE_LIMIT_DELAY_MS` (cloud-client.js, const en haut de queryLLM).
+2. **Désactiver le retry 429** : mettre `MAX_RATE_LIMIT_RETRIES = 0` — retour au comportement historique (429 = échec immédiat).
+3. **Revenir au message générique de clé API kilo** : retirer la branche `if (provider === 'kilo')` dans `promptApiKey()` de `frontier-batch.js`.
+4. **Changer l'avertissement anonyme** : éditer le bloc `_anonWarned` dans `queryLLM` (cloud-client.js).
+5. **Tester** : `node --check cloud-client.js` ; mock fetch 429 puis 200 → vérifier les logs `[429] Rate limit upstream — nouvelle tentative N/3 dans Xs...`.
+
+**Pièges :**
+- Le retry 429 s'applique à TOUS les providers cloud (openai, groq, mistral...) — un 429 est toujours transitoire par définition.
+- Les `:free` de Kilo partagent les pools OpenRouter : si un slug échoue en 429 sur OpenRouter, il échouera pareillement via Kilo. Changer de gateway ne contourne PAS le rate-limit upstream.
+- Le compteur de retry traverse les récursions via le paramètre privé `_rateLimitRetries` — ne pas le supprimer en refactorant la signature de `queryLLM`.
+- Un 429 peut aussi arriver en chunk SSE noyé dans un HTTP 200 (`chunk.error`) → géré par `isEmptyResponse` (pas par le retry 429, le statut HTTP est 200).
+- L'accès anonyme kilo (200 req/h/IP) + FRONTIER complet (~60+ requêtes) : la clé reste quasi indispensable même avec le retry.
+
 ---
 
 ## Vérifications après modification

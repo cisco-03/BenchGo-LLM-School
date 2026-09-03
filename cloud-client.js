@@ -243,13 +243,21 @@ async function streamAnthropicResponse(response, spinner) {
   return { content: fullContent, tokenCount };
 }
 
+// Retry sur HTTP 429 (rate limit) : les pools :free partages (OpenRouter direct
+// ou Kilo Gateway routant vers OpenRouter upstream) limitent a ~60 req/min par
+// modele. Un run FRONTIER (7 classes + aide + rattrapage) depasse ce quota sur
+// des rafales — les 429 sont TRANSITOIRES. Backoff lineaire : 5s, 10s, 15s.
+const MAX_RATE_LIMIT_RETRIES = 3;
+const RATE_LIMIT_DELAY_MS = 5000;
+let _anonWarned = false; // n'affiche l'avertissement anonyme qu'une fois par session
+
 /**
  * Interface identique à lm-studio-client.js#queryLLM.
  * options.providerConfig = { provider, model, apiKey? }
  * La clé API est lue depuis options.providerConfig.apiKey en priorité,
  * sinon depuis la variable d'environnement correspondante au fournisseur.
  */
-async function queryLLM(prompt, difficulty, tierId, isMandatory, spinner, options = {}) {
+async function queryLLM(prompt, difficulty, tierId, isMandatory, spinner, options = {}, _rateLimitRetries = 0) {
   const startTime = Date.now();
   const { providerConfig = {} } = options;
   const { provider, model, apiKey, endpoint } = providerConfig;
@@ -286,7 +294,13 @@ async function queryLLM(prompt, difficulty, tierId, isMandatory, spinner, option
     );
   }
   if (!resolvedKey && provSpec.optionalAuth) {
-    logger.warn(`${provider} : pas de clé API — accès anonyme (modèles gratuits, 200 req/h/IP).`);
+    // Avertissement une seule fois par session (pas a chaque requete).
+    if (!_anonWarned) {
+      _anonWarned = true;
+      logger.warn(`${provider} : pas de clé API — accès anonyme (modèles :free uniquement, ~200 req/h/IP).`);
+      console.log(`  \x1b[33m[${provider}] Sans clé : accès anonyme limité. Les :free routent vers les pools OpenRouter\x1b[0m`);
+      console.log(`  \x1b[33mupstream (rate-limits partagés, ~60 req/min) — un run complet risque des HTTP 429. Clé recommandée.\x1b[0m`);
+    }
   }
 
   const systemPrompt = getSystemPrompt(difficulty);
@@ -428,6 +442,29 @@ async function queryLLM(prompt, difficulty, tierId, isMandatory, spinner, option
   } catch (error) {
     clearTimeout(timeoutId);
     const duration = Date.now() - startTime;
+
+    // HTTP 429 (rate limit) : RETRY avec backoff. Les pools :free partages
+    // (OpenRouter direct, ou Kilo Gateway qui route vers OpenRouter upstream)
+    // renvoient des 429 TRANSITOIRES — le corps dit explicitement « Please
+    // retry shortly » et les headers X-RateLimit indiquent la limite
+    // (60 req/min constate en 2026-09-03). Sans retry, un run FRONTIER perd
+    // des classes entieres sur un simple rate-limit passager : le runner
+    // marque le tier obligatoire ECCHOUE et elime un modele qui repondait
+    // parfaitement (cf. log benchgo_2026-09-03T12-14-28 : Tier 0 OK 10/10,
+    // puis Tiers 1/2/4 tues par 429 a ~300ms). On retente avec un backoff
+    // lineaire (5s, 10s, 15s) — le rate-limit upstream est une fenetre
+    // glissante d'une minute, quelques secondes suffisent generalement a la
+    // franchir. Le compteur traverse les recursions via _rateLimitRetries.
+    const isRateLimit = /HTTP_429/.test(error.message || '') && !error.isFatalSlugError && !error.isEmptyResponse;
+    if (isRateLimit && _rateLimitRetries < MAX_RATE_LIMIT_RETRIES) {
+      const attempt = _rateLimitRetries + 1;
+      const delay = RATE_LIMIT_DELAY_MS * attempt; // 5s, 10s, 15s
+      logger.warn(`Cloud Tier ${tierId} — HTTP 429 (rate limit ${attempt}/${MAX_RATE_LIMIT_RETRIES}) — retry dans ${delay / 1000}s`);
+      console.log(`  \x1b[33m[429] Rate limit upstream — nouvelle tentative ${attempt}/${MAX_RATE_LIMIT_RETRIES} dans ${delay / 1000}s...\x1b[0m`);
+      await new Promise(r => setTimeout(r, delay));
+      return queryLLM(prompt, difficulty, tierId, isMandatory, spinner, options, attempt);
+    }
+
     const isTimeout = error.name === 'AbortError';
     const reason = isTimeout
       ? `Timeout après ${timeoutMs / 1000}s — le modèle cloud n'a pas répondu dans le délai imparti`

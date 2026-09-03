@@ -1,5 +1,87 @@
 # CHANGELOG - Carnet de Notes BenchGo
 
+## 2026-09-03 — fix(cloud) : Kilo `:free` route vers OpenRouter upstream + retry HTTP 429 + message « kilo local » erroné
+
+### Contexte : suspicion utilisateur confirmée par les logs
+L'utilisateur trouvait « extrêmement déstabilisant » que Kilo Gateway propose
+les mêmes modèles `:free` qu'OpenRouter (mêmes slugs `minimax/minimax-m3:free`,
+`tencent/hy3:free`...) alors que « plein ne passent pas ». Le log
+`benchgo_2026-09-03T12-14-28` confirme mot pour mot :
+`HTTP_429 — "Rate limit exceeded: minimax/minimax-m3-20260531/... High demand
+for minimax/minimax-m3:free **on OpenRouter** - limited to 60 requests per
+minute. Please retry shortly."` — l'erreur renvoyée par api.kilo.ai parle
+d'OpenRouter. Kilo Gateway est un agrégateur qui route ses `:free` vers les
+pools OpenRouter upstream : mêmes slugs, mêmes rate-limits partagés. Ce n'est
+PAS un bug de BenchGo ni un doublon de catalogue, c'est l'architecture de Kilo.
+
+### Problème (1) : un 429 transitoire tuait des classes entières
+Sur le run du 2026-09-03 (`minimax/minimax-m3:free`, FRONTIER) : Tier 0
+réussi 10/10 exercices (499 pts) en 9 s, puis Tiers 1, 2, 4 et l'Épreuve
+Finale massacrés par des 429 arrivés ~300 ms après le début de chaque appel.
+`cloud-client.js` ne retentait JAMAIS un 429 — l'erreur devenait un échec de
+tier obligatoire → rattrapage → élimination du modèle sur Post-Doctorat, alors
+qu'il fonctionnait parfaitement. Le corps du 429 dit explicitement « Please
+retry shortly » : c'est une fenêtre glissante d'une minute, pas une panne.
+
+### Changement (1) : retry backoff sur HTTP 429 dans `queryLLM`
+- `MAX_RATE_LIMIT_RETRIES = 3`, `RATE_LIMIT_DELAY_MS = 5000` → backoff linéaire
+  5 s, 10 s, 15 s (30 s cumulés — la fenêtre glissante d'une minute est
+  généralement franchie).
+- Le compteur traverse les récursions via le paramètre privé
+  `_rateLimitRetries` de `queryLLM`.
+- Après épuisement : comportement historique préservé (E504_LM_HTTP_ERROR,
+  propagation au runner, pas de boucle infinie).
+- Exclut les `isFatalSlugError` (400 slug) et `isEmptyResponse` (200 vide) —
+  un retry n'y changerait rien.
+
+### Problème (2) : « Pour kilo en local : laissez vide »
+Le prompt de clé API de `frontier-batch.js` affichait le message générique
+des providers locaux (ollama/lmstudio) : « Pour kilo en local : laissez vide
+(pas d'authentification). Pour kilo en mode cloud payant : saisissez votre
+clé. » Or il n'y a PAS de kilo local — Kilo Gateway est un agrégateur cloud
+(api.kilo.ai). L'utilisateur en a fait la remarque : « Il n'y a pas de local
+chez Kilo. En mode cloud, oui, je veux bien saisir une clé. D'ailleurs,
+j'en ai pas. »
+
+### Changement (2) : message kilo dédié dans `frontier-batch.js`
+- Prompt de clé API : branche spécifique `provider === 'kilo'` — « Kilo
+  Gateway est un agrégateur cloud (api.kilo.ai) — il n'y a pas de mode
+  local. Sans clé : accès anonyme aux modèles :free, limité à 200 req/h/IP.
+  Attention : les modèles :free de Kilo routent vers les pools OpenRouter
+  upstream (mêmes slugs, mêmes rate-limits partagés, ~60 req/min) — un run
+  complet dépasse largement. Avec une clé (https://app.kilo.ai) : pas de
+  limite stricte — recommandé. »
+- Libellé du menu provider : « Kilo Gateway (api.kilo.ai, modèles :free via
+  pools OpenRouter upstream, clé optionnelle) ».
+
+### Changement (3) : avertissement anonyme clarifié (cloud-client.js)
+L'avertissement « accès anonyme (200 req/h/IP) » est complété et affiché UNE
+seule fois par session (`_anonWarned`) au lieu de chaque requête : il précise
+désormais le routage upstream OpenRouter et le risque de 429 sur un run
+complet.
+
+### Validation
+- `node --check cloud-client.js frontier-batch.js` — OK.
+- `node tests/run-tests.js` — 27/27 OK.
+- Test ciblé fetch mocké : 2×429 → backoff 5 s + 10 s → succès 3e appel,
+  contenu « OK » retourné, 3 appels fetch. Épuisement : 3 retries (5/10/15 s)
+  puis E504_LM_HTTP_ERROR — 4 appels, pas de boucle infinie.
+
+### Pièges
+- Le retry 429 s'applique à TOUS les providers cloud (pas seulement kilo) :
+  un 429 d'OpenAI/Groq/Mistral sera aussi retenté 3 fois — c'est voulu, un
+  429 est par définition transitoire.
+- L'accès anonyme kilo reste limité à 200 req/h/IP ; avec le retry, un run
+  LIGHT (2 classes) passe plus souvent, mais un FRONTIER complet (7 classes
+  + aide + rattrapage) consomme ~60+ requêtes rapprochées : la clé reste
+  quasi indispensable.
+- Les `:free` de Kilo partagent les pools OpenRouter : si un modèle échoue
+  en 429 sur OpenRouter direct, il échouera pareillement via Kilo (et
+  inversement) — changer de gateway ne contourne pas le rate-limit upstream.
+- La récursion de `queryLLM` réinitialise les métriques `benchMetrics` par
+  tentative (les tentatives 429 sont comptées comme ERREUR puis la réussite
+  comme OK) — impact négligeable sur les stats globales.
+
 ## 2026-09-02 (b) — feat(night-batch) : --skip (passer au modèle suivant) + --resume (reprendre où la session s'était arrêtée)
 
 ### Contexte (1) : Ctrl+C tuait tout le batch
