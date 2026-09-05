@@ -1,0 +1,1049 @@
+{
+  "schemaVersion": 1,
+  "benchgoVersion": "V3",
+  "userId": "2181628c20fe6a0e",
+  "pseudo": "FlexoDiv",
+  "submittedAt": "2026-09-05T08:30:03.788Z",
+  "integrityHash": "5b96419b30808566",
+  "carnet": {
+    "model": "minimax/minimax-m3:free",
+    "shortName": "minimax-m3_free",
+    "ecoles": {
+      "Post-Doctorat": {
+        "best": {
+          "profile": "FRONTIER",
+          "ecole": "Post-Doctorat",
+          "score": 648,
+          "max": 3057,
+          "pct": 21,
+          "mandatoryPassed": 648,
+          "mandatoryTotal": 3057,
+          "globalLifeScore": 648,
+          "optionalBonus": 0,
+          "helpCount": 0,
+          "retriedCount": 1,
+          "calibrationIndex": null,
+          "declaredLevel": null,
+          "date": "2026-09-03",
+          "time": "14-15-24",
+          "reportFile": "Export-Rapports/2026-09-03/Post-Doctorat/FRONTIER/rapport_v3_minimax-m3_free_frontier_14-15-24.md",
+          "selfProfile": null,
+          "tiers": [
+            {
+              "tierNum": 0,
+              "tierTitle": "Tier 0 — Algorithmes Classiques et Closures",
+              "isMandatory": true,
+              "className": "PostDoc1",
+              "rawResponse": "\n\n---\n# Tache_0a — Curry\n\n```javascript\nfunction curry(fn) {\n  const arity = fn.length;\n  return function curried(...args) {\n    if (args.length >= arity) {\n      return fn.apply(this, args.slice(0, arity));\n    }\n    return function(...next) {\n      return curried.apply(this, args.concat(next));\n    };\n  };\n}\n```\n\n---\n\n### tache_0b — Égalité profonde\n\n```javascript\nfunction egalProfond(a, b) {\n  if (a === b) return true;\n  if (a === null || b === null) return false;\n  if (typeof a !== 'object' || typeof b !== 'object') return false;\n\n  if (Array.isArray(a) !== Array.isArray(b)) return false;\n\n  const keysA = Object.keys(a);\n  const keysB = Object.keys(b);\n  if (keysA.length !== keysB.length) return false;\n\n  for (const key of keysA) {\n    if (!Object.prototype.hasOwnProperty.call(b, key)) return false;\n    if (!egalProfond(a[key], b[key])) return false;\n  }\n  return true;\n}\n```\n\n---\n\n### tache_0c — Composition (droite → gauche)\n\n```javascript\nfunction composer(...fns) {\n  if (fns.length === 0) return x => x;\n  if (fns.length === 1) return fns[0];\n  return fns.reduce((acc, fn) => (...args) => acc(fn(...args)));\n}\n```\n\n---\n\n### tache_0d — Arbre binaire de recherche\n\n```javascript\nfunction creerBST() {\n  let root = null;\n\n  function insertNode(node, val) {\n    if (node === null) return { val, left: null, right: null };\n    if (val < node.val) node.left = insertNode(node.left, val);\n    else if (val > node.val) node.right = insertNode(node.right, val);\n    return node;\n  }\n\n  function searchNode(node, val) {\n    if (node === null) return false;\n    if (val === node.val) return true;\n    if (val < node.val) return searchNode(node.left, val);\n    return searchNode(node.right, val);\n  }\n\n  return {\n    insert(val) { root = insertNode(root, val); },\n    contains(val) { return searchNode(root, val); }\n  };\n}\n```\n\n---\n\n### tache_0e — Memoization\n\n```javascript\nfunction memoize(fn) {\n  const cache = new Map();\n  return function(...args) {\n    const key = JSON.stringify(args);\n    if (cache.has(key)) return cache.get(key);\n    const result = fn.apply(this, args);\n    cache.set(key, result);\n    return result;\n  };\n}\n```\n\n---\n\n### algo_facile_1 — Parité\n\n```javascript\nfunction estPair(n) {\n  return n % 2 === 0;\n}\n```\n\n---\n\n### algo_facile_2 — Carré\n\n```javascript\nfunction carre(n) {\n  return n * n;\n}\n```\n\n---\n\n### algo_moyen_1 — Somme 1..N\n\n```javascript\nfunction somme1aN(n) {\n  let s = 0;\n  for (let i = 1; i <= n; i++) s += i;\n  return s;\n}\n```\n\n---\n\n### algo_difficile_1 — Inversion de chaîne\n\n```javascript\nfunction inverserChaine(s) {\n  return s.split('').reverse().join('');\n}\n```\n\n---\n\n### algo_defi — Maximum d'un tableau\n\n```javascript\nfunction valeurMax(tab) {\n  let max = tab[0];\n  for (let i = 1; i < tab.length; i++) {\n    if (tab[i] > max) max = tab[i];\n  }\n  return max;\n}\n```",
+              "evalResults": [
+                {
+                  "id": "tache_0a",
+                  "label": "Curry auto-exécutant",
+                  "code": "function curry(fn) {\n  const arity = fn.length;\n  return function curried(...args) {\n    if (args.length >= arity) {\n      return fn.apply(this, args.slice(0, arity));\n    }\n    return function(...next) {\n      return curried.apply(this, args.concat(next));\n    };\n  };\n}",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "curry(a,b,c) appelé un par un",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "curry avec arguments groupés",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "curry à 2 arguments",
+                      "error": null
+                    }
+                  ],
+                  "points": 54,
+                  "maxPoints": 54,
+                  "taskType": "Curry auto-exécutant",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 0
+                },
+                {
+                  "id": "tache_0b",
+                  "label": "Égalité profonde",
+                  "code": "function egalProfond(a, b) {\n  if (a === b) return true;\n  if (a === null || b === null) return false;\n  if (typeof a !== 'object' || typeof b !== 'object') return false;\n\n  if (Array.isArray(a) !== Array.isArray(b)) return false;\n\n  const keysA = Object.keys(a);\n  const keysB = Object.keys(b);\n  if (keysA.length !== keysB.length) return false;\n\n  for (const key of keysA) {\n    if (!Object.prototype.hasOwnProperty.call(b, key)) return false;\n    if (!egalProfond(a[key], b[key])) return false;\n  }\n  return true;\n}",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "objets identiques",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "objets différents",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "tableaux imbriqués",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "primitives différentes",
+                      "error": null
+                    }
+                  ],
+                  "points": 45,
+                  "maxPoints": 45,
+                  "taskType": "Égalité profonde",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 0
+                },
+                {
+                  "id": "tache_0c",
+                  "label": "Composition de fonctions (droite→gauche)",
+                  "code": "function composer(...fns) {\n  if (fns.length === 0) return x => x;\n  if (fns.length === 1) return fns[0];\n  return fns.reduce((acc, fn) => (...args) => acc(fn(...args)));\n}",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "composer(f, g)(x) = f(g(x))",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "3 fonctions",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "une seule fonction",
+                      "error": null
+                    }
+                  ],
+                  "points": 53,
+                  "maxPoints": 53,
+                  "taskType": "Composition de fonctions (droite→gauche)",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 0
+                },
+                {
+                  "id": "tache_0d",
+                  "label": "Arbre binaire de recherche",
+                  "code": "function creerBST() {\n  let root = null;\n\n  function insertNode(node, val) {\n    if (node === null) return { val, left: null, right: null };\n    if (val < node.val) node.left = insertNode(node.left, val);\n    else if (val > node.val) node.right = insertNode(node.right, val);\n    return node;\n  }\n\n  function searchNode(node, val) {\n    if (node === null) return false;\n    if (val === node.val) return true;\n    if (val < node.val) return searchNode(node.left, val);\n    return searchNode(node.right, val);\n  }\n\n  return {\n    insert(val) { root = insertNode(root, val); },\n    contains(val) { return searchNode(root, val); }\n  };\n}",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "insert et contains trouvé",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "contains absent",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "BST vide",
+                      "error": null
+                    }
+                  ],
+                  "points": 34,
+                  "maxPoints": 34,
+                  "taskType": "Arbre binaire de recherche",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 0
+                },
+                {
+                  "id": "tache_0e",
+                  "label": "Memoization",
+                  "code": "function memoize(fn) {\n  const cache = new Map();\n  return function(...args) {\n    const key = JSON.stringify(args);\n    if (cache.has(key)) return cache.get(key);\n    const result = fn.apply(this, args);\n    cache.set(key, result);\n    return result;\n  };\n}",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "memoize : mise en cache",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "memoize : arguments différents",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "memoize : résultat correct",
+                      "error": null
+                    }
+                  ],
+                  "points": 46,
+                  "maxPoints": 46,
+                  "taskType": "Memoization",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 0
+                },
+                {
+                  "id": "algo_facile_1",
+                  "label": "Algorithmique — Parité",
+                  "code": "function estPair(n) {\n  return n % 2 === 0;\n}",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "Pair",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "Impair",
+                      "error": null
+                    }
+                  ],
+                  "points": 58,
+                  "maxPoints": 58,
+                  "taskType": "Algorithmique — Parité",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 0
+                },
+                {
+                  "id": "algo_facile_2",
+                  "label": "Algorithmique — Carré",
+                  "code": "function carre(n) {\n  return n * n;\n}",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "Positif",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "Zéro",
+                      "error": null
+                    }
+                  ],
+                  "points": 59,
+                  "maxPoints": 59,
+                  "taskType": "Algorithmique — Carré",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 0
+                },
+                {
+                  "id": "algo_moyen_1",
+                  "label": "Algorithmique — Somme 1..N",
+                  "code": "function somme1aN(n) {\n  let s = 0;\n  for (let i = 1; i <= n; i++) s += i;\n  return s;\n}",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "Somme 5",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "Somme 1",
+                      "error": null
+                    }
+                  ],
+                  "points": 55,
+                  "maxPoints": 55,
+                  "taskType": "Algorithmique — Somme 1..N",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 0
+                },
+                {
+                  "id": "algo_difficile_1",
+                  "label": "Algorithmique — Inversion de chaîne",
+                  "code": "function inverserChaine(s) {\n  return s.split('').reverse().join('');\n}",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "Mot",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "Un caractère",
+                      "error": null
+                    }
+                  ],
+                  "points": 37,
+                  "maxPoints": 37,
+                  "taskType": "Algorithmique — Inversion de chaîne",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 0
+                },
+                {
+                  "id": "algo_defi",
+                  "label": "Algorithmique — Maximum d'un tableau",
+                  "code": "function valeurMax(tab) {\n  let max = tab[0];\n  for (let i = 1; i < tab.length; i++) {\n    if (tab[i] > max) max = tab[i];\n  }\n  return max;\n}",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "Positifs",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "Négatifs",
+                      "error": null
+                    }
+                  ],
+                  "points": 58,
+                  "maxPoints": 58,
+                  "taskType": "Algorithmique — Maximum d'un tableau",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 0
+                }
+              ]
+            },
+            {
+              "tierNum": 3,
+              "tierTitle": "Tier 3 — Sécurité Avancée, Architecture et Algorithmes Complexes",
+              "isMandatory": true,
+              "className": "PostDoc4",
+              "rawResponse": "\n\n---\n```json\n{\n  \"tache_3a\": \"# deploy-patch.ps1\\nparam(\\n    [string]$DbPath = \\\"production.db\\\",\\n    [string]$BackupPath = \\\"production_backup.db\\\",\\n    [string]$MigrationPath = \\\"migration.sql\\\"\\n)\\n\\n$ErrorActionPreference = \\\"Stop\\\"\\n\\n# 1. Preventive backup BEFORE the migration\\nCopy-Item -Path $DbPath -Destination $BackupPath -Force\\n\\ntry {\\n    # 2. Run the SQL migration via the sqlite3 CLI\\n    $process = Start-Process -FilePath \\\"sqlite3\\\" -ArgumentList $DbPath, \\\".read $MigrationPath\\\" -NoNewWindow -Wait -PassThru\\n    $LASTEXITCODE = $process.ExitCode\\n\\n    if ($LASTEXITCODE -ne 0) {\\n        throw \\\"sqlite3 exited with code $LASTEXITCODE\\\"\\n    }\\n\\n    Write-Host \\\"Migration applied successfully.\\\"\\n    exit 0\\n}\\ncatch {\\n    Write-Warning (\\\"Migration failed: \\\" + $_.Exception.Message)\\n    # 3. Rollback: restore the backup over the production DB\\n    if (Test-Path $BackupPath) {\\n        Copy-Item -Path $BackupPath -Destination $DbPath -Force\\n        Write-Host \\\"Rollback performed: production.db restored from backup.\\\"\\n    } else {\\n        Write-Error \\\"Rollback impossible: backup file not found.\\\"\\n    }\\n    exit 1\\n}\\n\",\n  \"tache_3b\": \"function remplirMatrice(grille, x, y, nouvelleValeur) {\\n    if (!grille || !grille[y] || grille[y][x] === undefined) return grille;\\n    const valeurInitiale = grille[y][x];\\n    if (valeurInitiale === nouvelleValeur) return grille;\\n\\n    const m = grille.length;\\n    const n = grille[0].length;\\n    const pile = [[y, x]];\\n\\n    while (pile.length > 0) {\\n        const [cy, cx] = pile.pop();\\n        if (cx < 0 || cy < 0 || cx >= n || cy >= m) continue;\\n        if (grille[cy][cx] !== valeurInitiale) continue;\\n        grille[cy][cx] = nouvelleValeur;\\n        pile.push([cy + 1, cx]);\\n        pile.push([cy - 1, cx]);\\n        pile.push([cy, cx + 1]);\\n        pile.push([cy, cx - 1]);\\n    }\\n    return grille;\\n}\",\n  \"tache_3c\": \"async function middleware(request, env) {\\n    const auth = request.headers.get(\\\"Authorization\\\");\\n    if (auth !== \\\"Bearer SYSTEM-SECURE-KEY\\\") {\\n        return new Response(\\\"Access Denied\\\", { status: 403 });\\n    }\\n    return fetch(request);\\n}\",\n  \"tache_3d\": \"async function rechercherUtilisateurSecurise(db, nomUtilisateur) {\\n    const sql = \\\"SELECT * FROM utilisateurs WHERE nom = ?\\\";\\n    const params = [nomUtilisateur];\\n    return await db.query(sql, params);\\n}\",\n  \"tache_3e\": \"async function executerAvecRetry(operation, maxTentatives) {\\n    let derniereErreur;\\n    for (let i = 0; i < maxTentatives; i++) {\\n        try {\\n            return await operation();\\n        } catch (err) {\\n            derniereErreur = err;\\n        }\\n    }\\n    throw derniereErreur;\\n}\",\n  \"tache_3f\": \"function fusionnerConfig(base, override) {\\n    const INTERDITS = new Set([\\\"__proto__\\\", \\\"constructor\\\", \\\"prototype\\\"]);\\n    const estObjet = (v) => v !== null && typeof v === \\\"object\\\" && !Array.isArray(v);\\n\\n    const fusion = (a, b) => {\\n        if (!estObjet(a) || !estObjet(b)) return b;\\n        const resultat = {};\\n        for (const cle of Object.keys(a)) {\\n            if (INTERDITS.has(cle)) continue;\\n            if (Object.prototype.hasOwnProperty.call(a, cle)) {\\n                resultat[cle] = a[cle];\\n            }\\n        }\\n        for (const cle of Object.keys(b)) {\\n            if (INTERDITS.has(cle)) continue;\\n            if (Object.prototype.hasOwnProperty.call(b, cle)) {\\n                const vb = b[cle];\\n                const va = a[cle];\\n                if (estObjet(va) && estObjet(vb)) {\\n                    resultat[cle] = fusion(va, vb);\\n                } else {\\n                    resultat[cle] = vb;\\n                }\\n            }\\n        }\\n        return resultat;\\n    };\\n\\n    return fusion(base, override);\\n}\"\n}\n```\n\n### algo_facile_1\n```javascript\nfunction validerParentheses(s) {\n  let compteur = 0;\n  for (let i = 0; i < s.length; i++) {\n    const c = s[i];\n    if (c === \"(\") compteur++;\n    else if (c === \")\") {\n      compteur--;\n      if (compteur < 0) return false;\n    }\n  }\n  return compteur === 0;\n}\n```\n\n### algo_facile_2\n```javascript\nfunction fibonacci(n) {\n  if (n < 0) return 0;\n  if (n === 0) return 0;\n  if (n === 1) return 1;\n  let a = 0, b = 1;\n  for (let i = 2; i <= n; i++) {\n    const t = a + b;\n    a = b;\n    b = t;\n  }\n  return b;\n}\n```\n\n### algo_moyen_1\n```javascript\nfunction motsUniques(s) {\n  if (typeof s !== \"string\" || s.length === 0) return 0;\n  const mots = s.split(/\\s+/).filter(m => m.length > 0);\n  return new Set(mots).size;\n}\n```\n\n### algo_difficile_1\n```javascript\nfunction aplatirTableau(tab) {\n  const resultat = [];\n  for (let i = 0; i < tab.length; i++) {\n    const v = tab[i];\n    if (Array.isArray(v)) {\n      for (let j = 0; j < v.length; j++) resultat.push(v[j]);\n    } else {\n      resultat.push(v);\n    }\n  }\n  return resultat;\n}\n```\n\n### algo_defi\n```javascript\nfunction rotationDroite(tab, k) {\n  if (!Array.isArray(tab) || tab.length === 0) return tab.slice ? tab.slice() : [];\n  const n = tab.length;\n  const decalage = ((k % n) + n) % n;\n  if (decalage === 0) return tab.slice();\n  const part1 = tab.slice(n - decalage);\n  const part2 = tab.slice(0, n - decalage);\n  return part1.concat(part2);\n}\n```",
+              "evalResults": [
+                {
+                  "id": "tache_3a",
+                  "label": "Script PowerShell deploy-patch avec rollback",
+                  "code": "# deploy-patch.ps1\nparam(\n    [string]$DbPath = \"production.db\",\n    [string]$BackupPath = \"production_backup.db\",\n    [string]$MigrationPath = \"migration.sql\"\n)\n\n$ErrorActionPreference = \"Stop\"\n\n# 1. Preventive backup BEFORE the migration\nCopy-Item -Path $DbPath -Destination $BackupPath -Force\n\ntry {\n    # 2. Run the SQL migration via the sqlite3 CLI\n    $process = Start-Process -FilePath \"sqlite3\" -ArgumentList $DbPath, \".read $MigrationPath\" -NoNewWindow -Wait -PassThru\n    $LASTEXITCODE = $process.ExitCode\n\n    if ($LASTEXITCODE -ne 0) {\n        throw \"sqlite3 exited with code $LASTEXITCODE\"\n    }\n\n    Write-Host \"Migration applied successfully.\"\n    exit 0\n}\ncatch {\n    Write-Warning (\"Migration failed: \" + $_.Exception.Message)\n    # 3. Rollback: restore the backup over the production DB\n    if (Test-Path $BackupPath) {\n        Copy-Item -Path $BackupPath -Destination $DbPath -Force\n        Write-Host \"Rollback performed: production.db restored from backup.\"\n    } else {\n        Write-Error \"Rollback impossible: backup file not found.\"\n    }\n    exit 1\n}\n",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "Sauvegarde via Copy-Item",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "Détection d'erreur",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "Rollback",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "Analyse rollback",
+                      "error": null
+                    }
+                  ],
+                  "points": 37,
+                  "maxPoints": 37,
+                  "taskType": "Script PowerShell deploy-patch avec rollback",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 3
+                },
+                {
+                  "id": "tache_3b",
+                  "label": "Flood Fill",
+                  "code": "function remplirMatrice(grille, x, y, nouvelleValeur) {\n    if (!grille || !grille[y] || grille[y][x] === undefined) return grille;\n    const valeurInitiale = grille[y][x];\n    if (valeurInitiale === nouvelleValeur) return grille;\n\n    const m = grille.length;\n    const n = grille[0].length;\n    const pile = [[y, x]];\n\n    while (pile.length > 0) {\n        const [cy, cx] = pile.pop();\n        if (cx < 0 || cy < 0 || cx >= n || cy >= m) continue;\n        if (grille[cy][cx] !== valeurInitiale) continue;\n        grille[cy][cx] = nouvelleValeur;\n        pile.push([cy + 1, cx]);\n        pile.push([cy - 1, cx]);\n        pile.push([cy, cx + 1]);\n        pile.push([cy, cx - 1]);\n    }\n    return grille;\n}",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "Exécution réelle matrices",
+                      "error": null
+                    }
+                  ],
+                  "points": 31,
+                  "maxPoints": 31,
+                  "taskType": "Flood Fill",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 3
+                },
+                {
+                  "id": "tache_3c",
+                  "label": "Middleware Cloudflare",
+                  "code": "async function middleware(request, env) {\n    const auth = request.headers.get(\"Authorization\");\n    if (auth !== \"Bearer SYSTEM-SECURE-KEY\") {\n        return new Response(\"Access Denied\", { status: 403 });\n    }\n    return fetch(request);\n}",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "Bearer SYSTEM-SECURE-KEY",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "403 Access Denied",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "fetch(request)",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "Exécution réelle 403",
+                      "error": null
+                    }
+                  ],
+                  "points": 39,
+                  "maxPoints": 39,
+                  "taskType": "Middleware Cloudflare",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 3
+                },
+                {
+                  "id": "tache_3d",
+                  "label": "SQL paramétrée",
+                  "code": "async function rechercherUtilisateurSecurise(db, nomUtilisateur) {\n    const sql = \"SELECT * FROM utilisateurs WHERE nom = ?\";\n    const params = [nomUtilisateur];\n    return await db.query(sql, params);\n}",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "Placeholder ?",
+                      "error": null
+                    },
+                    {
+                      "passed": false,
+                      "description": "Cas nominal",
+                      "error": "Assertion échouée : Array.isArray(result) && result.length === 1"
+                    },
+                    {
+                      "passed": true,
+                      "description": "Pas de concat",
+                      "error": null
+                    }
+                  ],
+                  "points": -37,
+                  "maxPoints": 37,
+                  "taskType": "SQL paramétrée",
+                  "helpUsed": false,
+                  "retried": true,
+                  "status": "failed",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 3
+                },
+                {
+                  "id": "tache_3e",
+                  "label": "Retry async",
+                  "code": "async function executerAvecRetry(operation, maxTentatives) {\n    let derniereErreur;\n    for (let i = 0; i < maxTentatives; i++) {\n        try {\n            return await operation();\n        } catch (err) {\n            derniereErreur = err;\n        }\n    }\n    throw derniereErreur;\n}",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "3 scénarios",
+                      "error": null
+                    }
+                  ],
+                  "points": 49,
+                  "maxPoints": 49,
+                  "taskType": "Retry async",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 3
+                },
+                {
+                  "id": "tache_3f",
+                  "label": "Prototype pollution",
+                  "code": "function fusionnerConfig(base, override) {\n    const INTERDITS = new Set([\"__proto__\", \"constructor\", \"prototype\"]);\n    const estObjet = (v) => v !== null && typeof v === \"object\" && !Array.isArray(v);\n\n    const fusion = (a, b) => {\n        if (!estObjet(a) || !estObjet(b)) return b;\n        const resultat = {};\n        for (const cle of Object.keys(a)) {\n            if (INTERDITS.has(cle)) continue;\n            if (Object.prototype.hasOwnProperty.call(a, cle)) {\n                resultat[cle] = a[cle];\n            }\n        }\n        for (const cle of Object.keys(b)) {\n            if (INTERDITS.has(cle)) continue;\n            if (Object.prototype.hasOwnProperty.call(b, cle)) {\n                const vb = b[cle];\n                const va = a[cle];\n                if (estObjet(va) && estObjet(vb)) {\n                    resultat[cle] = fusion(va, vb);\n                } else {\n                    resultat[cle] = vb;\n                }\n            }\n        }\n        return resultat;\n    };\n\n    return fusion(base, override);\n}",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "Fusion simple",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "Fusion profonde",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "Anti pollution",
+                      "error": null
+                    }
+                  ],
+                  "points": 30,
+                  "maxPoints": 30,
+                  "taskType": "Prototype pollution",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 3
+                }
+              ]
+            }
+          ],
+          "quantization": null,
+          "elapsedMs": 27940,
+          "wallMs": 64071,
+          "tokens": 728,
+          "tokensPerSecond": 26.06,
+          "promptTokens": 2942,
+          "completionTokens": 728,
+          "timestampMs": 1788437741700,
+          "timestampIso": "2026-09-03T12:15:41.700Z"
+        },
+        "attempts": [
+          {
+            "profile": "FRONTIER",
+            "ecole": "Post-Doctorat",
+            "score": 648,
+            "max": 3057,
+            "pct": 21,
+            "mandatoryPassed": 648,
+            "mandatoryTotal": 3057,
+            "globalLifeScore": 648,
+            "optionalBonus": 0,
+            "helpCount": 0,
+            "retriedCount": 1,
+            "calibrationIndex": null,
+            "declaredLevel": null,
+            "date": "2026-09-03",
+            "time": "14-15-24",
+            "reportFile": "Export-Rapports/2026-09-03/Post-Doctorat/FRONTIER/rapport_v3_minimax-m3_free_frontier_14-15-24.md",
+            "selfProfile": null,
+            "tiers": [
+              {
+                "tierNum": 0,
+                "tierTitle": "Tier 0 — Algorithmes Classiques et Closures",
+                "isMandatory": true,
+                "className": "PostDoc1",
+                "rawResponse": "\n\n---\n# Tache_0a — Curry\n\n```javascript\nfunction curry(fn) {\n  const arity = fn.length;\n  return function curried(...args) {\n    if (args.length >= arity) {\n      return fn.apply(this, args.slice(0, arity));\n    }\n    return function(...next) {\n      return curried.apply(this, args.concat(next));\n    };\n  };\n}\n```\n\n---\n\n### tache_0b — Égalité profonde\n\n```javascript\nfunction egalProfond(a, b) {\n  if (a === b) return true;\n  if (a === null || b === null) return false;\n  if (typeof a !== 'object' || typeof b !== 'object') return false;\n\n  if (Array.isArray(a) !== Array.isArray(b)) return false;\n\n  const keysA = Object.keys(a);\n  const keysB = Object.keys(b);\n  if (keysA.length !== keysB.length) return false;\n\n  for (const key of keysA) {\n    if (!Object.prototype.hasOwnProperty.call(b, key)) return false;\n    if (!egalProfond(a[key], b[key])) return false;\n  }\n  return true;\n}\n```\n\n---\n\n### tache_0c — Composition (droite → gauche)\n\n```javascript\nfunction composer(...fns) {\n  if (fns.length === 0) return x => x;\n  if (fns.length === 1) return fns[0];\n  return fns.reduce((acc, fn) => (...args) => acc(fn(...args)));\n}\n```\n\n---\n\n### tache_0d — Arbre binaire de recherche\n\n```javascript\nfunction creerBST() {\n  let root = null;\n\n  function insertNode(node, val) {\n    if (node === null) return { val, left: null, right: null };\n    if (val < node.val) node.left = insertNode(node.left, val);\n    else if (val > node.val) node.right = insertNode(node.right, val);\n    return node;\n  }\n\n  function searchNode(node, val) {\n    if (node === null) return false;\n    if (val === node.val) return true;\n    if (val < node.val) return searchNode(node.left, val);\n    return searchNode(node.right, val);\n  }\n\n  return {\n    insert(val) { root = insertNode(root, val); },\n    contains(val) { return searchNode(root, val); }\n  };\n}\n```\n\n---\n\n### tache_0e — Memoization\n\n```javascript\nfunction memoize(fn) {\n  const cache = new Map();\n  return function(...args) {\n    const key = JSON.stringify(args);\n    if (cache.has(key)) return cache.get(key);\n    const result = fn.apply(this, args);\n    cache.set(key, result);\n    return result;\n  };\n}\n```\n\n---\n\n### algo_facile_1 — Parité\n\n```javascript\nfunction estPair(n) {\n  return n % 2 === 0;\n}\n```\n\n---\n\n### algo_facile_2 — Carré\n\n```javascript\nfunction carre(n) {\n  return n * n;\n}\n```\n\n---\n\n### algo_moyen_1 — Somme 1..N\n\n```javascript\nfunction somme1aN(n) {\n  let s = 0;\n  for (let i = 1; i <= n; i++) s += i;\n  return s;\n}\n```\n\n---\n\n### algo_difficile_1 — Inversion de chaîne\n\n```javascript\nfunction inverserChaine(s) {\n  return s.split('').reverse().join('');\n}\n```\n\n---\n\n### algo_defi — Maximum d'un tableau\n\n```javascript\nfunction valeurMax(tab) {\n  let max = tab[0];\n  for (let i = 1; i < tab.length; i++) {\n    if (tab[i] > max) max = tab[i];\n  }\n  return max;\n}\n```",
+                "evalResults": [
+                  {
+                    "id": "tache_0a",
+                    "label": "Curry auto-exécutant",
+                    "code": "function curry(fn) {\n  const arity = fn.length;\n  return function curried(...args) {\n    if (args.length >= arity) {\n      return fn.apply(this, args.slice(0, arity));\n    }\n    return function(...next) {\n      return curried.apply(this, args.concat(next));\n    };\n  };\n}",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "curry(a,b,c) appelé un par un",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "curry avec arguments groupés",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "curry à 2 arguments",
+                        "error": null
+                      }
+                    ],
+                    "points": 54,
+                    "maxPoints": 54,
+                    "taskType": "Curry auto-exécutant",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 0
+                  },
+                  {
+                    "id": "tache_0b",
+                    "label": "Égalité profonde",
+                    "code": "function egalProfond(a, b) {\n  if (a === b) return true;\n  if (a === null || b === null) return false;\n  if (typeof a !== 'object' || typeof b !== 'object') return false;\n\n  if (Array.isArray(a) !== Array.isArray(b)) return false;\n\n  const keysA = Object.keys(a);\n  const keysB = Object.keys(b);\n  if (keysA.length !== keysB.length) return false;\n\n  for (const key of keysA) {\n    if (!Object.prototype.hasOwnProperty.call(b, key)) return false;\n    if (!egalProfond(a[key], b[key])) return false;\n  }\n  return true;\n}",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "objets identiques",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "objets différents",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "tableaux imbriqués",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "primitives différentes",
+                        "error": null
+                      }
+                    ],
+                    "points": 45,
+                    "maxPoints": 45,
+                    "taskType": "Égalité profonde",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 0
+                  },
+                  {
+                    "id": "tache_0c",
+                    "label": "Composition de fonctions (droite→gauche)",
+                    "code": "function composer(...fns) {\n  if (fns.length === 0) return x => x;\n  if (fns.length === 1) return fns[0];\n  return fns.reduce((acc, fn) => (...args) => acc(fn(...args)));\n}",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "composer(f, g)(x) = f(g(x))",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "3 fonctions",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "une seule fonction",
+                        "error": null
+                      }
+                    ],
+                    "points": 53,
+                    "maxPoints": 53,
+                    "taskType": "Composition de fonctions (droite→gauche)",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 0
+                  },
+                  {
+                    "id": "tache_0d",
+                    "label": "Arbre binaire de recherche",
+                    "code": "function creerBST() {\n  let root = null;\n\n  function insertNode(node, val) {\n    if (node === null) return { val, left: null, right: null };\n    if (val < node.val) node.left = insertNode(node.left, val);\n    else if (val > node.val) node.right = insertNode(node.right, val);\n    return node;\n  }\n\n  function searchNode(node, val) {\n    if (node === null) return false;\n    if (val === node.val) return true;\n    if (val < node.val) return searchNode(node.left, val);\n    return searchNode(node.right, val);\n  }\n\n  return {\n    insert(val) { root = insertNode(root, val); },\n    contains(val) { return searchNode(root, val); }\n  };\n}",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "insert et contains trouvé",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "contains absent",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "BST vide",
+                        "error": null
+                      }
+                    ],
+                    "points": 34,
+                    "maxPoints": 34,
+                    "taskType": "Arbre binaire de recherche",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 0
+                  },
+                  {
+                    "id": "tache_0e",
+                    "label": "Memoization",
+                    "code": "function memoize(fn) {\n  const cache = new Map();\n  return function(...args) {\n    const key = JSON.stringify(args);\n    if (cache.has(key)) return cache.get(key);\n    const result = fn.apply(this, args);\n    cache.set(key, result);\n    return result;\n  };\n}",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "memoize : mise en cache",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "memoize : arguments différents",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "memoize : résultat correct",
+                        "error": null
+                      }
+                    ],
+                    "points": 46,
+                    "maxPoints": 46,
+                    "taskType": "Memoization",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 0
+                  },
+                  {
+                    "id": "algo_facile_1",
+                    "label": "Algorithmique — Parité",
+                    "code": "function estPair(n) {\n  return n % 2 === 0;\n}",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "Pair",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "Impair",
+                        "error": null
+                      }
+                    ],
+                    "points": 58,
+                    "maxPoints": 58,
+                    "taskType": "Algorithmique — Parité",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 0
+                  },
+                  {
+                    "id": "algo_facile_2",
+                    "label": "Algorithmique — Carré",
+                    "code": "function carre(n) {\n  return n * n;\n}",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "Positif",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "Zéro",
+                        "error": null
+                      }
+                    ],
+                    "points": 59,
+                    "maxPoints": 59,
+                    "taskType": "Algorithmique — Carré",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 0
+                  },
+                  {
+                    "id": "algo_moyen_1",
+                    "label": "Algorithmique — Somme 1..N",
+                    "code": "function somme1aN(n) {\n  let s = 0;\n  for (let i = 1; i <= n; i++) s += i;\n  return s;\n}",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "Somme 5",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "Somme 1",
+                        "error": null
+                      }
+                    ],
+                    "points": 55,
+                    "maxPoints": 55,
+                    "taskType": "Algorithmique — Somme 1..N",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 0
+                  },
+                  {
+                    "id": "algo_difficile_1",
+                    "label": "Algorithmique — Inversion de chaîne",
+                    "code": "function inverserChaine(s) {\n  return s.split('').reverse().join('');\n}",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "Mot",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "Un caractère",
+                        "error": null
+                      }
+                    ],
+                    "points": 37,
+                    "maxPoints": 37,
+                    "taskType": "Algorithmique — Inversion de chaîne",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 0
+                  },
+                  {
+                    "id": "algo_defi",
+                    "label": "Algorithmique — Maximum d'un tableau",
+                    "code": "function valeurMax(tab) {\n  let max = tab[0];\n  for (let i = 1; i < tab.length; i++) {\n    if (tab[i] > max) max = tab[i];\n  }\n  return max;\n}",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "Positifs",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "Négatifs",
+                        "error": null
+                      }
+                    ],
+                    "points": 58,
+                    "maxPoints": 58,
+                    "taskType": "Algorithmique — Maximum d'un tableau",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 0
+                  }
+                ]
+              },
+              {
+                "tierNum": 3,
+                "tierTitle": "Tier 3 — Sécurité Avancée, Architecture et Algorithmes Complexes",
+                "isMandatory": true,
+                "className": "PostDoc4",
+                "rawResponse": "\n\n---\n```json\n{\n  \"tache_3a\": \"# deploy-patch.ps1\\nparam(\\n    [string]$DbPath = \\\"production.db\\\",\\n    [string]$BackupPath = \\\"production_backup.db\\\",\\n    [string]$MigrationPath = \\\"migration.sql\\\"\\n)\\n\\n$ErrorActionPreference = \\\"Stop\\\"\\n\\n# 1. Preventive backup BEFORE the migration\\nCopy-Item -Path $DbPath -Destination $BackupPath -Force\\n\\ntry {\\n    # 2. Run the SQL migration via the sqlite3 CLI\\n    $process = Start-Process -FilePath \\\"sqlite3\\\" -ArgumentList $DbPath, \\\".read $MigrationPath\\\" -NoNewWindow -Wait -PassThru\\n    $LASTEXITCODE = $process.ExitCode\\n\\n    if ($LASTEXITCODE -ne 0) {\\n        throw \\\"sqlite3 exited with code $LASTEXITCODE\\\"\\n    }\\n\\n    Write-Host \\\"Migration applied successfully.\\\"\\n    exit 0\\n}\\ncatch {\\n    Write-Warning (\\\"Migration failed: \\\" + $_.Exception.Message)\\n    # 3. Rollback: restore the backup over the production DB\\n    if (Test-Path $BackupPath) {\\n        Copy-Item -Path $BackupPath -Destination $DbPath -Force\\n        Write-Host \\\"Rollback performed: production.db restored from backup.\\\"\\n    } else {\\n        Write-Error \\\"Rollback impossible: backup file not found.\\\"\\n    }\\n    exit 1\\n}\\n\",\n  \"tache_3b\": \"function remplirMatrice(grille, x, y, nouvelleValeur) {\\n    if (!grille || !grille[y] || grille[y][x] === undefined) return grille;\\n    const valeurInitiale = grille[y][x];\\n    if (valeurInitiale === nouvelleValeur) return grille;\\n\\n    const m = grille.length;\\n    const n = grille[0].length;\\n    const pile = [[y, x]];\\n\\n    while (pile.length > 0) {\\n        const [cy, cx] = pile.pop();\\n        if (cx < 0 || cy < 0 || cx >= n || cy >= m) continue;\\n        if (grille[cy][cx] !== valeurInitiale) continue;\\n        grille[cy][cx] = nouvelleValeur;\\n        pile.push([cy + 1, cx]);\\n        pile.push([cy - 1, cx]);\\n        pile.push([cy, cx + 1]);\\n        pile.push([cy, cx - 1]);\\n    }\\n    return grille;\\n}\",\n  \"tache_3c\": \"async function middleware(request, env) {\\n    const auth = request.headers.get(\\\"Authorization\\\");\\n    if (auth !== \\\"Bearer SYSTEM-SECURE-KEY\\\") {\\n        return new Response(\\\"Access Denied\\\", { status: 403 });\\n    }\\n    return fetch(request);\\n}\",\n  \"tache_3d\": \"async function rechercherUtilisateurSecurise(db, nomUtilisateur) {\\n    const sql = \\\"SELECT * FROM utilisateurs WHERE nom = ?\\\";\\n    const params = [nomUtilisateur];\\n    return await db.query(sql, params);\\n}\",\n  \"tache_3e\": \"async function executerAvecRetry(operation, maxTentatives) {\\n    let derniereErreur;\\n    for (let i = 0; i < maxTentatives; i++) {\\n        try {\\n            return await operation();\\n        } catch (err) {\\n            derniereErreur = err;\\n        }\\n    }\\n    throw derniereErreur;\\n}\",\n  \"tache_3f\": \"function fusionnerConfig(base, override) {\\n    const INTERDITS = new Set([\\\"__proto__\\\", \\\"constructor\\\", \\\"prototype\\\"]);\\n    const estObjet = (v) => v !== null && typeof v === \\\"object\\\" && !Array.isArray(v);\\n\\n    const fusion = (a, b) => {\\n        if (!estObjet(a) || !estObjet(b)) return b;\\n        const resultat = {};\\n        for (const cle of Object.keys(a)) {\\n            if (INTERDITS.has(cle)) continue;\\n            if (Object.prototype.hasOwnProperty.call(a, cle)) {\\n                resultat[cle] = a[cle];\\n            }\\n        }\\n        for (const cle of Object.keys(b)) {\\n            if (INTERDITS.has(cle)) continue;\\n            if (Object.prototype.hasOwnProperty.call(b, cle)) {\\n                const vb = b[cle];\\n                const va = a[cle];\\n                if (estObjet(va) && estObjet(vb)) {\\n                    resultat[cle] = fusion(va, vb);\\n                } else {\\n                    resultat[cle] = vb;\\n                }\\n            }\\n        }\\n        return resultat;\\n    };\\n\\n    return fusion(base, override);\\n}\"\n}\n```\n\n### algo_facile_1\n```javascript\nfunction validerParentheses(s) {\n  let compteur = 0;\n  for (let i = 0; i < s.length; i++) {\n    const c = s[i];\n    if (c === \"(\") compteur++;\n    else if (c === \")\") {\n      compteur--;\n      if (compteur < 0) return false;\n    }\n  }\n  return compteur === 0;\n}\n```\n\n### algo_facile_2\n```javascript\nfunction fibonacci(n) {\n  if (n < 0) return 0;\n  if (n === 0) return 0;\n  if (n === 1) return 1;\n  let a = 0, b = 1;\n  for (let i = 2; i <= n; i++) {\n    const t = a + b;\n    a = b;\n    b = t;\n  }\n  return b;\n}\n```\n\n### algo_moyen_1\n```javascript\nfunction motsUniques(s) {\n  if (typeof s !== \"string\" || s.length === 0) return 0;\n  const mots = s.split(/\\s+/).filter(m => m.length > 0);\n  return new Set(mots).size;\n}\n```\n\n### algo_difficile_1\n```javascript\nfunction aplatirTableau(tab) {\n  const resultat = [];\n  for (let i = 0; i < tab.length; i++) {\n    const v = tab[i];\n    if (Array.isArray(v)) {\n      for (let j = 0; j < v.length; j++) resultat.push(v[j]);\n    } else {\n      resultat.push(v);\n    }\n  }\n  return resultat;\n}\n```\n\n### algo_defi\n```javascript\nfunction rotationDroite(tab, k) {\n  if (!Array.isArray(tab) || tab.length === 0) return tab.slice ? tab.slice() : [];\n  const n = tab.length;\n  const decalage = ((k % n) + n) % n;\n  if (decalage === 0) return tab.slice();\n  const part1 = tab.slice(n - decalage);\n  const part2 = tab.slice(0, n - decalage);\n  return part1.concat(part2);\n}\n```",
+                "evalResults": [
+                  {
+                    "id": "tache_3a",
+                    "label": "Script PowerShell deploy-patch avec rollback",
+                    "code": "# deploy-patch.ps1\nparam(\n    [string]$DbPath = \"production.db\",\n    [string]$BackupPath = \"production_backup.db\",\n    [string]$MigrationPath = \"migration.sql\"\n)\n\n$ErrorActionPreference = \"Stop\"\n\n# 1. Preventive backup BEFORE the migration\nCopy-Item -Path $DbPath -Destination $BackupPath -Force\n\ntry {\n    # 2. Run the SQL migration via the sqlite3 CLI\n    $process = Start-Process -FilePath \"sqlite3\" -ArgumentList $DbPath, \".read $MigrationPath\" -NoNewWindow -Wait -PassThru\n    $LASTEXITCODE = $process.ExitCode\n\n    if ($LASTEXITCODE -ne 0) {\n        throw \"sqlite3 exited with code $LASTEXITCODE\"\n    }\n\n    Write-Host \"Migration applied successfully.\"\n    exit 0\n}\ncatch {\n    Write-Warning (\"Migration failed: \" + $_.Exception.Message)\n    # 3. Rollback: restore the backup over the production DB\n    if (Test-Path $BackupPath) {\n        Copy-Item -Path $BackupPath -Destination $DbPath -Force\n        Write-Host \"Rollback performed: production.db restored from backup.\"\n    } else {\n        Write-Error \"Rollback impossible: backup file not found.\"\n    }\n    exit 1\n}\n",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "Sauvegarde via Copy-Item",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "Détection d'erreur",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "Rollback",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "Analyse rollback",
+                        "error": null
+                      }
+                    ],
+                    "points": 37,
+                    "maxPoints": 37,
+                    "taskType": "Script PowerShell deploy-patch avec rollback",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 3
+                  },
+                  {
+                    "id": "tache_3b",
+                    "label": "Flood Fill",
+                    "code": "function remplirMatrice(grille, x, y, nouvelleValeur) {\n    if (!grille || !grille[y] || grille[y][x] === undefined) return grille;\n    const valeurInitiale = grille[y][x];\n    if (valeurInitiale === nouvelleValeur) return grille;\n\n    const m = grille.length;\n    const n = grille[0].length;\n    const pile = [[y, x]];\n\n    while (pile.length > 0) {\n        const [cy, cx] = pile.pop();\n        if (cx < 0 || cy < 0 || cx >= n || cy >= m) continue;\n        if (grille[cy][cx] !== valeurInitiale) continue;\n        grille[cy][cx] = nouvelleValeur;\n        pile.push([cy + 1, cx]);\n        pile.push([cy - 1, cx]);\n        pile.push([cy, cx + 1]);\n        pile.push([cy, cx - 1]);\n    }\n    return grille;\n}",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "Exécution réelle matrices",
+                        "error": null
+                      }
+                    ],
+                    "points": 31,
+                    "maxPoints": 31,
+                    "taskType": "Flood Fill",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 3
+                  },
+                  {
+                    "id": "tache_3c",
+                    "label": "Middleware Cloudflare",
+                    "code": "async function middleware(request, env) {\n    const auth = request.headers.get(\"Authorization\");\n    if (auth !== \"Bearer SYSTEM-SECURE-KEY\") {\n        return new Response(\"Access Denied\", { status: 403 });\n    }\n    return fetch(request);\n}",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "Bearer SYSTEM-SECURE-KEY",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "403 Access Denied",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "fetch(request)",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "Exécution réelle 403",
+                        "error": null
+                      }
+                    ],
+                    "points": 39,
+                    "maxPoints": 39,
+                    "taskType": "Middleware Cloudflare",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 3
+                  },
+                  {
+                    "id": "tache_3d",
+                    "label": "SQL paramétrée",
+                    "code": "async function rechercherUtilisateurSecurise(db, nomUtilisateur) {\n    const sql = \"SELECT * FROM utilisateurs WHERE nom = ?\";\n    const params = [nomUtilisateur];\n    return await db.query(sql, params);\n}",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "Placeholder ?",
+                        "error": null
+                      },
+                      {
+                        "passed": false,
+                        "description": "Cas nominal",
+                        "error": "Assertion échouée : Array.isArray(result) && result.length === 1"
+                      },
+                      {
+                        "passed": true,
+                        "description": "Pas de concat",
+                        "error": null
+                      }
+                    ],
+                    "points": -37,
+                    "maxPoints": 37,
+                    "taskType": "SQL paramétrée",
+                    "helpUsed": false,
+                    "retried": true,
+                    "status": "failed",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 3
+                  },
+                  {
+                    "id": "tache_3e",
+                    "label": "Retry async",
+                    "code": "async function executerAvecRetry(operation, maxTentatives) {\n    let derniereErreur;\n    for (let i = 0; i < maxTentatives; i++) {\n        try {\n            return await operation();\n        } catch (err) {\n            derniereErreur = err;\n        }\n    }\n    throw derniereErreur;\n}",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "3 scénarios",
+                        "error": null
+                      }
+                    ],
+                    "points": 49,
+                    "maxPoints": 49,
+                    "taskType": "Retry async",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 3
+                  },
+                  {
+                    "id": "tache_3f",
+                    "label": "Prototype pollution",
+                    "code": "function fusionnerConfig(base, override) {\n    const INTERDITS = new Set([\"__proto__\", \"constructor\", \"prototype\"]);\n    const estObjet = (v) => v !== null && typeof v === \"object\" && !Array.isArray(v);\n\n    const fusion = (a, b) => {\n        if (!estObjet(a) || !estObjet(b)) return b;\n        const resultat = {};\n        for (const cle of Object.keys(a)) {\n            if (INTERDITS.has(cle)) continue;\n            if (Object.prototype.hasOwnProperty.call(a, cle)) {\n                resultat[cle] = a[cle];\n            }\n        }\n        for (const cle of Object.keys(b)) {\n            if (INTERDITS.has(cle)) continue;\n            if (Object.prototype.hasOwnProperty.call(b, cle)) {\n                const vb = b[cle];\n                const va = a[cle];\n                if (estObjet(va) && estObjet(vb)) {\n                    resultat[cle] = fusion(va, vb);\n                } else {\n                    resultat[cle] = vb;\n                }\n            }\n        }\n        return resultat;\n    };\n\n    return fusion(base, override);\n}",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "Fusion simple",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "Fusion profonde",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "Anti pollution",
+                        "error": null
+                      }
+                    ],
+                    "points": 30,
+                    "maxPoints": 30,
+                    "taskType": "Prototype pollution",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 3
+                  }
+                ]
+              }
+            ],
+            "quantization": null,
+            "elapsedMs": 27940,
+            "wallMs": 64071,
+            "tokens": 728,
+            "tokensPerSecond": 26.06,
+            "promptTokens": 2942,
+            "completionTokens": 728,
+            "timestampMs": 1788437741700,
+            "timestampIso": "2026-09-03T12:15:41.700Z"
+          }
+        ]
+      }
+    },
+    "lastUpdated": "2026-09-03T12:15:41.702Z",
+    "provider": "kilo",
+    "isCloud": true
+  }
+}
