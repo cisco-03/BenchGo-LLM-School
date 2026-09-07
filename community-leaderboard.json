@@ -62862,10 +62862,10 @@
     },
     {
       "model": "harnessllm_sft_qwen3_4b",
-      "displayName": null,
+      "displayName": "harnessllm_sft_qwen3_4b-Q6_K",
       "shortName": "harnessllm-sft-qwen3-4b",
       "quantization": "Q6_K",
-      "modelUrl": null,
+      "modelUrl": "https://huggingface.co/mradermacher/HarnessLLM_SFT_Qwen3_4B-GGUF",
       "note": null,
       "publisher": null,
       "provider": "lmstudio",
@@ -63827,7 +63827,7 @@
         "College-Lycee"
       ],
       "pseudo": "FlexoDiv",
-      "submittedAt": "2026-09-03T10:49:38.925Z",
+      "submittedAt": "2026-09-07T06:41:11.127Z",
       "contributors": 1,
       "allPct": [
         80
@@ -78213,6 +78213,6 @@
       ]
     }
   ],
-  "generatedAt": "2026-09-07T06:41:27.454Z",
+  "generatedAt": "2026-09-07T06:41:43.289Z",
   "totalSubmissions": 81
 }
