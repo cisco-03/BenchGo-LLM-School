@@ -3,8 +3,8 @@
   "benchgoVersion": "V3",
   "userId": "2181628c20fe6a0e",
   "pseudo": "FlexoDiv",
-  "submittedAt": "2026-09-03T10:49:32.801Z",
-  "integrityHash": "0f978683d4a367ae",
+  "submittedAt": "2026-09-07T06:39:47.734Z",
+  "integrityHash": "35ad6263eb27ab49",
   "carnet": {
     "model": "ornith-1.5-9b@q6_k",
     "shortName": "ornith-1.5-9b_q6_k",
@@ -7420,9 +7420,12 @@
         ]
       }
     },
-    "lastUpdated": "2026-09-03T01:51:34.181Z",
+    "lastUpdated": "2026-09-05T09:21:49.892Z",
     "provider": "lmstudio",
     "isCloud": false,
-    "quantization": "Q6_K"
+    "quantization": "Q6_K",
+    "paramSize": 9,
+    "modelUrl": "https://huggingface.co/ornith-ai/Ornith-1.5-9B-GGUF",
+    "displayName": "ornith-1.5-9b@q6_k"
   }
 }
