@@ -3,8 +3,8 @@
   "benchgoVersion": "V3",
   "userId": "2181628c20fe6a0e",
   "pseudo": "FlexoDiv",
-  "submittedAt": "2026-09-07T06:39:35.018Z",
-  "integrityHash": "0d70826493f736a8",
+  "submittedAt": "2026-09-11T07:42:26.363Z",
+  "integrityHash": "5e92f4946e285389",
   "carnet": {
     "model": "gemma4",
     "shortName": "gemma4",
@@ -3792,8 +3792,11 @@
         ]
       }
     },
-    "lastUpdated": "2026-09-06T19:30:26.439Z",
+    "lastUpdated": "2026-09-07T07:22:06.324Z",
     "provider": "ollama",
-    "isCloud": false
+    "isCloud": false,
+    "modelUrl": "https://ollama.com/library/gemma4",
+    "paramSize": 32.7,
+    "displayName": "gemma4:31b-cloud"
   }
 }
