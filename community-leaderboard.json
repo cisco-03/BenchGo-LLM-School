@@ -971,10 +971,10 @@
     },
     {
       "model": "gemma4",
-      "displayName": null,
+      "displayName": "gemma4:31b-cloud",
       "shortName": "gemma4",
       "quantization": null,
-      "modelUrl": null,
+      "modelUrl": "https://ollama.com/library/gemma4",
       "note": null,
       "publisher": null,
       "provider": "ollama",
@@ -1855,7 +1855,7 @@
         "Post-Doctorat"
       ],
       "pseudo": "FlexoDiv",
-      "submittedAt": "2026-09-07T06:39:35.018Z",
+      "submittedAt": "2026-09-11T07:42:26.363Z",
       "contributors": 1,
       "allPct": [
         100
@@ -79101,6 +79101,6 @@
       ]
     }
   ],
-  "generatedAt": "2026-09-07T08:23:26.207Z",
+  "generatedAt": "2026-09-11T07:42:48.585Z",
   "totalSubmissions": 82
 }
