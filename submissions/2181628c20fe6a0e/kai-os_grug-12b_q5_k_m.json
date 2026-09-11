@@ -1,0 +1,136 @@
+{
+  "schemaVersion": 1,
+  "benchgoVersion": "V3",
+  "userId": "2181628c20fe6a0e",
+  "pseudo": "FlexoDiv",
+  "submittedAt": "2026-09-11T07:43:09.545Z",
+  "integrityHash": "99f1c7ec2945fa89",
+  "carnet": {
+    "model": "kai-os_grug-12b@q5_k_m",
+    "shortName": "kai-os_grug-12b_q5_k_m",
+    "ecoles": {
+      "RunCode-College-Lycee": {
+        "best": {
+          "profile": "STANDARD",
+          "ecole": "RunCode-College-Lycee",
+          "runCode": true,
+          "parcours": "College-Lycee",
+          "diplome": "6eme",
+          "specialite": "cpp",
+          "specialiteVerdict": "Spécialité : CPP — réussi 1/1 exercice(s) (100%) dans ce langage au fil des classes.",
+          "declaration": {
+            "majeure": "javascript",
+            "mineure": "python",
+            "niveau": "expert"
+          },
+          "disqualified": false,
+          "score": 1,
+          "max": 2,
+          "pct": 50,
+          "mandatoryPassed": 1,
+          "mandatoryTotal": 2,
+          "globalLifeScore": 0,
+          "optionalBonus": 0,
+          "helpCount": 0,
+          "retriedCount": 0,
+          "date": "2026-09-10",
+          "time": "20-06-57",
+          "reportFile": "Export-Rapports/exam_kai_os_grug_12b_q5_k_m_1789063402382.log",
+          "selfProfile": null,
+          "tiers": [
+            {
+              "tierNum": -1,
+              "runCode": true,
+              "className": "6eme",
+              "language": "cpp",
+              "exerciseId": "cpp_col_01_iterator_invalidation",
+              "passed": true,
+              "attempts": 2
+            },
+            {
+              "tierNum": -1,
+              "runCode": true,
+              "className": "5eme",
+              "language": "csharp",
+              "exerciseId": "cs_5e_01_async_task",
+              "passed": false,
+              "attempts": 2
+            }
+          ],
+          "quantization": "Q5_K_M",
+          "elapsedMs": 139910,
+          "wallMs": 139910,
+          "tokens": 319,
+          "tokensPerSecond": 2.28,
+          "promptTokens": 0,
+          "completionTokens": 319,
+          "timestampMs": 1789063617564,
+          "timestampIso": "2026-09-10T18:06:57.564Z"
+        },
+        "attempts": [
+          {
+            "profile": "STANDARD",
+            "ecole": "RunCode-College-Lycee",
+            "runCode": true,
+            "parcours": "College-Lycee",
+            "diplome": "6eme",
+            "specialite": "cpp",
+            "specialiteVerdict": "Spécialité : CPP — réussi 1/1 exercice(s) (100%) dans ce langage au fil des classes.",
+            "declaration": {
+              "majeure": "javascript",
+              "mineure": "python",
+              "niveau": "expert"
+            },
+            "disqualified": false,
+            "score": 1,
+            "max": 2,
+            "pct": 50,
+            "mandatoryPassed": 1,
+            "mandatoryTotal": 2,
+            "globalLifeScore": 0,
+            "optionalBonus": 0,
+            "helpCount": 0,
+            "retriedCount": 0,
+            "date": "2026-09-10",
+            "time": "20-06-57",
+            "reportFile": "Export-Rapports/exam_kai_os_grug_12b_q5_k_m_1789063402382.log",
+            "selfProfile": null,
+            "tiers": [
+              {
+                "tierNum": -1,
+                "runCode": true,
+                "className": "6eme",
+                "language": "cpp",
+                "exerciseId": "cpp_col_01_iterator_invalidation",
+                "passed": true,
+                "attempts": 2
+              },
+              {
+                "tierNum": -1,
+                "runCode": true,
+                "className": "5eme",
+                "language": "csharp",
+                "exerciseId": "cs_5e_01_async_task",
+                "passed": false,
+                "attempts": 2
+              }
+            ],
+            "quantization": "Q5_K_M",
+            "elapsedMs": 139910,
+            "wallMs": 139910,
+            "tokens": 319,
+            "tokensPerSecond": 2.28,
+            "promptTokens": 0,
+            "completionTokens": 319,
+            "timestampMs": 1789063617564,
+            "timestampIso": "2026-09-10T18:06:57.564Z"
+          }
+        ]
+      }
+    },
+    "lastUpdated": "2026-09-10T18:06:57.566Z",
+    "provider": "lmstudio",
+    "isCloud": false,
+    "quantization": "Q5_K_M"
+  }
+}
