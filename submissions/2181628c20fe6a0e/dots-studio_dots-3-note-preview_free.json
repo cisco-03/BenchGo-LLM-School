@@ -1,0 +1,2425 @@
+{
+  "schemaVersion": 1,
+  "benchgoVersion": "V3",
+  "userId": "2181628c20fe6a0e",
+  "pseudo": "FlexoDiv",
+  "submittedAt": "2026-09-05T08:29:58.256Z",
+  "integrityHash": "a61ea4a40ac5f8b3",
+  "carnet": {
+    "model": "dots-studio/dots-3-note-preview:free",
+    "shortName": "dots-studio_dots-3-note-preview_free",
+    "ecoles": {
+      "Post-Doctorat": {
+        "best": {
+          "profile": "FRONTIER",
+          "ecole": "Post-Doctorat",
+          "score": 1741,
+          "max": 2846,
+          "pct": 61,
+          "mandatoryPassed": 1741,
+          "mandatoryTotal": 2846,
+          "globalLifeScore": 1741,
+          "optionalBonus": 0,
+          "helpCount": 0,
+          "retriedCount": 1,
+          "calibrationIndex": null,
+          "declaredLevel": null,
+          "date": "2026-09-03",
+          "time": "14-11-03",
+          "reportFile": "Export-Rapports/2026-09-03/Post-Doctorat/FRONTIER/rapport_v3_dots-studio_dots-3-note-preview_free_frontier_14-11-03.md",
+          "selfProfile": null,
+          "tiers": [
+            {
+              "tierNum": 0,
+              "tierTitle": "Tier 0 — Algorithmes Classiques et Closures",
+              "isMandatory": true,
+              "className": "PostDoc1",
+              "rawResponse": "\n\n---\n### tache_0a\n```javascript\nfunction curry(fn) {\n  return function curried(...args) {\n    if (args.length >= fn.length) {\n      return fn(...args);\n    } else {\n      return (...nextArgs) => curried(...args, ...nextArgs);\n    }\n  };\n}\n```\n\n### tache_0b\n```javascript\nfunction egalProfond(a, b) {\n  if (a === b) return true;\n  if (typeof a !== typeof b) return false;\n  if (a === null || b === null) return a === b;\n  if (typeof a !== 'object') return a === b;\n  // Gérer la différence tableau / objet\n  if (Array.isArray(a) !== Array.isArray(b)) return false;\n  const keysA = Object.keys(a);\n  const keysB = Object.keys(b);\n  if (keysA.length !== keysB.length) return false;\n  for (const key of keysA) {\n    if (!egalProfond(a[key], b[key])) return false;\n  }\n  return true;\n}\n```\n\n### tache_0c\n```javascript\nfunction composer(...fns) {\n  return function(x) {\n    return fns.reduceRight((acc, fn) => fn(acc), x);\n  };\n}\n```\n\n### tache_0d\n```javascript\nfunction creerBST() {\n  class Node {\n    constructor(val) {\n      this.val = val;\n      this.left = null;\n      this.right = null;\n    }\n  }\n\n  let root = null;\n\n  return {\n    insert(val) {\n      const newNode = new Node(val);\n      if (!root) {\n        root = newNode;\n        return;\n      }\n      let current = root;\n      while (true) {\n        if (val < current.val) {\n          if (!current.left) {\n            current.left = newNode;\n            return;\n          }\n          current = current.left;\n        } else if (val > current.val) {\n          if (!current.right) {\n            current.right = newNode;\n            return;\n          }\n          current = current.right;\n        } else {\n          // Valeur déjà existante, on ignore\n          return;\n        }\n      }\n    },\n\n    contains(val) {\n      let current = root;\n      while (current) {\n        if (val === current.val) return true;\n        if (val < current.val) {\n          current = current.left;\n        } else {\n          current = current.right;\n        }\n      }\n      return false;\n    }\n  };\n}\n```\n\n### tache_0e\n```javascript\nfunction memoize(fn) {\n  const cache = new Map();\n  return function(...args) {\n    const key = JSON.stringify(args);\n    if (cache.has(key)) {\n      return cache.get(key);\n    }\n    const result = fn(...args);\n    cache.set(key, result);\n    return result;\n  };\n}\n```\n\n### algo_facile_1\n```javascript\nfunction estPair(n) {\n  return n % 2 === 0;\n}\n```\n\n### algo_facile_2\n```javascript\nfunction carre(n) {\n  return n * n;\n}\n```\n\n### algo_moyen_1\n```javascript\nfunction somme1aN(n) {\n  return (n * (n + 1)) / 2;\n}\n```\n\n### algo_difficile_1\n```javascript\nfunction inverserChaine(s) {\n  return s.split('').reverse().join('');\n}\n```\n\n### algo_defi\n```javascript\nfunction valeurMax(tab) {\n  let max = tab[0];\n  for (let i = 1; i < tab.length; i++) {\n    if (tab[i] > max) max = tab[i];\n  }\n  return max;\n}\n```",
+              "evalResults": [
+                {
+                  "id": "tache_0a",
+                  "label": "Curry auto-exécutant",
+                  "code": "function curry(fn) {\n  return function curried(...args) {\n    if (args.length >= fn.length) {\n      return fn(...args);\n    } else {\n      return (...nextArgs) => curried(...args, ...nextArgs);\n    }\n  };\n}",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "curry(a,b,c) appelé un par un",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "curry avec arguments groupés",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "curry à 2 arguments",
+                      "error": null
+                    }
+                  ],
+                  "points": 57,
+                  "maxPoints": 57,
+                  "taskType": "Curry auto-exécutant",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 0
+                },
+                {
+                  "id": "tache_0b",
+                  "label": "Égalité profonde",
+                  "code": "function egalProfond(a, b) {\n  if (a === b) return true;\n  if (typeof a !== typeof b) return false;\n  if (a === null || b === null) return a === b;\n  if (typeof a !== 'object') return a === b;\n  // Gérer la différence tableau / objet\n  if (Array.isArray(a) !== Array.isArray(b)) return false;\n  const keysA = Object.keys(a);\n  const keysB = Object.keys(b);\n  if (keysA.length !== keysB.length) return false;\n  for (const key of keysA) {\n    if (!egalProfond(a[key], b[key])) return false;\n  }\n  return true;\n}",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "objets identiques",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "objets différents",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "tableaux imbriqués",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "primitives différentes",
+                      "error": null
+                    }
+                  ],
+                  "points": 45,
+                  "maxPoints": 45,
+                  "taskType": "Égalité profonde",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 0
+                },
+                {
+                  "id": "tache_0c",
+                  "label": "Composition de fonctions (droite→gauche)",
+                  "code": "function composer(...fns) {\n  return function(x) {\n    return fns.reduceRight((acc, fn) => fn(acc), x);\n  };\n}",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "composer(f, g)(x) = f(g(x))",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "3 fonctions",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "une seule fonction",
+                      "error": null
+                    }
+                  ],
+                  "points": 44,
+                  "maxPoints": 44,
+                  "taskType": "Composition de fonctions (droite→gauche)",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 0
+                },
+                {
+                  "id": "tache_0d",
+                  "label": "Arbre binaire de recherche",
+                  "code": "function creerBST() {\n  class Node {\n    constructor(val) {\n      this.val = val;\n      this.left = null;\n      this.right = null;\n    }\n  }\n\n  let root = null;\n\n  return {\n    insert(val) {\n      const newNode = new Node(val);\n      if (!root) {\n        root = newNode;\n        return;\n      }\n      let current = root;\n      while (true) {\n        if (val < current.val) {\n          if (!current.left) {\n            current.left = newNode;\n            return;\n          }\n          current = current.left;\n        } else if (val > current.val) {\n          if (!current.right) {\n            current.right = newNode;\n            return;\n          }\n          current = current.right;\n        } else {\n          // Valeur déjà existante, on ignore\n          return;\n        }\n      }\n    },\n\n    contains(val) {\n      let current = root;\n      while (current) {\n        if (val === current.val) return true;\n        if (val < current.val) {\n          current = current.left;\n        } else {\n          current = current.right;\n        }\n      }\n      return false;\n    }\n  };\n}",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "insert et contains trouvé",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "contains absent",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "BST vide",
+                      "error": null
+                    }
+                  ],
+                  "points": 51,
+                  "maxPoints": 51,
+                  "taskType": "Arbre binaire de recherche",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 0
+                },
+                {
+                  "id": "tache_0e",
+                  "label": "Memoization",
+                  "code": "function memoize(fn) {\n  const cache = new Map();\n  return function(...args) {\n    const key = JSON.stringify(args);\n    if (cache.has(key)) {\n      return cache.get(key);\n    }\n    const result = fn(...args);\n    cache.set(key, result);\n    return result;\n  };\n}",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "memoize : mise en cache",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "memoize : arguments différents",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "memoize : résultat correct",
+                      "error": null
+                    }
+                  ],
+                  "points": 34,
+                  "maxPoints": 34,
+                  "taskType": "Memoization",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 0
+                },
+                {
+                  "id": "algo_facile_1",
+                  "label": "Algorithmique — Parité",
+                  "code": "function estPair(n) {\n  return n % 2 === 0;\n}",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "Pair",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "Impair",
+                      "error": null
+                    }
+                  ],
+                  "points": 32,
+                  "maxPoints": 32,
+                  "taskType": "Algorithmique — Parité",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 0
+                },
+                {
+                  "id": "algo_facile_2",
+                  "label": "Algorithmique — Carré",
+                  "code": "function carre(n) {\n  return n * n;\n}",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "Positif",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "Zéro",
+                      "error": null
+                    }
+                  ],
+                  "points": 45,
+                  "maxPoints": 45,
+                  "taskType": "Algorithmique — Carré",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 0
+                },
+                {
+                  "id": "algo_moyen_1",
+                  "label": "Algorithmique — Somme 1..N",
+                  "code": "function somme1aN(n) {\n  return (n * (n + 1)) / 2;\n}",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "Somme 5",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "Somme 1",
+                      "error": null
+                    }
+                  ],
+                  "points": 56,
+                  "maxPoints": 56,
+                  "taskType": "Algorithmique — Somme 1..N",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 0
+                },
+                {
+                  "id": "algo_difficile_1",
+                  "label": "Algorithmique — Inversion de chaîne",
+                  "code": "function inverserChaine(s) {\n  return s.split('').reverse().join('');\n}",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "Mot",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "Un caractère",
+                      "error": null
+                    }
+                  ],
+                  "points": 39,
+                  "maxPoints": 39,
+                  "taskType": "Algorithmique — Inversion de chaîne",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 0
+                },
+                {
+                  "id": "algo_defi",
+                  "label": "Algorithmique — Maximum d'un tableau",
+                  "code": "function valeurMax(tab) {\n  let max = tab[0];\n  for (let i = 1; i < tab.length; i++) {\n    if (tab[i] > max) max = tab[i];\n  }\n  return max;\n}",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "Positifs",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "Négatifs",
+                      "error": null
+                    }
+                  ],
+                  "points": 56,
+                  "maxPoints": 56,
+                  "taskType": "Algorithmique — Maximum d'un tableau",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 0
+                }
+              ]
+            },
+            {
+              "tierNum": 1,
+              "tierTitle": "Tier 1 — Structures de Données et Patterns Avancés",
+              "isMandatory": true,
+              "className": "PostDoc2",
+              "rawResponse": "\n\n---\n### tache_1a\n```javascript\nfunction creerFilePriorite() {\n  const heap = []; // elements: { val, priorite }\n\n  function enqueue(val, priorite) {\n    heap.push({ val, priorite });\n    let idx = heap.length - 1;\n    while (idx > 0) {\n      const parent = Math.floor((idx - 1) / 2);\n      if (heap[parent].priorite <= heap[idx].priorite) break;\n      [heap[parent], heap[idx]] = [heap[idx], heap[parent]];\n      idx = parent;\n    }\n  }\n\n  function dequeue() {\n    if (heap.length === 0) return null;\n    const min = heap[0].val;\n    const last = heap.pop();\n    if (heap.length > 0) {\n      heap[0] = last;\n      let idx = 0;\n      const n = heap.length;\n      while (true) {\n        const left = 2 * idx + 1;\n        const right = 2 * idx + 2;\n        let smallest = idx;\n        if (left < n && heap[left].priorite < heap[smallest].priorite) smallest = left;\n        if (right < n && heap[right].priorite < heap[smallest].priorite) smallest = right;\n        if (smallest === idx) break;\n        [heap[idx], heap[smallest]] = [heap[smallest], heap[idx]];\n        idx = smallest;\n      }\n    }\n    return min;\n  }\n\n  function taille() {\n    return heap.length;\n  }\n\n  return { enqueue, dequeue, taille };\n}\n```\n\n### tache_1b\n```javascript\nfunction creerEventEmitter() {\n  const events = {};\n\n  function on(event, fn) {\n    if (!events[event]) events[event] = [];\n    events[event].push(fn);\n  }\n\n  function off(event, fn) {\n    if (!events[event]) return;\n    const index = events[event].indexOf(fn);\n    if (index !== -1) events[event].splice(index, 1);\n  }\n\n  function emit(event, ...args) {\n    if (!events[event]) return;\n    // Copy to avoid issues if listeners modify the list during emit\n    events[event].forEach(fn => fn(...args));\n  }\n\n  return { on, off, emit };\n}\n```\n\n### tache_1c\n```javascript\nfunction zip(...tableaux) {\n  if (tableaux.length === 0) return [];\n  const minLength = Math.min(...tableaux.map(arr => arr.length));\n  const result = [];\n  for (let i = 0; i < minLength; i++) {\n    const tuple = tableaux.map(arr => arr[i]);\n    result.push(tuple);\n  }\n  return result;\n}\n```\n\n### tache_1d\n```javascript\nfunction parcoursEnLargeur(graphe, depart) {\n  const visites = [];\n  const file = [depart];\n  while (file.length > 0) {\n    const noeud = file.shift(); // corrected: shift() for BFS (FIFO)\n    if (!visites.includes(noeud)) {\n      visites.push(noeud);\n      for (const voisin of (graphe[noeud] || [])) {\n        file.push(voisin);\n      }\n    }\n  }\n  return visites;\n}\n```\n\n### tache_1e\n```javascript\nfunction creerProxy(cible, gestionnaire) {\n  const proxy = {};\n  // Intercept all own enumerable properties of the target\n  Object.keys(cible).forEach(key => {\n    Object.defineProperty(proxy, key, {\n      get: () => gestionnaire.get(cible, key),\n      set: (valeur) => gestionnaire.set(cible, key, valeur),\n      enumerable: true,\n      configurable: true\n    });\n  });\n  return proxy;\n}\n```\n\n### algo_facile_1\n```javascript\nfunction estMultipleDe(n, m) {\n  if (m === 0) return false;\n  return n % m === 0;\n}\n```\n\n### algo_facile_2\n```javascript\nfunction puissance(base, exp) {\n  let result = 1;\n  for (let i = 0; i < exp; i++) {\n    result *= base;\n  }\n  return result;\n}\n```\n\n### algo_moyen_1\n```javascript\nfunction compterPairs(tab) {\n  let count = 0;\n  for (const num of tab) {\n    if (num % 2 === 0) count++;\n  }\n  return count;\n}\n```\n\n### algo_difficile_1\n```javascript\nfunction supprimerDoublons(tab) {\n  const seen = new Set();\n  const result = [];\n  for (const item of tab) {\n    if (!seen.has(item)) {\n      seen.add(item);\n      result.push(item);\n    }\n  }\n  return result;\n}\n```\n\n### algo_defi\n```javascript\nfunction sommePaires(tab) {\n  let sum = 0;\n  for (const num of tab) {\n    if (num % 2 === 0) sum += num;\n  }\n  return sum;\n}\n```",
+              "evalResults": [
+                {
+                  "id": "tache_1a",
+                  "label": "File de priorité (min-heap)",
+                  "code": "function creerFilePriorite() {\n  const heap = []; // elements: { val, priorite }\n\n  function enqueue(val, priorite) {\n    heap.push({ val, priorite });\n    let idx = heap.length - 1;\n    while (idx > 0) {\n      const parent = Math.floor((idx - 1) / 2);\n      if (heap[parent].priorite <= heap[idx].priorite) break;\n      [heap[parent], heap[idx]] = [heap[idx], heap[parent]];\n      idx = parent;\n    }\n  }\n\n  function dequeue() {\n    if (heap.length === 0) return null;\n    const min = heap[0].val;\n    const last = heap.pop();\n    if (heap.length > 0) {\n      heap[0] = last;\n      let idx = 0;\n      const n = heap.length;\n      while (true) {\n        const left = 2 * idx + 1;\n        const right = 2 * idx + 2;\n        let smallest = idx;\n        if (left < n && heap[left].priorite < heap[smallest].priorite) smallest = left;\n        if (right < n && heap[right].priorite < heap[smallest].priorite) smallest = right;\n        if (smallest === idx) break;\n        [heap[idx], heap[smallest]] = [heap[smallest], heap[idx]];\n        idx = smallest;\n      }\n    }\n    return min;\n  }\n\n  function taille() {\n    return heap.length;\n  }\n\n  return { enqueue, dequeue, taille };\n}",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "dequeue retourne priorité minimale",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "taille correcte",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "file vide retourne null/undefined",
+                      "error": null
+                    }
+                  ],
+                  "points": 37,
+                  "maxPoints": 37,
+                  "taskType": "File de priorité (min-heap)",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 1
+                },
+                {
+                  "id": "tache_1b",
+                  "label": "EventEmitter",
+                  "code": "function creerEventEmitter() {\n  const events = {};\n\n  function on(event, fn) {\n    if (!events[event]) events[event] = [];\n    events[event].push(fn);\n  }\n\n  function off(event, fn) {\n    if (!events[event]) return;\n    const index = events[event].indexOf(fn);\n    if (index !== -1) events[event].splice(index, 1);\n  }\n\n  function emit(event, ...args) {\n    if (!events[event]) return;\n    // Copy to avoid issues if listeners modify the list during emit\n    events[event].forEach(fn => fn(...args));\n  }\n\n  return { on, off, emit };\n}",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "emit déclenche le listener",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "off supprime le listener",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "plusieurs listeners sur un même événement",
+                      "error": null
+                    }
+                  ],
+                  "points": 48,
+                  "maxPoints": 48,
+                  "taskType": "EventEmitter",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 1
+                },
+                {
+                  "id": "tache_1c",
+                  "label": "Zip de tableaux",
+                  "code": "function zip(...tableaux) {\n  if (tableaux.length === 0) return [];\n  const minLength = Math.min(...tableaux.map(arr => arr.length));\n  const result = [];\n  for (let i = 0; i < minLength; i++) {\n    const tuple = tableaux.map(arr => arr[i]);\n    result.push(tuple);\n  }\n  return result;\n}",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "zip de deux tableaux",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "s'arrête au plus court",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "zip de 3 tableaux",
+                      "error": null
+                    }
+                  ],
+                  "points": 41,
+                  "maxPoints": 41,
+                  "taskType": "Zip de tableaux",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 1
+                },
+                {
+                  "id": "tache_1d",
+                  "label": "Débogage : parcours en largeur (BFS)",
+                  "code": "function parcoursEnLargeur(graphe, depart) {\n  const visites = [];\n  const file = [depart];\n  while (file.length > 0) {\n    const noeud = file.shift(); // corrected: shift() for BFS (FIFO)\n    if (!visites.includes(noeud)) {\n      visites.push(noeud);\n      for (const voisin of (graphe[noeud] || [])) {\n        file.push(voisin);\n      }\n    }\n  }\n  return visites;\n}",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "BFS retourne les noeuds dans l'ordre correct",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "noeud sans voisins",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "utilise shift() pas pop()",
+                      "error": null
+                    }
+                  ],
+                  "points": 41,
+                  "maxPoints": 41,
+                  "taskType": "Débogage",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 1
+                },
+                {
+                  "id": "tache_1e",
+                  "label": "Proxy manuel",
+                  "code": "function creerProxy(cible, gestionnaire) {\n  const proxy = {};\n  // Intercept all own enumerable properties of the target\n  Object.keys(cible).forEach(key => {\n    Object.defineProperty(proxy, key, {\n      get: () => gestionnaire.get(cible, key),\n      set: (valeur) => gestionnaire.set(cible, key, valeur),\n      enumerable: true,\n      configurable: true\n    });\n  });\n  return proxy;\n}",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "get intercepté",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "set intercepté",
+                      "error": null
+                    }
+                  ],
+                  "points": 49,
+                  "maxPoints": 49,
+                  "taskType": "Proxy manuel",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 1
+                },
+                {
+                  "id": "algo_facile_1",
+                  "label": "Algorithmique — Multiplicité",
+                  "code": "function estMultipleDe(n, m) {\n  if (m === 0) return false;\n  return n % m === 0;\n}",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "Multiple",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "Non multiple",
+                      "error": null
+                    }
+                  ],
+                  "points": 43,
+                  "maxPoints": 43,
+                  "taskType": "Algorithmique — Multiplicité",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 1
+                },
+                {
+                  "id": "algo_facile_2",
+                  "label": "Algorithmique — Puissance",
+                  "code": "function puissance(base, exp) {\n  let result = 1;\n  for (let i = 0; i < exp; i++) {\n    result *= base;\n  }\n  return result;\n}",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "2^3",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "5^0",
+                      "error": null
+                    }
+                  ],
+                  "points": 30,
+                  "maxPoints": 30,
+                  "taskType": "Algorithmique — Puissance",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 1
+                },
+                {
+                  "id": "algo_moyen_1",
+                  "label": "Algorithmique — Comptage de pairs",
+                  "code": "function compterPairs(tab) {\n  let count = 0;\n  for (const num of tab) {\n    if (num % 2 === 0) count++;\n  }\n  return count;\n}",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "Mixte",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "Aucun pair",
+                      "error": null
+                    }
+                  ],
+                  "points": 56,
+                  "maxPoints": 56,
+                  "taskType": "Algorithmique — Comptage de pairs",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 1
+                },
+                {
+                  "id": "algo_difficile_1",
+                  "label": "Algorithmique — Suppression de doublons",
+                  "code": "function supprimerDoublons(tab) {\n  const seen = new Set();\n  const result = [];\n  for (const item of tab) {\n    if (!seen.has(item)) {\n      seen.add(item);\n      result.push(item);\n    }\n  }\n  return result;\n}",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "Avec doublons",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "Tous identiques",
+                      "error": null
+                    }
+                  ],
+                  "points": 44,
+                  "maxPoints": 44,
+                  "taskType": "Algorithmique — Suppression de doublons",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 1
+                },
+                {
+                  "id": "algo_defi",
+                  "label": "Algorithmique — Somme des pairs",
+                  "code": "function sommePaires(tab) {\n  let sum = 0;\n  for (const num of tab) {\n    if (num % 2 === 0) sum += num;\n  }\n  return sum;\n}",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "Mixte",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "Aucun pair",
+                      "error": null
+                    }
+                  ],
+                  "points": 60,
+                  "maxPoints": 60,
+                  "taskType": "Algorithmique — Somme des pairs",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 1
+                }
+              ]
+            },
+            {
+              "tierNum": 2,
+              "tierTitle": "Tier 2 — Concurrence, Réactivité et Optimisation",
+              "isMandatory": true,
+              "className": "PostDoc3",
+              "rawResponse": "\n\n---\n### tache_2a\n```javascript\nasync function chargerEnParallele(urls, chargement) {\n  // Utilise Promise.allSettled pour gérer les échecs sans fail-fast\n  const results = await Promise.allSettled(urls.map(url => chargement(url)));\n  const succes = [];\n  const echecs = [];\n  results.forEach((result, index) => {\n    if (result.status === 'fulfilled') {\n      succes.push(result.value);\n    } else {\n      echecs.push(urls[index]);\n    }\n  });\n  return { succes, echecs };\n}\n```\n\n### tache_2b\n```javascript\nfunction creerSubject() {\n  const subscribers = [];\n  let closed = false;\n\n  return {\n    subscribe(observer) {\n      if (typeof observer !== 'object') {\n        throw new TypeError('Observer must be an object');\n      }\n      subscribers.push(observer);\n      return {\n        unsubscribe() {\n          const index = subscribers.indexOf(observer);\n          if (index !== -1) subscribers.splice(index, 1);\n        }\n      };\n    },\n    next(val) {\n      if (!closed) {\n        subscribers.forEach(obs => {\n          try { obs.next(val); } catch (e) { /* ignorer les erreurs d'observateur */ }\n        });\n      }\n    },\n    error(err) {\n      if (!closed) {\n        closed = true;\n        subscribers.forEach(obs => {\n          try { obs.error(err); } catch (e) { /* ignorer */ }\n        });\n        subscribers.length = 0;\n      }\n    },\n    complete() {\n      if (!closed) {\n        closed = true;\n        subscribers.forEach(obs => {\n          try { obs.complete(); } catch (e) { /* ignorer */ }\n        });\n        subscribers.length = 0;\n      }\n    }\n  };\n}\n```\n\n### tache_2c\n```javascript\nfunction memoiserAsync(fn) {\n  const cache = new Map();\n  return async function(...args) {\n    // Crée une clé unique à partir des arguments (JSON.stringify pour les types primitifs et objets simples)\n    const key = JSON.stringify(args);\n    if (cache.has(key)) {\n      // Retourne la promise en cours ou déjà résolue (pas d'appel dupliqué)\n      return cache.get(key);\n    }\n    // Lance l'appel asynchrone et stocke la promise\n    const promise = (async () => {\n      try {\n        return await fn(...args);\n      } finally {\n        // Optionnel : on pourrait remplacer par la valeur résolue, mais la promise resteValide\n      }\n    })();\n    cache.set(key, promise);\n    return promise;\n  };\n}\n```\n\n### tache_2d\n```javascript\nasync function chargerUtilisateur(id) {\n  // Correction : attendre explicitement le fetch et la conversion JSON\n  const response = await fetch('/api/user/' + id);\n  const data = await response.json();\n  return data;\n}\n```\n\n### tache_2e\nfunction creerCircuitBreaker(fn, seuil, delaiResetMs) {\n  let state = 'CLOSED'; // CLOSED, OPEN, HALF_OPEN\n  let failureCount = 0;\n  let lastFailureTime = null;\n  let halfOpenCallInProgress = false;\n\n  return async function(...args) {\n    if (state === 'OPEN') {\n      // Vérifie si le délai de reset est écoulé\n      if (Date.now() - lastFailureTime >= delaiResetMs) {\n        state = 'HALF_OPEN';\n      } else {\n        throw new Error('Circuit breaker is open');\n      }\n    }\n\n    if (state === 'HALF_OPEN') {\n      if (halfOpenCallInProgress) {\n        throw new Error('Circuit breaker is half-open; call already in progress');\n      }\n      halfOpenCallInProgress = true;\n      try {\n        const result = await fn(...args);\n        // Succès : retour vers CLOSED\n        state = 'CLOSED';\n        failureCount = 0;\n        halfOpenCallInProgress = false;\n        return result;\n      } catch (err) {\n        // Échec : ré-ouverture\n        state = 'OPEN';\n        lastFailureTime = Date.now();\n        halfOpenCallInProgress = false;\n        throw err;\n      }\n    }\n\n    // state === CLOSED\n    try {\n      const result = await fn(...args);\n      failureCount = 0; // reset du compteur à chaque succès\n      return result;\n    } catch (err) {\n      failureCount++;\n      if (failureCount >= seuil) {\n        state = 'OPEN';\n        lastFailureTime = Date.now();\n      }\n      throw err;\n    }\n  };\n}\n```\n\n### algo_facile_1\n```javascript\nfunction estPalindrome(s) {\n  // Compare la chaîne avec son inverse (sensible à la casse)\n  return s === s.split('').reverse().join('');\n}\n```\n\n### algo_facile_2\n```javascript\nfunction pgcd(a, b) {\n  // Algorithme d'Euclide\n  while (b !== 0) {\n    [a, b] = [b, a % b];\n  }\n  return a;\n}\n```\n\n### algo_moyen_1\n```javascript\nfunction nombreMots(s) {\n  // Supprime les espaces avant/après, puis sépare par espaces consécutifs\n  const trimmed = s.trim();\n  if (trimmed === '') return 0;\n  return trimmed.split(/\\s+/).length;\n}\n```\n\n### algo_difficile_1\n```javascript\nfunction fusionTriee(a, b) {\n  const result = [];\n  let i = 0, j = 0;\n  while (i < a.length && j < b.length) {\n    if (a[i] < b[j]) {\n      result.push(a[i++]);\n    } else {\n      result.push(b[j++]);\n    }\n  }\n  // Ajouter les éléments restants\n  return result.concat(a.slice(i)).concat(b.slice(j));\n}\n```\n\n### algo_defi\n```javascript\nfunction sontAnagrammes(a, b) {\n  // Vérifie la longueur et compare les lettres triées (sensible à la casse)\n  if (a.length !== b.length) return false;\n  return a.split('').sort().join('') === b.split('').sort().join('');\n}\n```\n\n---\n### tache_2a\n```javascript\nasync function chargerEnParallele(urls, chargement) {\n  const results = await Promise.allSettled(urls.map(url => chargement(url)));\n  const succes = [];\n  const echecs = [];\n  results.forEach((result, index) => {\n    if (result.status === 'fulfilled') {\n      succes.push(result.value);\n    } else {\n      echecs.push(urls[index]);\n    }\n  });\n  return {succes, echecs};\n}\n```\n\n### tache_2b\n```javascript\nfunction creerSubject() {\n  const subscribers = [];\n  let stopped = false;\n\n  function subscribe(observer) {\n    if (stopped) {\n      return { unsubscribe() {} };\n    }\n    subscribers.push(observer);\n    return {\n      unsubscribe() {\n        const index = subscribers.indexOf(observer);\n        if (index !== -1) {\n          subscribers.splice(index, 1);\n        }\n      }\n    };\n  }\n\n  function next(val) {\n    if (stopped) return;\n    subscribers.forEach(obs => {\n      try {\n        obs.next && obs.next(val);\n      } catch (e) {\n        // ignore observer errors\n      }\n    });\n  }\n\n  function error(err) {\n    if (stopped) return;\n    stopped = true;\n    subscribers.forEach(obs => {\n      try {\n        obs.error && obs.error(err);\n      } catch (e) {}\n    });\n    subscribers.length = 0;\n  }\n\n  function complete() {\n    if (stopped) return;\n    stopped = true;\n    subscribers.forEach(obs => {\n      try {\n        obs.complete && obs.complete();\n      } catch (e) {}\n    });\n    subscribers.length = 0;\n  }\n\n  return { subscribe, next, error, complete };\n}\n```\n\n### tache_2c\n```javascript\nfunction memoiserAsync(fn) {\n  const cache = new Map();\n  return async function(...args) {\n    const key = JSON.stringify(args);\n    if (cache.has(key)) {\n      return cache.get(key);\n    }\n    let promise;\n    try {\n      promise = fn(...args);\n    } catch (e) {\n      promise = Promise.reject(e);\n    }\n    if (!(promise instanceof Promise)) {\n      promise = Promise.resolve(promise);\n    }\n    cache.set(key, promise);\n    return promise;\n  };\n}\n```\n\n### tache_2d\n```javascript\nasync function chargerUtilisateur(id) {\n  const reponse = await fetch('/api/user/' + id);\n  const data = await reponse.json();\n  return data;\n}\n```\n\n### tache_2e\n```javascript\nfunction creerCircuitBreaker(fn, seuil, delaiResetMs) {\n  let state = 'CLOSED'; // 'CLOSED', 'OPEN', 'HALF_OPEN'\n  let failureCount = 0;\n  let lastFailureTime = null;\n  let halfOpenCallInProgress = false;\n\n  return async function(...args) {\n    // If OPEN, check if we can transition to HALF_OPEN\n    if (state === 'OPEN') {\n      const now = Date.now();\n      if (now - lastFailureTime >= delaiResetMs) {\n        state = 'HALF_OPEN';\n        halfOpenCallInProgress = false;\n      } else {\n        throw new Error('Circuit breaker is OPEN');\n      }\n    }\n\n    // If HALF_OPEN, only allow one call at a time\n    if (state === 'HALF_OPEN') {\n      if (halfOpenCallInProgress) {\n        throw new Error('Circuit breaker is HALF_OPEN and a call is already in progress');\n      }\n      halfOpenCallInProgress = true;\n    }\n\n    try {\n      const result = await fn(...args);\n      // Success\n      if (state === 'HALF_OPEN') {\n        state = 'CLOSED';\n        failureCount = 0;\n        halfOpenCallInProgress = false;\n      } else if (state === 'CLOSED') {\n        failureCount = 0; // reset consecutive failures\n      }\n      return result;\n    } catch (err) {\n      failureCount++;\n      if (state === 'HALF_OPEN') {\n        state = 'OPEN';\n        lastFailureTime = Date.now();\n        halfOpenCallInProgress = false;\n      } else if (state === 'CLOSED') {\n        if (failureCount >= seuil) {\n          state = 'OPEN';\n          lastFailureTime = Date.now();\n        }\n      }\n      throw err;\n    }\n  };\n}\n```\n\n### algo_facile_1\n```javascript\nfunction estPalindrome(s) {\n  return s === s.split('').reverse().join('');\n}\n```\n\n### algo_facile_2\n```javascript\nfunction pgcd(a, b) {\n  while (b !== 0) {\n    [a, b] = [b, a % b];\n  }\n  return a;\n}\n```\n\n### algo_moyen_1\n```javascript\nfunction nombreMots(s) {\n  const trimmed = s.trim();\n  if (trimmed === '') return 0;\n  return trimmed.split(/\\s+/).length;\n}\n```\n\n### algo_difficile_1\n```javascript\nfunction fusionTriee(a, b) {\n  const result = [];\n  let i = 0, j = 0;\n  while (i < a.length && j < b.length) {\n    if (a[i] < b[j]) {\n      result.push(a[i++]);\n    } else {\n      result.push(b[j++]);\n    }\n  }\n  return result.concat(a.slice(i)).concat(b.slice(j));\n}\n```\n\n### algo_defi\n```javascript\nfunction sontAnagrammes(a, b) {\n  if (a.length !== b.length) return false;\n  return a.split('').sort().join('') === b.split('').sort().join('');\n}\n```",
+              "evalResults": [
+                {
+                  "id": "tache_2a",
+                  "label": "Pool de concurrence async",
+                  "code": "async function chargerEnParallele(urls, chargement) {\n  // Utilise Promise.allSettled pour gérer les échecs sans fail-fast\n  const results = await Promise.allSettled(urls.map(url => chargement(url)));\n  const succes = [];\n  const echecs = [];\n  results.forEach((result, index) => {\n    if (result.status === 'fulfilled') {\n      succes.push(result.value);\n    } else {\n      echecs.push(urls[index]);\n    }\n  });\n  return { succes, echecs };\n}",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "gestion des échecs partiels en pool",
+                      "error": null
+                    }
+                  ],
+                  "points": 40,
+                  "maxPoints": 40,
+                  "taskType": "Pool de concurrence async",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 2
+                },
+                {
+                  "id": "tache_2b",
+                  "label": "Subject réactif (multicast)",
+                  "code": "function creerSubject() {\n  const subscribers = [];\n  let closed = false;\n\n  return {\n    subscribe(observer) {\n      if (typeof observer !== 'object') {\n        throw new TypeError('Observer must be an object');\n      }\n      subscribers.push(observer);\n      return {\n        unsubscribe() {\n          const index = subscribers.indexOf(observer);\n          if (index !== -1) subscribers.splice(index, 1);\n        }\n      };\n    },\n    next(val) {\n      if (!closed) {\n        subscribers.forEach(obs => {\n          try { obs.next(val); } catch (e) { /* ignorer les erreurs d'observateur */ }\n        });\n      }\n    },\n    error(err) {\n      if (!closed) {\n        closed = true;\n        subscribers.forEach(obs => {\n          try { obs.error(err); } catch (e) { /* ignorer */ }\n        });\n        subscribers.length = 0;\n      }\n    },\n    complete() {\n      if (!closed) {\n        closed = true;\n        subscribers.forEach(obs => {\n          try { obs.complete(); } catch (e) { /* ignorer */ }\n        });\n        subscribers.length = 0;\n      }\n    }\n  };\n}",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "multicast vers plusieurs abonnés",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "complete notifie tous les abonnés",
+                      "error": null
+                    }
+                  ],
+                  "points": 32,
+                  "maxPoints": 32,
+                  "taskType": "Subject réactif (multicast)",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 2
+                },
+                {
+                  "id": "tache_2c",
+                  "label": "Mémoïsation async anti-duplication",
+                  "code": "function memoiserAsync(fn) {\n  const cache = new Map();\n  return async function(...args) {\n    // Crée une clé unique à partir des arguments (JSON.stringify pour les types primitifs et objets simples)\n    const key = JSON.stringify(args);\n    if (cache.has(key)) {\n      // Retourne la promise en cours ou déjà résolue (pas d'appel dupliqué)\n      return cache.get(key);\n    }\n    // Lance l'appel asynchrone et stocke la promise\n    const promise = (async () => {\n      try {\n        return await fn(...args);\n      } finally {\n        // Optionnel : on pourrait remplacer par la valeur résolue, mais la promise resteValide\n      }\n    })();\n    cache.set(key, promise);\n    return promise;\n  };\n}",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "retourne le bon résultat",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "appels concurrents partagent la même Promise",
+                      "error": null
+                    }
+                  ],
+                  "points": 44,
+                  "maxPoints": 44,
+                  "taskType": "Mémoïsation async anti-duplication",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 2
+                },
+                {
+                  "id": "tache_2d",
+                  "label": "Débogage : race condition async",
+                  "code": "async function chargerUtilisateur(id) {\n  // Correction : attendre explicitement le fetch et la conversion JSON\n  const response = await fetch('/api/user/' + id);\n  const data = await response.json();\n  return data;\n}",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "utilise await",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "utilise async",
+                      "error": null
+                    }
+                  ],
+                  "points": 52,
+                  "maxPoints": 52,
+                  "taskType": "Débogage",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 2
+                },
+                {
+                  "id": "tache_2e",
+                  "label": "Circuit Breaker",
+                  "code": "function creerCircuitBreaker(fn, seuil, delaiResetMs) {\n  let state = 'CLOSED'; // 'CLOSED', 'OPEN', 'HALF_OPEN'\n  let failureCount = 0;\n  let lastFailureTime = null;\n  let halfOpenCallInProgress = false;\n\n  return async function(...args) {\n    // If OPEN, check if we can transition to HALF_OPEN\n    if (state === 'OPEN') {\n      const now = Date.now();\n      if (now - lastFailureTime >= delaiResetMs) {\n        state = 'HALF_OPEN';\n        halfOpenCallInProgress = false;\n      } else {\n        throw new Error('Circuit breaker is OPEN');\n      }\n    }\n\n    // If HALF_OPEN, only allow one call at a time\n    if (state === 'HALF_OPEN') {\n      if (halfOpenCallInProgress) {\n        throw new Error('Circuit breaker is HALF_OPEN and a call is already in progress');\n      }\n      halfOpenCallInProgress = true;\n    }\n\n    try {\n      const result = await fn(...args);\n      // Success\n      if (state === 'HALF_OPEN') {\n        state = 'CLOSED';\n        failureCount = 0;\n        halfOpenCallInProgress = false;\n      } else if (state === 'CLOSED') {\n        failureCount = 0; // reset consecutive failures\n      }\n      return result;\n    } catch (err) {\n      failureCount++;\n      if (state === 'HALF_OPEN') {\n        state = 'OPEN';\n        lastFailureTime = Date.now();\n        halfOpenCallInProgress = false;\n      } else if (state === 'CLOSED') {\n        if (failureCount >= seuil) {\n          state = 'OPEN';\n          lastFailureTime = Date.now();\n        }\n      }\n      throw err;\n    }\n  };\n}",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "appel normal réussit",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "s'ouvre après seuil d'échecs",
+                      "error": null
+                    }
+                  ],
+                  "points": 0,
+                  "maxPoints": 31,
+                  "taskType": "Circuit Breaker",
+                  "helpUsed": false,
+                  "retried": true,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 2
+                },
+                {
+                  "id": "algo_facile_1",
+                  "label": "Algorithmique — Palindrome",
+                  "code": "function estPalindrome(s) {\n  // Compare la chaîne avec son inverse (sensible à la casse)\n  return s === s.split('').reverse().join('');\n}",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "Palindrome",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "Non palindrome",
+                      "error": null
+                    }
+                  ],
+                  "points": 39,
+                  "maxPoints": 39,
+                  "taskType": "Algorithmique — Palindrome",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 2
+                },
+                {
+                  "id": "algo_facile_2",
+                  "label": "Algorithmique — PGCD",
+                  "code": "function pgcd(a, b) {\n  // Algorithme d'Euclide\n  while (b !== 0) {\n    [a, b] = [b, a % b];\n  }\n  return a;\n}",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "48 et 18",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "Premiers entre eux",
+                      "error": null
+                    }
+                  ],
+                  "points": 53,
+                  "maxPoints": 53,
+                  "taskType": "Algorithmique — PGCD",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 2
+                },
+                {
+                  "id": "algo_moyen_1",
+                  "label": "Algorithmique — Nombre de mots",
+                  "code": "function nombreMots(s) {\n  // Supprime les espaces avant/après, puis sépare par espaces consécutifs\n  const trimmed = s.trim();\n  if (trimmed === '') return 0;\n  return trimmed.split(/\\s+/).length;\n}",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "3 mots",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "1 mot",
+                      "error": null
+                    }
+                  ],
+                  "points": 31,
+                  "maxPoints": 31,
+                  "taskType": "Algorithmique — Nombre de mots",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 2
+                },
+                {
+                  "id": "algo_difficile_1",
+                  "label": "Algorithmique — Fusion triée",
+                  "code": "function fusionTriee(a, b) {\n  const result = [];\n  let i = 0, j = 0;\n  while (i < a.length && j < b.length) {\n    if (a[i] < b[j]) {\n      result.push(a[i++]);\n    } else {\n      result.push(b[j++]);\n    }\n  }\n  // Ajouter les éléments restants\n  return result.concat(a.slice(i)).concat(b.slice(j));\n}",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "Deux tableaux",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "Un vide",
+                      "error": null
+                    }
+                  ],
+                  "points": 30,
+                  "maxPoints": 30,
+                  "taskType": "Algorithmique — Fusion triée",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 2
+                },
+                {
+                  "id": "algo_defi",
+                  "label": "Algorithmique — Anagrammes",
+                  "code": "function sontAnagrammes(a, b) {\n  // Vérifie la longueur et compare les lettres triées (sensible à la casse)\n  if (a.length !== b.length) return false;\n  return a.split('').sort().join('') === b.split('').sort().join('');\n}",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "Anagrammes",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "Pas anagrammes",
+                      "error": null
+                    }
+                  ],
+                  "points": 54,
+                  "maxPoints": 54,
+                  "taskType": "Algorithmique — Anagrammes",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 2
+                }
+              ]
+            },
+            {
+              "tierNum": 3,
+              "tierTitle": "Tier 3 — Sécurité Avancée, Architecture et Algorithmes Complexes",
+              "isMandatory": true,
+              "className": "PostDoc4",
+              "rawResponse": "\n\n---\n## tache_3a\n```powershell\n# deploy-patch.ps1\n$backupSource = \"production.db\"\n$backupTarget = \"production_backup.db\"\n$migrationFile = \"migration.sql\"\n\ntry {\n    # 1. Preventive backup BEFORE migration\n    Copy-Item -Path $backupSource -Destination $backupTarget -Force\n    Write-Host \"Backup created: $backupTarget\"\n\n    # 2. Run SQL migration via sqlite3\n    sqlite3 $backupSource < $migrationFile\n    if ($LASTEXITCODE -ne 0) {\n        throw \"Migration failed with exit code $LASTEXITCODE\"\n    }\n    Write-Host \"Migration applied successfully.\"\n}\ncatch {\n    Write-Error \"Error occurred: $_\"\n    # 3. Rollback on failure\n    if (Test-Path $backupTarget) {\n        Copy-Item -Path $backupTarget -Destination $backupSource -Force\n        Write-Host \"Rolled back to backup.\"\n    }\n    exit 1\n}\n```\n\n## tache_3b\n```javascript\nfunction remplirMatrice(grille, x, y, nouvelleValeur) {\n    if (!grille.length || !grille[0].length) return grille;\n    const rows = grille.length;\n    const cols = grille[0].length;\n    if (y < 0 || y >= rows || x < 0 || x >= cols) return grille;\n\n    const target = grille[y][x];\n    if (target === nouvelleValeur) return grille;\n\n    const queue = [[y, x]];\n    grille[y][x] = nouvelleValeur;\n    const dirs = [[-1, 0], [1, 0], [0, -1], [0, 1]];\n\n    while (queue.length) {\n        const [r, c] = queue.shift();\n        for (const [dr, dc] of dirs) {\n            const nr = r + dr;\n            const nc = c + dc;\n            if (nr >= 0 && nr < rows && nc >= 0 && nc < cols && grille[nr][nc] === target) {\n                grille[nr][nc] = nouvelleValeur;\n                queue.push([nr, nc]);\n            }\n        }\n    }\n    return grille;\n}\n```\n\n## tache_3c\n```javascript\nasync function middleware(request, env) {\n    const authHeader = request.headers.get('Authorization');\n    if (authHeader !== 'Bearer SYSTEM-SECURE-KEY') {\n        return new Response('Access Denied', { status: 403 });\n    }\n    return fetch(request);\n}\n```\n\n## tache_3d\n```javascript\nfunction rechercherUtilisateurSecurise(db, nomUtilisateur) {\n    const sql = \"SELECT * FROM utilisateurs WHERE nom = ?\";\n    return db.query(sql, [nomUtilisateur]);\n}\n```\n\n## tache_3e\n```javascript\nasync function executerAvecRetry(operation, maxTentatives) {\n    let lastError;\n    for (let i = 0; i < maxTentatives; i++) {\n        try {\n            return await operation();\n        } catch (error) {\n            lastError = error;\n        }\n    }\n    throw lastError;\n}\n```\n\n## tache_3f\n```javascript\nfunction fusionnerConfig(base, override) {\n    const result = {};\n    const keys = new Set([...Object.keys(base), ...Object.keys(override)]);\n    for (const key of keys) {\n        if (key === '__proto__') continue; // ignore prototype pollution\n        if (override.hasOwnProperty(key)) {\n            const overrideVal = override[key];\n            const baseVal = base[key];\n            const isPlainObject = (v) => typeof v === 'object' && v !== null && !Array.isArray(v);\n            if (isPlainObject(overrideVal) && isPlainObject(baseVal)) {\n                result[key] = fusionnerConfig(baseVal, overrideVal);\n            } else {\n                result[key] = overrideVal;\n            }\n        } else {\n            result[key] = base[key];\n        }\n    }\n    return result;\n}\n```\n\n## algo_facile_1\n```javascript\nfunction validerParentheses(s) {\n    let stack = 0;\n    for (const ch of s) {\n        if (ch === '(') {\n            stack++;\n        } else if (ch === ')') {\n            if (stack === 0) return false;\n            stack--;\n        }\n    }\n    return stack === 0;\n}\n```\n\n## algo_facile_2\n```javascript\nfunction fibonacci(n) {\n    if (n < 0) return undefined;\n    let a = 0, b = 1;\n    for (let i = 0; i < n; i++) {\n        [a, b] = [b, a + b];\n    }\n    return a;\n}\n```\n\n## algo_moyen_1\n```javascript\nfunction motsUniques(s) {\n    const trimmed = s.trim();\n    if (!trimmed) return 0;\n    const words = trimmed.split(/\\s+/);\n    return new Set(words).size;\n}\n```\n\n## algo_difficile_1\n```javascript\nfunction aplatirTableau(tab) {\n    return tab.flat();\n}\n```\n\n## algo_defi\n```javascript\nfunction rotationDroite(tab, k) {\n    const n = tab.length;\n    if (n === 0) return [];\n    const rotations = k % n;\n    if (rotations === 0) return tab.slice();\n    return tab.slice(-rotations).concat(tab.slice(0, n - rotations));\n}\n```",
+              "evalResults": [
+                {
+                  "id": "tache_3a",
+                  "label": "Script PowerShell deploy-patch avec rollback",
+                  "code": "# deploy-patch.ps1\n$backupSource = \"production.db\"\n$backupTarget = \"production_backup.db\"\n$migrationFile = \"migration.sql\"\n\ntry {\n    # 1. Preventive backup BEFORE migration\n    Copy-Item -Path $backupSource -Destination $backupTarget -Force\n    Write-Host \"Backup created: $backupTarget\"\n\n    # 2. Run SQL migration via sqlite3\n    sqlite3 $backupSource < $migrationFile\n    if ($LASTEXITCODE -ne 0) {\n        throw \"Migration failed with exit code $LASTEXITCODE\"\n    }\n    Write-Host \"Migration applied successfully.\"\n}\ncatch {\n    Write-Error \"Error occurred: $_\"\n    # 3. Rollback on failure\n    if (Test-Path $backupTarget) {\n        Copy-Item -Path $backupTarget -Destination $backupSource -Force\n        Write-Host \"Rolled back to backup.\"\n    }\n    exit 1\n}",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "Sauvegarde via Copy-Item",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "Détection d'erreur",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "Rollback",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "Analyse rollback",
+                      "error": null
+                    }
+                  ],
+                  "points": 35,
+                  "maxPoints": 35,
+                  "taskType": "Script PowerShell deploy-patch avec rollback",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 3
+                },
+                {
+                  "id": "tache_3b",
+                  "label": "Flood Fill",
+                  "code": "function remplirMatrice(grille, x, y, nouvelleValeur) {\n    if (!grille.length || !grille[0].length) return grille;\n    const rows = grille.length;\n    const cols = grille[0].length;\n    if (y < 0 || y >= rows || x < 0 || x >= cols) return grille;\n\n    const target = grille[y][x];\n    if (target === nouvelleValeur) return grille;\n\n    const queue = [[y, x]];\n    grille[y][x] = nouvelleValeur;\n    const dirs = [[-1, 0], [1, 0], [0, -1], [0, 1]];\n\n    while (queue.length) {\n        const [r, c] = queue.shift();\n        for (const [dr, dc] of dirs) {\n            const nr = r + dr;\n            const nc = c + dc;\n            if (nr >= 0 && nr < rows && nc >= 0 && nc < cols && grille[nr][nc] === target) {\n                grille[nr][nc] = nouvelleValeur;\n                queue.push([nr, nc]);\n            }\n        }\n    }\n    return grille;\n}",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "Exécution réelle matrices",
+                      "error": null
+                    }
+                  ],
+                  "points": 52,
+                  "maxPoints": 52,
+                  "taskType": "Flood Fill",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 3
+                },
+                {
+                  "id": "tache_3c",
+                  "label": "Middleware Cloudflare",
+                  "code": "async function middleware(request, env) {\n    const authHeader = request.headers.get('Authorization');\n    if (authHeader !== 'Bearer SYSTEM-SECURE-KEY') {\n        return new Response('Access Denied', { status: 403 });\n    }\n    return fetch(request);\n}",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "Bearer SYSTEM-SECURE-KEY",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "403 Access Denied",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "fetch(request)",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "Exécution réelle 403",
+                      "error": null
+                    }
+                  ],
+                  "points": 49,
+                  "maxPoints": 49,
+                  "taskType": "Middleware Cloudflare",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 3
+                },
+                {
+                  "id": "tache_3d",
+                  "label": "SQL paramétrée",
+                  "code": "function rechercherUtilisateurSecurise(db, nomUtilisateur) {\n    const sql = \"SELECT * FROM utilisateurs WHERE nom = ?\";\n    return db.query(sql, [nomUtilisateur]);\n}",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "Placeholder ?",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "Cas nominal",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "Pas de concat",
+                      "error": null
+                    }
+                  ],
+                  "points": 33,
+                  "maxPoints": 33,
+                  "taskType": "SQL paramétrée",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 3
+                },
+                {
+                  "id": "tache_3e",
+                  "label": "Retry async",
+                  "code": "async function executerAvecRetry(operation, maxTentatives) {\n    let lastError;\n    for (let i = 0; i < maxTentatives; i++) {\n        try {\n            return await operation();\n        } catch (error) {\n            lastError = error;\n        }\n    }\n    throw lastError;\n}",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "3 scénarios",
+                      "error": null
+                    }
+                  ],
+                  "points": 30,
+                  "maxPoints": 30,
+                  "taskType": "Retry async",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 3
+                },
+                {
+                  "id": "tache_3f",
+                  "label": "Prototype pollution",
+                  "code": "function fusionnerConfig(base, override) {\n    const result = {};\n    const keys = new Set([...Object.keys(base), ...Object.keys(override)]);\n    for (const key of keys) {\n        if (key === '__proto__') continue; // ignore prototype pollution\n        if (override.hasOwnProperty(key)) {\n            const overrideVal = override[key];\n            const baseVal = base[key];\n            const isPlainObject = (v) => typeof v === 'object' && v !== null && !Array.isArray(v);\n            if (isPlainObject(overrideVal) && isPlainObject(baseVal)) {\n                result[key] = fusionnerConfig(baseVal, overrideVal);\n            } else {\n                result[key] = overrideVal;\n            }\n        } else {\n            result[key] = base[key];\n        }\n    }\n    return result;\n}",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "Fusion simple",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "Fusion profonde",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "Anti pollution",
+                      "error": null
+                    }
+                  ],
+                  "points": 35,
+                  "maxPoints": 35,
+                  "taskType": "Prototype pollution",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 3
+                },
+                {
+                  "id": "algo_facile_1",
+                  "label": "Algorithmique — Parenthèses valides",
+                  "code": "function validerParentheses(s) {\n    let stack = 0;\n    for (const ch of s) {\n        if (ch === '(') {\n            stack++;\n        } else if (ch === ')') {\n            if (stack === 0) return false;\n            stack--;\n        }\n    }\n    return stack === 0;\n}",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "Balancées",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "Non fermée",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "Inversées",
+                      "error": null
+                    }
+                  ],
+                  "points": 53,
+                  "maxPoints": 53,
+                  "taskType": "Algorithmique — Parenthèses valides",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 3
+                },
+                {
+                  "id": "algo_facile_2",
+                  "label": "Algorithmique — Fibonacci",
+                  "code": "function fibonacci(n) {\n    if (n < 0) return undefined;\n    let a = 0, b = 1;\n    for (let i = 0; i < n; i++) {\n        [a, b] = [b, a + b];\n    }\n    return a;\n}",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "fib(7)",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "fib(0)",
+                      "error": null
+                    }
+                  ],
+                  "points": 37,
+                  "maxPoints": 37,
+                  "taskType": "Algorithmique — Fibonacci",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 3
+                },
+                {
+                  "id": "algo_moyen_1",
+                  "label": "Algorithmique — Mots uniques",
+                  "code": "function motsUniques(s) {\n    const trimmed = s.trim();\n    if (!trimmed) return 0;\n    const words = trimmed.split(/\\s+/);\n    return new Set(words).size;\n}",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "Répétition",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "Un seul",
+                      "error": null
+                    }
+                  ],
+                  "points": 44,
+                  "maxPoints": 44,
+                  "taskType": "Algorithmique — Mots uniques",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 3
+                },
+                {
+                  "id": "algo_difficile_1",
+                  "label": "Algorithmique — Aplatir un tableau",
+                  "code": "function aplatirTableau(tab) {\n    return tab.flat();\n}",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "Imbriqué",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "Vide",
+                      "error": null
+                    }
+                  ],
+                  "points": 48,
+                  "maxPoints": 48,
+                  "taskType": "Algorithmique — Aplatir un tableau",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 3
+                },
+                {
+                  "id": "algo_defi",
+                  "label": "Algorithmique — Rotation à droite",
+                  "code": "function rotationDroite(tab, k) {\n    const n = tab.length;\n    if (n === 0) return [];\n    const rotations = k % n;\n    if (rotations === 0) return tab.slice();\n    return tab.slice(-rotations).concat(tab.slice(0, n - rotations));\n}",
+                  "evaluations": [
+                    {
+                      "passed": true,
+                      "description": "Rotation 1",
+                      "error": null
+                    },
+                    {
+                      "passed": true,
+                      "description": "Pas de rotation",
+                      "error": null
+                    }
+                  ],
+                  "points": 42,
+                  "maxPoints": 42,
+                  "taskType": "Algorithmique — Rotation à droite",
+                  "helpUsed": false,
+                  "retried": false,
+                  "status": "success",
+                  "failureExplanation": null,
+                  "teacherCorrection": null,
+                  "_tierNum": 3
+                }
+              ]
+            }
+          ],
+          "quantization": null,
+          "elapsedMs": 236685,
+          "wallMs": 263207,
+          "tokens": 8062,
+          "tokensPerSecond": 34.06,
+          "promptTokens": 6963,
+          "completionTokens": 8062,
+          "timestampMs": 1788437483705,
+          "timestampIso": "2026-09-03T12:11:23.705Z"
+        },
+        "attempts": [
+          {
+            "profile": "FRONTIER",
+            "ecole": "Post-Doctorat",
+            "score": 1741,
+            "max": 2846,
+            "pct": 61,
+            "mandatoryPassed": 1741,
+            "mandatoryTotal": 2846,
+            "globalLifeScore": 1741,
+            "optionalBonus": 0,
+            "helpCount": 0,
+            "retriedCount": 1,
+            "calibrationIndex": null,
+            "declaredLevel": null,
+            "date": "2026-09-03",
+            "time": "14-11-03",
+            "reportFile": "Export-Rapports/2026-09-03/Post-Doctorat/FRONTIER/rapport_v3_dots-studio_dots-3-note-preview_free_frontier_14-11-03.md",
+            "selfProfile": null,
+            "tiers": [
+              {
+                "tierNum": 0,
+                "tierTitle": "Tier 0 — Algorithmes Classiques et Closures",
+                "isMandatory": true,
+                "className": "PostDoc1",
+                "rawResponse": "\n\n---\n### tache_0a\n```javascript\nfunction curry(fn) {\n  return function curried(...args) {\n    if (args.length >= fn.length) {\n      return fn(...args);\n    } else {\n      return (...nextArgs) => curried(...args, ...nextArgs);\n    }\n  };\n}\n```\n\n### tache_0b\n```javascript\nfunction egalProfond(a, b) {\n  if (a === b) return true;\n  if (typeof a !== typeof b) return false;\n  if (a === null || b === null) return a === b;\n  if (typeof a !== 'object') return a === b;\n  // Gérer la différence tableau / objet\n  if (Array.isArray(a) !== Array.isArray(b)) return false;\n  const keysA = Object.keys(a);\n  const keysB = Object.keys(b);\n  if (keysA.length !== keysB.length) return false;\n  for (const key of keysA) {\n    if (!egalProfond(a[key], b[key])) return false;\n  }\n  return true;\n}\n```\n\n### tache_0c\n```javascript\nfunction composer(...fns) {\n  return function(x) {\n    return fns.reduceRight((acc, fn) => fn(acc), x);\n  };\n}\n```\n\n### tache_0d\n```javascript\nfunction creerBST() {\n  class Node {\n    constructor(val) {\n      this.val = val;\n      this.left = null;\n      this.right = null;\n    }\n  }\n\n  let root = null;\n\n  return {\n    insert(val) {\n      const newNode = new Node(val);\n      if (!root) {\n        root = newNode;\n        return;\n      }\n      let current = root;\n      while (true) {\n        if (val < current.val) {\n          if (!current.left) {\n            current.left = newNode;\n            return;\n          }\n          current = current.left;\n        } else if (val > current.val) {\n          if (!current.right) {\n            current.right = newNode;\n            return;\n          }\n          current = current.right;\n        } else {\n          // Valeur déjà existante, on ignore\n          return;\n        }\n      }\n    },\n\n    contains(val) {\n      let current = root;\n      while (current) {\n        if (val === current.val) return true;\n        if (val < current.val) {\n          current = current.left;\n        } else {\n          current = current.right;\n        }\n      }\n      return false;\n    }\n  };\n}\n```\n\n### tache_0e\n```javascript\nfunction memoize(fn) {\n  const cache = new Map();\n  return function(...args) {\n    const key = JSON.stringify(args);\n    if (cache.has(key)) {\n      return cache.get(key);\n    }\n    const result = fn(...args);\n    cache.set(key, result);\n    return result;\n  };\n}\n```\n\n### algo_facile_1\n```javascript\nfunction estPair(n) {\n  return n % 2 === 0;\n}\n```\n\n### algo_facile_2\n```javascript\nfunction carre(n) {\n  return n * n;\n}\n```\n\n### algo_moyen_1\n```javascript\nfunction somme1aN(n) {\n  return (n * (n + 1)) / 2;\n}\n```\n\n### algo_difficile_1\n```javascript\nfunction inverserChaine(s) {\n  return s.split('').reverse().join('');\n}\n```\n\n### algo_defi\n```javascript\nfunction valeurMax(tab) {\n  let max = tab[0];\n  for (let i = 1; i < tab.length; i++) {\n    if (tab[i] > max) max = tab[i];\n  }\n  return max;\n}\n```",
+                "evalResults": [
+                  {
+                    "id": "tache_0a",
+                    "label": "Curry auto-exécutant",
+                    "code": "function curry(fn) {\n  return function curried(...args) {\n    if (args.length >= fn.length) {\n      return fn(...args);\n    } else {\n      return (...nextArgs) => curried(...args, ...nextArgs);\n    }\n  };\n}",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "curry(a,b,c) appelé un par un",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "curry avec arguments groupés",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "curry à 2 arguments",
+                        "error": null
+                      }
+                    ],
+                    "points": 57,
+                    "maxPoints": 57,
+                    "taskType": "Curry auto-exécutant",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 0
+                  },
+                  {
+                    "id": "tache_0b",
+                    "label": "Égalité profonde",
+                    "code": "function egalProfond(a, b) {\n  if (a === b) return true;\n  if (typeof a !== typeof b) return false;\n  if (a === null || b === null) return a === b;\n  if (typeof a !== 'object') return a === b;\n  // Gérer la différence tableau / objet\n  if (Array.isArray(a) !== Array.isArray(b)) return false;\n  const keysA = Object.keys(a);\n  const keysB = Object.keys(b);\n  if (keysA.length !== keysB.length) return false;\n  for (const key of keysA) {\n    if (!egalProfond(a[key], b[key])) return false;\n  }\n  return true;\n}",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "objets identiques",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "objets différents",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "tableaux imbriqués",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "primitives différentes",
+                        "error": null
+                      }
+                    ],
+                    "points": 45,
+                    "maxPoints": 45,
+                    "taskType": "Égalité profonde",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 0
+                  },
+                  {
+                    "id": "tache_0c",
+                    "label": "Composition de fonctions (droite→gauche)",
+                    "code": "function composer(...fns) {\n  return function(x) {\n    return fns.reduceRight((acc, fn) => fn(acc), x);\n  };\n}",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "composer(f, g)(x) = f(g(x))",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "3 fonctions",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "une seule fonction",
+                        "error": null
+                      }
+                    ],
+                    "points": 44,
+                    "maxPoints": 44,
+                    "taskType": "Composition de fonctions (droite→gauche)",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 0
+                  },
+                  {
+                    "id": "tache_0d",
+                    "label": "Arbre binaire de recherche",
+                    "code": "function creerBST() {\n  class Node {\n    constructor(val) {\n      this.val = val;\n      this.left = null;\n      this.right = null;\n    }\n  }\n\n  let root = null;\n\n  return {\n    insert(val) {\n      const newNode = new Node(val);\n      if (!root) {\n        root = newNode;\n        return;\n      }\n      let current = root;\n      while (true) {\n        if (val < current.val) {\n          if (!current.left) {\n            current.left = newNode;\n            return;\n          }\n          current = current.left;\n        } else if (val > current.val) {\n          if (!current.right) {\n            current.right = newNode;\n            return;\n          }\n          current = current.right;\n        } else {\n          // Valeur déjà existante, on ignore\n          return;\n        }\n      }\n    },\n\n    contains(val) {\n      let current = root;\n      while (current) {\n        if (val === current.val) return true;\n        if (val < current.val) {\n          current = current.left;\n        } else {\n          current = current.right;\n        }\n      }\n      return false;\n    }\n  };\n}",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "insert et contains trouvé",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "contains absent",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "BST vide",
+                        "error": null
+                      }
+                    ],
+                    "points": 51,
+                    "maxPoints": 51,
+                    "taskType": "Arbre binaire de recherche",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 0
+                  },
+                  {
+                    "id": "tache_0e",
+                    "label": "Memoization",
+                    "code": "function memoize(fn) {\n  const cache = new Map();\n  return function(...args) {\n    const key = JSON.stringify(args);\n    if (cache.has(key)) {\n      return cache.get(key);\n    }\n    const result = fn(...args);\n    cache.set(key, result);\n    return result;\n  };\n}",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "memoize : mise en cache",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "memoize : arguments différents",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "memoize : résultat correct",
+                        "error": null
+                      }
+                    ],
+                    "points": 34,
+                    "maxPoints": 34,
+                    "taskType": "Memoization",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 0
+                  },
+                  {
+                    "id": "algo_facile_1",
+                    "label": "Algorithmique — Parité",
+                    "code": "function estPair(n) {\n  return n % 2 === 0;\n}",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "Pair",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "Impair",
+                        "error": null
+                      }
+                    ],
+                    "points": 32,
+                    "maxPoints": 32,
+                    "taskType": "Algorithmique — Parité",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 0
+                  },
+                  {
+                    "id": "algo_facile_2",
+                    "label": "Algorithmique — Carré",
+                    "code": "function carre(n) {\n  return n * n;\n}",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "Positif",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "Zéro",
+                        "error": null
+                      }
+                    ],
+                    "points": 45,
+                    "maxPoints": 45,
+                    "taskType": "Algorithmique — Carré",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 0
+                  },
+                  {
+                    "id": "algo_moyen_1",
+                    "label": "Algorithmique — Somme 1..N",
+                    "code": "function somme1aN(n) {\n  return (n * (n + 1)) / 2;\n}",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "Somme 5",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "Somme 1",
+                        "error": null
+                      }
+                    ],
+                    "points": 56,
+                    "maxPoints": 56,
+                    "taskType": "Algorithmique — Somme 1..N",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 0
+                  },
+                  {
+                    "id": "algo_difficile_1",
+                    "label": "Algorithmique — Inversion de chaîne",
+                    "code": "function inverserChaine(s) {\n  return s.split('').reverse().join('');\n}",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "Mot",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "Un caractère",
+                        "error": null
+                      }
+                    ],
+                    "points": 39,
+                    "maxPoints": 39,
+                    "taskType": "Algorithmique — Inversion de chaîne",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 0
+                  },
+                  {
+                    "id": "algo_defi",
+                    "label": "Algorithmique — Maximum d'un tableau",
+                    "code": "function valeurMax(tab) {\n  let max = tab[0];\n  for (let i = 1; i < tab.length; i++) {\n    if (tab[i] > max) max = tab[i];\n  }\n  return max;\n}",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "Positifs",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "Négatifs",
+                        "error": null
+                      }
+                    ],
+                    "points": 56,
+                    "maxPoints": 56,
+                    "taskType": "Algorithmique — Maximum d'un tableau",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 0
+                  }
+                ]
+              },
+              {
+                "tierNum": 1,
+                "tierTitle": "Tier 1 — Structures de Données et Patterns Avancés",
+                "isMandatory": true,
+                "className": "PostDoc2",
+                "rawResponse": "\n\n---\n### tache_1a\n```javascript\nfunction creerFilePriorite() {\n  const heap = []; // elements: { val, priorite }\n\n  function enqueue(val, priorite) {\n    heap.push({ val, priorite });\n    let idx = heap.length - 1;\n    while (idx > 0) {\n      const parent = Math.floor((idx - 1) / 2);\n      if (heap[parent].priorite <= heap[idx].priorite) break;\n      [heap[parent], heap[idx]] = [heap[idx], heap[parent]];\n      idx = parent;\n    }\n  }\n\n  function dequeue() {\n    if (heap.length === 0) return null;\n    const min = heap[0].val;\n    const last = heap.pop();\n    if (heap.length > 0) {\n      heap[0] = last;\n      let idx = 0;\n      const n = heap.length;\n      while (true) {\n        const left = 2 * idx + 1;\n        const right = 2 * idx + 2;\n        let smallest = idx;\n        if (left < n && heap[left].priorite < heap[smallest].priorite) smallest = left;\n        if (right < n && heap[right].priorite < heap[smallest].priorite) smallest = right;\n        if (smallest === idx) break;\n        [heap[idx], heap[smallest]] = [heap[smallest], heap[idx]];\n        idx = smallest;\n      }\n    }\n    return min;\n  }\n\n  function taille() {\n    return heap.length;\n  }\n\n  return { enqueue, dequeue, taille };\n}\n```\n\n### tache_1b\n```javascript\nfunction creerEventEmitter() {\n  const events = {};\n\n  function on(event, fn) {\n    if (!events[event]) events[event] = [];\n    events[event].push(fn);\n  }\n\n  function off(event, fn) {\n    if (!events[event]) return;\n    const index = events[event].indexOf(fn);\n    if (index !== -1) events[event].splice(index, 1);\n  }\n\n  function emit(event, ...args) {\n    if (!events[event]) return;\n    // Copy to avoid issues if listeners modify the list during emit\n    events[event].forEach(fn => fn(...args));\n  }\n\n  return { on, off, emit };\n}\n```\n\n### tache_1c\n```javascript\nfunction zip(...tableaux) {\n  if (tableaux.length === 0) return [];\n  const minLength = Math.min(...tableaux.map(arr => arr.length));\n  const result = [];\n  for (let i = 0; i < minLength; i++) {\n    const tuple = tableaux.map(arr => arr[i]);\n    result.push(tuple);\n  }\n  return result;\n}\n```\n\n### tache_1d\n```javascript\nfunction parcoursEnLargeur(graphe, depart) {\n  const visites = [];\n  const file = [depart];\n  while (file.length > 0) {\n    const noeud = file.shift(); // corrected: shift() for BFS (FIFO)\n    if (!visites.includes(noeud)) {\n      visites.push(noeud);\n      for (const voisin of (graphe[noeud] || [])) {\n        file.push(voisin);\n      }\n    }\n  }\n  return visites;\n}\n```\n\n### tache_1e\n```javascript\nfunction creerProxy(cible, gestionnaire) {\n  const proxy = {};\n  // Intercept all own enumerable properties of the target\n  Object.keys(cible).forEach(key => {\n    Object.defineProperty(proxy, key, {\n      get: () => gestionnaire.get(cible, key),\n      set: (valeur) => gestionnaire.set(cible, key, valeur),\n      enumerable: true,\n      configurable: true\n    });\n  });\n  return proxy;\n}\n```\n\n### algo_facile_1\n```javascript\nfunction estMultipleDe(n, m) {\n  if (m === 0) return false;\n  return n % m === 0;\n}\n```\n\n### algo_facile_2\n```javascript\nfunction puissance(base, exp) {\n  let result = 1;\n  for (let i = 0; i < exp; i++) {\n    result *= base;\n  }\n  return result;\n}\n```\n\n### algo_moyen_1\n```javascript\nfunction compterPairs(tab) {\n  let count = 0;\n  for (const num of tab) {\n    if (num % 2 === 0) count++;\n  }\n  return count;\n}\n```\n\n### algo_difficile_1\n```javascript\nfunction supprimerDoublons(tab) {\n  const seen = new Set();\n  const result = [];\n  for (const item of tab) {\n    if (!seen.has(item)) {\n      seen.add(item);\n      result.push(item);\n    }\n  }\n  return result;\n}\n```\n\n### algo_defi\n```javascript\nfunction sommePaires(tab) {\n  let sum = 0;\n  for (const num of tab) {\n    if (num % 2 === 0) sum += num;\n  }\n  return sum;\n}\n```",
+                "evalResults": [
+                  {
+                    "id": "tache_1a",
+                    "label": "File de priorité (min-heap)",
+                    "code": "function creerFilePriorite() {\n  const heap = []; // elements: { val, priorite }\n\n  function enqueue(val, priorite) {\n    heap.push({ val, priorite });\n    let idx = heap.length - 1;\n    while (idx > 0) {\n      const parent = Math.floor((idx - 1) / 2);\n      if (heap[parent].priorite <= heap[idx].priorite) break;\n      [heap[parent], heap[idx]] = [heap[idx], heap[parent]];\n      idx = parent;\n    }\n  }\n\n  function dequeue() {\n    if (heap.length === 0) return null;\n    const min = heap[0].val;\n    const last = heap.pop();\n    if (heap.length > 0) {\n      heap[0] = last;\n      let idx = 0;\n      const n = heap.length;\n      while (true) {\n        const left = 2 * idx + 1;\n        const right = 2 * idx + 2;\n        let smallest = idx;\n        if (left < n && heap[left].priorite < heap[smallest].priorite) smallest = left;\n        if (right < n && heap[right].priorite < heap[smallest].priorite) smallest = right;\n        if (smallest === idx) break;\n        [heap[idx], heap[smallest]] = [heap[smallest], heap[idx]];\n        idx = smallest;\n      }\n    }\n    return min;\n  }\n\n  function taille() {\n    return heap.length;\n  }\n\n  return { enqueue, dequeue, taille };\n}",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "dequeue retourne priorité minimale",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "taille correcte",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "file vide retourne null/undefined",
+                        "error": null
+                      }
+                    ],
+                    "points": 37,
+                    "maxPoints": 37,
+                    "taskType": "File de priorité (min-heap)",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 1
+                  },
+                  {
+                    "id": "tache_1b",
+                    "label": "EventEmitter",
+                    "code": "function creerEventEmitter() {\n  const events = {};\n\n  function on(event, fn) {\n    if (!events[event]) events[event] = [];\n    events[event].push(fn);\n  }\n\n  function off(event, fn) {\n    if (!events[event]) return;\n    const index = events[event].indexOf(fn);\n    if (index !== -1) events[event].splice(index, 1);\n  }\n\n  function emit(event, ...args) {\n    if (!events[event]) return;\n    // Copy to avoid issues if listeners modify the list during emit\n    events[event].forEach(fn => fn(...args));\n  }\n\n  return { on, off, emit };\n}",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "emit déclenche le listener",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "off supprime le listener",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "plusieurs listeners sur un même événement",
+                        "error": null
+                      }
+                    ],
+                    "points": 48,
+                    "maxPoints": 48,
+                    "taskType": "EventEmitter",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 1
+                  },
+                  {
+                    "id": "tache_1c",
+                    "label": "Zip de tableaux",
+                    "code": "function zip(...tableaux) {\n  if (tableaux.length === 0) return [];\n  const minLength = Math.min(...tableaux.map(arr => arr.length));\n  const result = [];\n  for (let i = 0; i < minLength; i++) {\n    const tuple = tableaux.map(arr => arr[i]);\n    result.push(tuple);\n  }\n  return result;\n}",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "zip de deux tableaux",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "s'arrête au plus court",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "zip de 3 tableaux",
+                        "error": null
+                      }
+                    ],
+                    "points": 41,
+                    "maxPoints": 41,
+                    "taskType": "Zip de tableaux",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 1
+                  },
+                  {
+                    "id": "tache_1d",
+                    "label": "Débogage : parcours en largeur (BFS)",
+                    "code": "function parcoursEnLargeur(graphe, depart) {\n  const visites = [];\n  const file = [depart];\n  while (file.length > 0) {\n    const noeud = file.shift(); // corrected: shift() for BFS (FIFO)\n    if (!visites.includes(noeud)) {\n      visites.push(noeud);\n      for (const voisin of (graphe[noeud] || [])) {\n        file.push(voisin);\n      }\n    }\n  }\n  return visites;\n}",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "BFS retourne les noeuds dans l'ordre correct",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "noeud sans voisins",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "utilise shift() pas pop()",
+                        "error": null
+                      }
+                    ],
+                    "points": 41,
+                    "maxPoints": 41,
+                    "taskType": "Débogage",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 1
+                  },
+                  {
+                    "id": "tache_1e",
+                    "label": "Proxy manuel",
+                    "code": "function creerProxy(cible, gestionnaire) {\n  const proxy = {};\n  // Intercept all own enumerable properties of the target\n  Object.keys(cible).forEach(key => {\n    Object.defineProperty(proxy, key, {\n      get: () => gestionnaire.get(cible, key),\n      set: (valeur) => gestionnaire.set(cible, key, valeur),\n      enumerable: true,\n      configurable: true\n    });\n  });\n  return proxy;\n}",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "get intercepté",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "set intercepté",
+                        "error": null
+                      }
+                    ],
+                    "points": 49,
+                    "maxPoints": 49,
+                    "taskType": "Proxy manuel",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 1
+                  },
+                  {
+                    "id": "algo_facile_1",
+                    "label": "Algorithmique — Multiplicité",
+                    "code": "function estMultipleDe(n, m) {\n  if (m === 0) return false;\n  return n % m === 0;\n}",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "Multiple",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "Non multiple",
+                        "error": null
+                      }
+                    ],
+                    "points": 43,
+                    "maxPoints": 43,
+                    "taskType": "Algorithmique — Multiplicité",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 1
+                  },
+                  {
+                    "id": "algo_facile_2",
+                    "label": "Algorithmique — Puissance",
+                    "code": "function puissance(base, exp) {\n  let result = 1;\n  for (let i = 0; i < exp; i++) {\n    result *= base;\n  }\n  return result;\n}",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "2^3",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "5^0",
+                        "error": null
+                      }
+                    ],
+                    "points": 30,
+                    "maxPoints": 30,
+                    "taskType": "Algorithmique — Puissance",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 1
+                  },
+                  {
+                    "id": "algo_moyen_1",
+                    "label": "Algorithmique — Comptage de pairs",
+                    "code": "function compterPairs(tab) {\n  let count = 0;\n  for (const num of tab) {\n    if (num % 2 === 0) count++;\n  }\n  return count;\n}",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "Mixte",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "Aucun pair",
+                        "error": null
+                      }
+                    ],
+                    "points": 56,
+                    "maxPoints": 56,
+                    "taskType": "Algorithmique — Comptage de pairs",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 1
+                  },
+                  {
+                    "id": "algo_difficile_1",
+                    "label": "Algorithmique — Suppression de doublons",
+                    "code": "function supprimerDoublons(tab) {\n  const seen = new Set();\n  const result = [];\n  for (const item of tab) {\n    if (!seen.has(item)) {\n      seen.add(item);\n      result.push(item);\n    }\n  }\n  return result;\n}",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "Avec doublons",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "Tous identiques",
+                        "error": null
+                      }
+                    ],
+                    "points": 44,
+                    "maxPoints": 44,
+                    "taskType": "Algorithmique — Suppression de doublons",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 1
+                  },
+                  {
+                    "id": "algo_defi",
+                    "label": "Algorithmique — Somme des pairs",
+                    "code": "function sommePaires(tab) {\n  let sum = 0;\n  for (const num of tab) {\n    if (num % 2 === 0) sum += num;\n  }\n  return sum;\n}",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "Mixte",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "Aucun pair",
+                        "error": null
+                      }
+                    ],
+                    "points": 60,
+                    "maxPoints": 60,
+                    "taskType": "Algorithmique — Somme des pairs",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 1
+                  }
+                ]
+              },
+              {
+                "tierNum": 2,
+                "tierTitle": "Tier 2 — Concurrence, Réactivité et Optimisation",
+                "isMandatory": true,
+                "className": "PostDoc3",
+                "rawResponse": "\n\n---\n### tache_2a\n```javascript\nasync function chargerEnParallele(urls, chargement) {\n  // Utilise Promise.allSettled pour gérer les échecs sans fail-fast\n  const results = await Promise.allSettled(urls.map(url => chargement(url)));\n  const succes = [];\n  const echecs = [];\n  results.forEach((result, index) => {\n    if (result.status === 'fulfilled') {\n      succes.push(result.value);\n    } else {\n      echecs.push(urls[index]);\n    }\n  });\n  return { succes, echecs };\n}\n```\n\n### tache_2b\n```javascript\nfunction creerSubject() {\n  const subscribers = [];\n  let closed = false;\n\n  return {\n    subscribe(observer) {\n      if (typeof observer !== 'object') {\n        throw new TypeError('Observer must be an object');\n      }\n      subscribers.push(observer);\n      return {\n        unsubscribe() {\n          const index = subscribers.indexOf(observer);\n          if (index !== -1) subscribers.splice(index, 1);\n        }\n      };\n    },\n    next(val) {\n      if (!closed) {\n        subscribers.forEach(obs => {\n          try { obs.next(val); } catch (e) { /* ignorer les erreurs d'observateur */ }\n        });\n      }\n    },\n    error(err) {\n      if (!closed) {\n        closed = true;\n        subscribers.forEach(obs => {\n          try { obs.error(err); } catch (e) { /* ignorer */ }\n        });\n        subscribers.length = 0;\n      }\n    },\n    complete() {\n      if (!closed) {\n        closed = true;\n        subscribers.forEach(obs => {\n          try { obs.complete(); } catch (e) { /* ignorer */ }\n        });\n        subscribers.length = 0;\n      }\n    }\n  };\n}\n```\n\n### tache_2c\n```javascript\nfunction memoiserAsync(fn) {\n  const cache = new Map();\n  return async function(...args) {\n    // Crée une clé unique à partir des arguments (JSON.stringify pour les types primitifs et objets simples)\n    const key = JSON.stringify(args);\n    if (cache.has(key)) {\n      // Retourne la promise en cours ou déjà résolue (pas d'appel dupliqué)\n      return cache.get(key);\n    }\n    // Lance l'appel asynchrone et stocke la promise\n    const promise = (async () => {\n      try {\n        return await fn(...args);\n      } finally {\n        // Optionnel : on pourrait remplacer par la valeur résolue, mais la promise resteValide\n      }\n    })();\n    cache.set(key, promise);\n    return promise;\n  };\n}\n```\n\n### tache_2d\n```javascript\nasync function chargerUtilisateur(id) {\n  // Correction : attendre explicitement le fetch et la conversion JSON\n  const response = await fetch('/api/user/' + id);\n  const data = await response.json();\n  return data;\n}\n```\n\n### tache_2e\nfunction creerCircuitBreaker(fn, seuil, delaiResetMs) {\n  let state = 'CLOSED'; // CLOSED, OPEN, HALF_OPEN\n  let failureCount = 0;\n  let lastFailureTime = null;\n  let halfOpenCallInProgress = false;\n\n  return async function(...args) {\n    if (state === 'OPEN') {\n      // Vérifie si le délai de reset est écoulé\n      if (Date.now() - lastFailureTime >= delaiResetMs) {\n        state = 'HALF_OPEN';\n      } else {\n        throw new Error('Circuit breaker is open');\n      }\n    }\n\n    if (state === 'HALF_OPEN') {\n      if (halfOpenCallInProgress) {\n        throw new Error('Circuit breaker is half-open; call already in progress');\n      }\n      halfOpenCallInProgress = true;\n      try {\n        const result = await fn(...args);\n        // Succès : retour vers CLOSED\n        state = 'CLOSED';\n        failureCount = 0;\n        halfOpenCallInProgress = false;\n        return result;\n      } catch (err) {\n        // Échec : ré-ouverture\n        state = 'OPEN';\n        lastFailureTime = Date.now();\n        halfOpenCallInProgress = false;\n        throw err;\n      }\n    }\n\n    // state === CLOSED\n    try {\n      const result = await fn(...args);\n      failureCount = 0; // reset du compteur à chaque succès\n      return result;\n    } catch (err) {\n      failureCount++;\n      if (failureCount >= seuil) {\n        state = 'OPEN';\n        lastFailureTime = Date.now();\n      }\n      throw err;\n    }\n  };\n}\n```\n\n### algo_facile_1\n```javascript\nfunction estPalindrome(s) {\n  // Compare la chaîne avec son inverse (sensible à la casse)\n  return s === s.split('').reverse().join('');\n}\n```\n\n### algo_facile_2\n```javascript\nfunction pgcd(a, b) {\n  // Algorithme d'Euclide\n  while (b !== 0) {\n    [a, b] = [b, a % b];\n  }\n  return a;\n}\n```\n\n### algo_moyen_1\n```javascript\nfunction nombreMots(s) {\n  // Supprime les espaces avant/après, puis sépare par espaces consécutifs\n  const trimmed = s.trim();\n  if (trimmed === '') return 0;\n  return trimmed.split(/\\s+/).length;\n}\n```\n\n### algo_difficile_1\n```javascript\nfunction fusionTriee(a, b) {\n  const result = [];\n  let i = 0, j = 0;\n  while (i < a.length && j < b.length) {\n    if (a[i] < b[j]) {\n      result.push(a[i++]);\n    } else {\n      result.push(b[j++]);\n    }\n  }\n  // Ajouter les éléments restants\n  return result.concat(a.slice(i)).concat(b.slice(j));\n}\n```\n\n### algo_defi\n```javascript\nfunction sontAnagrammes(a, b) {\n  // Vérifie la longueur et compare les lettres triées (sensible à la casse)\n  if (a.length !== b.length) return false;\n  return a.split('').sort().join('') === b.split('').sort().join('');\n}\n```\n\n---\n### tache_2a\n```javascript\nasync function chargerEnParallele(urls, chargement) {\n  const results = await Promise.allSettled(urls.map(url => chargement(url)));\n  const succes = [];\n  const echecs = [];\n  results.forEach((result, index) => {\n    if (result.status === 'fulfilled') {\n      succes.push(result.value);\n    } else {\n      echecs.push(urls[index]);\n    }\n  });\n  return {succes, echecs};\n}\n```\n\n### tache_2b\n```javascript\nfunction creerSubject() {\n  const subscribers = [];\n  let stopped = false;\n\n  function subscribe(observer) {\n    if (stopped) {\n      return { unsubscribe() {} };\n    }\n    subscribers.push(observer);\n    return {\n      unsubscribe() {\n        const index = subscribers.indexOf(observer);\n        if (index !== -1) {\n          subscribers.splice(index, 1);\n        }\n      }\n    };\n  }\n\n  function next(val) {\n    if (stopped) return;\n    subscribers.forEach(obs => {\n      try {\n        obs.next && obs.next(val);\n      } catch (e) {\n        // ignore observer errors\n      }\n    });\n  }\n\n  function error(err) {\n    if (stopped) return;\n    stopped = true;\n    subscribers.forEach(obs => {\n      try {\n        obs.error && obs.error(err);\n      } catch (e) {}\n    });\n    subscribers.length = 0;\n  }\n\n  function complete() {\n    if (stopped) return;\n    stopped = true;\n    subscribers.forEach(obs => {\n      try {\n        obs.complete && obs.complete();\n      } catch (e) {}\n    });\n    subscribers.length = 0;\n  }\n\n  return { subscribe, next, error, complete };\n}\n```\n\n### tache_2c\n```javascript\nfunction memoiserAsync(fn) {\n  const cache = new Map();\n  return async function(...args) {\n    const key = JSON.stringify(args);\n    if (cache.has(key)) {\n      return cache.get(key);\n    }\n    let promise;\n    try {\n      promise = fn(...args);\n    } catch (e) {\n      promise = Promise.reject(e);\n    }\n    if (!(promise instanceof Promise)) {\n      promise = Promise.resolve(promise);\n    }\n    cache.set(key, promise);\n    return promise;\n  };\n}\n```\n\n### tache_2d\n```javascript\nasync function chargerUtilisateur(id) {\n  const reponse = await fetch('/api/user/' + id);\n  const data = await reponse.json();\n  return data;\n}\n```\n\n### tache_2e\n```javascript\nfunction creerCircuitBreaker(fn, seuil, delaiResetMs) {\n  let state = 'CLOSED'; // 'CLOSED', 'OPEN', 'HALF_OPEN'\n  let failureCount = 0;\n  let lastFailureTime = null;\n  let halfOpenCallInProgress = false;\n\n  return async function(...args) {\n    // If OPEN, check if we can transition to HALF_OPEN\n    if (state === 'OPEN') {\n      const now = Date.now();\n      if (now - lastFailureTime >= delaiResetMs) {\n        state = 'HALF_OPEN';\n        halfOpenCallInProgress = false;\n      } else {\n        throw new Error('Circuit breaker is OPEN');\n      }\n    }\n\n    // If HALF_OPEN, only allow one call at a time\n    if (state === 'HALF_OPEN') {\n      if (halfOpenCallInProgress) {\n        throw new Error('Circuit breaker is HALF_OPEN and a call is already in progress');\n      }\n      halfOpenCallInProgress = true;\n    }\n\n    try {\n      const result = await fn(...args);\n      // Success\n      if (state === 'HALF_OPEN') {\n        state = 'CLOSED';\n        failureCount = 0;\n        halfOpenCallInProgress = false;\n      } else if (state === 'CLOSED') {\n        failureCount = 0; // reset consecutive failures\n      }\n      return result;\n    } catch (err) {\n      failureCount++;\n      if (state === 'HALF_OPEN') {\n        state = 'OPEN';\n        lastFailureTime = Date.now();\n        halfOpenCallInProgress = false;\n      } else if (state === 'CLOSED') {\n        if (failureCount >= seuil) {\n          state = 'OPEN';\n          lastFailureTime = Date.now();\n        }\n      }\n      throw err;\n    }\n  };\n}\n```\n\n### algo_facile_1\n```javascript\nfunction estPalindrome(s) {\n  return s === s.split('').reverse().join('');\n}\n```\n\n### algo_facile_2\n```javascript\nfunction pgcd(a, b) {\n  while (b !== 0) {\n    [a, b] = [b, a % b];\n  }\n  return a;\n}\n```\n\n### algo_moyen_1\n```javascript\nfunction nombreMots(s) {\n  const trimmed = s.trim();\n  if (trimmed === '') return 0;\n  return trimmed.split(/\\s+/).length;\n}\n```\n\n### algo_difficile_1\n```javascript\nfunction fusionTriee(a, b) {\n  const result = [];\n  let i = 0, j = 0;\n  while (i < a.length && j < b.length) {\n    if (a[i] < b[j]) {\n      result.push(a[i++]);\n    } else {\n      result.push(b[j++]);\n    }\n  }\n  return result.concat(a.slice(i)).concat(b.slice(j));\n}\n```\n\n### algo_defi\n```javascript\nfunction sontAnagrammes(a, b) {\n  if (a.length !== b.length) return false;\n  return a.split('').sort().join('') === b.split('').sort().join('');\n}\n```",
+                "evalResults": [
+                  {
+                    "id": "tache_2a",
+                    "label": "Pool de concurrence async",
+                    "code": "async function chargerEnParallele(urls, chargement) {\n  // Utilise Promise.allSettled pour gérer les échecs sans fail-fast\n  const results = await Promise.allSettled(urls.map(url => chargement(url)));\n  const succes = [];\n  const echecs = [];\n  results.forEach((result, index) => {\n    if (result.status === 'fulfilled') {\n      succes.push(result.value);\n    } else {\n      echecs.push(urls[index]);\n    }\n  });\n  return { succes, echecs };\n}",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "gestion des échecs partiels en pool",
+                        "error": null
+                      }
+                    ],
+                    "points": 40,
+                    "maxPoints": 40,
+                    "taskType": "Pool de concurrence async",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 2
+                  },
+                  {
+                    "id": "tache_2b",
+                    "label": "Subject réactif (multicast)",
+                    "code": "function creerSubject() {\n  const subscribers = [];\n  let closed = false;\n\n  return {\n    subscribe(observer) {\n      if (typeof observer !== 'object') {\n        throw new TypeError('Observer must be an object');\n      }\n      subscribers.push(observer);\n      return {\n        unsubscribe() {\n          const index = subscribers.indexOf(observer);\n          if (index !== -1) subscribers.splice(index, 1);\n        }\n      };\n    },\n    next(val) {\n      if (!closed) {\n        subscribers.forEach(obs => {\n          try { obs.next(val); } catch (e) { /* ignorer les erreurs d'observateur */ }\n        });\n      }\n    },\n    error(err) {\n      if (!closed) {\n        closed = true;\n        subscribers.forEach(obs => {\n          try { obs.error(err); } catch (e) { /* ignorer */ }\n        });\n        subscribers.length = 0;\n      }\n    },\n    complete() {\n      if (!closed) {\n        closed = true;\n        subscribers.forEach(obs => {\n          try { obs.complete(); } catch (e) { /* ignorer */ }\n        });\n        subscribers.length = 0;\n      }\n    }\n  };\n}",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "multicast vers plusieurs abonnés",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "complete notifie tous les abonnés",
+                        "error": null
+                      }
+                    ],
+                    "points": 32,
+                    "maxPoints": 32,
+                    "taskType": "Subject réactif (multicast)",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 2
+                  },
+                  {
+                    "id": "tache_2c",
+                    "label": "Mémoïsation async anti-duplication",
+                    "code": "function memoiserAsync(fn) {\n  const cache = new Map();\n  return async function(...args) {\n    // Crée une clé unique à partir des arguments (JSON.stringify pour les types primitifs et objets simples)\n    const key = JSON.stringify(args);\n    if (cache.has(key)) {\n      // Retourne la promise en cours ou déjà résolue (pas d'appel dupliqué)\n      return cache.get(key);\n    }\n    // Lance l'appel asynchrone et stocke la promise\n    const promise = (async () => {\n      try {\n        return await fn(...args);\n      } finally {\n        // Optionnel : on pourrait remplacer par la valeur résolue, mais la promise resteValide\n      }\n    })();\n    cache.set(key, promise);\n    return promise;\n  };\n}",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "retourne le bon résultat",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "appels concurrents partagent la même Promise",
+                        "error": null
+                      }
+                    ],
+                    "points": 44,
+                    "maxPoints": 44,
+                    "taskType": "Mémoïsation async anti-duplication",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 2
+                  },
+                  {
+                    "id": "tache_2d",
+                    "label": "Débogage : race condition async",
+                    "code": "async function chargerUtilisateur(id) {\n  // Correction : attendre explicitement le fetch et la conversion JSON\n  const response = await fetch('/api/user/' + id);\n  const data = await response.json();\n  return data;\n}",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "utilise await",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "utilise async",
+                        "error": null
+                      }
+                    ],
+                    "points": 52,
+                    "maxPoints": 52,
+                    "taskType": "Débogage",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 2
+                  },
+                  {
+                    "id": "tache_2e",
+                    "label": "Circuit Breaker",
+                    "code": "function creerCircuitBreaker(fn, seuil, delaiResetMs) {\n  let state = 'CLOSED'; // 'CLOSED', 'OPEN', 'HALF_OPEN'\n  let failureCount = 0;\n  let lastFailureTime = null;\n  let halfOpenCallInProgress = false;\n\n  return async function(...args) {\n    // If OPEN, check if we can transition to HALF_OPEN\n    if (state === 'OPEN') {\n      const now = Date.now();\n      if (now - lastFailureTime >= delaiResetMs) {\n        state = 'HALF_OPEN';\n        halfOpenCallInProgress = false;\n      } else {\n        throw new Error('Circuit breaker is OPEN');\n      }\n    }\n\n    // If HALF_OPEN, only allow one call at a time\n    if (state === 'HALF_OPEN') {\n      if (halfOpenCallInProgress) {\n        throw new Error('Circuit breaker is HALF_OPEN and a call is already in progress');\n      }\n      halfOpenCallInProgress = true;\n    }\n\n    try {\n      const result = await fn(...args);\n      // Success\n      if (state === 'HALF_OPEN') {\n        state = 'CLOSED';\n        failureCount = 0;\n        halfOpenCallInProgress = false;\n      } else if (state === 'CLOSED') {\n        failureCount = 0; // reset consecutive failures\n      }\n      return result;\n    } catch (err) {\n      failureCount++;\n      if (state === 'HALF_OPEN') {\n        state = 'OPEN';\n        lastFailureTime = Date.now();\n        halfOpenCallInProgress = false;\n      } else if (state === 'CLOSED') {\n        if (failureCount >= seuil) {\n          state = 'OPEN';\n          lastFailureTime = Date.now();\n        }\n      }\n      throw err;\n    }\n  };\n}",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "appel normal réussit",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "s'ouvre après seuil d'échecs",
+                        "error": null
+                      }
+                    ],
+                    "points": 0,
+                    "maxPoints": 31,
+                    "taskType": "Circuit Breaker",
+                    "helpUsed": false,
+                    "retried": true,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 2
+                  },
+                  {
+                    "id": "algo_facile_1",
+                    "label": "Algorithmique — Palindrome",
+                    "code": "function estPalindrome(s) {\n  // Compare la chaîne avec son inverse (sensible à la casse)\n  return s === s.split('').reverse().join('');\n}",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "Palindrome",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "Non palindrome",
+                        "error": null
+                      }
+                    ],
+                    "points": 39,
+                    "maxPoints": 39,
+                    "taskType": "Algorithmique — Palindrome",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 2
+                  },
+                  {
+                    "id": "algo_facile_2",
+                    "label": "Algorithmique — PGCD",
+                    "code": "function pgcd(a, b) {\n  // Algorithme d'Euclide\n  while (b !== 0) {\n    [a, b] = [b, a % b];\n  }\n  return a;\n}",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "48 et 18",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "Premiers entre eux",
+                        "error": null
+                      }
+                    ],
+                    "points": 53,
+                    "maxPoints": 53,
+                    "taskType": "Algorithmique — PGCD",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 2
+                  },
+                  {
+                    "id": "algo_moyen_1",
+                    "label": "Algorithmique — Nombre de mots",
+                    "code": "function nombreMots(s) {\n  // Supprime les espaces avant/après, puis sépare par espaces consécutifs\n  const trimmed = s.trim();\n  if (trimmed === '') return 0;\n  return trimmed.split(/\\s+/).length;\n}",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "3 mots",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "1 mot",
+                        "error": null
+                      }
+                    ],
+                    "points": 31,
+                    "maxPoints": 31,
+                    "taskType": "Algorithmique — Nombre de mots",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 2
+                  },
+                  {
+                    "id": "algo_difficile_1",
+                    "label": "Algorithmique — Fusion triée",
+                    "code": "function fusionTriee(a, b) {\n  const result = [];\n  let i = 0, j = 0;\n  while (i < a.length && j < b.length) {\n    if (a[i] < b[j]) {\n      result.push(a[i++]);\n    } else {\n      result.push(b[j++]);\n    }\n  }\n  // Ajouter les éléments restants\n  return result.concat(a.slice(i)).concat(b.slice(j));\n}",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "Deux tableaux",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "Un vide",
+                        "error": null
+                      }
+                    ],
+                    "points": 30,
+                    "maxPoints": 30,
+                    "taskType": "Algorithmique — Fusion triée",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 2
+                  },
+                  {
+                    "id": "algo_defi",
+                    "label": "Algorithmique — Anagrammes",
+                    "code": "function sontAnagrammes(a, b) {\n  // Vérifie la longueur et compare les lettres triées (sensible à la casse)\n  if (a.length !== b.length) return false;\n  return a.split('').sort().join('') === b.split('').sort().join('');\n}",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "Anagrammes",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "Pas anagrammes",
+                        "error": null
+                      }
+                    ],
+                    "points": 54,
+                    "maxPoints": 54,
+                    "taskType": "Algorithmique — Anagrammes",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 2
+                  }
+                ]
+              },
+              {
+                "tierNum": 3,
+                "tierTitle": "Tier 3 — Sécurité Avancée, Architecture et Algorithmes Complexes",
+                "isMandatory": true,
+                "className": "PostDoc4",
+                "rawResponse": "\n\n---\n## tache_3a\n```powershell\n# deploy-patch.ps1\n$backupSource = \"production.db\"\n$backupTarget = \"production_backup.db\"\n$migrationFile = \"migration.sql\"\n\ntry {\n    # 1. Preventive backup BEFORE migration\n    Copy-Item -Path $backupSource -Destination $backupTarget -Force\n    Write-Host \"Backup created: $backupTarget\"\n\n    # 2. Run SQL migration via sqlite3\n    sqlite3 $backupSource < $migrationFile\n    if ($LASTEXITCODE -ne 0) {\n        throw \"Migration failed with exit code $LASTEXITCODE\"\n    }\n    Write-Host \"Migration applied successfully.\"\n}\ncatch {\n    Write-Error \"Error occurred: $_\"\n    # 3. Rollback on failure\n    if (Test-Path $backupTarget) {\n        Copy-Item -Path $backupTarget -Destination $backupSource -Force\n        Write-Host \"Rolled back to backup.\"\n    }\n    exit 1\n}\n```\n\n## tache_3b\n```javascript\nfunction remplirMatrice(grille, x, y, nouvelleValeur) {\n    if (!grille.length || !grille[0].length) return grille;\n    const rows = grille.length;\n    const cols = grille[0].length;\n    if (y < 0 || y >= rows || x < 0 || x >= cols) return grille;\n\n    const target = grille[y][x];\n    if (target === nouvelleValeur) return grille;\n\n    const queue = [[y, x]];\n    grille[y][x] = nouvelleValeur;\n    const dirs = [[-1, 0], [1, 0], [0, -1], [0, 1]];\n\n    while (queue.length) {\n        const [r, c] = queue.shift();\n        for (const [dr, dc] of dirs) {\n            const nr = r + dr;\n            const nc = c + dc;\n            if (nr >= 0 && nr < rows && nc >= 0 && nc < cols && grille[nr][nc] === target) {\n                grille[nr][nc] = nouvelleValeur;\n                queue.push([nr, nc]);\n            }\n        }\n    }\n    return grille;\n}\n```\n\n## tache_3c\n```javascript\nasync function middleware(request, env) {\n    const authHeader = request.headers.get('Authorization');\n    if (authHeader !== 'Bearer SYSTEM-SECURE-KEY') {\n        return new Response('Access Denied', { status: 403 });\n    }\n    return fetch(request);\n}\n```\n\n## tache_3d\n```javascript\nfunction rechercherUtilisateurSecurise(db, nomUtilisateur) {\n    const sql = \"SELECT * FROM utilisateurs WHERE nom = ?\";\n    return db.query(sql, [nomUtilisateur]);\n}\n```\n\n## tache_3e\n```javascript\nasync function executerAvecRetry(operation, maxTentatives) {\n    let lastError;\n    for (let i = 0; i < maxTentatives; i++) {\n        try {\n            return await operation();\n        } catch (error) {\n            lastError = error;\n        }\n    }\n    throw lastError;\n}\n```\n\n## tache_3f\n```javascript\nfunction fusionnerConfig(base, override) {\n    const result = {};\n    const keys = new Set([...Object.keys(base), ...Object.keys(override)]);\n    for (const key of keys) {\n        if (key === '__proto__') continue; // ignore prototype pollution\n        if (override.hasOwnProperty(key)) {\n            const overrideVal = override[key];\n            const baseVal = base[key];\n            const isPlainObject = (v) => typeof v === 'object' && v !== null && !Array.isArray(v);\n            if (isPlainObject(overrideVal) && isPlainObject(baseVal)) {\n                result[key] = fusionnerConfig(baseVal, overrideVal);\n            } else {\n                result[key] = overrideVal;\n            }\n        } else {\n            result[key] = base[key];\n        }\n    }\n    return result;\n}\n```\n\n## algo_facile_1\n```javascript\nfunction validerParentheses(s) {\n    let stack = 0;\n    for (const ch of s) {\n        if (ch === '(') {\n            stack++;\n        } else if (ch === ')') {\n            if (stack === 0) return false;\n            stack--;\n        }\n    }\n    return stack === 0;\n}\n```\n\n## algo_facile_2\n```javascript\nfunction fibonacci(n) {\n    if (n < 0) return undefined;\n    let a = 0, b = 1;\n    for (let i = 0; i < n; i++) {\n        [a, b] = [b, a + b];\n    }\n    return a;\n}\n```\n\n## algo_moyen_1\n```javascript\nfunction motsUniques(s) {\n    const trimmed = s.trim();\n    if (!trimmed) return 0;\n    const words = trimmed.split(/\\s+/);\n    return new Set(words).size;\n}\n```\n\n## algo_difficile_1\n```javascript\nfunction aplatirTableau(tab) {\n    return tab.flat();\n}\n```\n\n## algo_defi\n```javascript\nfunction rotationDroite(tab, k) {\n    const n = tab.length;\n    if (n === 0) return [];\n    const rotations = k % n;\n    if (rotations === 0) return tab.slice();\n    return tab.slice(-rotations).concat(tab.slice(0, n - rotations));\n}\n```",
+                "evalResults": [
+                  {
+                    "id": "tache_3a",
+                    "label": "Script PowerShell deploy-patch avec rollback",
+                    "code": "# deploy-patch.ps1\n$backupSource = \"production.db\"\n$backupTarget = \"production_backup.db\"\n$migrationFile = \"migration.sql\"\n\ntry {\n    # 1. Preventive backup BEFORE migration\n    Copy-Item -Path $backupSource -Destination $backupTarget -Force\n    Write-Host \"Backup created: $backupTarget\"\n\n    # 2. Run SQL migration via sqlite3\n    sqlite3 $backupSource < $migrationFile\n    if ($LASTEXITCODE -ne 0) {\n        throw \"Migration failed with exit code $LASTEXITCODE\"\n    }\n    Write-Host \"Migration applied successfully.\"\n}\ncatch {\n    Write-Error \"Error occurred: $_\"\n    # 3. Rollback on failure\n    if (Test-Path $backupTarget) {\n        Copy-Item -Path $backupTarget -Destination $backupSource -Force\n        Write-Host \"Rolled back to backup.\"\n    }\n    exit 1\n}",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "Sauvegarde via Copy-Item",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "Détection d'erreur",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "Rollback",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "Analyse rollback",
+                        "error": null
+                      }
+                    ],
+                    "points": 35,
+                    "maxPoints": 35,
+                    "taskType": "Script PowerShell deploy-patch avec rollback",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 3
+                  },
+                  {
+                    "id": "tache_3b",
+                    "label": "Flood Fill",
+                    "code": "function remplirMatrice(grille, x, y, nouvelleValeur) {\n    if (!grille.length || !grille[0].length) return grille;\n    const rows = grille.length;\n    const cols = grille[0].length;\n    if (y < 0 || y >= rows || x < 0 || x >= cols) return grille;\n\n    const target = grille[y][x];\n    if (target === nouvelleValeur) return grille;\n\n    const queue = [[y, x]];\n    grille[y][x] = nouvelleValeur;\n    const dirs = [[-1, 0], [1, 0], [0, -1], [0, 1]];\n\n    while (queue.length) {\n        const [r, c] = queue.shift();\n        for (const [dr, dc] of dirs) {\n            const nr = r + dr;\n            const nc = c + dc;\n            if (nr >= 0 && nr < rows && nc >= 0 && nc < cols && grille[nr][nc] === target) {\n                grille[nr][nc] = nouvelleValeur;\n                queue.push([nr, nc]);\n            }\n        }\n    }\n    return grille;\n}",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "Exécution réelle matrices",
+                        "error": null
+                      }
+                    ],
+                    "points": 52,
+                    "maxPoints": 52,
+                    "taskType": "Flood Fill",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 3
+                  },
+                  {
+                    "id": "tache_3c",
+                    "label": "Middleware Cloudflare",
+                    "code": "async function middleware(request, env) {\n    const authHeader = request.headers.get('Authorization');\n    if (authHeader !== 'Bearer SYSTEM-SECURE-KEY') {\n        return new Response('Access Denied', { status: 403 });\n    }\n    return fetch(request);\n}",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "Bearer SYSTEM-SECURE-KEY",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "403 Access Denied",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "fetch(request)",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "Exécution réelle 403",
+                        "error": null
+                      }
+                    ],
+                    "points": 49,
+                    "maxPoints": 49,
+                    "taskType": "Middleware Cloudflare",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 3
+                  },
+                  {
+                    "id": "tache_3d",
+                    "label": "SQL paramétrée",
+                    "code": "function rechercherUtilisateurSecurise(db, nomUtilisateur) {\n    const sql = \"SELECT * FROM utilisateurs WHERE nom = ?\";\n    return db.query(sql, [nomUtilisateur]);\n}",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "Placeholder ?",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "Cas nominal",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "Pas de concat",
+                        "error": null
+                      }
+                    ],
+                    "points": 33,
+                    "maxPoints": 33,
+                    "taskType": "SQL paramétrée",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 3
+                  },
+                  {
+                    "id": "tache_3e",
+                    "label": "Retry async",
+                    "code": "async function executerAvecRetry(operation, maxTentatives) {\n    let lastError;\n    for (let i = 0; i < maxTentatives; i++) {\n        try {\n            return await operation();\n        } catch (error) {\n            lastError = error;\n        }\n    }\n    throw lastError;\n}",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "3 scénarios",
+                        "error": null
+                      }
+                    ],
+                    "points": 30,
+                    "maxPoints": 30,
+                    "taskType": "Retry async",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 3
+                  },
+                  {
+                    "id": "tache_3f",
+                    "label": "Prototype pollution",
+                    "code": "function fusionnerConfig(base, override) {\n    const result = {};\n    const keys = new Set([...Object.keys(base), ...Object.keys(override)]);\n    for (const key of keys) {\n        if (key === '__proto__') continue; // ignore prototype pollution\n        if (override.hasOwnProperty(key)) {\n            const overrideVal = override[key];\n            const baseVal = base[key];\n            const isPlainObject = (v) => typeof v === 'object' && v !== null && !Array.isArray(v);\n            if (isPlainObject(overrideVal) && isPlainObject(baseVal)) {\n                result[key] = fusionnerConfig(baseVal, overrideVal);\n            } else {\n                result[key] = overrideVal;\n            }\n        } else {\n            result[key] = base[key];\n        }\n    }\n    return result;\n}",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "Fusion simple",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "Fusion profonde",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "Anti pollution",
+                        "error": null
+                      }
+                    ],
+                    "points": 35,
+                    "maxPoints": 35,
+                    "taskType": "Prototype pollution",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 3
+                  },
+                  {
+                    "id": "algo_facile_1",
+                    "label": "Algorithmique — Parenthèses valides",
+                    "code": "function validerParentheses(s) {\n    let stack = 0;\n    for (const ch of s) {\n        if (ch === '(') {\n            stack++;\n        } else if (ch === ')') {\n            if (stack === 0) return false;\n            stack--;\n        }\n    }\n    return stack === 0;\n}",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "Balancées",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "Non fermée",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "Inversées",
+                        "error": null
+                      }
+                    ],
+                    "points": 53,
+                    "maxPoints": 53,
+                    "taskType": "Algorithmique — Parenthèses valides",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 3
+                  },
+                  {
+                    "id": "algo_facile_2",
+                    "label": "Algorithmique — Fibonacci",
+                    "code": "function fibonacci(n) {\n    if (n < 0) return undefined;\n    let a = 0, b = 1;\n    for (let i = 0; i < n; i++) {\n        [a, b] = [b, a + b];\n    }\n    return a;\n}",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "fib(7)",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "fib(0)",
+                        "error": null
+                      }
+                    ],
+                    "points": 37,
+                    "maxPoints": 37,
+                    "taskType": "Algorithmique — Fibonacci",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 3
+                  },
+                  {
+                    "id": "algo_moyen_1",
+                    "label": "Algorithmique — Mots uniques",
+                    "code": "function motsUniques(s) {\n    const trimmed = s.trim();\n    if (!trimmed) return 0;\n    const words = trimmed.split(/\\s+/);\n    return new Set(words).size;\n}",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "Répétition",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "Un seul",
+                        "error": null
+                      }
+                    ],
+                    "points": 44,
+                    "maxPoints": 44,
+                    "taskType": "Algorithmique — Mots uniques",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 3
+                  },
+                  {
+                    "id": "algo_difficile_1",
+                    "label": "Algorithmique — Aplatir un tableau",
+                    "code": "function aplatirTableau(tab) {\n    return tab.flat();\n}",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "Imbriqué",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "Vide",
+                        "error": null
+                      }
+                    ],
+                    "points": 48,
+                    "maxPoints": 48,
+                    "taskType": "Algorithmique — Aplatir un tableau",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 3
+                  },
+                  {
+                    "id": "algo_defi",
+                    "label": "Algorithmique — Rotation à droite",
+                    "code": "function rotationDroite(tab, k) {\n    const n = tab.length;\n    if (n === 0) return [];\n    const rotations = k % n;\n    if (rotations === 0) return tab.slice();\n    return tab.slice(-rotations).concat(tab.slice(0, n - rotations));\n}",
+                    "evaluations": [
+                      {
+                        "passed": true,
+                        "description": "Rotation 1",
+                        "error": null
+                      },
+                      {
+                        "passed": true,
+                        "description": "Pas de rotation",
+                        "error": null
+                      }
+                    ],
+                    "points": 42,
+                    "maxPoints": 42,
+                    "taskType": "Algorithmique — Rotation à droite",
+                    "helpUsed": false,
+                    "retried": false,
+                    "status": "success",
+                    "failureExplanation": null,
+                    "teacherCorrection": null,
+                    "_tierNum": 3
+                  }
+                ]
+              }
+            ],
+            "quantization": null,
+            "elapsedMs": 236685,
+            "wallMs": 263207,
+            "tokens": 8062,
+            "tokensPerSecond": 34.06,
+            "promptTokens": 6963,
+            "completionTokens": 8062,
+            "timestampMs": 1788437483705,
+            "timestampIso": "2026-09-03T12:11:23.705Z"
+          }
+        ]
+      }
+    },
+    "lastUpdated": "2026-09-03T12:11:23.707Z",
+    "provider": "kilo",
+    "isCloud": true
+  }
+}
