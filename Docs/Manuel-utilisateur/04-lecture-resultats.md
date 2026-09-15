@@ -83,3 +83,30 @@ Utilisation pratique:
 - comparer 2 runs
 - diagnostiquer un echec
 - auditer un comportement inattendu
+
+## RunCode : lire le bilan turbo
+
+À la fin d'un examen RunCode (`node runner.js --exam-code`), l'écran affiche :
+
+```
+🏆 BILAN FINAL : <modèle>
+🎓 Diplôme : CM2 (Primaire)
+✅ STATUT : TERMINÉ (4/5 exercices réussis)
+🌟 SPÉCIALITÉ : PYTHON (3/4 réussis, 75%)
+   Verdict du professeur : Spécialité : PYTHON — ...
+--- Détails par classe ---
+  CP       PYTHON       ✅ (4441 ms)
+  CE1      JAVASCRIPT   ✅ (6683 ms)
+  ...
+```
+
+- **Diplôme** : la dernière classe validée du parcours (le parcours s'arrête au
+  1er échec — un 4/5 signifie « échec en classe 5, classes suivantes non jouées »).
+- **SPÉCIALITÉ** : le langage d'excellence du modèle, déterminé par le professeur
+  à partir du bilan factuel (réussites par langage sur tous les tirages).
+- **STATUT : EXPULSÉ** (carton rouge) : le modèle s'est déclaré « expert » dans
+  un langage mais a échoué à un exercice basique dans ce langage.
+- **Carnet** : « 📓 Carnet RunCode mis à jour » confirme l'enregistrement (école
+  `RunCode-<parcours>`) qui compte pour le classement général. Le badge
+  `⚡ RunCode · Turbo` apparaît alors sur la carte du modèle (classement HTML),
+  avec la section RunCode dans la modale (parcours, diplôme, spécialité, verdict).

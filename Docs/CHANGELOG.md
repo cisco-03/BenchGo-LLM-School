@@ -1,5 +1,531 @@
 # CHANGELOG - Carnet de Notes BenchGo
 
+## 2026-09-15 — feat(arch-warning) : avertissement « modèle non compatible » + registre des incompatibles (arch GGUF non supportée par llama.cpp)
+
+### Contexte & problème rencontré
+L'utilisateur a demandé de remettre en course 4 modèles (`Memories-BenchGo/Tasks.md`) : 2 `k2-horizon-7b` (Q4_K_M / Q4_K_S) isolés et 2 `kai-os_grug-12b` (Q5_K_M / Q6_K_L) en échec. Diagnostic : (1) les Grug se chargent maintenant — la Q6_K_L répond « OK » au ping avec budget 512 (modèle thinking, 8 tokens étaient insuffisants pour son raisonnement), mais son carnet est absent (« Tiers testés, carnet absent ») ; (2) les k2-horizon échouent au chargement avec `unknown model architecture: 'k2-horizon'` — le runtime llama.cpp de LM Studio (2.38.0, dernier dispo) ne connaît PAS cette architecture (issue #28361 ouverte, support en cours, fork MBZUAI-IFM requis d'après la model card HF). L'utilisateur : « on ne sait pas si c'est un bug » → il faut avertir clairement les utilisateurs (CLI RunCode ET grande école) qu'un modèle téléchargé a un PROBLÈME DE STRUCTURE, et tenir une liste de rappel pour retélécharger le GGUF quand le support llama.cpp arrivera (2-3 semaines).
+
+### Modifications apportées
+
+**`arch-warning.js` (nouveau module)** :
+- Registre persistant `.benchgo-incompatible.json` : `{ model, displayName, publisher, quantization, architecture, firstSeen, lastSeen, reason, attempts }`.
+- `isArchitectureError(msg)` : détecte `unknown model architecture: 'xxx'` OU `Failed to load model` (HTTP_400).
+- `extractArchitecture(msg)` : extrait l'arch depuis le message (quote optionnelle).
+- `recordIncompatible(modelKey, opts)` : enregistre/met à jour ; fallback `archFromLmsLs(modelKey)` lit l'arch depuis `lms ls --json` quand le message d'erreur ne la mentionne pas (cas HTTP_400 JSON de LM Studio).
+- `incompatibleWarningText(modelKey, opts)` : bandeau complet « ⚠⚠⚠ MODÈLE NON COMPATIBLE — ARCHITECTURE GGUF NON SUPPORTÉE » avec cause, durée estimée (2-3 semaines), solution (mettre LM Studio à jour / retélécharger le GGUF HF) et commande de rappel de la liste.
+- `printIncompatibleList()` : liste des modèles mis de côté (arch, quant, éditeur, dates, raison).
+- `clearIncompatible(modelKey)` : retire une entrée (runtime mis à jour).
+
+**`runner.js` — avertissement aux 3 points d'entrée (grande école + RunCode)** :
+- Avertissement PRÉVENTIF après résolution du modèle (avant pre-flight ET avant l'examen RunCode) : si le modèle figure déjà au registre, le bandeau s'affiche immédiatement — le run continue quand même (le runtime a peut-être été mis à jour).
+- Pre-flight (grande école cloud/local) : au diagnostic `loadFailure` (E507), enregistrement au registre + bandeau complet en plus du résumé existant.
+- Catch global `main().catch` : E507 → enregistrement + bandeau (couvre tout chemin d'échec propagé).
+- Catch RunCode (`--exam-code`) : le catch avalait l'erreur (jamais vu par `main().catch`) — gestion dédiée ajoutée, sinon aucun avertissement ne s'affichait sur le tremplin.
+
+**`night-batch.js` — mode nuit + liste** :
+- `loadModel()` : si `lms load` échoue avec une erreur d'architecture, enregistrement au registre + bandeau complet (le modèle est auto-blacklisté comme avant — la double trace noir/incompat sert : la blacklist l'exclut des batchs, le registre rappelle pourquoi et qu'il faudra retélécharger).
+- `healthCheck` KO sur arch inconnue : même traitement.
+- Bilan de session : la liste des incompatibles est réaffichée à la fin si le batch en a détecté au moins un.
+- **NOUVEAU FLAG `--incompatible-list`** (one-shot) : affiche le registre des modèles mis de côté et rappelle de les retélécharger (Hugging Face / LM Studio) quand le support de l'arch sera ajouté. Aucun daemon requis.
+- `--list-only` : les modèles isolés qui figurent au registre affichent le badge **INCOMPATIBLE** (rouge) + raison « Incompatible : arch non supportée » au lieu de « NON APPLICABLE / Isolé manuellement ».
+- Désisolation (`!!N`) : retire AUSSI l'entrée du registre (l'utilisateur réessaie après mise à jour du runtime).
+
+### Vérifications
+- `node --check` sur les 3 fichiers : OK.
+- `node tests/run-tests.js` : 31/31.
+- Test réel night-batch : `--models=k2-horizon-7b@q4_k_m --schools=LIGHT --class-by-class --tiers=0 --no-teacher` → bandeau affiché au load_failed, registre écrit (arch k2-horizon extraite), auto-blacklist, liste réaffichée au bilan.
+- Test réel runner RunCode : `--provider=lmstudio --model=k2-horizon-7b@q4_k_m --exam-code --force` → E507 + bandeau + registre (arch retrouvée via fallback lms ls).
+- `node night-batch.js --incompatible-list` : liste formatée avec les 2 k2-horizon.
+- Registre de test nettoyé (fichier absent) — les vraies détections se feront automatiquement au prochain batch.
+
+## 2026-09-11c — feat(runcode) : RunCode Turbo = tremplin vers la grande école (mode diagnostic + gate souple + gains de temps)
+
+### Contexte & problème rencontré
+Nouvelle architecture demandée par l'utilisateur (`Memories-BenchGo/Tasks.md`) : **RunCode Turbo devient le PRÉ-EXAMEN** (tremplin) de la grande école. Démarche : (1) tous les modèles passent RunCode pour mesurer leurs aptitudes par langage de programmation, (2) une fois la spécialité connue, ils intègrent la grande école. Problèmes sous-jacents : (a) la spécialité mesurée était fragile (1 exercice par classe, arrêt au 1er échec — la plupart des langages n'avaient que 0-1 tentative), (b) la grande école est trop longue (1h+ par modèle, une nuit ne suffit pas pour 6-7 modèles), (c) le vocabulaire « échec » en gros caractères donnait un ton « film catastrophe » alors que le tremplin n'est JAMAIS éliminatoire.
+
+### Modifications apportées
+
+**`adaptive-exam.js` — mode DIAGNOSTIC du tremplin** :
+- `DIAG_EXERCICES_PAR_CLASSE = 2` : le tirage prend désormais 2 exercices DISTINCTS par classe (tirage sans remise, même classe jamais rejouée) — les stats par langage deviennent exploitables.
+- `DIAG_CONSECUTIVE_FAILS_TO_STOP = 2` : l'examen ne s'arrête qu'après 2 échecs CONSÉCUTIFS (tolérance à un échec isolé). Un échec affiche « ℹ️ Un raté isolé — on continue la classe » (ton doux demandé).
+- `DIAG_MAX_EXERCICES = 15` : plafond de sécurité (~10-20 min par modèle). Le dépassement trace `[plafond]` dans le journal.
+- Diplôme : dernière classe où le modèle a réussi AU MOINS un exercice (`passedClasses`), un échec isolé n'efface plus une réussite de la même classe.
+- `computeSpecialtyStats` : la spécialité n'est conservée que si le langage a été tenté ≥ 2 fois (sinon verdict « pas encore assez d'exercices ») — mesure fiable, la base du tremplin.
+- `reportCard.languageStats` enrichi : `avgLatencyMs` (latence moyenne par langage) en plus de passed/failed/total/rate/classes.
+
+**`.teacher-vault/vault_polyglot.json` (86 exercices, +18)** :
+- Classes creuses comblées : 5eme (csharp +1), Licence2 (python +1, rust +1), Licence3 (javascript +1), Master2 (javascript +1), Doctorat (python +1), Terminale (go +1), Licence1 (c +1, kotlin +1), Master1 (cpp +1), 3eme (java +1), 2nde (sql +1), CM1 (bash +1, react +1), CM2 (php +1, typescript +1), 4eme (typescript +1, bash +1).
+- Tous les IDs préfixés `_02` (jamais de collision), regex validées : `JSON.parse` + `new RegExp` sur les 86 exercices → AUCUNE ERREUR.
+
+**`runner.js` — carnet RunCode enrichi** :
+- `examResult.languageStats` : le bilan par langage (tentatives/réussites/latence moyenne) est stocké dans le carnet (école RunCode-*) → le leaderboard l'agrège pour les barres de la modale. Rétrocompatible : les anciens carnets sans `languageStats` affichent simplement 0 barre.
+
+**`night-batch.js` — tremplin + gain de temps grande école** :
+- `runCodeBestOf(ledger)` / `runCodeGateInfo(ledger)` : lit la meilleure tentative RunCode d'un carnet (logique rcBestOf de leaderboard.js, sans couplage).
+- **File d'attente réordonnée** : les modèles AVEC pré-examen RunCode au carnet passent en premier (tri par pct RunCode décroissant), les modèles sans pré-examen ensuite — les modèles prometteurs donnent des carnets tôt dans la nuit.
+- **RunCode AVANT la grande école** : un modèle sans examen RunCode au carnet passe d'abord `node runner.js --exam-code` (parcours = même scolarité que sa première école : LIGHT→Primaire, STANDARD→College-Lycee, EXPERT/DOCTORAT→Universite). Timeout 2× TIER_TIMEOUT_MS (90 min). Un tremplin écourté (--skip) passe au modèle suivant sans consigner de run_ko.
+- **Seuil souple (JAMAIS éliminatoire)** : `RUNCODE_GATE_DEFAULT_PCT = 40`. Sous le seuil : simple avertissement ambre « modèle non recommandé pour un run complet — passage quand même ». Aucune exclusion, aucun blacklistage (demande explicite : « pas de film catastrophe »).
+- **Option « obli »** dans le choix des tiers (mode Exercice par exercice) : taper `obli` ne joue QUE les tiers OBLIGATOIRES de chaque école sélectionnée — la consolidation "all" se déclenche quand même (obligatoires couverts) → carnet écrit pour ~60-70 % du temps. Répond au problème « la grande école est trop très très longue ».
+- `runBenchmark` : nouveau paramètre `opts.examCodeArgs` (lancement de l'examen RunCode depuis night-batch).
+
+**`leaderboard.js` + `consolidate-leaderboard.js` — affichage tremplin** :
+- Badge ⚡ RunCode bicolore : bleu (#58a6ff) si pct ≥ 40 %, ambre (#d29922) si sous le seuil — orientation, jamais éliminatoire.
+- Modale : sous-titre « pré-examen code natif (tremplin vers la grande école) » + NOUVELLES BARRES PAR LANGAGE (une barre par langage tenté, taux coloré, latence moyenne affichée). Dupliqué dans les deux fichiers (contrainte JS inline).
+- `exportMd` du consolidate : nouvelle colonne « Spécialité » + préfixe ⚡ au nom des modèles RunCode.
+- Détail MD (leaderboard.js) : ligne « Aptitudes par langage (tremplin — orientation) » triée par taux décroissant.
+- Vocabulaire doux : « ✘ Recalé » remplace « ✘ Échoué » pour les tiers RunCode du rapport intégral (consolidate), « Exercice de débugging natif recalé » dans le détail.
+
+### Vérifications
+- `node --check adaptive-exam.js / runner.js / night-batch.js / leaderboard.js / consolidate-leaderboard.js` : OK.
+- `node tests/run-tests.js` : 31/31.
+- Coffre validé : 86 exercices, `JSON.parse` + `new RegExp` sur chaque `expected_regex` → AUCUNE ERREUR.
+- `node leaderboard.js` + `node consolidate-leaderboard.js` + `node scripts/check-inline-js.js` : JS inline valide des deux HTML (9 cartes + 4 cartes).
+- `vm.Script` sur le JS inline consolidé : OK (pas de SyntaxError).
+- `runCodeBestOf` testé sur les 33 carnets réels : 7 carnets RunCode lus (pct/spécialité), 26 sans (rétrocompatibles).
+- Dry-run `node runner.js --provider=lmstudio --model=... --exam-code --dry-run` : bannière RunCode + parcours auto (College-Lycee pour un 12B) OK.
+
+## 2026-09-11b — fix(runcode) : la commande "list" du questionnaire ne fonctionnait jamais (retombait sur le modèle par défaut)
+
+### Contexte & problème rencontré
+La commande `list` (tableau détaillé night-batch) à l'invite « Choix du modèle (numéro ou nom, "list" = tableau détaillé) » du questionnaire RunCode ne produisait AUCUN tableau — entre guillemets ou pas. Constaté dans `Memories-BenchGo/Tasks.md` : après la saisie de `list`, le questionnaire enchaînait directement sur la section 2b (Quantification) avec le modèle 1 sélectionné.
+
+**Cause racine** : `_askNumberedChoice()` (startup-questionnaire.js) renvoie le choix par défaut pour TOUTE saisie qui ne matche ni un numéro ni un nom exact d'entrée. `list`/`liste` n'est ni un numéro ni un nom de modèle → résolue en `entries[defaultIndex].value` → la boucle `while (picked === 'list' || picked === 'liste')` (ligne 344) n'était JAMAIS atteinte : le code de la commande `list` existait mais était inatteignable. Aucun des sites d'appel de `_askNumberedChoice` (fournisseur, profil) n'est concerné : leurs saisies attendues sont numéros ou noms, le repli-défaut y est correct.
+
+### Modifications apportées
+- `_askNumberedChoice(question, entries, defaultIndex, opts)` : nouvelle option `opts.commands` — un tableau de saisies spéciales renvoyées BRUTES à l'appelant quand elles ne matchent ni numéro ni nom (ex: `['list', 'liste']`). Les autres saisies inconnues (typos) tombent TOUJOURS sur le défaut — une faute de frappe ne doit pas sélectionner un modèle inexistant.
+- Les DEUX appels du choix du modèle (appel initial + relance dans la boucle `while`) passent `{ commands: ['list', 'liste'] }` (constante `modelChoices` partagée). La boucle `list` est désormais réellement atteignable : le tableau night-batch s'affiche puis l'invite se relance.
+
+### Vérifications
+- `node --check startup-questionnaire.js` : OK.
+- `node tests/run-tests.js` : 31/31.
+
+## 2026-09-11 — fix(runcode) : badge ⚡ mort dans le classement communautaire + compartiments de modèles + diagnostic k2-horizon + modèles Ollama cloud
+
+### Contexte & problème rencontré
+Quatre demandes de l'utilisateur (`Memories-BenchGo/Tasks.md`) :
+
+1. **Badge ⚡ RunCode absent du classement communautaire** alors qu'il s'affiche parfaitement dans le classement local (`leaderboard.js --serve`).
+2. **Menu RunCode sans mémoire** : la liste des modèles LM Studio du questionnaire n'indique pas lesquels ont déjà été testés, échoué, ou sont isolés — on re-teste toujours les mêmes modèles à l'aveugle.
+3. **k2-horizon-7b (Q4_K_M et Q4_K_S) échoue en RunCode** avec un `HTTP_400` JSON brut illisible, alors que ce sont des modèles réputés excellents ; et doute sur l'écriture des carnets RunCode.
+4. **`gemma4:31b-cloud` (Ollama Cloud) visible dans le classement local** : demande de vérifier que les modèles cloud ne se retrouvent jamais classés locaux, et de vérifier tous les autres modèles. Demande aussi un message explicite « vous pouvez supprimer ce modèle sur LM Studio » pour les modèles non chargeables.
+
+### Modifications apportées
+
+**`leaderboard.js` + `consolidate-leaderboard.js` — modèles Ollama Cloud classés locaux** :
+- Nouveau signal fort `detectIsCloudFromLedger` (local) / `detectIsCloudFromCarnet` (communautaire) : suffixe `-cloud` / `:cloud` dans `model` OU `displayName` (ex: `gemma4:31b-cloud`, tag officiel des modèles Ollama Cloud servis par le proxy ollama.com). Ce signal est INDEPENDANT de l'école FRONTIER : un modèle Ollama cloud testé hors FRONTIER (STANDARD etc.) ne sera plus jamais classé local.
+- Audit croisé des 33 carnets : les 13 classés locaux sont tous des GGUF LM Studio légitimes (vérifiés contre `lms ls`), les 20 cloud sont toutes des API distantes. gemma4:31b-cloud était DÉJÀ correctement classé cloud (signal FRONTIER) — le suffixe `-cloud` ajoute une ceinture de sécurité pour les futurs carnets sans FRONTIER.
+- `classement.md` : nouvelle colonne `Orig.` (☁️/🏠) dans le tableau global + ligne `**Origine :**` dans le détail par modèle (avec provider). Un modèle cloud est désormais identifiable d'un coup d'œil dans le rang global mélangé.
+
+**`lm-studio-client.js` + `cloud-client.js` + `runner.js` — suppression conseillée** :
+- Diagnostic E507 enrichi : « Ce modèle est inutilisable en l'état : vous pouvez le supprimer de LM Studio (UI → poubelle) pour libérer de l'espace disque » — explicite comme demandé. Pre-flight : ligne dédiée + astuce d'isolation conservée.
+
+**`consolidate-leaderboard.js` — badge ⚡ mort (cause racine)** :
+- Dans `aggregateCarnet()`, le calcul RunCode (et `result.cost`) était placé APRÈS le `return { ... }` initial : **code mort** — `result.runCode` n'a jamais été sérialisé dans le HTML communautaire. Déplacé avant le return (calcul de `rcAgg` en amont, objet résultat `const result` + `runCode: rcAgg` inline).
+- Vérifié : `node consolidate-leaderboard.js` régénère maintenant les badges `⚡ RunCode · Turbo` (3 badges) + `node scripts/check-inline-js.js` OK.
+
+**Soumissions communautaires manquantes (2e cause)** :
+- Audit : les 7 carnets contenant une école RunCode (`bartowski_minicpm5-2b_q8_0`, `kai-os_grug-12b_q5_k_m`, `minicpm5-2b_q4_k_m`, `openbmb_minicpm5-2b_q8_0`, `ornith-1.5-9b-mtp-ashq1-remix`, `qwen3.8-9b-distill_q5_k_m`, `spark-x2.5-4b_q8_0`) n'ont **jamais été soumis** (`submissions/` ne contient aucune école RunCode). Le fix du badge ne suffit pas : il faut relancer `node runner.js --submit --model=<nom>` pour chacun, puis `gh workflow run consolidate.yml`.
+
+**`startup-questionnaire.js` + `night-batch.js` — compartiments de modèles** :
+- Le menu « Choix du modèle » (section 2, providers locaux) annote chaque modèle avec un glyphe de statut : `✓` testé, `~` partiel, `✘` échec, `·` à tester, `⊘` isolé (source : carnets + historique + blacklist, même logique que `night-batch.js --list-only`). Matching normalisé `/v1/models` ↔ `modelKey` lms (sans `@quant`/`.gguf`). Repli silencieux si lms est injoignable.
+- Commande `list` à l'invite du modèle : affiche le tableau détaillé night-batch (`printModelsList` exportée) avec les colonnes complètes (pct, vitesse, tokens, temps, écoles manquantes) puis relance le choix.
+- `night-batch.js` : `groupModelsByStatus(listResult)` (nouveau, exporté) regroupe les modèles par compartiment (tested/partial/failed/never/isolated) ; `printModelsList` et `loadAllLedgers` exportés. Validé : 12/13 modèles matchés (le seul raté est un embedding, jamais testable).
+
+**`lm-studio-client.js` + `cloud-client.js` + `runner.js` — E507 (diagnostic k2-horizon)** :
+- Nouveau code `E507_LM_LOAD_FAILED` : HTTP 400 « Failed to load model » = l'architecture GGUF n'est pas supportée par le runtime llama.cpp de LM Studio. Message explicite (mettre LM Studio / runtimes à jour, ou tester un autre GGUF) au lieu du JSON brut — dans les DEUX clients (RunCode `--provider=lmstudio` passe par `queryLLMCloud`, benchmark local par `queryLLMLocal`).
+- Pre-flight check : détection immédiate (break, sans 3 tentatives inutiles) + section diagnostic dédiée (`lms load` → « unknown model architecture », mise à jour runtimes, isolation `--isoler=!<num>`).
+- Testé en live : `node runner.js all --provider=lmstudio --model=k2-horizon-7b@q4_k_m --exam-code --force` affiche désormais le diagnostic E507 complet.
+
+**Diagnostic k2-horizon (cause, aucune modification de modèle)** :
+- Preuve établie : le header GGUF déclare `general.architecture = k2-horizon`, architecture ABSENTE de llama.cpp (y compris le runtime 2.34.0 de LM Studio ; issue ggml-org/llama.cpp #28361 toujours ouverte à date). Ollama échoue pareil ; seul vLLM (recipe officielle `--trust-remote-code`) l'exécute.
+- Les deux GGUF (Q4_K_M et Q4_K_S, AMAImedia) ne peuvent donc PAS être chargés par LM Studio, quel que soit le runtime : ils ne sont ni défectueux ni mal quantifiés — ils sont **prématurés**. L'isolation manuelle déjà en place (`--isoler`) est la bonne stratégie en attendant le support llama.cpp.
+- Audit carnets RunCode : les 7 carnets existants sont tous cohérents (score/max/tiers). Aucun carnet corrompu. Les seuls cas « sans carnet » sont : examen interrompu (throw → catch, ex: k2-horizon), `examMax === 0` (coffre vide), ou Ctrl+C pendant l'examen — comportement voulu (pas de résultat à consigner). Le journal `exam_*.log` est bien écrit dans les trois cas.
+
+### Vérifications
+- `node --check` sur les 5 fichiers modifiés : OK.
+- `node tests/run-tests.js` : 31/31.
+- `node scripts/check-inline-js.js` : OK (2 classements).
+- `node verify_tiers.js` : 368/388 (20 skip), 0 problème.
+- Reproduction live E507 sur k2-horizon : OK.
+- Badge ⚡ présent dans `gh-pages-output/community-leaderboard.html` (données + JS inline).
+
+## 2026-09-10b — feat(runcode) : 3 parcours scolaires + spécialité du modèle + classement général + badge ⚡ Turbo
+
+### Contexte & problème rencontré
+Quatre demandes de l'utilisateur sur RunCode (`--exam-code`, cf. `Memories-BenchGo/Tasks.md`) :
+
+1. **Classes manquantes** — le coffre-fort ne couvrait que 6 classes (CP→COLLEGE) : pas de CM2, pas de Collège-Lycée complet (6ème→Terminale), pas d'Université (Licence→Doctorat). Les autres écoles (tasks.md : Light-Primaire, STANDARD, EXPERT) n'avaient PAS de parcours RunCode.
+2. **Spécialité non déterminée** — le but de l'examen : savoir dans quel domaine le modèle excèle (un modèle spécialisé TypeScript, un autre Python). Aucun verdict de spécialisation n'existait ; le pool d'exercices était en plus limité à la majeure/mineure déclarée (le modèle ne jouait QUE ses 2 langages de prédilection — impossible de détecter une spécialité réelle).
+3. **Résultats absents du classement général** — l'examen ne créait AUCUN carnet : les résultats RunCode ne comptaient pour rien, invisibles dans le leaderboard.
+4. **Deux modes invisibles** — le benchmark sandbox classique et l'examen RunCode (code natif) coexistent sans distinction visuelle : impossible de voir d'un coup d'œil quels modèles ont passé l'examen turbo.
+
+### Modifications apportées
+
+**`.teacher-vault/vault_polyglot.json` (1.0.1 → 1.1.0)** :
+- 52 nouveaux exercices (16 → 68 au total) couvrant les 18 classes des 3 parcours : Primaire (CP→CM2, Maternel exclu), Collège-Lycée (6ème→Terminale), Université (Licence1→Doctorat).
+- 16 langages : python, javascript, typescript, go, rust, c, cpp, java, csharp, php, sql, bash, html, css, kotlin, swift, ruby, perl (+ react existant).
+- Nouvelle clé `parcours` : mapping parcours → classes (`Primaire`, `College-Lycee`, `Universite`).
+- Ancienne classe `COLLEGE` migrée vers `6eme` (alignement sur la nomenclature STANDARD).
+- Tableaux d'exercices aplatis (le script d'extension avait imbriqué `[[exo]]` → 52 exercices illisibles réparés, tous validés : id + regex compilable + max_tokens).
+
+**`adaptive-exam.js`** :
+- `runAdaptiveSchoolExam()` accepte `options.parcoursRunCode` (Primaire | College-Lycee | Universite) et `options.profileBenchgo` : le parcours suit la même scolarité que le benchmark (LIGHT → Primaire, STANDARD → College-Lycee, EXPERT → Universite).
+- **Pool GLOBAL par classe** : l'exercice aléatoire est tiré parmi TOUS les langages du coffre pour cette classe (plus la restriction majeure/mineure). La déclaration d'entretien ne sert plus qu'au carton rouge (mensonge « expert » dans les 3 premières classes du parcours).
+- `reportCard.parcours` / `parcoursProfile` / `classes` / `score` / `max` / `examLogFile` : données enrichies pour le carnet.
+- **`computeSpecialtyStats(details)`** (nouveau, exporté) : agrège les réussites par langage, score de spécialité = réussites×2 + volume, tri spécialité > taux > volume.
+- **`determineSpecialty()`** (nouveau) : le professeur cloud reçoit le bilan factuel et rédige le verdict de spécialité (« Spécialité : PYTHON — … »). Repli mécanique si le professeur échoue (jamais de verdict vide). La réponse brute du professeur et les erreurs sont tracées dans le journal.
+- Logs de diagnostic dans le journal `exam_*.log` : `[déclaration brute]`, `[inventaire coffre]` (version + parcours + classes), `[pool classe X]` (composition complète), `[tirage classe X]` (exercice tiré + index), `[réponse complète]`, `[verdict professeur brut/ERREUR]`, `[verdict mécanique (repli)]`, `[pool vide]`.
+- `parseStudentDeclaration(rawText, knownTechs)` : la liste des langages déclarables est construite depuis le coffre (langages réellement jouables) — plus de déclaration hors-jeu.
+
+**`runner.js` (bloc `--exam-code`)** :
+- Nouveau flag `--parcours=Primaire|College-Lycee|Universite` (défaut : déduit du profil explicit, du profil cloud auto, ou de la taille du modèle local via `detectProfileFromModelName`).
+- **Carnet RunCode** : l'examen est enregistré via `scoreLedger.saveResult()` dans une école dédiée (`RunCode-Primaire` / `RunCode-College-Lycee` / `RunCode-Universite`) → **compte pour le classement général** (agrégation standard du leaderboard, pct = exercices réussis / joués).
+- Champs carnet spécifiques : `runCode: true`, `parcours`, `diplome`, `specialite`, `specialiteVerdict`, `declaration` (entretien), `disqualified`, `tiers[]` (un par classe : `className`, `language`, `exerciseId`, `passed`, `attempts`, `runCode: true`).
+- Régénération automatique du classement (`leaderboard.generateLeaderboard()`) après l'écriture du carnet + affichage « 📓 Carnet RunCode mis à jour ».
+- Logs : `RunCode: parcours résolu = …`, `RunCode: carnet écrit (…)`, `RunCode: classement régénéré…` ; avertissement si aucun exercice joué (coffre-fort suspect).
+
+**`leaderboard.js`** :
+- Sérialisation modale : les tiers RunCode exposent `runCode`, `language`, `exerciseId`, `passed`, `attempts` (en plus des champs standard).
+- Rendu modale : branche dédiée aux tiers RunCode — badge « ✔ Réussi » / « ✘ Échoué » + classe + langage + id d'exercice (au lieu de « Aucun exercice enregistré pour ce tier »).
+- **Badge ⚡ RunCode · Turbo** (carte) : calculé côté serveur (`agg.runCode` : écoles RunCode-*, parcours, diplôme, spécialité, pct) + exposé au client (`runCode` dans `modelsData`) + badge bleu ciel sur la carte avec tooltip (spécialité · diplôme · %).
+- Modale : section dédiée « ⚡ RunCode · Turbo » (parcours, diplôme, score, réussite, spécialité) + verdict du professeur.
+- Markdown : `⚡` préfixé au nom des modèles RunCode dans le tableau + ligne `**⚡ RunCode (turbo) :** Diplôme | Réussite | Spécialité` dans le détail par modèle.
+
+**`consolidate-leaderboard.js`** (classement communautaire) :
+- `aggregateCarnet()` : détection des écoles RunCode-* + exposition `runCode` (parcours, diplôme, spécialité, specialiteVerdict, pct, score, max, date) + champs tiers RunCode (`runCode`, `language`, `exerciseId`, `passed`, `attempts`).
+- Carte : badge `⚡ RunCode · Turbo` (bleu ciel, tooltip spécialité/diplôme/pct) après le badge d'origine.
+- Modale : section « ⚡ RunCode · Turbo » identique au local + branche tier RunCode (badge ✔/✘).
+- Sérialisation client (`modelsJson`) : `runCode` exposé.
+
+**`cli-help.js`** : aide `--exam-code` réécrite (multi-langage aléatoire par classe, spécialité, carnet classement) + nouveau `--parcours=` documenté.
+
+### Validation
+- End-to-end mocké : parcours Primaire → 5 classes, tirages multi-langages (PYTHON puis CSHARP constatés sur 2 runs), carton rouge expert-JS échouant CP, spécialité calculée + verdict (repli mécanique sans clé professeur valide).
+- Traces de diagnostic complètes dans `exam_*.log` (inventaire, pools, tirage, réponse, verdict).
+- Carnet RunCode → `aggregateLedger` OK (école RunCode-* agrégée, isCloud correct) ; classement régénéré ; `check-inline-js.js` OK ; tests 31/31.
+- **Badge ⚡** : vérifié dans les deux classements générés (classement.html + community-leaderboard.html) avec un carnet RunCode temporaire — badge carte, section modale, tiers ✔/✘, `⚡` en Markdown. `check-inline-js.js` OK sur les 2 fichiers. Nettoyage des carnets de test après validation.
+
+### Pièges
+- Une classe SANS exercice dans le coffre est SAUTÉE (trace `[pool vide]`) : le diplôme correspond alors au parcours réduit. Après ajout de classes dans `parcours`, vérifier qu'au moins 1 exercice existe pour chaque classe (`scan des manquants`).
+- Le carton rouge ne s'applique que sur les 3 PREMIÈRES classes du parcours (examClasses.slice(0, 3)) et seulement si l'exercice tiré est DANS le langage déclaré expert — un expert-Python qui échoue un exercice Python CP est expulsé, pas s'il échoue un exercice CSS.
+- Le `best` d'une entrée d'école n'est recalculé QUE par `saveResult` : éditer un carnet à la main (attempts seulement) ne met pas à jour `best` → le leaderboard lit `best`. Toujours passer par `saveResult`.
+- Le pourcentage RunCode = exercices réussis / exercices JOUÉS (l'examen s'arrête au 1er échec) : un 4/4 est un parcours complet ; un 3/4 signifie « échec en classe 4, classes 5+ non jouées ».
+- `--parcours=` est lu depuis `process.argv` (pas parseCliArgs) : tolérant aux flags inconnus du reste du runner.
+- Le badge ⚡ détecte les écoles via le préfixe `RunCode-` (regex `/^RunCode-/i`) : une école renommée ne porterait plus le badge.
+- Le badge s'affiche dès la première école RunCode (pas besoin d'un parcours complet) : un modèle testé partiellement porte aussi le badge — son tooltip montre la spécialité réelle.
+- Le consolidate (classement communautaire) ne lit que les carnets SOUMIS (`submissions/`) : un carnet RunCode local n'apparaît en ligne qu'après `node runner.js --submit` (soumission PR + merge).
+
+## 2026-09-10 — fix(runcode) : coffre-fort regex inmatchables + détection trace EN
+
+### Contexte & problème rencontré
+Tous les modèles échouaient à l'examen RunCode (`--exam-code`), expulsés au carton rouge dès le 1er exercice (cas documenté dans `Memories-BenchGo/Tasks.md` : minicpm5-2b recalé sur `range(1, n)` malgré une réponse correcte).
+
+1. **Cause racine : regex du coffre-fort quadruplement échappées** — dans `.teacher-vault/vault_polyglot.json`, les `expected_regex` utilisaient `\\\\s` (quadruple anti-slash dans le JSON) au lieu de `\\s`. Après `JSON.parse`, la regex contenait `\\s` **littéral** (anti-slash + s) au lieu de `\s` (classe d'espacement) → la regex cherchait des anti-slashes littéraux dans la réponse. **Aucune des 16 regex ne pouvait matcher**, même avec une réponse parfaite. Preuve : `new RegExp(ex.expected_regex).test('range(1, n + 1)')` → `false`.
+2. **Cause secondaire : `code_snippet` avec `\n` littéraux** — les snippets affichaient `\n` en texte au lieu de vrais sauts de ligne (code illisible).
+3. **La tentative 2 (budget étendu) ne déclenchait pas** sur les traces de délibération anglaises : `looksLikeReasoningTrace` ne connaissait que `Role:/Context:/Task:` et les marqueurs FR — pas « We need to correct... » (délibération EN de minicpm).
+
+### Modifications apportées
+
+**`.teacher-vault/vault_polyglot.json`** :
+- Toutes les 16 `expected_regex` corrigées : quadruple → double anti-slash (`\\\\s` → `\\s` dans le JSON = `\s` dans la regex parsée).
+- Toutes les 16 `code_snippet` corrigées : `\n` littéraux → vrais retours à la ligne.
+- Regex React (`react_cm1_01_functional_updater`) : groupe `((prev|c|current))` dupliqué corrigé — la fermeture n'est plus capturée en double.
+- `vault_version` : 1.0.0 → 1.0.1.
+
+**`adaptive-exam.js`** :
+- `looksLikeReasoningTrace()` : ajout des marqueurs de délibération EN (`we need to`, `we must`, `the user`, `i think`, `however,`…) + patterns forts (`we need to respond`, `as an ai`). La tentative 2 (budget 512) se déclenche désormais sur les traces anglaises tronquées.
+
+### Validation
+- Script de contrôle : 16/16 regex matchent leur solution canonique.
+- `looksLikeReasoningTrace` : trace EN → true, `range(1, n + 1)` → false (vraie réponse non affectée).
+- `node --check` OK, tests unitaires 31/31.
+
+### Pièges
+- La règle d'or de l'AGENTS.md (« regex en chaînes JSON doublement échappées ») désignait le BON format, mais le fichier du vault contenait du **quadruple**. Après toute modification du vault, exécuter le check canonique (solutions connues) AVANT un run.
+- Un modèle déclarant « expert » qui échoue CP → expulsion : la cause était l'exercice infaisable (regex inmatchable), pas le modèle. Le professeur IA a de nouveau blâmé l'élève à tort.
+
+## 2026-09-09 — fix(runcode) : examen interactif + faux échec thinking + questionnaire numéroté + déchargement auto
+
+### Contexte & problème rencontré
+Six défauts remontés sur le mode RunCode (`--exam-code`, Examen Pur Code Natif) et le questionnaire de démarrage :
+
+1. **Questionnaire : fournisseur et profil sans chiffres** — `startup-questionnaire.js` demandait de retaper le nom exact (`lmstudio`, `light`…) à la main à chaque run. Aucun menu numéroté.
+2. **Questionnaire : mauvais modèle LM Studio** — `fetchModelNameFromLMStudio()` prenait `data.data[0].id` de `/v1/models` (ordre arbitraire du serveur). L'utilisateur a 4 modèles dans LM Studio et le questionnaire en imposait un seul (souvent pas celui attendu, « il me prend le deuxième de la liste »), sans jamais afficher la liste des modèles disponibles.
+3. **Questionnaire : profil sans chiffres** — idem, le profil se tapait à la main.
+4. **Professeur : clé affichée deux fois** — `_ensureApiKey()` affichait `Clé OpenRouter (professeur) déjà mémorisée…` dans le bloc TTY (l. 145) PUIS à nouveau inconditionnellement (l. 158) après le `Utiliser cette clé ?`. La ligne doublait à chaque run.
+5. **Examen : aucune interactivité + faux échec + modèle non déchargé** — `new Spinner('Examen en cours...')` était créé mais **jamais `.start()`é** : l'écran restait figé pendant la réflexion (l'utilisateur croyait à un crash). Les questions du professeur ne s'affichaient pas avant l'appel. Surtout, le modèle `kai-os_grug-12b@q5_k_m` (modèle **thinking**) échouait sur TOUS les exercices alors que c'est l'un des meilleurs modèles locaux : les `max_tokens` du coffre-fort (25-50 tokens) étaient entièrement consommés par la phase de délibération (`delta.reasoning_content`) → le client LLM injectait la trace tronquée dans `content` → la regex de validation échouait sur un fragment de phrase (`*   Context: LLM candidate… *   Task: Debugging native code`). C'est le MÊME bug que le test de capacité (tâche 2026-09-07b), non couvert par l'examen. Enfin, le modèle n'était jamais déchargé à la fin (`studentClient.unloadModel` n'existait pas dans l'adaptateur).
+6. **Examen : insistance sur l'interactivité** — l'utilisateur veut voir les dialogues du professeur, les spinners, une progression, pendant l'examen.
+
+### Modifications apportées
+
+**`config.js`** :
+- Nouvelle fonction `fetchAllModelsFromLMStudio()` → liste TOUS les modèles de `/api/v0/models` avec `{name, quantization, arch, publisher, state}`. Permet au questionnaire d'afficher un menu de choix numéroté avec l'état (chargé/non chargé), au lieu d'imposer `data.data[0]`. Exportée.
+
+**`startup-questionnaire.js`** :
+- Nouveau helper `_askNumberedChoice(question, entries, defaultIndex)` : affiche une liste numérotée et lit un NUMÉRO (Entrée = défaut). Repli : le nom exact reste accepté (rétrocompatibilité). Nouvelle fonction `_fetchOllamaModels()` (liste `/api/tags`).
+- **Section 1 (fournisseur)** : menu numéroté 1-9 (locaux 1-3, cloud 4-9) au lieu d'une saisie libre.
+- **Section 2 (modèle)** : pour `lmstudio`/`ollama`, liste numérotée de TOUS les modèles détectés avec badges (`chargé · Q5_K_M · gemma4 · bartowski`). Défaut = premier modèle **chargé** (`state === 'loaded'`), sinon le 1er. L'utilisateur choisit par numéro. Les métadonnées du modèle choisi (`modelMeta`) sont réutilisées en section 2b (évite un re-fetch de `/api/v0/models`).
+- **Section 5 (profil)** : menu numéroté 1-5 au lieu d'une saisie libre.
+- **`_ensureApiKey()`** : restructuré — la ligne « déjà mémorisée » ne s'affiche plus qu'UNE fois (le double `console.log` est supprimé). Le flux `keep=true → return` ne ré-affiche plus.
+- Suppression de `_listProviders()` et `_tryAutoDetectModel()` (remplacés, plus référencés).
+
+**`adaptive-exam.js`** (réécriture complète) :
+- **Correction des `\n` littéraux** : le fichier précédent écrivait `'\\n'` (backslash + n littéral) dans `writeLog`/`appendFileSync` → la console affichait `\n====` au lieu d'un vrai saut de ligne. Tous les `writeLog` utilisent maintenant de vrais `\n`.
+- **Interactivité** : chaque question affiche le prompt du professeur (`📝 [PROFESSEUR] « … »`) + le code à corriger AVANT l'appel élève, puis le verdict APRÈS. Progression `📚 [CLASSE CP] (1/6)`. Le raisonnement/réponse de l'élève est streamé en DIRECT par le Spinner (💭 tokens/s, ✍ texte) — l'utilisateur voit le modèle travailler, plus d'écran figé.
+- **Faux échec thinking corrigé** : `parseStudentDeclaration()` priorise la DERNIÈRE ligne non vide (les modèles thinking concluent leur délibération à la fin, même pattern que `interpretCapabilityAnswer`) et matche les langages par MOT ENTIER (`\bgo\b` ne matche pas `google` — l'ancien `includes('go')` déclarait faussement majeure GO). Budget de l'entretien : 512 tokens (au lieu de 30). Pour les exercices : **tentative 1** avec le budget court du coffre-fort ; si la réponse ressemble à une trace de raisonnement tronquée (nouvelle fonction `looksLikeReasoningTrace()` — marqueurs `Role:`/`Context:`/`Task:`, délibération multi-lignes, réponse vide), **tentative 2** avec un budget de réflexion étendu (512 tokens) + instruction renforcée (« TERMINE ABSOLUMENT par la ligne corrigée »). Le verdict affiche `(tentative 2/2)` quand applicable.
+- **Journal** : `Export-Rapports/exam_<modele>_<ts>.log` ouvert une seule fois (mkdir au démarrage), la réponse complète y est tracée (`logFileOnly`) même si l'écran n'affiche que les 200 premiers caractères.
+- Export de `parseStudentDeclaration` et `looksLikeReasoningTrace` (testables).
+
+**`runner.js`** (bloc `--exam-code`) :
+- `const { spawnSync } = require('child_process')` importé (le déchargement en a besoin).
+- L'adaptateur `studentClient.generate()` démarre/arrête un Spinner **par appel** (`start()` + reset `tokenCount`/`charCount` + `stop('Réponse reçue')` / `fail()` sur erreur) : l'utilisateur voit le spinner tourner pendant chaque réflexion, puis le streaming live (💭/✍), puis un récap `✔ Réponse reçue (N tokens)`. Le label du spinner reflète l'étape courante (`Classe CP — l'élève corrige le bug…`, `Entretien : l'élève rédige sa déclaration…`).
+- **Déchargement automatique** dans le `finally` : `lms unload --all` pour LM Studio, `ollama stop <modèle>` pour Ollama (silencieux si le daemon est injoignable — le déchargement est un confort, jamais bloquant). Cloud/custom : rien à décharger.
+- Bannière enrichie : ligne « Suivi : les questions du professeur et la réflexion de l'élève s'affichent EN DIRECT ».
+- Bilan : colonne `(budget étendu)` quand une tentative 2 a été nécessaire.
+
+**`teacher-client.js`** :
+- `TeacherClient.resolveDefaultBaseUrl()` : ajout de `openrouter: 'https://openrouter.ai/api/v1'` dans la table d'URLs (avant, un professeur `openrouter` retombait sur l'URL groq — sans crash car le TeacherClient n'est pas appelé en examen, mais incohérent).
+
+### Commande pour l'RunCode (Code Natif)
+```
+# Interactif (questionnaire de démarrage, choisit provider + modèle) :
+node runner.js --exam-code
+
+# CLI direct (modèle local LM Studio) :
+node runner.js --provider=lmstudio --model=<modèle> --exam-code
+
+# CLI direct (modèle cloud) :
+node runner.js --provider=<provider> --model=<slug> --exam-code
+```
+
+### Vérification
+- `node --check config.js startup-questionnaire.js adaptive-exam.js runner.js teacher-client.js` : TOUS OK.
+- `node tests/run-tests.js` : 31/31 OK.
+- `node scripts/check-inline-js.js` : tout valide.
+- `parseStudentDeclaration('google for solutions, go for speed, expert')` → `majeure: go` (mot entier — `google` ne déclenche plus GO).
+- `parseStudentDeclaration('Role: candidate\nContext: exam\npython, typescript, standard')` → `majeure: python, mineure: typescript` (dernière ligne prioritaire).
+- `looksLikeReasoningTrace('range(1, n + 1)')` → `false` (vraie réponse).
+- `looksLikeReasoningTrace('*   Context: LLM candidate for BenchGo V3 exam (high stakes).\n*   Task: Debugging native code')` → `true` (trace tronquée → déclenche la tentative 2).
+
+### Action requise
+`kai-os_grug-12b@q5_k_m` a pu être auto-blacklisté lors des runs précédents (crashes/false failures). Le désisoler avant de relancer l'examen :
+```
+node night-batch.js --list-only          # voir le numéro
+node night-batch.js --isoler=!!<num>     # désisoler
+```
+
+## 2026-09-07e — fix(runner) : mode auto → FRONTIER pour modèle local + restauration teacher-client + import fs
+
+### Contexte & problème rencontré
+Trois bugs distincts, suite à l'intégration de l'RunCode (`--exam-code`, tâche 2026-09-07) :
+
+1. **Mode auto → FRONTIER pour un modèle local 12B** : lancer `node runner.js --provider=lmstudio --model=kai-os_grug-12b@q6_k_l` (sans `--profile=`) déclenchait le profil **FRONTIER — Post-Doctorat** (le plus dur). `runner.js:1583` faisait `profileArg = resolvedProfileArgExplicit || (isCloudMode ? 'FRONTIER' : 'STANDARD')`. Or `isCloudMode = Boolean(resolvedProvider)` est vrai pour **tout** provider passé en CLI, y compris les providers locaux (lmstudio, ollama, custom). Un modèle LM Studio de 12B se retrouvait donc en Post-Doctorat — un niveau absurde pour un petit modèle local. L'utilisateur a vu le run démarrer sur « FRONTIER — Post-Doctorat (modèles cloud frontier) » avec `Score: 0/497`, ce qui est exactement le symptôme signalé.
+
+2. **`teacher-client.js` réécrit — `askTeacherToCorrectStudentAnalysis` perdue** : la réécriture de `teacher-client.js` pour l'RunCode (classe `TeacherClient`) a remplacé l'ancien module qui exportait `askTeacherToCorrectStudentAnalysis`, `fetchFreeModels`, `callCloudTeacher`, `buildTeacherPrompt`. Or `runner.js:37` importe `askTeacherToCorrectStudentAnalysis` depuis `./teacher-client`. La fonction était devenue `undefined` → `TypeError` au moment de la correction professeur → silencieusement avalée par le `try/catch` (`logger.warn('Teacher: exception...')`). Le professeur de benchmark ne corrigeait plus l'analyse de l'élève depuis l'ajout de l'examen, sans aucun message visible.
+
+3. **`fs` non importé dans `runner.js`** : le diff de l'examen a supprimé `const fs = require('fs')` (l'ancien bloc d'imports) sans le réimporter. `fs.mkdirSync` (ligne 2734, sauvegarde du rapport) et `fs.writeFileSync` (ligne 2874) levaient `ReferenceError: fs is not defined` à l'export. La session 2026-09-07d avait corrigé l'import `path` manquant mais oublié `fs` (supprimé dans le même diff). Le run du modèle local plantait à la sauvegarde du rapport.
+
+### Modifications apportées
+
+**`runner.js`** :
+- Réimporté `const fs = require('fs')` (avait été supprimé avec l'ancien bloc d'imports lors de l'ajout de l'examen).
+- Nouvelle logique de profil par défaut pour les providers locaux : `LOCAL_CLOUD_PROVIDERS = new Set(['lmstudio', 'ollama', 'custom'])` + `defaultProfileForCloud(provider, modelName)` qui détecte le profil depuis le nom du modèle (`detectProfileFromModelName` : `12b` → STANDARD, `2.6b` → LIGHT…) avec repli STANDARD. FRONTIER reste le défaut des **providers cloud distants** (openrouter, openai, groq, kilo…) — comportement historique conservé.
+- Le log `Profil cloud auto : FRONTIER` affiche désormais le profil réellement choisi + la mention « (provider local) » quand applicable.
+
+**`teacher-client.js`** : restauration de l'ancien module (Free Router OpenRouter avec rotation de modèles gratuits, `fetchFreeModels`, `buildTeacherPrompt`, `callOpenRouter`, `callCloudTeacher`, `askTeacherToCorrectStudentAnalysis`) **fusionné** avec la classe `TeacherClient` (RunCode). Les deux exports coexistent : `askTeacherToCorrectStudentAnalysis` (benchmark) et `TeacherClient` (`adaptive-exam.js`).
+
+### Commande pour l'RunCode (Code Natif)
+```
+# Interactif (questionnaire de démarrage, choisit provider + modèle) :
+node runner.js --exam-code
+
+# CLI direct (modèle local LM Studio) :
+node runner.js --provider=lmstudio --model=<modèle> --exam-code
+
+# CLI direct (modèle cloud) :
+node runner.js --provider=<provider> --model=<slug> --exam-code
+
+# Professeur custom pour l'examen (défaut : groq/llama-3.3-70b-versatile) :
+node runner.js --provider=openrouter --model=<slug:free> --exam-code \
+  --teacher-provider=groq --teacher-model=llama-3.3-70b-versatile --teacher-api-key=<clé>
+```
+Aucun carnet n'est créé, aucun rapport V3 n'est généré — c'est un mode d'évaluation séparé (`process.exit(0)` après l'examen).
+
+### Vérification
+- `node --check runner.js` : OK. `node --check teacher-client.js` : OK.
+- `node tests/run-tests.js` : 31/31 OK.
+- `detectProfileFromModelName('kai-os_grug-12b@q6_k_l')` → `{ paramSize: 12, detected: 'STANDARD' }`.
+- `require('./teacher-client').askTeacherToCorrectStudentAnalysis` → `function` (restaurée).
+
+### Action requise
+`kai-os_grug-12b@q6_k_l` a été auto-blacklisté pendant les crashes précédents. Le désisoler avant de relancer :
+```
+node night-batch.js --list-only          # voir le numéro
+node night-batch.js --isoler=!!<num>     # désisoler
+```
+
+## 2026-09-07d — fix(runner) : `path` non importé → crash ReferenceError sur export CSV et runSchool
+
+### Contexte & problème rencontré
+Le runner crashait avec `ReferenceError: path is not defined` à deux endroits :
+1. `runner.js:2140` (`path.basename` dans `runSchool`) — crash de l'école entière → auto-blacklist du modèle.
+2. `runner.js:3138` (`path.relative` dans l'export CSV final) — crash après la fin du run.
+
+`path` était utilisé à 11 endroits dans `runner.js` mais **jamais importé** (`require('path')` absent). Le module fonctionnait par accident car Node.js 26 expose `path` comme global builtin dans certains modes, mais pas de façon fiable — l'erreur se manifestait selon le chemin d'exécution et la version de Node.
+
+Cas réel : `kai-os_grug-12b@q6_k_l` a passé le test de capacité (OUI à la 2e tentative, correctif capability-check confirmé en live), puis a crashé immédiatement dans `runSchool` car `path.basename(logger.getFilePath())` a levé `ReferenceError`. L'école a échoué → auto-blacklist systémique.
+
+### Modification apportée
+**`runner.js`** — ajout de `const path = require('path');` après `const readline = require('readline');` (ligne 30). Les 11 usages de `path.*` sont désormais couverts par l'import explicite.
+
+### Vérification
+- `node --check runner.js` : OK.
+- `node -e "require('./runner.js')"` : se charge sans erreur.
+- 31/31 tests unitaires OK.
+
+### Action requise
+`kai-os_grug-12b@q6_k_l` a été auto-blacklisté pendant le crash. Le désisoler avant de relancer :
+```
+node night-batch.js --list-only          # voir le numéro du modèle
+node night-batch.js --isoler=!!<num>     # désisoler
+```
+
+## 2026-09-07c — fix(night-batch) : avertissement carnet absent si filtre de tiers incomplet
+
+### Contexte & problème rencontré
+Les deux variantes de `kai-os_grug-12b` (Q5_K_M et Q6_K_L) sont affichées « PARTIEL — Tiers testés, carnet absent » dans `--list-only` malgré 3-4 sessions de test répétées. Les rapports de tiers existent sur disque (`rapport_v3_kai-os_grug-12b_q6_k_l_standard_tier1_*.md`, `_tier3_*`, etc.) et l'historique des runs marque les modèles `ok` avec `lastSchool: STANDARD`, mais **aucun carnet `.json`** n'a jamais été écrit dans `Export-Rapports/.carnet/`.
+
+**Cause racine :** le mode classe-par-classe (`--class-by-class`) ne sauvegarde le carnet QUE via la consolidation (un run `all` final). Cette consolidation ne se déclenche que si `mandatoryCovered === true`, c'est-à-dire si **tous les tiers obligatoires** du profil sont dans la sélection (filtre compris). L'utilisateur a sélectionné un filtre de tiers qui **ne couvre pas** les obligatoires :
+
+| Variante | École | Tiers testés | Tiers obligatoires manquants |
+|---|---|---|---|
+| kai-os_grug-12b_q6_k_l | STANDARD | [1, 3] | [0, 2] |
+| kai-os_grug-12b_q6_k_l | LIGHT | [0, 2, 3] | [1] |
+| kai-os_grug-12b_iq4_nl | STANDARD | [0, 1] | [2] |
+| kai-os_grug-12b_q5_k_s | LIGHT | [0] | [1] |
+
+STANDARD a `mandatory: [0, 1, 2]` et LIGHT a `mandatory: [0, 1]`. Quand un obligatoire manque, la consolidation est **silencieusement annulée** (`Pas de consolidation du carnet : la sélection ne couvre pas...`) → le modèle reste sans carnet école par école, indéfiniment, aussi longtemps que l'utilisateur rejoue le même filtre incomplet.
+
+### Modifications apportées
+**`night-batch.js`** — avertissement proactif à deux endroits quand le filtre de tiers ne couvre pas les obligatoires :
+1. **Sélection interactive** (`selectSchoolsInteractive`, après le choix des tiers) : si `tierFilter` est défini et ne couvre pas les obligatoires d'au moins une école sélectionnée, affiche un bloc `⚠ ATTENTION` listant les écoles et tiers obligatoires manquants, avec rappel `--resume`.
+2. **CLI `--tiers=` + `--schools=`** (après résolution des écoles) : même avertissement avant le lancement du batch.
+
+L'avertissement ne **bloque pas** le batch (un test partiel reste utile pour trier rapidement des modèles), mais informe l'utilisateur **avant** qu'il ne perde plusieurs sessions sur un filtre qui ne produira jamais de carnet.
+
+### Pour récupérer les carnets manquants
+Relancer chaque variante Grug en couvrant les obligatoires manquants, puis consolidation :
+```
+node night-batch.js --class-by-class --models=kai-os_grug-12b@q6_k_l --schools=STANDARD --tiers=0,2
+node night-batch.js --class-by-class --models=kai-os_grug-12b@q6_k_l --schools=STANDARD  # tous les tiers → consolidation auto
+```
+Ou relancer tous les tiers (sans `--tiers=`) : la consolidation se déclenche automatiquement et écrit le carnet complet.
+
+## 2026-09-07 — fix(capability) : faux rejet des modèles thinking au test de capacité (Grug 12B, DeepSeek R1, Qwen QwQ)
+
+### Contexte & problème rencontré
+Le modèle local `kai-os_grug-12b@q6_k_l` (famille KaiOS/Grug, excellent modèle de raisonnement) a été **recalé définitivement** au test de capacité alors qu'il n'avait fait que commencer à délibérer. Le runner affichait :
+
+```
+✔ Test de capacité : NON (incapable) en 30.0s (0 tokens)
+━━━ MODÈLE RECALÉ ━━━
+Réponse : *   Role: Language model candidate for a serious exam by BenchGo V3.
+  *   Context: High-stakes academic setting (Primary to Post-Doc), points system, health buffer, global ranking.
+  *   Task: Wr
+```
+
+**Cause racine (double) :**
+1. **Budget de tokens insuffisant pour les thinking models** : `runCapabilityCheck` envoie le prompt avec `maxTokens = 512`. Les modèles de raisonnement (Grug 12B, DeepSeek R1, Qwen QwQ) consomment **tout** le budget en phase de délibération (`delta.reasoning_content` / `delta.reasoning`) **avant** d'avoir écrit « OUI » ou « NON ». Le stream s'arrête à 512 tokens (max_tokens atteint), `res.on('end')` dans `lm-studio-client.js` (ligne 224-225) détecte `fullContent` vide mais `reasoningContent` non vide → **injecte la trace de raisonnement partielle dans `content`**.
+2. **Parser scannait toute la trace** : `interpretCapabilityAnswer` appliquait les patterns NON/OUI sur **l'intégralité** de la réponse. Une négation contextuelle au milieu de la délibération (« je ne suis pas sûr », « not able to determine », « no clear answer ») était confondue avec un verdict NON définitif → **recalé à tort**.
+
+Le `30.0s` affiché n'était **pas** un timeout : le timer d'inactivité du client LM Studio (30 s) est **reset à chaque chunk reçu** (`resetInactivityTimer()` dans `res.on('data')`), donc un modèle qui streame activement n'est jamais tué. Les 30 s étaient le temps réel pour produire 512 tokens de raisonnement. Les « 0 tokens » sont un artefact d'affichage : `runCapabilityCheck` utilise un `noopSpinner` interne qui ne remonte pas les tokens au `capSpinner` externe du runner.
+
+### Modifications apportées
+**`capability-check.js`** — `interpretCapabilityAnswer(text)` réécrite pour **isoler la réponse finale** avant d'appliquer les patterns (au lieu de scanner toute la trace) :
+1. **Strip d'un bloc de raisonnement fermé** : si un bloc ```...``` (DeepSeek R1 / Qwen QwQ style) est présent, on garde uniquement ce qui suit la **dernière** balise fermante. Les modèles qui balisent leur raisonnement voient la trace ignorée.
+2. **Trace multi-lignes sans balise** : si le texte restant est long (> 150 chars) et multi-lignes (délibération structurée en puces `* Role/Context/Task`, ou long paragraphe), on ne garde que la **dernière ligne non vide** comme réponse finale. Une trace coupée par max_tokens n'a pas de verdict sur sa dernière ligne (fragment de phrase, ex: `Task: Wr`) → aucun pattern ne matche → **INDETERMINE** → **OUI par défaut** (prudence) → le modèle passe l'examen réel qui le jugera sur preuve.
+3. Les patterns NON/OUI/peut-être sont appliqués **uniquement sur la réponse finale isolée**.
+
+**Comportements préservés :**
+- Les modèles non-thinking qui répondent en 1 ligne (« OUI », « Non. », « Je ne suis pas capable ») sont **inchangés** : réponse courte sans `\n` → `answerText` reste la réponse entière → patterns appliqués comme avant.
+- Les patterns NON restent testés en **priorité** sur la réponse finale isolée (« Oui mais non » sur la dernière ligne → NO, prudence conservée).
+- Un modèle thinking qui **finit** sa délibération et écrit « Non, je ne suis pas capable » sur sa dernière ligne → toujours NO (recalé légitime). Le fix ne sauve que les modèles **coupés en pleine délibération**, pas ceux qui concluent vraiment par NON.
+- `CAPABILITY_MAX_TOKENS` reste à 512 (l'augmentation n'est plus nécessaire grâce au fix du parser).
+
+### Pourquoi ne pas augmenter maxTokens
+Passer `CAPABILITY_MAX_TOKENS` à 2048 laisserait les thinking models finir leur délibération et produire un vrai verdict, mais ralentirait le check de capacité à **2-4 min** sur les modèles thinking lents (Grug, DeepSeek R1) — un coût payé pour **chaque** modèle en mode nuit batch, y compris ceux qui raisonnent peu. Le fix du parser rend l'augmentation inutile : une trace coupée reste INDÉTERMINE → OUI par défaut, et le modèle est jugé sur preuve à l'examen réel.
+
+### Vérification
+- `node --check capability-check.js` ✓
+- `node tests/run-tests.js` ✓ (31/31)
+- Suite de tests manuelle (16 cas) :
+  - Trace Grug coupée (`Task: Wr`) → `null` (OUI par défaut) ✓
+  - « Non, je ne peux pas. » → `NO` ✓
+  - « OUI » → `YES` ✓
+  - Trace ```...``` suivie de « OUI » → `YES` ✓ (la délibération balisée est ignorée)
+  - Trace multi-lignes suivie de « Non, je ne peux pas. » sur dernière ligne → `NO` ✓ (recalé légitime)
+
+### Fichiers touchés
+- `capability-check.js` : `interpretCapabilityAnswer()` réécrite (isolation de la réponse finale).
+- `Docs/CHANGELOG.md`, `AGENTS.md` : documentation tâche `2026-09-07b`.
+
+## 2026-09-07 — fix(exam-code) : intégration correcte de l'RunCode dans le runner + correction du coffre-fort
+
+### Contexte & problème rencontré
+La fonctionnalité « RunCode (Mode Code Natif) » (`--exam-code`) avait été ajoutée à `runner.js` mais l'intégration était cassée sur trois niveaux :
+
+1. **Bloc en double** : le bloc `--exam-code` était présent deux fois consécutivement dans `main()` (lignes 1149-1197), entraînant une exécution double ou des comportements imprévisibles.
+2. **Bloc placé avant la définition des variables** : le bloc s'exécutait **avant** que `modelName`, `queryFn`/`cloudClient` et `teacherConfig` ne soient définis → `undefined` → crash `TypeError: cannot read properties of undefined`.
+3. **Incompatibilité d'API** : `adaptive-exam.js` appelle `studentClient.generate(model, prompt, opts)` mais le runner fournit `queryFn(prompt, difficulty, tierId, isMandatory, spinner, options)` — signatures incompatibles.
+4. **Coffre-fort JSON invalide** : `vault_polyglot.json` contenait 6 regex avec des escapes JSON invalides (`\]`, `\<`, `\>`, `\vert{}`) → `SyntaxError: Bad escaped character in JSON` au chargement → l'examen ne pouvait pas démarrer.
+
+### Modifications apportées
+1. **`runner.js`** :
+   - Suppression des deux blocs `--exam-code` dupliqués (avant le parsing CLI).
+   - Nouveau bloc `--exam-code` placé **après** `updateTiers()`, une fois `queryFn`, `providerConfig` et `teacherConfigResolved` résolus (après questionnaire interactif ou CLI).
+   - Adaptateur `studentClient` : objet wrapper exposant `.generate(model, prompt, opts)` qui délègue à `queryFn` avec les bons paramètres (`maxTokens`, `temperature` extraits d'`opts`).
+   - Affichage amélioré : bannière « RunCode — CODE NATIF », élève/professeur, détails par classe (latence + verdict), bilan final lisible.
+   - Le questionnaire interactif se lance normalement si `--exam-code` est utilisé seul en TTY (choix provider/modèle) ; en non-TTY il faut `--provider=X --model=Y --exam-code`.
+2. **`.teacher-vault/vault_polyglot.json`** :
+   - Correction de 6 regex invalides : `js_ce2_01` (backslash simple `\]`), `react_cm1_01` (`\vert{}`), `cs_ce1_01` (`\<string\>`), `sql_ce2_01` (`\['\\"\]`, `\>=`, `\<=`), `htmx_ce2_01` (`\['\\"\]`), `sh_ce1_01` (`\\[\\"'\]`), `go_ce1_01` (`\\\[string\\\]`).
+   - Validation : `JSON.parse` OK, 16/16 regex compilent avec `new RegExp`.
+3. **`cli-help.js`** :
+   - Ajout de `--exam-code` dans l'aide CLI (`node runner.js --help`) avec description et exemple.
+
+### Vérification
+- `node --check runner.js` ✓
+- `node --check cli-help.js` ✓
+- `node --check adaptive-exam.js` ✓
+- `node --check teacher-client.js` ✓
+- Validation JSON du vault : `node -e "JSON.parse(...)"` ✓ (16 regex, 13 langages, 6 classes)
+- Test live : `node runner.js --provider=openrouter --model=liquid/lfm-2.5-2.6b:free --exam-code` → déclaration élève captée, exercice CP Python tiré, verdict rendu, bilan affiché ✓
+- `node runner.js --help` mentionne `--exam-code` ✓
+
+## 2026-09-07 — fix(cloud) : exclusion et normalisation automatique des modèles OpenRouter `:batch` (incompatibles chat temps réel)
+
+### Contexte & problème rencontré
+L'utilisateur a signalé que les modèles « frontières » sur OpenRouter échouaient systématiquement dès le pre-flight check (« le modèle ne répond pas, 3 tentatives échouées »), avec des diagnostics trompeurs pointant vers un problème de clé API ou de quota (`Causes possibles : Quota gratuit épuisé / clé API invalide... ou ajoutez votre propre clé provider (BYOK)`), alors même que sa clé était valide et créditée.
+
+L'analyse des logs (`benchgo_2026-09-06T22-13-21`, `benchgo_2026-09-06T22-16-52`) a révélé l'erreur exacte renvoyée par OpenRouter :
+`HTTP_404 — {"error":{"message":"This model is only available through the Batch API. Use the /api/beta/batches endpoint instead.","code":404,"metadata":{"routing_funnel":[{"step":"Initial Endpoints","endpoint_count":1}],"failed_routing_step":"Filter Batch-Only Endpoints"}}}`
+
+OpenRouter liste désormais dans son catalogue public (`/api/v1/models`) 69 variantes de modèles avec le suffixe `:batch` (ex. `qwen/qwen3.8-2.4t-a95b:batch`, `openai/gpt-6-astra:batch`, `anthropic/claude-opus-5:batch`...). Ces variantes sont strictement restreintes à l'API asynchrone par lots (`/api/beta/batches`) et sont rejetées en HTTP 404 sur `/api/v1/chat/completions` (utilisé par BenchGo).
+
+### Modifications apportées
+1. **`model-resolver.js`** :
+   - `loadDiskCache()` & `fetchOpenRouterModels()` : exclusion systématique des slugs se terminant par `:batch` pour ne pas polluer la liste des modèles chat ni créer de fausses ambiguïtés de sous-chaîne.
+   - `_matchSlug()` : détection du suffixe `:batch` dans les saisies utilisateur pour résoudre automatiquement vers la variante temps réel correspondante (`matchedBy: 'stripped_batch'`).
+   - Export de `_matchSlug` pour tests unitaires.
+2. **`frontier-batch.js`** :
+   - Normalisation automatique des modèles se terminant par `:batch` vers leur variante temps réel chat avec avertissement explicite dans le résumé de session.
+3. **`cloud-client.js`** :
+   - Détection spécifique de l'erreur Batch API (`/only available through the Batch API|Filter Batch-Only Endpoints/i`), marquage en `isFatalSlugError = true`, `isBatchOnlyError = true`, et code d'erreur `E404_BATCH_ONLY_MODEL`.
+4. **`runner.js`** :
+   - Normalisation automatique de `resolvedCloudModel` si suffixé par `:batch`.
+   - Pre-flight check : détection immédiate de l'erreur Batch-only sans retenter inutilement 3 fois, et affichage d'un diagnostic clair invitant à utiliser le modèle sans le suffixe `:batch` au lieu du message trompeur sur la clé API.
+5. **`tests/test-model-resolver.js`** :
+   - Nouveaux tests unitaires vérifiant la résolution exacte, la suppression automatique de `:batch`, et la levée d'ambiguïté.
+
 ## 2026-09-03 — fix(cloud) : Kilo `:free` route vers OpenRouter upstream + retry HTTP 429 + message « kilo local » erroné
 
 ### Contexte : suspicion utilisateur confirmée par les logs

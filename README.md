@@ -18,8 +18,9 @@ le tout dans un bac à sable VM isolé.
 - 🧠 **Auto-profilage & calibration** : le modèle s'auto-évalue sur 4 compétences au démarrage ; les tâches trop difficiles sont filtrées ; un Indice de Calibration C = 1 − |D − P| mesure la lucidité du modèle.
 - ❤️ **Santé globale (gamification)** : le modèle accumule des PV (succès) ou en perd (échecs). En dessous de −100 PV, élimination définitive (Game Over). 👉 [Système de points complet](./Docs/Apps-Fonctions/systeme-points.md) — calcul par exercice, classe, école et cumul multi-écoles.
 - 🆘 **Aide du professeur & rattrapage** : un indice peut être proposé au modèle en rattrapage ; un seul réessai par exercice (`MAX_TASK_RETRIES = 1`).
-- 🎓 **Professeur IA correcteur (Free Router)** : après un échec définitif, l'élève (le modèle testé) s'auto-analyse, puis un **professeur IA indépendant** (modèle cloud via OpenRouter) relit cette analyse, dit si elle est juste/fausse et **démontre** la vraie cause racine. Rotate automatique sur les modèles gratuits d'OpenRouter (`:free`). Repli sur l'auto-analyse si aucun compte OpenRouter n'est configuré.
-- 📊 **Classement global interactif** : HTML condensé avec modale de détail, filtres par catégorie de performance et par taille de modèle, recherche texte, **badge de quantification** (Q4_K_M, Q5_K_S, Q8_0...) pour chaque modèle, et **bouton « Copier le classement »** pour partager l'ensemble du classement en texte brut.
+  - 🎓 **Professeur IA correcteur (Free Router)** : après un échec définitif, l'élève (le modèle testé) s'auto-analyse, puis un **professeur IA indépendant** (modèle cloud via OpenRouter) relit cette analyse, dit si elle est juste/fausse et **démontre** la vraie cause racine. Rotate automatique sur les modèles gratuits d'OpenRouter (`:free`). Repli sur l'auto-analyse si aucun compte OpenRouter n'est configuré.
+  - 🏛️ **RunCode** : mode d'évaluation « turbo » complémentaire au benchmark standard — parcours scolaire complet (Primaire → Collège/Lycée → Université) en débugging de code natif multi-langage (16 langages, 68 exercices), 1 exercice aléatoire par classe tiré parmi tous les langages, **verdict de spécialité** (le domaine d'excellence du modèle déterminé par le professeur), carton rouge si mensonge expert, carnet comptant pour le classement général avec badge `⚡ RunCode · Turbo`.
+  - 📊 **Classement global interactif** : HTML condensé avec modale de détail, filtres par catégorie de performance et par taille de modèle, recherche texte, **badge de quantification** (Q4_K_M, Q5_K_S, Q8_0...) pour chaque modèle, et **bouton « Copier le classement »** pour partager l'ensemble du classement en texte brut.
 - 📈 **Dashboard de progression** : visualisez l'évolution des modèles dans le temps (progression par date de test), l'historique par école et la comparaison vitesse/score. Accessible via `node leaderboard.js --serve` → http://localhost:3939/dashboard.
 - 🧩 **Quantification des modèles** : récupérée automatiquement via l'endpoint `/api/v0/models` de LM Studio (ou saisie manuelle / flag `--quantization=`) et affichée dans le classement. Indispensable pour distinguer deux runs du même modèle avec des quantifications différentes.
 - 🏫 **Écoles séquentielles** : si le modèle fait plus de 3B paramètres, BenchGo propose d'évaluer Primaire (LIGHT) puis Collège-Lycée (STANDARD) à la suite dans le même run — même clé, même auto-profilage, état de santé réinitialisé entre écoles.
@@ -155,6 +156,47 @@ node runner.js all --provider=groq --model=llama-3.1-70b-versatile
 $env:OPENROUTER_API_KEY = "sk-or-..."
 node runner.js all --provider=openrouter --model=anthropic/claude-opus-4 --profile=FRONTIER
 ```
+
+### 🏛️ RunCode — Examen Pur Code (mode alternatif / turbo)
+
+**RunCode** est le mode d'évaluation « turbo » de BenchGo, complémentaire au benchmark
+standard (sandbox VM) : entretien de vérité (le modèle déclare ses compétences), puis
+**parcours scolaire complet** en débugging de code **natif** multi-langage, sans sandbox
+VM ni JSON. **1 exercice aléatoire par classe, langage aléatoire parmi TOUS les langages
+du coffre** — c'est ce tirage global qui révèle la spécialité réelle du modèle.
+
+- **3 parcours scolaires** : Primaire (CP→CM2), Collège-Lycée (6ème→Terminale), Université (Licence1→Doctorat). Le parcours suit le profil du modèle (LIGHT → Primaire, STANDARD → Collège-Lycée, EXPERT → Université), forçable via `--parcours=`.
+- **68 exercices / 16 langages** : python, javascript, typescript, react, go, rust, c, cpp, java, csharp, php, sql, bash, html, css, kotlin, swift, ruby, perl.
+- **Verdict de SPÉCIALITÉ** : à la fin, le professeur maître absolu détermine le domaine d'excellence du modèle (« Spécialité : PYTHON — … », repli mécanique si absent) — un modèle excellera en TypeScript, un autre en Python.
+- **Carton rouge** : un modèle qui se déclare « expert » dans un langage mais échoue à un exercice de niveau basique dans CE langage est expulsé immédiatement.
+- **Classement général** : les résultats RunCode sont enregistrés dans le carnet (écoles `RunCode-Primaire` / `RunCode-College-Lycee` / `RunCode-Universite`) et **comptent pour le classement global**, avec badge `⚡ RunCode · Turbo` sur les cartes (leaderboard local + classement communautaire).
+
+```bash
+# Interactif (questionnaire de démarrage — choisit provider + modèle) :
+node runner.js --exam-code
+
+# Parcours forcé (défaut : déduit du profil/du nom du modèle) :
+node runner.js --exam-code --parcours=Universite   (Primaire | College-Lycee | Universite)
+
+# CLI direct — modèle local LM Studio :
+node runner.js --provider=lmstudio --model=<modèle> --exam-code
+
+# CLI direct — modèle cloud :
+node runner.js --provider=<provider> --model=<slug> --exam-code
+
+# Professeur custom pour RunCode (défaut : groq/llama-3.3-70b-versatile) :
+node runner.js --provider=openrouter --model=<slug:free> --exam-code \
+  --teacher-provider=groq --teacher-model=llama-3.3-70b-versatile --teacher-api-key=<clé>
+```
+
+> ℹ️ RunCode **court-circuite** le benchmark standard (`process.exit(0)` après l'examen)
+> et génère son propre carnet (école `RunCode-*`) **comptant pour le classement général**.
+> Les examens sont tracés dans `Export-Rapports/exam_*.log` (déclaration, pools, tirage,
+> verdict du professeur). RunCode **n'est pas compatible avec le mode nuit**
+> (`night-batch.js`) : il s'arrête après le premier modèle testé. Pour examiner
+> plusieurs modèles, enchaînez les commandes `--exam-code` dans un script.
+> Le badge `⚡ RunCode · Turbo` apparaît en ligne après soumission du carnet
+> (`node runner.js --submit`).
 
 ### Gérer le classement
 
@@ -294,7 +336,9 @@ un **historique** des performances d'un modèle dans le temps.
 | `self-profiling.js` | Auto-profilage du modèle + filtrage dynamique des tâches |
 | `lm-studio-client.js` | Client API LM Studio (streaming SSE, budget contexte) |
 | `cloud-client.js` | Client API cloud (6 fournisseurs, OpenAI-compat + Anthropic natif) |
-| `teacher-client.js` | Professeur IA correcteur (OpenRouter Free Router, rotation sur modèles gratuits) |
+| `teacher-client.js` | Professeur IA correcteur (Free Router OpenRouter pour le benchmark + classe `TeacherClient` pour RunCode) |
+| `adaptive-exam.js` | Moteur RunCode — examen pur code natif (3 parcours scolaires, tirage aléatoire tous langages, verdict de spécialité, carton rouge, logs de diagnostic) |
+| `capability-check.js` | Test de capacité OUI/NON pré-examen (remplace l'auto-profilage) |
 | `tier-loader.js` | Chargement des tiers JSON par profil (fallback chain) |
 | `task-evaluator.js` | Moteur d'évaluation des tâches (exec/pattern/custom) |
 | `custom-evaluators.js` | Évaluateurs comportementaux spécialisés (async, sécurité, algos) |
@@ -352,10 +396,11 @@ benchmark-v3/
 
 ## 📖 Documentation
 
-- [Manuel utilisateur](./Docs/Manuel-utilisateur/README.md) — Démarrage, commandes, fonctionnement, lecture des résultats, dépannage, référence des tiers, communauté
+- [Manuel utilisateur](./Docs/Manuel-utilisateur/README.md) — Démarrage, commandes (dont RunCode), fonctionnement, lecture des résultats, dépannage, référence des tiers, communauté
 - [CHANGELOG](./Docs/CHANGELOG.md) — Historique chronologique des modifications
 - [Système de gamification & santé](./Docs/Apps-Fonctions/gamification-sante.md) — Fonctionnement des PV, pénalités et élimination
 - [Système de points](./Docs/Apps-Fonctions/systeme-points.md) — Calcul des points par exercice, classe, école et cumul multi-écoles (sans-faute, bonus optionnel, diplôme, notes A–F)
+- 🏛️ **RunCode** — 3 parcours (Primaire, Collège-Lycée, Université), 68 exercices / 16 langages, verdict de spécialité, badge `⚡ RunCode · Turbo`, journal `exam_*.log` (voir README section RunCode + chapitres 2, 4 et 5 du manuel)
 
 ---
 
@@ -364,13 +409,16 @@ benchmark-v3/
 | Option | Description |
 |---|---|
 | `all` ou `N` | Lance toutes les classes ou un tier physique spécifique (0-6 ; 6 = Épreuve Finale). L'affichage montre la classe logique du profil |
-| `--profile=<PROFIL>` | Force le profil (LIGHT / STANDARD / EXPERT / DOCTORAT / FRONTIER) |
+| `--profile=<PROFIL>` | Force le profil (LIGHT / STANDARD / EXPERT / DOCTORAT / FRONTIER). Sans ce flag : auto-détecté depuis la taille du modèle (local) ou FRONTIER (cloud distant). |
 | `--context-limit=<N>` | Limite de tokens de contexte (défaut : 16384) |
-| `--provider=<NOM>` | Mode cloud (openai / anthropic / groq / together / openrouter / mistral) |
+| `--provider=<NOM>` | Mode cloud (openai / anthropic / groq / together / openrouter / mistral / kilo / ollama / lmstudio / custom) |
 | `--model=<NOM>` | Nom du modèle cloud |
 | `--api-key=<CLÉ>` | Clé API cloud (⚠️ visible dans le terminal — préférer les variables d'env) |
-| `--teacher-model=<NOM>` | Modèle du professeur correcteur (défaut : `OpenRouter Free Router`) |
-| `--teacher-api-key=<CLÉ>` | Clé API OpenRouter pour le professeur (force le mode professeur sans interaction) |
+| `--exam-code` | 🏛️ **RunCode** — examen pur code natif (entretien de vérité + débugging multi-langage, 1 exercice aléatoire par classe). Court-circuite le benchmark standard. Verdict de spécialité + carnet comptant pour le classement général. |
+| `--parcours=<P>` | 🏛️ RunCode : parcours scolaire forcé (`Primaire` / `College-Lycee` / `Universite`). Défaut : déduit du profil/du nom du modèle. |
+| `--teacher-provider=<P>` | Provider du professeur (openrouter par défaut). Pour RunCode : groq, openai, anthropic, mistral, ollama, lmstudio. |
+| `--teacher-model=<NOM>` | Modèle du professeur. Pour RunCode (défaut : `llama-3.3-70b-versatile`). Requis pour les providers non-openrouter. |
+| `--teacher-api-key=<CLÉ>` | Clé API du professeur (force le mode professeur sans interaction) |
 | `--teacher-endpoint=<URL>` | Endpoint alternatif pour le professeur (avancé) |
 | `--no-teacher` | Désactive le professeur IA (repli sur l'auto-analyse classique de l'élève) |
 | `--quantization=<Q>` | Quantification du modèle (ex: `Q4_K_M`, `Q5_K_S`, `Q8_0`). Auto-détectée via LM Studio `/api/v0/models` si absente ; saisie manuelle demandée au questionnaire pour Ollama/custom. |

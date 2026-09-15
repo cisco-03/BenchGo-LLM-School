@@ -22,9 +22,13 @@
 const readline = require('readline');
 const secrets = require('./secrets');
 const apiKeysStore = require('./api-keys-store');
-const { PROFILES, fetchModelMetadataFromLMStudio } = require('./config');
+const { PROFILES, fetchModelMetadataFromLMStudio, fetchAllModelsFromLMStudio } = require('./config');
 const { CLOUD_PROVIDERS } = require('./cloud-client');
 const logger = require('./logger');
+const nightBatch = require('./night-batch');
+
+// Constante couleur (reset ANSI) — évite la répétition des escapes.
+const C_RESET = '\x1b[0m';
 
 // Catalogue de fournisseurs proposés. Les providers locaux (lmstudio, ollama,
 // custom) n'exigent pas de clé API ; les providers cloud en exigent une.
@@ -76,6 +80,102 @@ function _askChoice(question, options, defaultValue) {
   });
 }
 
+// Question à choix numéroté : affiche les entrées "1. lmstudio — ..." et lit un
+// NUMÉRO (Entrée = défaut). Repli : le nom exact reste accepté (rétrocompat des
+// habitudes "lmstudio", "light"...). Plus rapide que de retaper le nom à la main.
+//
+// opts.commands : saisies spéciales renvoyées BRUTES à l'appelant quand rien ne
+// matche (ex: "list"/"liste" = commande interceptée par l'appelant). Les autres
+// saisies inconnues tombent toujours sur le défaut (une typo ne doit pas
+// sélectionner un modèle inexistant).
+function _askNumberedChoice(question, entries, defaultIndex = 0, opts = {}) {
+  const commands = opts.commands || [];
+  if (!process.stdin.isTTY || !process.stdout.isTTY) {
+    return entries[defaultIndex] ? entries[defaultIndex].value : undefined;
+  }
+  return new Promise((resolve) => {
+    const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+    rl.question(`${question} `, (answer) => {
+      rl.close();
+      const v = (answer || '').trim().toLowerCase();
+      if (!v) return resolve(entries[defaultIndex].value);
+      const n = parseInt(v, 10);
+      if (Number.isInteger(n) && n >= 1 && n <= entries.length) {
+        return resolve(entries[n - 1].value);
+      }
+      const found = entries.find(e => String(e.value).toLowerCase() === v);
+      if (found) return resolve(found.value);
+      if (commands.includes(v)) return resolve(v);
+      resolve(entries[defaultIndex].value);
+    });
+  });
+}
+
+// Liste les modèles Ollama via /api/tags (nom uniquement — pas d'état/quantif).
+async function _fetchOllamaModels() {
+  try {
+    const res = await fetch('http://localhost:11434/api/tags', { method: 'GET' });
+    if (!res.ok) return [];
+    const data = await res.json();
+    return (data.models || []).map(m => ({
+      name: m.name,
+      quantization: null,
+      arch: null,
+      publisher: null,
+      state: null
+    }));
+  } catch (_) {
+    return [];
+  }
+}
+
+// --- Statut des modèles locaux (compartiments) — tâche 2026-09-11 ---
+// Enrichit le menu « Choix du modèle » avec le statut de test de chaque modèle
+// (déjà testé + score, partiel, en échec, isolé, jamais testé), exactement
+// comme `night-batch.js --list-only`. Source : listLlmModels() de night-batch
+// (lms ls + carnets .carnet + historique .benchgo-run-history.json + blacklist).
+//
+// Renvoie une Map normalizedName -> { label, badge, colored } pour annoter la
+// liste affichée. Vide si lms/carnets indisponibles (dégradation silencieuse).
+const STATUS_BADGE_COLORS = {
+  tested:   { glyph: '✓', color: '\x1b[32m', label: 'TESTÉ' },
+  partial:  { glyph: '~', color: '\x1b[35m', label: 'PARTIEL' },
+  failed:   { glyph: '✘', color: '\x1b[31m', label: 'ÉCHEC' },
+  never:    { glyph: '·', color: '\x1b[33m', label: 'À TESTER' },
+  isolated: { glyph: '⊘', color: '\x1b[90m', label: 'ISOLÉ' }
+};
+
+// Glyphe ANSI par statut (kind) : compact, lisible dans le menu numéroté.
+const STATUS_GLYPHS = {
+  complete: { glyph: '✓', color: '\x1b[32m' },
+  partial:  { glyph: '~', color: '\x1b[35m' },
+  failed:   { glyph: '✘', color: '\x1b[31m' },
+  never:    { glyph: '·', color: '\x1b[33m' },
+  nonllm:   { glyph: '⊘', color: '\x1b[90m' }
+};
+
+function _statusMapForModels(models) {
+  const map = new Map();
+  try {
+    const list = nightBatch.listLlmModels();
+    if (!list.ok) return map;
+    const norm = s => String(s || '').toLowerCase().replace(/\s+/g, ' ').replace(/\.gguf$/i, '').split('@')[0];
+    // listLlmModels renvoie des modelKey lms (ex: "kai-os_grug-12b@q4_k_s").
+    // Le questionnaire renvoie des ids /v1/models (souvent le même basename).
+    // Matching : normalisé (sans @quant, sans .gguf) — suffisant pour annoter.
+    for (const m of list.models) {
+      const kind = (m.status && m.status.kind) || 'never';
+      const badge = nightBatch.statusBadge(m.status);
+      const mt = m.metrics;
+      let detail = badge.label;
+      if (mt) detail += ` · ${mt.pct}%${mt.tokensPerSecond > 0 ? ` · ${mt.tokensPerSecond} t/s` : ''}`;
+      else if (m.status.reason) detail += ` (${m.status.reason})`;
+      map.set(norm(m.modelKey), { kind, badge, detail });
+    }
+  } catch (e) { /* lms absent : liste simple sans statuts */ }
+  return map;
+}
+
 function _printHeader() {
   console.log('');
   console.log('  \x1b[1;36m━━━━━━━━━━━━━ QUESTIONNAIRE DE DÉMARRAGE ━━━━━━━━━━━━━\x1b[0m');
@@ -86,44 +186,6 @@ function _printHeader() {
 
 function _printSection(title) {
   console.log(`  \x1b[1;33m▸ ${title}\x1b[0m`);
-}
-
-// Affiche un menu de fournisseurs lisible.
-function _listProviders() {
-  console.log('  Fournisseurs disponibles :');
-  console.log('  \x1b[90m── Locaux (aucune clé requise) ──\x1b[0m');
-  console.log('    • lmstudio   — LM Studio (port 1234)');
-  console.log('    • ollama     — Ollama (port 11434)');
-  console.log('    • custom     — serveur OpenAI-compat personnalisé (--endpoint)');
-  console.log('  \x1b[90m── Cloud (clé API requise) ──\x1b[0m');
-  console.log('    • openrouter — OpenRouter (Free Router + modèles payants)');
-  console.log('    • openai     — OpenAI (GPT, gpt-oss...)');
-  console.log('    • anthropic  — Anthropic (Claude)');
-  console.log('    • groq       — Groq (Llama, etc.)');
-  console.log('    • together   — Together AI');
-  console.log('    • mistral    — Mistral AI');
-}
-
-// --- Détection auto du modèle pour les serveurs locaux ---
-async function _tryAutoDetectModel(provider) {
-  const { fetchModelNameFromLMStudio } = require('./config');
-  if (provider === 'lmstudio') {
-    try {
-      const name = await fetchModelNameFromLMStudio();
-      return name;
-    } catch (_) { return null; }
-  }
-  if (provider === 'ollama') {
-    try {
-      const res = await fetch('http://localhost:11434/api/tags', { method: 'GET' });
-      if (!res.ok) return null;
-      const data = await res.json();
-      const models = (data.models || []).map(m => m.name);
-      if (models.length === 0) return null;
-      return models[0];
-    } catch (_) { return null; }
-  }
-  return null;
 }
 
 /**
@@ -141,8 +203,12 @@ async function _ensureApiKey(providerName, { label = 'API', revealMs = 3000 } = 
     // démarrage, ou saisie plus tôt). On propose de la garder OU d'en saisir
     // une nouvelle : une clé révoquée/invalide ne doit pas piéger
     // l'utilisateur (sinon il doit connaître --forget-key pour s'en sortir).
+    // ATTENTION : ne JAMAIS ré-afficher la ligne « déjà mémorisée » deux fois
+    // (bug historique : un console.log dans le if TTY + un console.log après
+    // le bloc → la clé s'affichait en double après « Utiliser cette clé ? o »).
+    const display = `  \x1b[32mClé ${label} déjà mémorisée pour cette session :\x1b[0m ${secrets.maskedForDisplay(secrets.getSecret(secretKey))}`;
     if (process.stdin.isTTY && process.stdout.isTTY) {
-      console.log(`  \x1b[32mClé ${label} déjà mémorisée pour cette session :\x1b[0m ${secrets.maskedForDisplay(secrets.getSecret(secretKey))}`);
+      console.log(display);
       const keep = await _askYesNo('  Utiliser cette clé mémorisée ?', true);
       if (!keep) {
         const newKey = await secrets.askSecret(`  Collez votre NOUVELLE clé ${label} (saisie masquée) :`, { revealMs });
@@ -153,9 +219,11 @@ async function _ensureApiKey(providerName, { label = 'API', revealMs = 3000 } = 
           return newKey;
         }
         console.log(`  \x1b[33mNouvelle clé vide — utilisation de la clé précédente.\x1b[0m`);
+        return secrets.getSecret(secretKey);
       }
+      return secrets.getSecret(secretKey);
     }
-    console.log(`  \x1b[32mClé ${label} déjà mémorisée pour cette session :\x1b[0m ${secrets.maskedForDisplay(secrets.getSecret(secretKey))}`);
+    console.log(display);
     return secrets.getSecret(secretKey);
   }
 
@@ -201,15 +269,29 @@ async function runStartupQuestionnaire(cliArgs) {
 
   // --- 1. Fournisseur ---
   _printSection('1. Fournisseur du modèle à tester');
-  _listProviders();
+  const providerEntries = [
+    { value: 'lmstudio',   detail: 'LM Studio (port 1234)' },
+    { value: 'ollama',     detail: 'Ollama (port 11434)' },
+    { value: 'custom',     detail: 'serveur OpenAI-compat personnalisé (--endpoint)' },
+    { value: 'openrouter', detail: 'OpenRouter (Free Router + modèles payants)' },
+    { value: 'openai',     detail: 'OpenAI (GPT, gpt-oss...)' },
+    { value: 'anthropic',  detail: 'Anthropic (Claude)' },
+    { value: 'groq',       detail: 'Groq (Llama, etc.)' },
+    { value: 'together',   detail: 'Together AI' },
+    { value: 'mistral',    detail: 'Mistral AI' }
+  ];
   let provider = cliArgs.provider;
   if (!provider) {
-    const all = [...LOCAL_PROVIDERS, ...CLOUD_PROVIDERS_ORDERED];
-    provider = await _askChoice(
-      '  Choix du fournisseur :',
-      all,
-      'lmstudio'
-    );
+    console.log('  Fournisseurs disponibles :');
+    console.log('  \x1b[90m── Locaux (aucune clé requise) ──\x1b[0m');
+    providerEntries.slice(0, 3).forEach((e, i) => {
+      console.log(`    \x1b[1m${i + 1}.\x1b[0m ${e.value.padEnd(11)} — ${e.detail}`);
+    });
+    console.log('  \x1b[90m── Cloud (clé API requise) ──\x1b[0m');
+    providerEntries.slice(3).forEach((e, i) => {
+      console.log(`    \x1b[1m${i + 4}.\x1b[0m ${e.value.padEnd(11)} — ${e.detail}`);
+    });
+    provider = await _askNumberedChoice('  Choix du fournisseur (numéro, Entrée = 1) :', providerEntries, 0);
   } else {
     console.log(`  \x1b[90mFournisseur passé en CLI : ${provider}\x1b[0m`);
   }
@@ -220,17 +302,70 @@ async function runStartupQuestionnaire(cliArgs) {
   // --- 2. Modèle ---
   _printSection('2. Modèle à évaluer');
   let model = cliArgs.model;
+  let modelMeta = null;
   if (!model) {
     if (isLocal) {
-      const auto = await _tryAutoDetectModel(provider);
-      if (auto) {
-        console.log(`  \x1b[32mModèle détecté automatiquement : ${auto}\x1b[0m`);
-        const keep = await _askYesNo('  Garder ce modèle ?', false);
-        if (keep) {
-          model = auto;
-        } else {
-          model = await _askFreeText('  Saisissez le nom du modèle :', { allowEmpty: false });
+      const models = provider === 'lmstudio'
+        ? await fetchAllModelsFromLMStudio()
+        : await _fetchOllamaModels();
+      if (models.length > 0) {
+        // Statut de test (compartiments night-batch) annoté sur chaque modèle :
+        // ✓ TESTÉ (pct) · ~ PARTIEL · ✘ ÉCHEC · · À TESTER · ⊘ ISOLÉ.
+        // Repli silencieux : si lms/carnets indisponibles, liste simple.
+        const statusMap = provider === 'lmstudio' ? _statusMapForModels(models) : new Map();
+        if (statusMap.size > 0) {
+          console.log('  \x1b[90mStatuts : ✓ testé (score) · ~ partiel · ✘ échec · · à tester · ⊘ isolé. Tapez "list" pour le tableau détaillé.\x1b[0m');
         }
+        console.log(`  \x1b[32m${models.length} modèle(s) ${provider === 'lmstudio' ? 'LM Studio' : 'Ollama'} détecté(s) :\x1b[0m`);
+        models.forEach((m, i) => {
+          const badges = [];
+          if (m.state === 'loaded') badges.push('chargé');
+          if (m.quantization)      badges.push(m.quantization);
+          if (m.arch)              badges.push(m.arch);
+          if (m.publisher)         badges.push(m.publisher);
+          const suffix = badges.length > 0 ? ` \x1b[90m(${badges.join(' · ')})\x1b[0m` : '';
+          // Statut night-batch : glyphe coloré en tête de ligne (visible immédiatement).
+          let statusTag = '';
+          if (statusMap.size > 0) {
+            const st = statusMap.get(String(m.name || '').toLowerCase().replace(/\s+/g, ' ').replace(/\.gguf$/i, '').split('@')[0]);
+            if (st) {
+              const g = STATUS_GLYPHS[st.kind] || STATUS_GLYPHS.never;
+              statusTag = `${g.color}${g.glyph}${C_RESET} `;
+            }
+          }
+          console.log(`    \x1b[1m${i + 1}.\x1b[0m ${statusTag}${m.name}${suffix}`);
+        });
+        // Défaut : le premier modèle CHARGÉ (state === 'loaded'), sinon le 1er.
+        const loadedIdx = models.findIndex(m => m.state === 'loaded');
+        const defaultIdx = loadedIdx >= 0 ? loadedIdx : 0;
+        if (loadedIdx >= 0) {
+          console.log(`  \x1b[90m(« chargé » = modèle déjà en VRAM — Entrée = ${defaultIdx + 1})\x1b[0m`);
+        } else {
+          console.log('  \x1b[90m(Aucun modèle chargé — Entrée = 1)\x1b[0m');
+        }
+        const entries = models.map(m => ({ value: m.name }));
+        // commands : "list"/"liste" est une COMMANDE, pas un nom de modèle —
+        // la saisie est renvoyée brute pour être interceptée par la boucle
+        // while ci-dessous. Sans elle, la saisie tombait sur le défaut.
+        const modelChoices = { commands: ['list', 'liste'] };
+        let picked = await _askNumberedChoice('  Choix du modèle (numéro ou nom, "list" = tableau détaillé) :', entries, defaultIdx, modelChoices);
+        // Commande "list" : affiche le tableau complet night-batch (--list-only)
+        // avec compartiments (testés triés par score, puis échecs, à tester,
+        // isolés). Recharge la liste LM Studio (un GGUF ajouté entre-temps est
+        // détecté) puis relance le choix. Boucle tant que l'utilisateur tape "list".
+        while (picked === 'list' || picked === 'liste') {
+          const list = nightBatch.listLlmModels();
+          if (list.ok && list.models.length > 0) {
+            nightBatch.printModelsList(list.models, { interactive: false });
+            const grouped = nightBatch.groupModelsByStatus(list);
+            console.log(`  \x1b[90mCompartiments : ${grouped.groups.tested.length} testé(s) · ${grouped.groups.partial.length} partiel(s) · ${grouped.groups.failed.length} échec(s) · ${grouped.groups.never.length} à tester · ${grouped.groups.isolated.length} isolé(s).${C_RESET}`);
+          } else {
+            console.log(`  \x1b[33mlms indisponible (${(list && list.error) || 'daemon éteint ?'}) — tableau détaillé impossible.\x1b[0m`);
+          }
+          picked = await _askNumberedChoice('  Choix du modèle (numéro ou nom, "list" = tableau détaillé) :', entries, defaultIdx, modelChoices);
+        }
+        model = picked;
+        modelMeta = models.find(m => m.name === model) || null;
       } else {
         console.log('  \x1b[33mAucun modèle détecté automatiquement.\x1b[0m');
         model = await _askFreeText('  Saisissez le nom du modèle :', { allowEmpty: false });
@@ -259,17 +394,35 @@ async function runStartupQuestionnaire(cliArgs) {
     console.log('');
   } else if (provider === 'lmstudio') {
     console.log('  \x1b[1;33m2b. Quantification\x1b[0m');
-    const meta = await fetchModelMetadataFromLMStudio(model);
-    if (meta && meta.quantization) {
-      quantization = meta.quantization;
-      console.log(`  \x1b[32mQuantification détectée automatiquement (LM Studio /api/v0/models) : ${quantization}\x1b[0m`);
-      if (meta.arch)        console.log(`  \x1b[90m  Architecture : ${meta.arch}\x1b[0m`);
-      if (meta.publisher)  console.log(`  \x1b[90m  Éditeur      : ${meta.publisher}\x1b[0m`);
-      if (meta.state)       console.log(`  \x1b[90m  État         : ${meta.state}\x1b[0m`);
+    // Si le modèle a été choisi dans la liste LM Studio, on a déjà ses métadonnées
+    // (quantif/arch/éditeur/état) — on évite un re-fetch de /api/v0/models.
+    if (modelMeta && (modelMeta.quantization || modelMeta.arch || modelMeta.publisher)) {
+      if (modelMeta.quantization) {
+        quantization = modelMeta.quantization;
+        console.log(`  \x1b[32mQuantification (LM Studio /api/v0/models) : ${quantization}\x1b[0m`);
+      } else {
+        console.log('  \x1b[33mQuantification non exposée par LM Studio pour ce modèle.\x1b[0m');
+      }
+      if (modelMeta.arch)      console.log(`  \x1b[90m  Architecture : ${modelMeta.arch}\x1b[0m`);
+      if (modelMeta.publisher) console.log(`  \x1b[90m  Éditeur      : ${modelMeta.publisher}\x1b[0m`);
+      if (modelMeta.state)     console.log(`  \x1b[90m  État         : ${modelMeta.state}\x1b[0m`);
+      if (!quantization) {
+        const q = await _askFreeText('  Saisissez la quantification (ex: Q4_K_M, Q5_K_S, Q8_0) — laissez vide si inconnue :', { allowEmpty: true });
+        if (q) quantization = q;
+      }
     } else {
-      console.log('  \x1b[33mQuantification non détectable automatiquement (LM Studio injoignable ou endpoint /api/v0 absent).\x1b[0m');
-      const q = await _askFreeText('  Saisissez la quantification (ex: Q4_K_M, Q5_K_S, Q8_0) — laissez vide si inconnue :', { allowEmpty: true });
-      if (q) quantization = q;
+      const meta = await fetchModelMetadataFromLMStudio(model);
+      if (meta && meta.quantization) {
+        quantization = meta.quantization;
+        console.log(`  \x1b[32mQuantification détectée automatiquement (LM Studio /api/v0/models) : ${quantization}\x1b[0m`);
+        if (meta.arch)       console.log(`  \x1b[90m  Architecture : ${meta.arch}\x1b[0m`);
+        if (meta.publisher)  console.log(`  \x1b[90m  Éditeur      : ${meta.publisher}\x1b[0m`);
+        if (meta.state)      console.log(`  \x1b[90m  État         : ${meta.state}\x1b[0m`);
+      } else {
+        console.log('  \x1b[33mQuantification non détectable automatiquement (LM Studio injoignable ou endpoint /api/v0 absent).\x1b[0m');
+        const q = await _askFreeText('  Saisissez la quantification (ex: Q4_K_M, Q5_K_S, Q8_0) — laissez vide si inconnue :', { allowEmpty: true });
+        if (q) quantization = q;
+      }
     }
     console.log('');
   } else if (provider === 'ollama' || provider === 'custom') {
@@ -315,19 +468,18 @@ async function runStartupQuestionnaire(cliArgs) {
 
   // --- 5. Profil ---
   _printSection('5. Profil d\'évaluation');
+  const profileKeys = Object.keys(PROFILES);
   console.log('  Profils :');
-  for (const [key, p] of Object.entries(PROFILES)) {
-    console.log(`    \x1b[90m• ${key.padEnd(10)}\x1b[0m ${p.label}`);
-  }
+  profileKeys.forEach((key, i) => {
+    console.log(`    \x1b[1m${i + 1}.\x1b[0m ${key.padEnd(10)} ${PROFILES[key].label}`);
+  });
   let profileArg = cliArgs.profileArgExplicit;
   if (!profileArg) {
     // Default heuristic : local provider → STANDARD, cloud → FRONTIER.
     const defaultProfile = isLocal ? 'STANDARD' : 'FRONTIER';
-    profileArg = await _askChoice(
-      '  Choix du profil :',
-      Object.keys(PROFILES),
-      defaultProfile
-    );
+    const defaultIdx = Math.max(0, profileKeys.indexOf(defaultProfile));
+    const entries = profileKeys.map(k => ({ value: k }));
+    profileArg = await _askNumberedChoice('  Choix du profil (numéro ou nom, Entrée = défaut) :', entries, defaultIdx);
   } else {
     console.log(`  \x1b[90mProfil passé en CLI : ${profileArg}\x1b[0m`);
   }

@@ -39,19 +39,58 @@ const MAX_ATTEMPTS = 2;              // 2 tentatives max (déjà ~30s pire cas)
 // Ordre de priorité : NON est testé en premier car un "non, je ne suis pas
 // capable" est non ambigu. On accepte de nombreux variants.
 //
-// Retourne : 'YES' | 'NO' | null (indéterminé)
+// IMPORTANT — modèles de raisonnement (thinking : Grug 12B, DeepSeek R1,
+// Qwen QwQ) : ils délibèrent en streaming avant de produire OUI/NON. Avec
+// maxTokens=512, le budget est souvent consommé par la délibération
+// (delta.reasoning_content), et lm-studio-client.js injecte cette trace
+// partielle dans `content` (ligne 224-225). Scanner TOUTE la trace fait
+// correspondre des négations contextuelles ("je ne suis pas sûr", "not able
+// to determine") à un NON définitif → faux rejet. On isole donc la RÉPONSE
+// FINALE avant d'appliquer les patterns.
+//
+// Retourne : 'YES' | 'NO' | null (indéterminé → OUI par défaut côté runner)
 function interpretCapabilityAnswer(text) {
   if (!text || typeof text !== 'string') return null;
-  const t = text.toLowerCase().trim();
+  const full = text.trim();
+  if (!full) return null;
 
-  // Patterns d'incapacité (NON). Testés en priorité.
+  let answerText = full.toLowerCase();
+
+  // 1. Striper un bloc de raisonnement fermé (DeepSeek R1 / Qwen QwQ style) :
+  //    ```...trace...```. On garde uniquement ce qui suit la dernière balise
+  //    fermante. Les modèles qui balisent leur raisonnement voient la trace
+  //    ignorée, seuls les OUI/NON post-délibération sont examinés.
+  const thinkClose = answerText.lastIndexOf('```');
+  if (thinkClose !== -1) {
+    const after = answerText.slice(thinkClose + 3).trim();
+    if (after) answerText = after;
+  }
+
+  // 2. Trace multi-lignes sans balise (puces * Role/Context/Task, ou long
+  //    paragraphe de délibération) : on garde la DERNIÈRE ligne non vide comme
+  //    réponse finale. Une trace coupée par max_tokens n'a pas de verdict sur
+  //    sa dernière ligne (fragment de phrase, ex: "Task: Wr") → aucun pattern
+  //    ne matche → INDETERMINE → OUI par défaut (prudence) → le modèle passe
+  //    l'examen réel qui le jugera sur preuve. Les modèles non-thinking qui
+  //    répondent en 1 ligne ("OUI", "Non.") sont inchangés : pas de `\n`, on
+  //    garde la réponse entière.
+  if (answerText.length > 150 && answerText.includes('\n')) {
+    const lines = answerText.split('\n').map(l => l.trim()).filter(Boolean);
+    if (lines.length > 1) {
+      answerText = lines[lines.length - 1];
+    }
+  }
+
+  if (!answerText) return null;
+
+  // Patterns d'incapacité (NON). Testés en priorité sur la réponse finale.
   const noPatterns = [
     /\bnon\b/, /\bno\b/, /\bn\b(?=\s|$|[,.;!?])/, /je ne suis pas capable/,
     /je ne peux pas/, /incapable/, /impossib/, /je refuse/, /non[,\s]/,
     /\bnope\b/, /\bno way\b/, /not able/, /cannot/, /can'?t\b/
   ];
   for (const re of noPatterns) {
-    if (re.test(t)) return 'NO';
+    if (re.test(answerText)) return 'NO';
   }
 
   // Patterns de capacité (OUI).
@@ -61,7 +100,7 @@ function interpretCapabilityAnswer(text) {
     /bien sur/, /bien sur/, /absolument/, /certainement/, /with pleasure/
   ];
   for (const re of yesPatterns) {
-    if (re.test(t)) return 'YES';
+    if (re.test(answerText)) return 'YES';
   }
 
   // Cas ambigu : "peut-être", "partiellement", "je vais essayer" → on tente OUI
@@ -69,7 +108,7 @@ function interpretCapabilityAnswer(text) {
   // l'examen qui le jugera réellement). Tolérant aux accents (être/etre).
   const maybePatterns = [/\bpeut[- ]?[eèêé]tre\b/, /partiellement/, /je vais essayer/, /je vais tenter/, /je vais faire/, /essayer/, /tentative/];
   for (const re of maybePatterns) {
-    if (re.test(t)) return 'YES';
+    if (re.test(answerText)) return 'YES';
   }
 
   return null;

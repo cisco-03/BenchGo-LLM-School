@@ -38,6 +38,7 @@ const fs = require('fs');
 const path = require('path');
 const { PROFILES, detectProfileFromModelName } = require('./config');
 const { printEntryHelp, wantsHelp } = require('./cli-help');
+const archWarning = require('./arch-warning');
 
 const PROJECT_ROOT = __dirname;
 const RUNNER = path.join(PROJECT_ROOT, 'runner.js');
@@ -1016,7 +1017,11 @@ function listLlmModels() {
       const failedRun = runStatusFromHistory(modelKey);
       let status;
       if (nonLlm || blacklisted) {
-        status = { kind: 'nonllm', tested: [], missing: [], quant: ledger ? ledger.quantization : null, reason: nonLlm ? 'Modèle non-LLM (OCR/embedding/rerank/vision)' : 'Isolé manuellement' };
+        // Modèle au registre des incompatibles (arch GGUF non supportée par le
+        // runtime llama.cpp) : raison dédiée au lieu de « Isolé manuellement »
+        // pour expliquer le vrai problème de structure (tâche 2026-09-15).
+        const incompat = !nonLlm ? (archWarning.loadIncompatible()[modelKey] || null) : null;
+        status = { kind: 'nonllm', tested: [], missing: [], quant: ledger ? ledger.quantization : null, reason: nonLlm ? 'Modèle non-LLM (OCR/embedding/rerank/vision)' : (incompat ? 'Incompatible : arch non supportée' : 'Isolé manuellement'), archIncompatible: incompat ? (incompat.architecture || '?') : null };
       } else if (!ledger || testedSchools.length === 0) {
         // Pas de carnet : jamais testé avec succès. Mais a-t-on déjà tenté ?
         if (failedRun) {
@@ -1126,11 +1131,44 @@ function listLlmModels() {
 
 function statusBadge(status) {
   if (!status) return { label: '?', color: C.gray };
-  if (status.kind === 'nonllm')   return { label: 'NON APPLICABLE', color: C.gray };
+  if (status.kind === 'nonllm')   return status.archIncompatible ? { label: 'INCOMPATIBLE', color: C.red } : { label: 'NON APPLICABLE', color: C.gray };
   if (status.kind === 'failed')   return { label: 'ÉCHEC',          color: C.red };
   if (status.kind === 'never')   return { label: 'JAMAIS TESTE', color: C.yellow };
   if (status.kind === 'partial') return { label: 'PARTIEL',      color: C.magenta };
   return { label: 'COMPLET', color: C.green };
+}
+
+// Regroupe les modèles par compartiment de statut pour un affichage lisible
+// dans le questionnaire de démarrage (mode RunCode / interactive). Répond au
+// besoin utilisateur (tâche 2026-09-11) : savoir quels modèles ont DÉJÀ été
+// testés (et leur score), lesquels sont en échec, isolés, ou jamais testés —
+// au lieu d'une liste plate sans mémoire.
+//
+// Compartiments :
+//   tested  : COMPLET (toutes les écoles pertinentes au carnet)
+//   partial : PARTIEL (au moins une école au carnet, mais incomplet)
+//   failed  : ÉCHEC (tenté, dernier run load_failed ou run_ko)
+//   never   : JAMAIS TESTÉ (aucune trace de run ni de rapport)
+//   isolated: NON APPLICABLE (isolé manuellement / non-LLM)
+//
+// @param {{ ok: boolean, models: Array, error?: string }} listResult —
+//        retour de listLlmModels().
+// @returns {{ ok: boolean, error?: string, groups: {tested, partial, failed, never, isolated}, flat: Array }}
+//          flat = les modèles dans l'ordre d'affichage (tested → partial →
+//          failed → never → isolated), chacun enrichi d'un champ `bucket`.
+function groupModelsByStatus(list) {
+  const groups = { tested: [], partial: [], failed: [], never: [], isolated: [] };
+  if (!list || !list.ok) return { ok: false, error: (list && list.error) || 'lms indisponible', groups, flat: [] };
+  for (const m of list.models) {
+    const kind = m.status && m.status.kind;
+    if (kind === 'complete') groups.tested.push(m);
+    else if (kind === 'partial') groups.partial.push(m);
+    else if (kind === 'failed') groups.failed.push(m);
+    else if (kind === 'nonllm') groups.isolated.push(m);
+    else groups.never.push(m);
+  }
+  const flat = [...groups.tested, ...groups.partial, ...groups.failed, ...groups.never, ...groups.isolated];
+  return { ok: true, groups, flat };
 }
 
 // Renvoie le label lisible ABRÉGÉ d'une cle SCHOOLS pour la colonne
@@ -1709,12 +1747,53 @@ async function selectSchoolsInteractive(selectedModels) {
     console.log(`  ${C.gray}Numéros séparés par virgules (ex: "0" = 1er exercice, "0,1" = 2 premiers).${C.reset}`);
     console.log(`  ${C.gray}Idéal pour trier les modèles faibles : si un modèle échoue${C.reset}`);
     console.log(`  ${C.gray}au 1er exercice, il part à la poubelle sans perdre de temps.${C.reset}`);
-    const tierAnswer = await ask(`  ${C.cyan}Tiers à exécuter (défaut = tous) :${C.reset} `);
-    if (tierAnswer) {
+    console.log(`  ${C.gray}"obli" = SEULEMENT les tiers obligatoires (gain de temps : le carnet${C.reset}`);
+    console.log(`  ${C.gray}est écrit quand même, les optionnels sautés — cf. AGENTS.md).${C.reset}`);
+    const tierAnswer = await ask(`  ${C.cyan}Tiers à exécuter (défaut = tous, "obli" = obligatoires seuls) :${C.reset} `);
+    if (tierAnswer && tierAnswer.trim().toLowerCase() === 'obli') {
+      // Gain de temps (tâche 2026-09-11c) : ne jouer que les tiers OBLIGATOIRES
+      // de chaque école sélectionnée. La consolidation ("all") est déclenchée
+      // dès que les obligatoires sont couverts — le carnet est écrit et le
+      // modèle est classable, pour un temps réduit à ~60-70 %.
+      const mandatory = new Set();
+      for (const s of schools) {
+        const prof = PROFILES[s.key];
+        if (!prof) continue;
+        for (const t of prof.mandatory) mandatory.add(t);
+      }
+      tierFilter = [...mandatory].sort((a, b) => a - b);
+      console.log(`  ${C.gray}→ Tiers OBLIGATOIRES uniquement : ${tierFilter.join(', ')} (gain de temps, carnet écrit quand même).${C.reset}`);
+      console.log('');
+    } else if (tierAnswer) {
       const nums = tierAnswer.split(/[\s,;]+/).map(s => parseInt(s, 10)).filter(n => Number.isInteger(n) && n >= 0);
       if (nums.length > 0) {
         tierFilter = [...new Set(nums)];
         console.log(`  ${C.gray}→ Tiers sélectionnés : ${tierFilter.join(', ')}${C.reset}`);
+        // Avertissement carnet : si le filtre ne couvre pas TOUS les tiers
+        // obligatoires d'au moins une école sélectionnée, la consolidation
+        // (run "all") ne se déclenchera pas → AUCUN carnet écrit pour cette
+        // école. Le modèle apparaîtra « Tiers testés, carnet absent » dans
+        // --list-only. C'est le piège qui a fait perdre 3-4 sessions de test
+        // sur Grug 12B (tiers 1+3 testés, obligatoires [0,1,2] non couverts →
+        // carnet jamais écrit malgré des rapports valides sur disque).
+        const selectedProfileKeys = schools
+          .filter(s => PROFILES[s.key])
+          .map(s => s.key);
+        const uncovered = [];
+        for (const pk of selectedProfileKeys) {
+          const mand = PROFILES[pk].mandatory;
+          const missing = mand.filter(t => !tierFilter.includes(t));
+          if (missing.length > 0) uncovered.push({ key: pk, missing });
+        }
+        if (uncovered.length > 0) {
+          console.log(`\n  ${C.yellow}⚠ ATTENTION : le filtre de tiers ne couvre pas tous les tiers obligatoires.${C.reset}`);
+          console.log(`  ${C.gray}Le carnet de scores NE SERA PAS écrit pour ces écoles (consolidation annulée) :${C.reset}`);
+          for (const u of uncovered) {
+            console.log(`  ${C.gray}  • ${u.key} : tiers obligatoires manquants = [${u.missing.join(', ')}]${C.reset}`);
+          }
+          console.log(`  ${C.gray}Pour écrire le carnet, testez TOUS les tiers obligatoires, ou relancez${C.reset}`);
+          console.log(`  ${C.gray}avec --resume après avoir passé les tiers manquants.${C.reset}\n`);
+        }
       }
     }
     if (!tierFilter) {
@@ -1809,7 +1888,17 @@ function loadModel(modelKey, mtpModelKey) {
   }
   const r = runLms(args, { timeoutMs: 180000 });
   if (r.status !== 0) {
-    console.log(`  ${C.red}lms load echoue : ${r.stderr || r.stdout || 'erreur inconnue'}${C.reset}`);
+    const loadErrText = r.stderr || r.stdout || 'erreur inconnue';
+    console.log(`  ${C.red}lms load echoue : ${loadErrText}${C.reset}`);
+    // Architecture GGUF inconnue du runtime llama.cpp (ex: k2-horizon) :
+    // avertissement complet « modèle non compatible » + enregistrement dans
+    // le registre .benchgo-incompatible.json (tâche 2026-09-15). Le modèle est
+    // mis de côté pour ne plus bloquer les batchs, mais on garde la trace pour
+    // rappeler de le retélécharger quand LM Studio supportera l'architecture.
+    if (archWarning.isArchitectureError(loadErrText)) {
+      archWarning.recordIncompatible(modelKey, { reason: loadErrText });
+      console.log(archWarning.incompatibleWarningText(modelKey, { reason: loadErrText }));
+    }
     return false;
   }
   return true;
@@ -1905,6 +1994,59 @@ function autoBlacklist(modelKey, reason) {
   return true;
 }
 
+// --- Tremplin RunCode (tâche 2026-09-11c) ---
+// RunCode Turbo est le PRÉ-EXAMEN de la grande école : on le fait passer en
+// PREMIER à tout modèle qui n'a jamais d'examen RunCode au carnet, et on
+// organise la file d'attente par résultat du tremplin (les meilleurs d'abord).
+// Le tremplin n'est JAMAIS éliminatoire : sous le seuil, l'école est lancée
+// quand même avec un simple avertissement « non recommandé » (demande
+// utilisateur : pas de film catastrophe, un seuil souple + --force).
+const RUNCODE_GATE_DEFAULT_PCT = 40; // seuil souple : au-dessus = recommandé
+
+// Meilleure tentative RunCode d'un carnet (toutes écoles RunCode-*), par pct.
+// Reproduit la logique rcBestOf de leaderboard.js sans coupler les modules.
+function runCodeBestOf(ledger) {
+  if (!ledger || !ledger.ecoles) return null;
+  let best = null;
+  for (const v of Object.values(ledger.ecoles)) {
+    const attempts = (v && v.attempts && Array.isArray(v.attempts)) ? v.attempts : (v && v.best ? [v.best] : []);
+    for (const a of attempts) {
+      if (a && a.runCode && (!best || (a.pct || 0) > (best.pct || 0))) best = a;
+    }
+  }
+  return best;
+}
+
+// Métadonnées tremplin d'un modèle depuis son carnet :
+// { done, pct, specialite, diplome, parcours } ou { done: false }.
+function runCodeGateInfo(ledger) {
+  const best = runCodeBestOf(ledger);
+  if (!best) return { done: false };
+  return {
+    done: true,
+    pct: best.pct != null ? best.pct : (best.max > 0 ? Math.round((best.score / best.max) * 100) : null),
+    specialite: best.specialite || null,
+    diplome: best.diplome || null,
+    parcours: best.parcours || null
+  };
+}
+
+// Lance l'examen RunCode (node runner.js --exam-code) pour un modèle local.
+// Le parcours suit la même scolarité que l'école cible (un modèle STANDARD
+// passe College-Lycee) : le pre-examen mesure les aptitudes au bon niveau.
+// Retourne { ok, durationMs, skipped } — jamais bloquant pour la file.
+async function runRunCodeExam(modelKey, extraArgs, parcours, timeoutMs) {
+  const args = ['runner.js', '--force', '--provider=lmstudio', `--model=${modelKey}`, '--exam-code'];
+  if (parcours) args.push(`--parcours=${parcours}`);
+  for (const a of extraArgs) args.push(a);
+  console.log(`\n  ${C.magenta}⚡ TREMPLIN RUNCODE : ${args.join(' ')}${C.reset}`);
+  const bench = await runBenchmark(modelKey, null, [], {
+    examCodeArgs: args.slice(1),
+    timeoutMs: timeoutMs || (TIER_TIMEOUT_MS * 2)
+  });
+  return bench;
+}
+
 async function runBenchmark(modelKey, schoolCli, extraArgs, opts = {}) {
   // opts.tierNum : si défini, lance uniquement CE tier (mode classe-par-classe).
   //   Le runner supporte un argument positionnel = numéro de tier. On l'insère
@@ -1913,8 +2055,12 @@ async function runBenchmark(modelKey, schoolCli, extraArgs, opts = {}) {
   //   En mode classe-par-classe, on met un timeout par tier pour éviter qu'un
   //   modèle gelé bloque toute la nuit (bug constaté : un hang infini sur un
   //   tier arrêtait tout le batch sans jamais passer au modèle suivant).
-  const { tierNum = null, timeoutMs = 0 } = opts;
-  const args = ['runner.js', '--force', '--provider=lmstudio', `--model=${modelKey}`];
+  // opts.examCodeArgs : si défini, lance l'examen RunCode (--exam-code) avec
+  //   ces arguments au lieu d'un run d'école classique (tremplin 2026-09-11c).
+  const { tierNum = null, timeoutMs = 0, examCodeArgs = null } = opts;
+  const args = examCodeArgs
+    ? ['runner.js', ...examCodeArgs]
+    : ['runner.js', '--force', '--provider=lmstudio', `--model=${modelKey}`];
   if (schoolCli) args.push(`--profile=${schoolCli}`);
   if (tierNum !== null && tierNum !== undefined) args.push(String(tierNum));
   for (const a of extraArgs) args.push(a);
@@ -2242,6 +2388,7 @@ function parseArgs() {
   const noTeacher = raw.includes('--no-teacher');
   const hybridFlag = raw.includes('--hybrid');
   const listOnly = raw.includes('--list-only');
+  const incompatibleList = raw.includes('--incompatible-list');
   const classByClass = raw.includes('--class-by-class') || raw.includes('--cbc');
   const forceDetect = raw.includes('--force-detect');
   const skipFlag = raw.includes('--skip');
@@ -2289,7 +2436,7 @@ function parseArgs() {
   if (teacherModelArg) extraRunnerArgs.push(`--teacher-model=${teacherModelArg}`);
   if (teacherApiKeyArg) extraRunnerArgs.push(`--teacher-api-key=${teacherApiKeyArg}`);
   if (teacherEndpointArg) extraRunnerArgs.push(`--teacher-endpoint=${teacherEndpointArg}`);
-  return { modelsArg, schoolsArg, tiersArg, noTeacher, listOnly, hybridFlag, forceDetect, classByClass, isolateArg, skipFlag, resumeFlag, teacherProviderArg, teacherModelArg, extraRunnerArgs };
+  return { modelsArg, schoolsArg, tiersArg, noTeacher, listOnly, incompatibleList, hybridFlag, forceDetect, classByClass, isolateArg, skipFlag, resumeFlag, teacherProviderArg, teacherModelArg, extraRunnerArgs };
 }
 
 function resolveSchoolsFromArg(schoolsArg) {
@@ -2309,6 +2456,7 @@ async function main() {
     printEntryHelp('night-batch.js', 'Mode nuit (batch) — enchaîne les modèles LM Studio', [
       { cmd: 'node night-batch.js', desc: 'Mode interactif : sélection des modèles et écoles (TTY).' },
       { cmd: 'node night-batch.js --list-only', desc: 'Liste les modèles LM Studio triés par score local, puis quitte (debug).' },
+      { cmd: 'node night-batch.js --incompatible-list', desc: 'Liste les modèles mis de côté (architecture GGUF non supportée par llama.cpp) et rappelle de les retélécharger.' },
       { cmd: 'node night-batch.js --models=key1,key2', desc: 'Modèles à tester sans sélection interactive (modelKeys).' },
       { cmd: 'node night-batch.js --schools=STANDARD,EXPERT', desc: 'Écoles à tester sans sélection interactive (clés SCHOOLS).' },
       { cmd: 'node night-batch.js --isoler=!4', desc: 'Isole le modèle n° 4 (marque NON APPLICABLE + exclut des batchs). Numéro = position dans --list-only.' },
@@ -2343,7 +2491,7 @@ async function main() {
   console.log(`${C.bold}${C.cyan}   File d'attente automatique de modeles LM Studio   ${C.reset}`);
   console.log(`${C.bold}${C.cyan}==================================================${C.reset}\n`);
 
-  const { modelsArg, schoolsArg, tiersArg, listOnly, hybridFlag, forceDetect, isolateArg, classByClass: cbcFromCli, skipFlag, resumeFlag, extraRunnerArgs } = parseArgs();
+  const { modelsArg, schoolsArg, tiersArg, listOnly, incompatibleList, hybridFlag, forceDetect, isolateArg, classByClass: cbcFromCli, skipFlag, resumeFlag, extraRunnerArgs } = parseArgs();
   let classByClass = cbcFromCli;
   let tierFilter = null;
   // Mode 8 Manuel : stoppe la file au premier tier obligatoire échoué.
@@ -2377,6 +2525,16 @@ async function main() {
       console.log(`  ${C.red}Impossible d'écrire la sentinelle : ${e.message}${C.reset}`);
       process.exit(1);
     }
+    process.exit(0);
+  }
+
+  // --- Action one-shot : --incompatible-list (tâche 2026-09-15) ---
+  // Affiche le registre des modèles mis de côté pour architecture GGUF non
+  // supportée par le runtime llama.cpp de LM Studio. Rappel de retélécharger
+  // le GGUF (Hugging Face / LM Studio) quand le support de l'architecture sera
+  // ajouté. Aucun batch lancé, aucun daemon requis (lecture fichier seule).
+  if (incompatibleList) {
+    archWarning.printIncompatibleList();
     process.exit(0);
   }
 
@@ -2458,7 +2616,12 @@ async function main() {
       }
       bl.delete(target.modelKey);
       saveBlacklist(bl);
+      // La désisolation retire AUSSI l'entrée du registre des incompatibles :
+      // l'utilisateur réessaie (typiquement après une mise à jour du runtime
+      // llama.cpp), il ne faut plus afficher le modèle comme incompatible.
+      const wasIncompat = archWarning.clearIncompatible(target.modelKey);
       console.log(`  ${C.green}✓ ${target.displayName} [${target.modelKey}] → désisolé.${C.reset}`);
+      if (wasIncompat) console.log(`  ${C.gray}Entrée retirée du registre des incompatibles (.benchgo-incompatible.json).${C.reset}`);
       console.log(`  ${C.gray}Le modèle sera retesté dans les prochains batchs.${C.reset}`);
     }
     if (serverHandle.startedByUs) stopServer();
@@ -2552,6 +2715,26 @@ async function main() {
       process.exit(1);
     }
     console.log(`  ${C.gray}Selection via --schools : ${schools.map(s => s.key).join(', ')}${C.reset}`);
+    // Avertissement carnet (cf. avertissement interactif plus haut) : en CLI
+    // --tiers= + --schools=, si le filtre ne couvre pas les obligatoires, le
+    // carnet ne sera pas écrit. On prévient l'utilisateur AVANT le batch.
+    if (tierFilter && tierFilter.length > 0) {
+      const uncovered = [];
+      for (const s of schools) {
+        const prof = PROFILES[s.key];
+        if (!prof) continue;
+        const missing = prof.mandatory.filter(t => !tierFilter.includes(t));
+        if (missing.length > 0) uncovered.push({ key: s.key, missing });
+      }
+      if (uncovered.length > 0) {
+        console.log(`\n  ${C.yellow}⚠ ATTENTION : --tiers= ne couvre pas tous les tiers obligatoires.${C.reset}`);
+        console.log(`  ${C.gray}Le carnet NE SERA PAS écrit pour ces écoles (consolidation annulée) :${C.reset}`);
+        for (const u of uncovered) {
+          console.log(`  ${C.gray}  • ${u.key} : tiers obligatoires manquants = [${u.missing.join(', ')}]${C.reset}`);
+        }
+        console.log(`  ${C.gray}Pour écrire le carnet, testez tous les obligatoires, ou --resume après.${C.reset}\n`);
+      }
+    }
   } else {
     if (!process.stdin.isTTY || !process.stdout.isTTY) {
       schools = [SCHOOLS.find(s => s.key === 'auto')];
@@ -2651,6 +2834,38 @@ async function main() {
   if (classByClass) {
     console.log(`  ${C.yellow}Mode classe-par-classe ACTIVÉ : chaque tier dans un process séparé (timeout ${TIER_TIMEOUT_MS / 60000} min/tier, reprise auto au tier suivant).${C.reset}`);
   }
+  // --- Tremplin RunCode (tâche 2026-09-11c) ---
+  // Chaque modèle sans examen RunCode au carnet passe d'abord son pré-examen
+  // (parcours = même scolarité que sa première école). La file est ensuite
+  // ORDONNÉE par le résultat du tremplin : les meilleurs pct RunCode passent
+  // en premier (les modèles prometteurs donnent des carnets tôt dans la nuit).
+  // Le tremplin n'est PAS éliminatoire : sous le seuil, on lance quand même
+  // avec un avertissement souple.
+  const runcodeGate = RUNCODE_GATE_DEFAULT_PCT;
+  const runcodeGateInfoByModel = new Map();
+  const ledgersForGate = loadAllLedgers();
+  let runcodePending = 0;
+  for (const m of selected) {
+    const ledger = matchLedger(m.modelKey, ledgersForGate);
+    const info = runCodeGateInfo(ledger);
+    runcodeGateInfoByModel.set(m.modelKey, info);
+    if (!info.done) runcodePending++;
+  }
+  if (runcodePending > 0) {
+    console.log(`  ${C.magenta}⚡ Tremplin RunCode ACTIVÉ : ${runcodePending} modèle(s) sans pré-examen passeront RunCode AVANT la grande école (seuil souple ${runcodeGate}%, jamais éliminatoire).${C.reset}`);
+    // Ordre de la file : RunCode déjà fait (meilleurs d'abord) → sans RunCode
+    // (triés par score d'école si connu, sinon par nom) — les modèles qui ont
+    // déjà prouvé leur niveau ouvrent la nuit.
+    selected.sort((a, b) => {
+      const ia = runcodeGateInfoByModel.get(a.modelKey) || { done: false };
+      const ib = runcodeGateInfoByModel.get(b.modelKey) || { done: false };
+      if (ia.done !== ib.done) return ia.done ? -1 : 1;
+      const pa = ia.done ? (ia.pct || 0) : ((a.metrics && a.metrics.pct) || 0);
+      const pb = ib.done ? (ib.pct || 0) : ((b.metrics && b.metrics.pct) || 0);
+      if (pb !== pa) return pb - pa;
+      return (a.displayName || '').localeCompare(b.displayName || '');
+    });
+  }
   if (manualPerModel) {
     console.log(`  ${C.gray}Mode manuel-par-modele : ecole choisie individuellement pour chaque modele.${C.reset}`);
     console.log(`  ${C.gray}Attribution :${C.reset}`);
@@ -2745,6 +2960,13 @@ async function main() {
     const health = await healthCheck(m.modelKey);
     if (!health.ok) {
       console.log(`  ${C.red}Health check ÉCHEC : ${health.reason}${C.reset}`);
+      // Architecture GGUF inconnue du runtime (HTTP 400 « Failed to load
+      // model » au health check) : registre + avertissement complet
+      // (tâche 2026-09-15).
+      if (archWarning.isArchitectureError(health.reason)) {
+        archWarning.recordIncompatible(m.modelKey, { reason: health.reason, displayName: m.displayName, publisher: m.publisher, quantization: m.quant });
+        console.log(archWarning.incompatibleWarningText(m.modelKey, { reason: health.reason }));
+      }
       console.log(`  ${C.gray}Déchargement et passage au modèle suivant.${C.reset}`);
       unloadAll();
       autoBlacklist(m.modelKey, `health check échoué — ${health.reason}`);
@@ -2763,6 +2985,47 @@ async function main() {
     if (m.quant && m.quant !== '?') {
       modelExtraArgs.push(`--quantization=${m.quant}`);
     }
+
+    // --- Tremplin RunCode (tâche 2026-09-11c) ---
+    // Modèle sans pré-examen RunCode au carnet → RunCode d'abord. Le parcours
+    // suit la scolarité de la première école planifiée (LIGHT→Primaire,
+    // STANDARD→College-Lycee, EXPERT/DOCTORAT→Universite). JAMAIS éliminatoire :
+    // si le pct est sous le seuil, l'école est lancée quand même avec un
+    // simple avertissement (le tri des files futures tiendra compte du pct).
+    const gateInfo = runcodeGateInfoByModel.get(m.modelKey) || { done: false };
+    if (!gateInfo.done) {
+      const firstSchoolKey = (modelSchools[0] && modelSchools[0].key) || 'auto';
+      const PARCOURS_BY_SCHOOL = { LIGHT: 'Primaire', STANDARD: 'College-Lycee', EXPERT: 'Universite', DOCTORAT: 'Universite' };
+      const parcours = PARCOURS_BY_SCHOOL[firstSchoolKey] || 'Primaire';
+      console.log(`\n  ${C.magenta}⚡ Pré-examen RunCode (${parcours}) — le tremplin mesure les aptitudes avant la grande école.${C.reset}`);
+      const rcBench = await runRunCodeExam(m.modelKey, modelExtraArgs, parcours, TIER_TIMEOUT_MS * 2);
+      const rcMins = (rcBench.durationMs / 60000).toFixed(1);
+      if (rcBench.skipped) {
+        console.log(`  ${C.yellow}[--skip] Tremplin écourté — passage au modèle suivant.${C.reset}`);
+        results.push({ model: m, school: 'runcode', ok: false, reason: 'skipped', durationMs: rcBench.durationMs });
+        modelSkipped = true;
+        continue;
+      }
+      // Recharge le carnet pour lire le résultat du pré-examen.
+      const rcLedger = matchLedger(m.modelKey, loadAllLedgers());
+      const rcInfo = runCodeGateInfo(rcLedger);
+      runcodeGateInfoByModel.set(m.modelKey, rcInfo);
+      if (rcInfo.done && rcInfo.pct != null) {
+        const under = rcInfo.pct < runcodeGate;
+        console.log(`  ${under ? C.yellow : C.green}[${nowClock()}] Tremplin terminé en ${rcMins} min — pré-examen ${rcInfo.pct}%${rcInfo.specialite ? ` (spécialité ${rcInfo.specialite.toUpperCase()})` : ''}.${C.reset}`);
+        if (under) {
+          // Ton souple : pas d'élimination, juste une orientation.
+          console.log(`  ${C.yellow}Pré-examen sous le seuil ${runcodeGate}% : la grande école reste ouverte, mais ce modèle n'est pas recommandé pour un run complet.${C.reset}`);
+        }
+      } else {
+        console.log(`  ${C.yellow}[${nowClock()}] Tremplin interrompu après ${rcMins} min (carnet RunCode absent) — la grande école continue normalement.${C.reset}`);
+      }
+    } else if (gateInfo.pct != null && gateInfo.pct < runcodeGate) {
+      // Modèle déjà testé au tremplin avec un pct sous le seuil : avertissement
+      // souple (jamais éliminatoire), la grande école reste ouverte.
+      console.log(`  ${C.yellow}⚡ Tremplin ${gateInfo.pct}% (sous le seuil ${runcodeGate}%) : modèle non recommandé pour un run complet — passage quand même.${C.reset}`);
+    }
+
     for (let j = 0; j < modelSchools.length; j++) {
       const school = modelSchools[j];
       console.log(`\n  ${C.bold}${C.cyan}=== ECOLE ${j + 1}/${modelSchools.length} - ${school.label} ===${C.reset}`);
@@ -2879,6 +3142,16 @@ async function main() {
     console.log(`  ${icon} ${r.model.displayName.padEnd(28)}${quantTag}${schoolTag} ${C.gray}${mins} min${C.reset}${reason}${blTag}`);
   }
 
+  // --- Rappel des modèles incompatibles (tâche 2026-09-15) ---
+  // Si le batch a détecté au moins un modèle dont l'architecture GGUF n'est
+  // pas supportée par le runtime llama.cpp, on réaffiche la liste complète
+  // des incompatibles à la fin du bilan : rappel de retélécharger le GGUF
+  // (Hugging Face / LM Studio) quand le support sera ajouté.
+  const incompatibleSeen = results.filter(r => !r.ok && (r.reason === 'load_failed') && r.model && archWarning.loadIncompatible()[r.model.modelKey]);
+  if (incompatibleSeen.length > 0) {
+    archWarning.printIncompatibleList();
+  }
+
   console.log(`\n  ${C.gray}Rapports : Export-Rapports/<date>/<ecole>/<niveau>/rapport_v3_*.md${C.reset}`);
   console.log(`  ${C.gray}Classement : Export-Rapports/classement.html (et classement.md)${C.reset}`);
   console.log(`  ${C.gray}Logs : logs/benchgo_*.log${C.reset}\n`);
@@ -2906,6 +3179,7 @@ async function main() {
 // main() n'est lancé que lorsqu'on exécute ce script directement.
 module.exports = {
   listLlmModels,
+  printModelsList,
   matchLedger,
   normalizeForMatch,
   SCHOOLS,
@@ -2931,7 +3205,9 @@ module.exports = {
   runStatusFromHistory,
   healthCheck,
   autoBlacklist,
-  NON_LLM_PATTERNS
+  NON_LLM_PATTERNS,
+  loadAllLedgers,
+  groupModelsByStatus
 };
 
 if (require.main === module) {

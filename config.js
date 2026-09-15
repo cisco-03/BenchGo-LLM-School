@@ -320,6 +320,36 @@ async function fetchModelNameFromLMStudio() {
   }
 }
 
+// Liste TOUS les modèles LM Studio (endpoint v0) avec leur état (loaded /
+// not-loaded), quantification, architecture et éditeur. Contrairement à
+// fetchModelNameFromLMStudio (/v1/models, ordre arbitraire du serveur), cette
+// fonction renvoie la liste complète pour afficher un menu de choix numéroté
+// dans le questionnaire de démarrage : l'utilisateur voit ses modèles et
+// choisit par numéro, au lieu de se voir imposer data[0] (souvent pas le modèle
+// attendu). Retourne [] si LM Studio est injoignable.
+async function fetchAllModelsFromLMStudio() {
+  try {
+    const response = await fetch(LM_STUDIO_MODELS_V0_URL, {
+      method: "GET",
+      headers: { "Content-Type": "application/json" }
+    });
+    if (!response.ok) return [];
+    const data = await response.json();
+    if (!Array.isArray(data.data)) return [];
+    return data.data
+      .filter(m => m && (m.id || m.name))
+      .map(m => ({
+        name: m.id || m.name,
+        quantization: m.quantization || null,
+        arch: m.arch || null,
+        publisher: m.publisher || null,
+        state: m.state || null
+      }));
+  } catch (e) {
+    return [];
+  }
+}
+
 // Récupère les métadonnées riches d'un modèle depuis l'endpoint v0 de LM Studio.
 // Contrairement à /v1/models (qui ne donne que l'id), /api/v0/models renvoie la
 // quantification (Q4_K_M, Q5_K_S, Q8_0...), l'architecture, l'éditeur et l'état.
@@ -392,6 +422,7 @@ module.exports = {
   parseCliArgs,
   detectProfileFromModelName,
   fetchModelNameFromLMStudio,
+  fetchAllModelsFromLMStudio,
   fetchModelMetadataFromLMStudio,
   selfProfiling
 };

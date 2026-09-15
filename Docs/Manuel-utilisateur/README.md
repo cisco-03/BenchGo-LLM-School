@@ -28,3 +28,13 @@ Ce dossier contient la documentation utilisateur complète pour lancer et exploi
 - Un rapport Markdown complet dans `Export-Rapports/`
 - Un fichier de logs horodaté dans `logs/`
 - Un score global, un score obligatoire, une note A-F, et un verdict
+
+## Mode alternatif : RunCode (examen pur code natif)
+
+En complément du benchmark standard (sandbox VM), le mode **RunCode** (`node
+runner.js --exam-code`) fait passer un examen de débugging code natif par un
+professeur maître absolu : 3 parcours scolaires (Primaire, Collège-Lycée,
+Université), 1 exercice aléatoire par classe parmi 16 langages, verdict final
+de **spécialité** (le domaine d'excellence du modèle). Les résultats comptent
+pour le classement général (badge `⚡ RunCode · Turbo`). Commandes dans
+[02-commandes.md](02-commandes.md#runcode--examen-pur-code-natif-mode-turbo).

@@ -723,6 +723,19 @@ async function main() {
   models.length = 0;
   for (const m of filteredModels) models.push(m);
 
+  // --- Normalisation des modèles :batch (asynchrones) vers le chat temps réel ---
+  // Les variantes :batch d'OpenRouter ne sont pas testables via /v1/chat/completions.
+  // Si un modèle se termine par :batch, on le convertit automatiquement en sa version
+  // temps réel et on avertit l'utilisateur.
+  for (let i = 0; i < models.length; i++) {
+    if (/:batch$/i.test(models[i])) {
+      const unbatched = models[i].replace(/:batch$/i, '');
+      console.log(`  ${C.yellow}⚠ Modèle :batch détecté (${models[i]}) : réservé à l'API asynchrone OpenRouter.${C.reset}`);
+      console.log(`  ${C.green}✔ Converti automatiquement en modèle temps réel : ${unbatched}${C.reset}`);
+      models[i] = unbatched;
+    }
+  }
+
   const profileLabel = (CLOUD_PROFILES.find(p => p.key === profile) || {}).label || profile;
   // En mode AUTO, chaque modèle reçoit son profil individuel (résolu au moment
   // du run). On affiche l'attribution dès le résumé pour validation visuelle.

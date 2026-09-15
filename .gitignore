@@ -89,6 +89,9 @@ Docs/Screens/**
 !/submissions/
 submissions/**
 
+# --- 8. Coffre-fort pédagogique (Secret) ---
+.teacher-vault/
+
 # =============================================================================
 # Données SENSIBLES / INTERNES — NE PAS COMMITER (ignorées par le "*" ci-dessus) :
 #   Memories-BenchGo/    -> mémoire interne de dev (Kilo Memory, issues-fixes, etc.)
@@ -101,3 +104,6 @@ submissions/**
 #   Docs/Modeles-exclure/ -> dossier vide de travail local
 #   fichiers racine jetables (ex: "c", ")") -> ignorés automatiquement
 # =============================================================================
+
+# --- 9. Documentation Logseq serveur MCP ---
+Logseq-BenchGo/

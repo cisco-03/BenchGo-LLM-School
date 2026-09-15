@@ -70,6 +70,13 @@ const HELP_TEXT = `
   \x1b[1m--restore-carnets\x1b[0m      Restaure les carnets disparus depuis .carnet-backup/, puis exit.
   \x1b[1m--no-update-check\x1b[0m      Désactive l'avis de mise à jour au démarrage.
   \x1b[1m--hybrid\x1b[0m             Mode nuit hybride : CLI + auto-soumission GitHub si seuil atteint.
+  \x1b[1m--exam-code\x1b[0m          RunCode : examen pur code natif (entretien de vérité + débugging
+                          multi-langage, 1 exercice aléatoire par classe). Carton rouge si
+                          mensonge expert. Verdict final : spécialité du modèle (langage
+                          d'excellence) + carnet (compte pour le classement général).
+  \x1b[1m--parcours=\x1b[0m           RunCode : parcours scolaire Primaire | College-Lycee | Universite
+                          (défaut : déduit du profil/du nom du modèle).
+                          Ex: node runner.js --provider=groq --model=llama-3.3-70b-versatile --exam-code
 
 \x1b[1mEXEMPLES\x1b[0m
   \x1b[90m# Benchmark local complet (LM Studio) en auto-détection\x1b[0m

@@ -196,6 +196,33 @@ node runner.js --no-update-check
 > 📖 Voir le [chapitre 8 — Communauté & classement participatif](./08-communaute.md)
 > pour le détail complet (token GitHub, détection des nouveaux modèles, etc.)
 
+### Runcode — examen pur code natif (mode turbo)
+
+```powershell
+# Interactif (questionnaire de démarrage : choisit provider + modèle)
+node runner.js --exam-code
+
+# Parcours forcé (défaut : déduit du profil/du nom du modèle)
+node runner.js --exam-code --parcours=Primaire
+node runner.js --exam-code --parcours=College-Lycee
+node runner.js --exam-code --parcours=Universite
+
+# Modèle local LM Studio
+node runner.js --provider=lmstudio --model=<modèle> --exam-code
+
+# Modèle cloud
+node runner.js --provider=openrouter --model=<slug:free> --exam-code
+
+# Professeur custom (défaut : groq/llama-3.3-70b-versatile)
+node runner.js --provider=openrouter --model=<slug:free> --exam-code --teacher-provider=groq --teacher-model=llama-3.3-70b-versatile --teacher-api-key=<clé>
+```
+
+> RunCode **court-circuite** le benchmark standard (`process.exit(0)` après l'examen).
+> Le résultat est enregistré dans le carnet (école `RunCode-Primaire` /
+> `RunCode-College-Lycee` / `RunCode-Universite`) et **compte pour le classement
+> général** avec le badge `⚡ RunCode · Turbo`. Journal de dépannage :
+> `Export-Rapports/exam_*.log`.
+
 ---
 
 ## Avis de mise à jour disponible

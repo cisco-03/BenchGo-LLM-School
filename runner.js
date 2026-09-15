@@ -22,8 +22,10 @@ process.on('uncaughtException', (err) => {
   process.exit(1);
 });
 
+const { runAdaptiveSchoolExam } = require('./adaptive-exam');
 const fs = require('fs');
 const path = require('path');
+const { spawnSync } = require('child_process');
 const readline = require('readline');
 const logger = require('./logger');
 const { PROFILES, CLASSE_NAMES, tierToClasseNum, parseCliArgs, detectProfileFromModelName, fetchModelNameFromLMStudio, fetchModelMetadataFromLMStudio, OPTIONAL_BONUS_PCT, selfProfiling, TEACHER_CONFIG, PROFILING_TIMEOUT_MS, PROFILING_WAITING_MESSAGES, POST_PROFILING_WAITING_MESSAGES, REASONING_WAITING_MESSAGES } = require('./config');
@@ -59,6 +61,7 @@ const { isRattrapageEligibleProfile, shouldReplaceBestResult, explainTechnicalEr
 const hybridMode = require('./hybrid-mode');
 const { exportCsv: exportRunsCsv, detectUnstableModels } = scoreLedger;
 const { resolveOpenRouterSlug, resolveKiloSlug } = require('./model-resolver');
+const archWarning = require('./arch-warning');
 const { runSubmitAction } = require('./submit-action');
 
 const DEFAULT_CONTEXT_LIMIT_TOKENS = 16384;
@@ -1144,6 +1147,8 @@ async function main() {
     const rawCli = process.argv.slice(2);
     const hasRunIntent = rawCli.some(a => a.startsWith('--provider=') || a.startsWith('--preset=')) ||
                          rawCli.some(a => !a.startsWith('--'));
+    // NB : --exam-code est traité plus bas, APRES résolution du provider/modèle
+    // et construction de queryFn (l'adaptateur studentClient en dépend).
     if (rawCli.includes('--submit') && !hasRunIntent) {
       const preCli = parseCliArgs();
       logger.info('CLI: action autonome --submit (sans run)');
@@ -1577,7 +1582,24 @@ async function main() {
   const isCloudMode = Boolean(resolvedProvider);
   const providerConfig = isCloudMode ? { provider: resolvedProvider, model: resolvedCloudModel, apiKey: resolvedApiKey, endpoint: resolvedEndpoint } : null;
   const queryFn = isCloudMode ? queryLLMCloud : queryLLMLocal;
-  let profileArg = resolvedProfileArgExplicit || (isCloudMode ? 'FRONTIER' : 'STANDARD');
+
+  // --- Profil par défaut selon le type de provider ---
+  // FRONTIER (Post-Doctorat) est réservé aux modèles cloud de pointe. Pour les
+  // providers LOCAUX (lmstudio, ollama, custom) utilisés via --provider=, on ne
+  // JAMAIS impose FRONTIER par défaut : un modèle local de 12B n'a rien à faire
+  // en Post-Doctorat. On détecte le profil depuis le nom du modèle (ex: "12b"
+  // -> STANDARD), avec repli STANDARD. FRONTIER reste le défaut des providers
+  // cloud distants (openrouter, openai, groq, kilo, etc.) — comportement historique.
+  const LOCAL_CLOUD_PROVIDERS = new Set(['lmstudio', 'ollama', 'custom']);
+  function defaultProfileForCloud(provider, modelName) {
+    if (provider && LOCAL_CLOUD_PROVIDERS.has(provider.toLowerCase())) {
+      const { detected } = detectProfileFromModelName(modelName || '');
+      if (detected) return detected;
+      return 'STANDARD';
+    }
+    return 'FRONTIER';
+  }
+  let profileArg = resolvedProfileArgExplicit || (isCloudMode ? defaultProfileForCloud(resolvedProvider, resolvedCloudModel) : 'STANDARD');
   const contextLimitTokens = resolvedContextLimit || DEFAULT_CONTEXT_LIMIT_TOKENS;
   let preKnownModelName = isCloudMode ? resolvedCloudModel : null;
   logger.info(`Professeur : ${teacherConfigResolved && teacherConfigResolved.enabled ? `activé (${teacherConfigResolved.provider || 'openrouter'})` : 'désactivé (auto-analyse classique)'}`);
@@ -1626,6 +1648,224 @@ async function main() {
   // Lance l'auto-updater pour ajouter les exercices manquants et les points
   updateTiers();
 
+  // --- Avertissement préventif « modèle non compatible » (tâche 2026-09-15) ---
+  // Si le modèle figure déjà au registre des incompatibles (architecture GGUF
+  // inconnue du runtime llama.cpp de LM Studio, ex: k2-horizon), on avertit
+  // TOUT DE SUITE l'utilisateur (grande école ET RunCode) au lieu de le laisser
+  // découvrir l'échec pendant l'examen. Le registre permet de retélécharger le
+  // GGUF sur Hugging Face quand le support llama.cpp sera ajouté (2-3 semaines).
+  if (!isCloudMode) {
+    const knownIncompatName = preKnownModelName || null;
+    if (knownIncompatName && archWarning.loadIncompatible()[knownIncompatName]) {
+      console.log(archWarning.incompatibleWarningText(knownIncompatName, archWarning.loadIncompatible()[knownIncompatName]));
+      console.log('  \x1b[33mLe run continue quand même (au cas où le runtime aurait été mis à jour depuis) — échec attendu si non corrigé.\x1b[0m\n');
+      logger.warn(`Modèle ${knownIncompatName} présent au registre des incompatibles (arch non supportée) — avertissement affiché.`);
+    }
+  }
+
+  // --- --exam-code : RunCode (Examen Pur Code Natif) ---
+  // Lancé APRES le questionnaire interactif / parsing CLI afin que queryFn,
+  // providerConfig et teacherConfigResolved soient résolus. On construit un
+  // adaptateur studentClient qui expose l'API .generate() attendue par
+  // adaptive-exam.js au-dessus de queryFn (signature runner : prompt, difficulty,
+  // tierId, isMandatory, spinner, options).
+  //
+  // Interactivité (tâche 2026-09-09) : chaque question de l'examen passe par un
+  // cycle Spinner complet (start -> streaming live du raisonnement/réponse ->
+  // stop). L'utilisateur VOIT le professeur poser la question (prompt affiché),
+  // l'élève réfléchir (💭 tokens/s) et répondre (✍) — plus jamais d'écran figé.
+  // À la fin de l'examen, le modèle local est DÉCHARGÉ automatiquement
+  // (lms unload --all pour LM Studio, ollama stop pour Ollama).
+  if (process.argv.slice(2).includes('--exam-code')) {
+    const examModelName = isCloudMode ? resolvedCloudModel : (preKnownModelName || 'eleve-local');
+    // Parcours RunCode : --parcours=Primaire|College-Lycee|Universite en CLI.
+    // Défaut : déduire le parcours du profil BenchGo auto (LIGHT -> Primaire,
+    // STANDARD -> College-Lycee, EXPERT -> Universite), repli Primaire.
+    // Le parcours suit la même scolarité que le benchmark standard : un modèle
+    // 2B ne passe pas l'Université (cf. détective de taille detectProfileFromModelName).
+    const parcoursArg = (process.argv.find(a => a.startsWith('--parcours=')) || '').split('=')[1] || null;
+    const PROFILE_TO_PARCOURS = { LIGHT: 'Primaire', STANDARD: 'College-Lycee', EXPERT: 'Universite' };
+    const autoProfile = resolvedProfileArgExplicit
+      || (isCloudMode ? defaultProfileForCloud(resolvedProvider, resolvedCloudModel) : null);
+    let examParcours = null;
+    if (parcoursArg && ['Primaire', 'College-Lycee', 'Universite'].includes(parcoursArg)) examParcours = parcoursArg;
+    else if (autoProfile && PROFILE_TO_PARCOURS[autoProfile]) examParcours = PROFILE_TO_PARCOURS[autoProfile];
+    else {
+      // Détection depuis le nom du modèle local (ex: "12b" -> STANDARD).
+      const { detected } = detectProfileFromModelName(examModelName || '');
+      examParcours = (detected && PROFILE_TO_PARCOURS[detected]) || 'Primaire';
+    }
+    const PARCOURS_ECOLE = { Primaire: 'RunCode-Primaire', 'College-Lycee': 'RunCode-College-Lycee', Universite: 'RunCode-Universite' };
+    logger.info(`RunCode: parcours résolu = ${examParcours} (--parcours=${parcoursArg || 'aucun'}, profil auto = ${autoProfile || 'aucun'}, élève = ${examModelName})`);
+    console.log('\n\x1b[1;36m━━━ 🏛️ RUNCODE — EXAMEN PUR CODE NATIF ━━━\x1b[0m');
+    console.log(`  \x1b[90mÉlève     : ${examModelName}\x1b[0m`);
+    console.log(`  \x1b[90mParcours  : ${examParcours}\x1b[0m`);
+    console.log(`  \x1b[90mProfesseur : ${teacherConfigResolved && teacherConfigResolved.enabled ? `${teacherConfigResolved.provider} (${teacherConfigResolved.model || 'auto'})` : 'désactivé'}\x1b[0m`);
+    console.log("  \x1b[90mSuivi     : les questions du professeur et la réflexion de l'élève s'affichent EN DIRECT.\x1b[0m\n");
+    const spinnerExam = new Spinner('Examen RunCode en cours...');
+    const studentClient = {
+      async generate(_model, prompt, opts = {}) {
+        const maxTokens = (opts && opts.max_tokens) || 256;
+        const temp = (opts && opts.temperature !== undefined) ? opts.temperature : 0.0;
+        const label = (opts && opts.spinnerLabel) || 'Examen RunCode en cours...';
+        spinnerExam.label = label;
+        spinnerExam.tokenCount = 0;
+        spinnerExam.charCount = 0;
+        spinnerExam.start();
+        try {
+          const resp = await queryFn(prompt, 'EASY', -1, true, spinnerExam, {
+            contextLimitTokens,
+            providerConfig,
+            maxTokens,
+            temperature: temp
+          });
+          spinnerExam.stop('Réponse reçue');
+          return (resp && resp.content) || '';
+        } catch (err) {
+          spinnerExam.fail('Appel de l\'élève échoué');
+          throw err;
+        }
+      }
+    };
+    try {
+      const result = await runAdaptiveSchoolExam(examModelName, studentClient, {
+        teacherProvider: teacherConfigResolved && teacherConfigResolved.provider,
+        teacherModel: teacherConfigResolved && teacherConfigResolved.model,
+        teacherApiKey: teacherConfigResolved && teacherConfigResolved.apiKey,
+        parcoursRunCode: examParcours,
+        profileBenchgo: autoProfile
+      });
+      console.log('\n================================================================');
+      console.log(`🏆 BILAN FINAL : ${result.student}`);
+      console.log(`🎓 Diplôme : ${result.highestClassPassed} (${result.parcours})`);
+      if (result.disqualified) {
+        console.log(`🚫 STATUT : EXPULSÉ`);
+        console.log(`Raison : ${result.disqualificationReason}`);
+      } else {
+        console.log(`✅ STATUT : TERMINÉ (${result.score}/${result.max} exercices réussis)`);
+      }
+      if (result.specialty) {
+        console.log(`🌟 SPÉCIALITÉ : ${result.specialty.language.toUpperCase()}${result.specialty.total > 0 ? ` (${result.specialty.passed}/${result.specialty.total} réussis, ${Math.round(result.specialty.rate * 100)}%)` : ''}`);
+        console.log(`   Verdict du professeur : ${result.specialty.verdict}`);
+      }
+      if (result.details && result.details.length) {
+        console.log('--- Détails par classe ---');
+        for (const d of result.details) {
+          const attemptTag = d.attempts > 1 ? ' (budget étendu)' : '';
+          console.log(`  ${d.class.padEnd(10)} ${d.language.toUpperCase().padEnd(12)} ${d.passed ? '✅' : '❌'}${attemptTag} (${d.latency} ms)`);
+        }
+      }
+      console.log('================================================================\n');
+
+      // --- Carnet de scores RunCode (compte pour le classement général) ---
+      // L'examen est enregistré comme une école RunCode-<parcours> dans le
+      // carnet du modèle : le leaderboard l'agrège comme les autres écoles.
+      // Pct simple (exercices réussis / exercices joués), la spécialité et le
+      // parcours sont embarqués dans la tentative pour l'affichage.
+      const examScore = result.score || 0;
+      const examMax = result.max || 0;
+      if (examMax > 0) {
+        const nowExam = new Date();
+        const padExam = n => String(n).padStart(2, '0');
+        const examDate = `${nowExam.getFullYear()}-${padExam(nowExam.getMonth() + 1)}-${padExam(nowExam.getDate())}`;
+        const examTime = `${padExam(nowExam.getHours())}-${padExam(nowExam.getMinutes())}-${padExam(nowExam.getSeconds())}`;
+        const examEcole = PARCOURS_ECOLE[result.parcours] || 'RunCode-Primaire';
+        const examElapsed = (result.details || []).reduce((s, d) => s + (d.latency || 0), 0);
+        const examTokens = spinnerExam.tokenCount || 0;
+        const examShort = shortNameWithQuant(examModelName, resolvedQuantization || null);
+        const examResult = {
+          profile: result.parcoursProfile || 'LIGHT',
+          ecole: examEcole,
+          runCode: true,
+          parcours: result.parcours,
+          diplome: result.highestClassPassed,
+          specialite: result.specialty ? result.specialty.language : null,
+          specialiteVerdict: result.specialty ? result.specialty.verdict : null,
+          // Bilan par langage (tremplin 2026-09-11c) : tentatives/réussites/
+          // latence moyenne par langage. Sert aux barres par langage du
+          // leaderboard + au choix de l'ordre de passage (tremplin).
+          languageStats: (result.languageStats || []),
+          declaration: result.profile || null,
+          disqualified: result.disqualified || false,
+          score: examScore,
+          max: examMax,
+          pct: Math.round((examScore / examMax) * 100),
+          mandatoryPassed: examScore,
+          mandatoryTotal: examMax,
+          globalLifeScore: 0,
+          optionalBonus: 0,
+          helpCount: 0,
+          retriedCount: 0,
+          date: examDate,
+          time: examTime,
+          reportFile: (result.examLogFile ? String(result.examLogFile).split(path.sep).join('/') : null),
+          selfProfile: null,
+          tiers: (result.details || []).map(d => ({
+            tierNum: -1,
+            runCode: true,
+            className: d.class,
+            language: d.language,
+            exerciseId: d.exerciseId,
+            passed: d.passed,
+            attempts: d.attempts
+          })),
+          quantization: resolvedQuantization || null,
+          elapsedMs: examElapsed,
+          wallMs: examElapsed,
+          tokens: examTokens,
+          tokensPerSecond: examElapsed > 0 ? Math.round((examTokens / (examElapsed / 1000)) * 100) / 100 : 0,
+          promptTokens: 0,
+          completionTokens: examTokens
+        };
+        scoreLedger.saveResult(examShort, examModelName, examResult, resolvedQuantization || null, null, isCloudMode ? resolvedProvider : 'local');
+        logger.info(`RunCode: carnet écrit (${examShort}.json, école ${examEcole}, score ${examScore}/${examMax}, spécialité=${examResult.specialite || 'aucune'}, parcours=${result.parcours})`);
+        console.log(`  \x1b[36m📓 Carnet RunCode mis à jour : ${examShort}.json (école ${examEcole}) — compte pour le classement général.\x1b[0m`);
+        try {
+          leaderboard.generateLeaderboard({ silent: true });
+          logger.info('RunCode: classement régénéré après examen (classement.html/.md).');
+        } catch (e) {
+          logger.warn('Régénération classement RunCode échouée : ' + e.message);
+          console.log(`  \x1b[33m⚠ Classement non régénéré après l'examen : ${e.message}\x1b[0m`);
+        }
+      } else {
+        logger.warn('RunCode: aucun exercice joué (max=0) — carnet NON écrit. Vérifier le coffre-fort (.teacher-vault/vault_polyglot.json).');
+      }
+    } catch (err) {
+      console.error('\x1b[31m❌ Erreur lors de l\'examen :\x1b[0m', err && err.message ? err.message : err);
+      // E507 (arch GGUF inconnue du runtime llama.cpp, ex: k2-horizon) :
+      // avertissement complet « modèle non compatible » + registre des
+      // incompatibles. Le catch du RunCode n'atteint JAMAIS main().catch
+      // (l'erreur est avalée ici) — d'où la gestion dédiée (tâche 2026-09-15).
+      if (err && (err.code === 'E507_LM_LOAD_FAILED' || /Failed to load model/i.test(err.message || ''))) {
+        const incompatModel = examModelName || 'modele-inconnu';
+        archWarning.recordIncompatible(incompatModel, {
+          reason: err.message || 'Failed to load model',
+          quantization: resolvedQuantization || null,
+          publisher: resolvedProvider || null
+        });
+        console.log(archWarning.incompatibleWarningText(incompatModel, { reason: err.message || 'Failed to load model' }));
+      }
+    } finally {
+      // --- Déchargement automatique du modèle local (VRAM/RAM libérée) ---
+      // LM Studio : lms unload --all (le daemon doit tourner — silencieux sinon).
+      // Ollama : ollama stop <modèle>. Cloud/custom : rien à décharger.
+      const prov = resolvedProvider ? String(resolvedProvider).toLowerCase() : '';
+      try {
+        if (prov === 'lmstudio') {
+          const r = spawnSync('lms', ['unload', '--all'], { encoding: 'utf8', windowsHide: true, timeout: 60000 });
+          if (r.status === 0) console.log('  \x1b[32m✔ Modèles LM Studio déchargés (lms unload --all) — VRAM/RAM libérée.\x1b[0m');
+          else console.log(`  \x1b[33m⚠ Déchargement LM Studio impossible : ${(r.stderr || r.stdout || 'daemon lms injoignable').substring(0, 120)}\x1b[0m`);
+        } else if (prov === 'ollama') {
+          const r = spawnSync('ollama', ['stop', examModelName], { encoding: 'utf8', windowsHide: true, timeout: 60000 });
+          if (r.status === 0) console.log(`  \x1b[32m✔ Modèle Ollama « ${examModelName} » déchargé (ollama stop).\x1b[0m`);
+          else console.log(`  \x1b[33m⚠ Déchargement Ollama impossible : ${(r.stderr || r.stdout || 'ollama injoignable').substring(0, 120)}\x1b[0m`);
+        }
+      } catch (_) { /* le déchargement est un confort, jamais bloquant */ }
+      logger.close();
+    }
+    process.exit(0);
+  }
+
   logger.info(`Démarrage du benchmark`);
   logger.info(`Cible demandée : ${tierArg.toUpperCase()}`);
   logger.info(`Profil explicite CLI : ${resolvedProfileArgExplicit || 'AUCUN (auto-détection)'}`);
@@ -1665,6 +1905,15 @@ async function main() {
         logger.warn(`Résolution slug ${resolvedProvider} échouée : ${resolveErr.message}. Slug gardé tel quel.`);
       }
     }
+    // --- Normalisation des modèles :batch asynchrones ---
+    // Les variantes :batch d'OpenRouter ne fonctionnent pas avec /v1/chat/completions.
+    if (resolvedCloudModel && /:batch$/i.test(resolvedCloudModel)) {
+      const unbatched = resolvedCloudModel.replace(/:batch$/i, '');
+      console.log(`  \x1b[33m⚠ Modèle :batch détecté (${resolvedCloudModel}) : réservé à l'API asynchrone OpenRouter.\x1b[0m`);
+      console.log(`  \x1b[32m✔ Remplacement automatique par la version temps réel : ${unbatched}\x1b[0m`);
+      logger.info(`Modèle :batch remplacé par sa version temps réel : ${resolvedCloudModel} -> ${unbatched}`);
+      resolvedCloudModel = unbatched;
+    }
     logger.info(`Mode cloud : provider=${resolvedProvider}, modèle=${resolvedCloudModel}`);
     console.log(`  Mode              : \x1b[1;35mCLOUD\x1b[0m`);
     console.log(`  Fournisseur       : \x1b[1;35m${resolvedProvider.toUpperCase()}\x1b[0m`);
@@ -1677,7 +1926,7 @@ async function main() {
     if (resolvedProfileArgExplicit) {
       logger.info(`Profil forcé par l'utilisateur : ${PROFILES[profileArg] ? PROFILES[profileArg].label : profileArg}`);
     } else {
-      logger.info(`Profil cloud auto : FRONTIER`);
+      logger.info(`Profil cloud auto : ${profileArg}${LOCAL_CLOUD_PROVIDERS.has(resolvedProvider.toLowerCase()) ? ' (provider local)' : ''}`);
     }
   } else if (!resolvedProfileArgExplicit) {
     logger.info(`Aucun --profile= passé. Tentative de détection automatique via LM Studio...`);
@@ -1901,6 +2150,9 @@ async function main() {
     let pingOk = false;
     let pingAttempts = 0;
     let keyLimitExceeded = false;
+    let batchModelError = false;
+    let loadFailure = false;
+    let loadFailureDetail = null;
     const MAX_PING_ATTEMPTS = 3;
 
     while (pingAttempts < MAX_PING_ATTEMPTS && !pingOk) {
@@ -1938,22 +2190,58 @@ async function main() {
         if (/Key limit exceeded/i.test(pingErr.message || '')) {
           keyLimitExceeded = true;
         }
+        // HTTP 404 "Batch API" (variante :batch OpenRouter réservée à l'API asynchrone)
+        if (pingErr.isBatchOnlyError || /only available through the Batch API|Filter Batch-Only Endpoints|E404_BATCH_ONLY_MODEL/i.test(pingErr.message || '')) {
+          batchModelError = true;
+          break; // Inutile de retenter : un endpoint asynchrone ne répondra jamais en chat temps réel
+        }
+        // E507 "Failed to load model" (HTTP 400) : le runtime llama.cpp de LM
+        // Studio ne peut PAS charger ce GGUF (architecture inconnue, ex:
+        // k2-horizon). Définitif — inutile de retenter 3 fois (tâche 2026-09-11).
+        if (pingErr.code === 'E507_LM_LOAD_FAILED' || /Failed to load model/i.test(pingErr.message || '')) {
+          loadFailure = true;
+          loadFailureDetail = pingErr.message;
+          break;
+        }
       }
-      if (!pingOk && pingAttempts < MAX_PING_ATTEMPTS) {
+      if (!pingOk && !batchModelError && pingAttempts < MAX_PING_ATTEMPTS) {
         console.log(`  \x1b[33mTentative ${pingAttempts} échouée — nouvelle tentative dans 3s...\x1b[0m`);
         await new Promise(r => setTimeout(r, 3000));
       }
     }
 
     if (!pingOk) {
-      pingSpinner.fail(`Vérification : ${MAX_PING_ATTEMPTS} tentatives échouées — le modèle ne répond pas`);
-      console.log(`\n  \x1b[31m━━━ ARRÊT : le modèle "${resolvedCloudModel}" ne répond pas (${MAX_PING_ATTEMPTS} tentatives).\x1b[0m`);
-      if (keyLimitExceeded) {
+      pingSpinner.fail(`Vérification : ${batchModelError ? 'modèle réservé à l\'API Batch asynchrone' : (loadFailure ? 'modèle non chargeable par LM Studio' : `${MAX_PING_ATTEMPTS} tentatives échouées — le modèle ne répond pas`)}`);
+      console.log(`\n  \x1b[31m━━━ ARRÊT : le modèle "${resolvedCloudModel}" ne répond pas (${batchModelError ? 'modèle Batch asynchrone' : (loadFailure ? 'échec de chargement' : `${MAX_PING_ATTEMPTS} tentatives`)}).\x1b[0m`);
+      if (batchModelError) {
+        console.log(`  \x1b[33mDiagnostic : MODÈLE BATCH ASYNCHRONE DÉTECTÉ (HTTP 404 « Batch-Only Endpoints »).\x1b[0m`);
+        console.log(`  \x1b[90m  • Le modèle "${resolvedCloudModel}" est réservé à l'API asynchrone OpenRouter (/api/beta/batches).\x1b[0m`);
+        console.log(`  \x1b[90m  • BenchGo fonctionne en temps réel (/v1/chat/completions) et ne peut pas interroger cet endpoint.\x1b[0m`);
+        const withoutBatch = resolvedCloudModel.replace(/:batch$/i, '');
+        console.log(`  \x1b[90m  • Solution : retirez le suffixe ":batch" et utilisez le modèle temps réel : "${withoutBatch}".\x1b[0m`);
+      } else if (keyLimitExceeded) {
         console.log(`  \x1b[33mDiagnostic : LIMITE DE CLÉ atteinte (HTTP 403 « Key limit exceeded »).\x1b[0m`);
         console.log(`  \x1b[90m  • Ce modèle est PAYANT (le slug n'a pas de suffixe :free).\x1b[0m`);
         console.log(`  \x1b[90m  • Ta clé OpenRouter a une limite de dépense (0$) : OpenRouter refuse de le servir.\x1b[0m`);
         console.log(`  \x1b[90m  • Les modèles :free NE consomment RIEN et passent ce contrôle — teste-les avec le suffixe :free.\x1b[0m`);
         console.log(`  \x1b[90m  • NE PAS déverrouiller la limite : elle protège ton porte-monnaie. Les :free coûtent 0$.\x1b[0m`);
+      } else if (loadFailure) {
+        console.log(`  \x1b[33mDiagnostic : ÉCHEC DE CHARGEMENT DU MODÈLE (HTTP 400 « Failed to load model »).\x1b[0m`);
+        console.log(`  \x1b[90m  • L'architecture GGUF du modèle n'est PAS supportée par le runtime llama.cpp installé dans LM Studio.\x1b[0m`);
+        console.log(`  \x1b[90m  • C'est un modèle trop récent pour le runtime (ex: k2-horizon — support llama.cpp en cours, issue #28361).\x1b[0m`);
+        console.log(`  \x1b[90m  • Vérifiez : lms load <modelKey> → « unknown model architecture: 'xxx' » = arch non supportée.\x1b[0m`);
+        console.log(`  \x1b[90m  • Solutions : mettre LM Studio + runtimes llama.cpp à jour, ou attendre le support de l'architecture.\x1b[0m`);
+        console.log(`  \x1b[33m  • Ce modèle est inutilisable en l'état : vous pouvez le SUPPRIMER de LM Studio (UI → poubelle) pour libérer ~5 Go de disque.\x1b[0m`);
+        console.log(`  \x1b[90m  • Ou l'isoler pour l'exclure des batchs : node night-batch.js --list-only puis --isoler=!<num>.\x1b[0m`);
+        // Registre des incompatibles (tâche 2026-09-15) : enregistre le modèle
+        // mis de côté + avertissement complet au lieu du simple résumé.
+        const preflightModel = resolvedCloudModel || 'modele-inconnu';
+        archWarning.recordIncompatible(preflightModel, {
+          reason: loadFailureDetail || 'Failed to load model',
+          quantization: resolvedQuantization || null,
+          publisher: resolvedProvider || null
+        });
+        console.log(archWarning.incompatibleWarningText(preflightModel, { reason: loadFailureDetail || 'Failed to load model' }));
       } else {
         console.log(`  \x1b[33mCauses possibles :\x1b[0m`);
         console.log(`  \x1b[90m  • Modèle free rate-limité upstream sur OpenRouter (HTTP 200, 0 contenu)\x1b[0m`);
@@ -1961,10 +2249,17 @@ async function main() {
         console.log(`  \x1b[90m  • Quota gratuit épuisé / clé API invalide\x1b[0m`);
         console.log(`  \x1b[90mAstuce : réessayez plus tard, utilisez un autre modèle, ou ajoutez votre propre clé provider (BYOK).\x1b[0m\n`);
       }
-      if (keyLimitExceeded) console.log('');
-      logger.error(`Pre-flight check : ${MAX_PING_ATTEMPTS} tentatives échouées — modèle indisponible${keyLimitExceeded ? ' (limite de clé OpenRouter atteinte — modèle payant)' : ''}.`);
-      throw new BenchgoError(keyLimitExceeded ? 'E506_KEY_LIMIT_EXCEEDED' : 'E505_MODEL_UNRESPONSIVE',
-        `Le modèle "${resolvedCloudModel}" ne répond pas (${MAX_PING_ATTEMPTS} tentatives) — ${keyLimitExceeded ? 'limite de dépense de la clé OpenRouter atteinte (modèle payant, clé limitée à 0$)' : 'probablement rate-limité upstream ou indisponible'}`);
+      if (keyLimitExceeded || batchModelError || loadFailure) console.log('');
+      logger.error(`Pre-flight check : arrêt — modèle indisponible${batchModelError ? ' (modèle Batch asynchrone)' : (keyLimitExceeded ? ' (limite de clé OpenRouter atteinte — modèle payant)' : (loadFailure ? ' (échec de chargement LM Studio)' : ''))}.`);
+      const errCode = batchModelError ? 'E404_BATCH_ONLY_MODEL' : (keyLimitExceeded ? 'E506_KEY_LIMIT_EXCEEDED' : (loadFailure ? 'E507_LM_LOAD_FAILED' : 'E505_MODEL_UNRESPONSIVE'));
+      const errDetail = batchModelError
+        ? `Le modèle "${resolvedCloudModel}" est réservé à l'API Batch asynchrone OpenRouter — utilisez la version temps réel sans ":batch" (${resolvedCloudModel.replace(/:batch$/i, '')})`
+        : (keyLimitExceeded
+          ? `Le modèle "${resolvedCloudModel}" ne répond pas — limite de dépense de la clé OpenRouter atteinte (modèle payant, clé limitée à 0$)`
+          : (loadFailure
+            ? `Le modèle "${resolvedCloudModel}" ne peut pas être chargé par LM Studio (architecture GGUF non supportée par le runtime llama.cpp actuel)${loadFailureDetail ? ' — ' + loadFailureDetail : ''}`
+            : `Le modèle "${resolvedCloudModel}" ne répond pas (${MAX_PING_ATTEMPTS} tentatives) — probablement rate-limité upstream ou indisponible`));
+      throw new BenchgoError(errCode, errDetail);
     }
     console.log('');
   }
@@ -3074,6 +3369,20 @@ main().catch(e => {
     // par BenchgoError.print(). On logge aussi la stack (DEBUG) pour le diagnostic.
     logger.error(`BenchgoError ${e.code} — ${e.detail || ''}`);
     logger.error(`Stack : ${e.stack}`);
+    // E507 (arch GGUF inconnue du runtime llama.cpp) : avertissement dédié
+    // « modèle non compatible » + enregistrement dans le registre des
+    // incompatibles (tâche 2026-09-15) — s'applique aussi au RunCode.
+    if (e.code === 'E507_LM_LOAD_FAILED') {
+      const mk = preKnownModelName || (isCloudMode ? resolvedCloudModel : null) || 'modele-inconnu';
+      const isNew = archWarning.recordIncompatible(mk, {
+        reason: e.detail || e.message,
+        quantization: resolvedQuantization || null,
+        publisher: isCloudMode ? resolvedProvider : null
+      });
+      if (isNew) console.log(archWarning.incompatibleWarningText(mk, { reason: e.detail || e.message }));
+      else console.log(archWarning.incompatibleWarningText(mk, { reason: e.detail || e.message }));
+      console.log('  \x1b[90mRetirer du registre (runtime mis à jour) : supprimez son entrée de .benchgo-incompatible.json puis retestez.\x1b[0m');
+    }
     e.print();
   } else {
     logger.error(`ERREUR FATALE : ${e.message}`);

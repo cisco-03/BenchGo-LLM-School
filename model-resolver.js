@@ -106,11 +106,16 @@ function loadDiskCache() {
     // Format pricing.js : { savedAt, models: { idLower: { prompt, completion } } }
     // On extrait les ids depuis obj.models. Compatibilité : si l'ancien format
     // (map plate id->{prompt,completion}) est rencontré, on prend les clés directes.
+    let keys = null;
     if (obj && obj.models && typeof obj.models === 'object') {
-      return Object.keys(obj.models);
+      keys = Object.keys(obj.models);
+    } else if (obj && typeof obj === 'object' && !obj.savedAt) {
+      keys = Object.keys(obj);
     }
-    if (obj && typeof obj === 'object' && !obj.savedAt) {
-      return Object.keys(obj);
+    if (keys) {
+      // Exclut les variantes :batch (réservées à l'API asynchrone OpenRouter,
+      // incompatibles avec /v1/chat/completions en temps réel).
+      return keys.filter(id => !id.toLowerCase().endsWith(':batch'));
     }
   } catch (_) { /* cache corrompu */ }
   return null;
@@ -140,6 +145,9 @@ async function fetchOpenRouterModels() {
     const diskMap = {};
     for (const m of all) {
       if (!m || !m.id) continue;
+      // Les variantes :batch sont réservées à l'API asynchrone /api/beta/batches
+      // et rejetées en HTTP 404 sur /v1/chat/completions temps réel.
+      if (m.id.toLowerCase().endsWith(':batch')) continue;
       ids.push(m.id);
       // Format compatible pricing.js (prix placeholder 0 — sera rafraîchi).
       const p = m.pricing || {};
@@ -266,6 +274,23 @@ function preferFreeVariant(matches) {
 //   5. Suffixe (après le /).
 function _matchSlug(raw, ids, idsSet) {
   const lower = raw.toLowerCase();
+
+  // 0. Variante :batch asynchrone OpenRouter : les endpoints :batch sont
+  // réservés à /api/beta/batches et renvoient HTTP 404 sur /v1/chat/completions.
+  // Si l'utilisateur saisit un slug se terminant par :batch, on retire le suffixe
+  // et on résout vers le modèle temps réel correspondant.
+  if (/:batch$/i.test(raw)) {
+    const unbatched = raw.replace(/:batch$/i, '');
+    const resUnbatched = _matchSlug(unbatched, ids, idsSet);
+    if (resUnbatched.resolved) {
+      return {
+        resolved: true,
+        slug: resUnbatched.slug,
+        matchedBy: 'stripped_batch',
+        suggestions: []
+      };
+    }
+  }
 
   // 1. Match exact
   if (idsSet.has(lower)) {
@@ -509,5 +534,6 @@ module.exports = {
   getOpenRouterModelIds,
   getKiloModelIds,
   normalizeSlug,
-  COMMON_ALIASES
+  COMMON_ALIASES,
+  _matchSlug
 };

@@ -86,6 +86,31 @@ Methode recommandee:
 2. Lire le message d erreur dans la section evaluation
 3. Ouvrir le dernier fichier de `logs/` pour le detail VM/PARSE/API
 
+## Probleme 8: RunCode — tous les exercices echoues ou specialite absente
+
+Cas :
+- le modèle est expulsé au carton rouge dès le 1er exercice
+- la spécialité affichée ne correspond pas à ce que le modèle sait faire
+- aucun carnet RunCode écrit (« max=0 »)
+
+Actions :
+1. Ouvrir le journal d'examen : `Export-Rapports/exam_<modele>_<ts>.log`
+2. Vérifier les traces de diagnostic :
+   - `[déclaration brute]` : ce que le modèle a réellement déclaré à l'entretien
+   - `[inventaire coffre]` : parcours + classes chargées (vault_version 1.1.0 attendu)
+   - `[pool classe X]` : les exercices candidats par classe
+   - `[tirage classe X]` : l'exercice tiré et son index
+   - `[réponse complète classe X]` : la réponse brute de l'élève
+   - `[verdict professeur brut/ERREUR]` : la réponse du professeur (ou l'erreur)
+   - `[verdict mécanique (repli)]` : le repli si le professeur est indisponible
+   - `[pool vide]` : une classe sans exercice est sautée (trou du coffre-fort)
+3. Une réponse correcte mais recalée → vérifier la regex du coffre-fort
+   (`.teacher-vault/vault_polyglot.json`) : chaque `expected_regex` doit être
+   doublement échappée (`\\s` dans le JSON = `\s` dans la regex). Après toute
+   modification du coffre : `JSON.parse` + `new RegExp` sur toutes les regex.
+4. Professeur muet → vérifier la clé du professeur (`--teacher-api-key=`) ;
+   le repli mécanique garantit toujours un verdict de spécialité.
+
 ## Bonnes pratiques
 
 - lancer depuis la racine du projet (le dossier contenant `runner.js`)

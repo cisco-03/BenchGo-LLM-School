@@ -108,12 +108,18 @@ function providerDisplay(provider, isCloud) {
 // soumis qui ne stockent pas provider/isCloud. Réplique detectIsCloudFromLedger
 // de leaderboard.js. Signaux forts uniquement :
 //   1. Slug OpenRouter ":free" (exclusif aux modèles cloud gratuits).
-//   2. Présence du profil FRONTIER dans les attempts (réservé au cloud).
+//   2. Suffixe "-cloud"/":cloud" (Ollama Cloud, ex: "gemma4:31b-cloud") — un
+//      modèle distant via le proxy ollama.com n'est JAMAIS un GGUF local
+//      (tâche 2026-09-11).
+//   3. Présence du profil FRONTIER dans les attempts (réservé au cloud).
 // Conservatrice : en cas de doute, on classe en local.
 function detectIsCloudFromCarnet(carnet) {
   const model = (carnet.model || '').trim();
-  if (!model) return false;
+  const display = (carnet.displayName || '').trim();
+  if (!model && !display) return false;
   if (/:free$/i.test(model)) return true;
+  if (/-cloud$/i.test(model) || /-cloud$/i.test(display)) return true;
+  if (/:cloud$/i.test(model) || /:cloud$/i.test(display)) return true;
   const ecoles = Object.values(carnet.ecoles || {});
   for (const ec of ecoles) {
     const attempts = (ec && ec.attempts) || [];
@@ -177,6 +183,11 @@ function aggregateCarnet(carnet) {
       completionTokens: best.completionTokens || best.tokens || 0,
       tiers: (best.tiers || []).map(t => ({
         tierNum: t.tierNum,
+        runCode: !!t.runCode,
+        language: t.language || null,
+        exerciseId: t.exerciseId || null,
+        passed: t.passed != null ? !!t.passed : null,
+        attempts: t.attempts || null,
         tierTitle: t.tierTitle || '',
         className: t.className || '',
         isMandatory: !!t.isMandatory,
@@ -206,16 +217,48 @@ function aggregateCarnet(carnet) {
     : 0;
   const mandatoryPct = mandatoryTotal > 0 ? Math.round((mandatoryPassed / mandatoryTotal) * 100) : 0;
 
+  // --- RunCode (mode turbo : examen pur code natif) ---
+  // Détecte les écoles RunCode-* et expose la spécialité/diplôme pour le badge ⚡.
+  // Calculé AVANT l'objet résultat (l'ancien code le faisait après le `return`
+  // initial : code mort, badge ⚡ jamais présent dans le classement communautaire).
+  const rcEcoles = ecoles.filter(e => /^RunCode-/i.test(e.ecole || ''));
+  let rcAgg = null;
+  if (rcEcoles.length > 0) {
+    const rcRaw = Object.values(carnet.ecoles || {}).find(v => {
+      const b = (v && v.best) || (v && v.attempts && v.attempts.length > 0 ? v.attempts.reduce((x, y) => ((y.pct || 0) >= (x.pct || 0)) ? y : x, v.attempts[0]) : null);
+      return b && b.runCode;
+    });
+    const rcBest = rcRaw ? ((rcRaw.best && rcRaw.best.runCode) ? rcRaw.best : (rcRaw.attempts || []).filter(a => a && a.runCode).sort((a, b) => (b.timestampMs || 0) - (a.timestampMs || 0))[0]) : null;
+    if (rcBest) {
+      rcAgg = {
+        ecoles: rcEcoles.map(e => e.ecole),
+        parcours: rcBest.parcours || null,
+        diplome: rcBest.diplome || null,
+        specialite: rcBest.specialite || null,
+        specialiteVerdict: rcBest.specialiteVerdict || null,
+        languageStats: rcBest.languageStats || [],
+        pct: rcBest.max > 0 ? Math.round((rcBest.score / rcBest.max) * 100) : null,
+        score: rcBest.score || 0,
+        max: rcBest.max || 0,
+        date: rcBest.date || null
+      };
+    }
+  }
+
   // Détection de l'origine (cloud vs local) : priorité aux champs explicites du
   // carnet (provider/isCloud). Pour les carnets soumis sans ces champs, on
-  // utilise l'heuristique (slug :free, profil FRONTIER) pour départager.
+  // utilise l'heuristique (slug :free, suffixe -cloud, profil FRONTIER) pour
+  // départager.
   // Les providers locaux (lmstudio, ollama, custom) sont traités comme locaux
-  // même si un ancien carnet porte isCloud=true (bug 2026-08-26).
-  const isCloud = carnet.provider
+  // même si un ancien carnet porte isCloud=true (bug 2026-08-26) — MAIS un
+  // suffixe "-cloud"/":cloud" dans le nom (Ollama Cloud, ex: "gemma4:31b-cloud")
+  // fait du modèle un modèle DISTANT : il prime sur le provider (tâche 2026-09-11).
+  const cloudByName = detectIsCloudFromCarnet(carnet) && /-(cloud|free)$/i.test(carnet.displayName || carnet.model || '');
+  const isCloud = cloudByName || (carnet.provider
     ? !LOCAL_PROVIDERS.has(String(carnet.provider).toLowerCase())
-    : Boolean(carnet.isCloud || detectIsCloudFromCarnet(carnet));
+    : Boolean(carnet.isCloud || detectIsCloudFromCarnet(carnet)));
 
-  return {
+  const result = {
     model: carnet.model || carnet.shortName || 'Inconnu',
     // Nom d affichage personnalise (corrige par l utilisateur dans le
     // leaderboard local via /api/model-displayname, puis soumis avec le
@@ -240,10 +283,11 @@ function aggregateCarnet(carnet) {
     ecoles,
     ecoleNames: ecoles.map(e => e.ecole),
     pseudo: null,
-    submittedAt: null
+    submittedAt: null,
+    // Tarif cloud estimé (pricing.js, estimation indicative).
+    cost: null,
+    runCode: rcAgg
   };
-  // Calcul du coût via pricing.js (estimation). Pour les anciens carnets sans
-  // tokens détaillés, estimateModelCost gère le fallback (promptTokens ≈ 3×completion).
   result.cost = pricing.estimateModelCost(result) || null;
   return result;
 }
@@ -501,6 +545,8 @@ function buildConsolidatedHTML(entries) {
       cost: e.cost || null,
       promptTokens: e.promptTokens || 0,
       completionTokens: e.completionTokens || 0,
+      // --- RunCode (mode turbo : examen pur code natif) ---
+      runCode: e.runCode || null,
       contributors: e.contributors || 1, pseudo: e.pseudo,
       submittedAt: e.submittedAt || null,
       cat, paramSize: psize, verdict, args,
@@ -527,7 +573,9 @@ function buildConsolidatedHTML(entries) {
           }],
           selfProfile: ec.selfProfile || null,
           tiers: (ec.tiers || []).map(t => ({
-            tierNum: t.tierNum, tierTitle: t.tierTitle || '', className: t.className || '',
+            tierNum: t.tierNum, runCode: !!t.runCode, language: t.language || null,
+            exerciseId: t.exerciseId || null, passed: t.passed != null ? !!t.passed : null, attempts: t.attempts || null,
+            tierTitle: t.tierTitle || '', className: t.className || '',
             isMandatory: !!t.isMandatory, rawResponse: t.rawResponse || null,
             evalResults: (t.evalResults || []).map(r => ({
               id: r.id, taskType: r.taskType || null, status: r.status,
@@ -1698,6 +1746,20 @@ function renderCards() {
     } else {
       originBadge = '<span class="badge local" title="Modèle local (LM Studio)">🏠 Local</span>';
     }
+    // Badge ⚡ RunCode · Turbo : le modèle a passé l'examen code natif (mode turbo).
+    // Deux modes distincts : benchmark sandbox classique vs RunCode turbo.
+    // Tremplin (tâche 2026-09-11c) : sous 40 % le badge passe en ambre (⚠
+    // orientation, jamais éliminatoire).
+    var rcBadge = '';
+    if (m.runCode) {
+      var rcTip = 'RunCode (mode turbo) : examen pur code natif réussi —';
+      if (m.runCode.specialite) rcTip += ' spécialité ' + m.runCode.specialite.toUpperCase();
+      if (m.runCode.diplome) rcTip += ' · diplôme ' + m.runCode.diplome;
+      if (m.runCode.pct != null) rcTip += ' · ' + m.runCode.pct + '%';
+      var rcGateOk = (m.runCode.pct != null && m.runCode.pct >= 40);
+      var rcCol = rcGateOk ? '#58a6ff' : '#d29922';
+      rcBadge = ' <span class="badge runcode" title="' + esc(rcTip) + '" style="color:' + rcCol + ';border-color:' + rcCol + '55;background:' + rcCol + '18">⚡ RunCode · Turbo</span>';
+    }
     var posArrow = positionArrow(m.positionDelta);
 
     var html = '<div class="card ' + cardClass + '" onclick="openModal(' + i + ')">' +
@@ -1705,7 +1767,7 @@ function renderCards() {
         '<div class="rank">' + rankDisp + '</div>' +
         '<div class="model-name">' +
           '<div class="name-line"><span class="cat-icon">' + dynCat.icon + '</span>' + esc(m.displayName || m.model) + posArrow + '</div>' +
-          '<div class="badges">' + szBadge + ' ' + originBadge + ' ' + quantBadge + ' ' + noteBadge + ' ' + contribBadge + ' ' + pseudoBadge + '</div>' +
+          '<div class="badges">' + szBadge + ' ' + originBadge + ' ' + rcBadge + ' ' + quantBadge + ' ' + noteBadge + ' ' + contribBadge + ' ' + pseudoBadge + '</div>' +
         '</div>' +
         '<div class="mini-stats">' +
           '<div class="mini-stat"><span class="lbl">%</span><span class="val" style="color:' + pc + '">' + dispPct(m.pct) + '%</span><div class="pct-bar-wrap"><div class="pct-bar-fill" style="width:' + Math.max(2,dispPct(m.pct)) + '%;background:' + pc + '"></div></div></div>' +
@@ -1800,6 +1862,49 @@ function openModal(idx) {
   if (m.note) {
     body += '<h3>📝 Note personnelle</h3>';
     body += '<div class="model-note-display" style="max-height:200px;overflow-y:auto;scrollbar-width:none;-ms-overflow-style:none;font-size:var(--fs-small);color:var(--text);white-space:pre-wrap;word-break:break-word;line-height:1.5;">' + esc(m.note) + '</div>';
+  }
+
+  // --- RunCode (mode turbo : examen pur code natif) ---
+  // Section dédiée si le modèle a un historique RunCode : parcours, diplôme,
+  // spécialité (le domaine d'excellence déterminé par le professeur) + verdict.
+  // Depuis le mode diagnostic (tâche 2026-09-11c) : barres par langage du
+  // bilan tremplin (aptitudes mesurées par langage, jamais éliminatoires).
+  if (m.runCode) {
+    var rc = m.runCode;
+    body += '<h3>⚡ RunCode · Turbo <span style="font-size:var(--fs-small);color:var(--text-dim);font-weight:400">pré-examen code natif (tremplin vers la grande école)</span></h3>';
+    body += '<div class="full-stats">';
+    body += statBox('Parcours', rc.parcours || '—');
+    body += statBox('Diplôme', rc.diplome || 'Non diplômé');
+    body += statBox('Score', (rc.score != null ? rc.score + ' / ' + rc.max : '—'));
+    body += statBoxBar('Réussite', rc.pct != null ? rc.pct + '%' : '—', rc.pct != null ? pctColor(rc.pct) : '#8b949e', rc.pct);
+    body += statBox('Spécialité', rc.specialite ? '<span style="color:#58a6ff;font-size:1.2em">' + esc(rc.specialite.toUpperCase()) + '</span>' : '—');
+    body += '</div>';
+    if (rc.specialiteVerdict) {
+      body += '<div class="report-teacher" style="margin-top:var(--space-s)">🎓 ' + esc(rc.specialiteVerdict) + '</div>';
+    }
+    // Barres par langage : le bilan d'aptitudes du tremplin. NB : pas de
+    // backticks littéraux dans ce JS inline (contrainte consolidate).
+    var rcLangs = rc.languageStats || [];
+    if (rcLangs.length > 0) {
+      body += '<div style="margin-top:var(--space-s)">';
+      body += '<div style="color:var(--text-dim);font-size:var(--fs-small);margin-bottom:6px">Aptitudes par langage (mesurées au tremplin — orientation, non éliminatoire) :</div>';
+      var rcSorted = rcLangs.slice().sort(function (a, b) { return (b.rate || 0) - (a.rate || 0); });
+      for (var rci = 0; rci < rcSorted.length; rci++) {
+        var rl = rcSorted[rci];
+        var rlPct = rl.rate != null ? rl.rate : 0;
+        var rlColor = pctColor(rlPct);
+        var rlLabel = rl.language ? String(rl.language).toUpperCase() : '?';
+        var rlDetail = rl.passed + '/' + rl.total;
+        if (rl.avgLatencyMs != null) rlDetail += ' · ' + (rl.avgLatencyMs / 1000).toFixed(1) + 's';
+        body += '<div style="display:flex;align-items:center;gap:10px;margin:4px 0">'
+          + '<span style="min-width:110px;font-size:var(--fs-small);color:var(--text)">' + esc(rlLabel) + '</span>'
+          + '<span style="flex:1;height:10px;border-radius:5px;background:var(--bg-ter);overflow:hidden">'
+          + '<span style="display:block;height:100%;width:' + Math.max(2, rlPct) + '%;background:' + rlColor + ';border-radius:5px"></span></span>'
+          + '<span style="min-width:90px;text-align:right;font-size:var(--fs-small);color:var(--text-dim)">' + esc(rlDetail) + '</span>'
+          + '</div>';
+      }
+      body += '</div>';
+    }
   }
 
   body += '<h3>Forces & Faiblesses</h3>';
@@ -1953,6 +2058,17 @@ function openModal(idx) {
     }
     for (var t of tiers) {
       body += '<div class="report-tier">';
+      // --- École RunCode (1 exercice natif par classe, pas de tier sandbox) ---
+      // Un tier RunCode porte passed/language/exerciseId au lieu d'evalResults.
+      if (t.runCode) {
+        var rcOk = t.passed;
+        var rcSt = rcOk ? '<span class="th-badge mand">✔ Réussi</span>' : '<span class="th-badge opt">✘ Recalé</span>';
+        body += '<div class="report-tier-head" onclick="toggleReport(this)"><span class="caret">▶</span><span class="th-title">' + esc(t.className || 'Classe ?') + ' — ' + esc(t.language || '?').toUpperCase() + ' (' + esc(t.exerciseId || '') + ')</span>' + rcSt + '</div>';
+        body += '<div class="report-tier-body">';
+        body += '<div class="report-empty">' + (rcOk ? 'Exercice de débugging natif réussi' : 'Exercice de débugging natif recalé') + (t.attempts > 1 ? ' (après ' + t.attempts + ' tentatives)' : '') + '.</div>';
+        body += '</div></div>';
+        continue;
+      }
       var mandBadge = t.isMandatory ? '<span class="th-badge mand">Obligatoire</span>' : '<span class="th-badge opt">Optionnel</span>';
       body += '<div class="report-tier-head" onclick="toggleReport(this)"><span class="caret">▶</span><span class="th-title">Tier ' + esc(String(t.tierNum)) + ' — ' + esc(t.tierTitle || '') + ' (' + esc(t.className || '') + ')</span>' + mandBadge + '</div>';
       body += '<div class="report-tier-body">';
@@ -2225,8 +2341,8 @@ function exportMd() {
   var lines = [];
   lines.push('# Classement Communautaire BenchGo V3 — ' + new Date().toLocaleDateString('fr-FR'));
   lines.push('');
-  lines.push('| Rang | Modèle | Quantif. | Score | % | Note | Oblig. | Santé | Bonus | Écoles | Vitesse | Temps | Lien |');
-  lines.push('|------|--------|----------|-------|---|------|--------|-------|-------|--------|---------|-------|------|');
+  lines.push('| Rang | Modèle | Quantif. | Score | % | Note | Oblig. | Santé | Bonus | Écoles | Spécialité | Vitesse | Temps | Lien |');
+  lines.push('|------|--------|----------|-------|---|------|--------|-------|-------|--------|------------|---------|-------|------|');
   for (var i = 0; i < MODELS.length; i++) {
     var m = MODELS[i];
     var medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : String(i + 1);
@@ -2234,7 +2350,9 @@ function exportMd() {
     var temps = m.elapsedMs > 0 ? fmtDurJS(m.elapsedMs) : '—';
     var oblig = m.mandatoryTotal > 0 ? (m.mandatoryPct + '%') : '—';
     var lien = m.modelUrl ? '[Voir](' + m.modelUrl + ')' : '—';
-    lines.push('| ' + medal + ' | ' + mdCell(m.displayName || m.model) + ' | ' + mdCell(m.quantization || '—') + ' | ' + m.score + '/' + m.max + ' | ' + dispPct(m.pct) + '% | ' + m.grade + ' | ' + oblig + ' | ' + m.globalLifeScore + ' PV | ' + (m.optionalBonus > 0 ? '+' + m.optionalBonus : '—') + ' | ' + m.ecoleCount + ' | ' + vit + ' | ' + temps + ' | ' + lien + ' |');
+    var spec = m.runCode && m.runCode.specialite ? String(m.runCode.specialite).toUpperCase() : '—';
+    var rcPre = m.runCode ? '⚡ ' : '';
+    lines.push('| ' + medal + ' | ' + rcPre + mdCell(m.displayName || m.model) + ' | ' + mdCell(m.quantization || '—') + ' | ' + m.score + '/' + m.max + ' | ' + dispPct(m.pct) + '% | ' + m.grade + ' | ' + oblig + ' | ' + m.globalLifeScore + ' PV | ' + (m.optionalBonus > 0 ? '+' + m.optionalBonus : '—') + ' | ' + m.ecoleCount + ' | ' + mdCell(spec) + ' | ' + vit + ' | ' + temps + ' | ' + lien + ' |');
   }
   downloadTextFile(lines.join('\\n'), 'classement_communautaire_' + new Date().toISOString().slice(0,10) + '.md', 'text/markdown;charset=utf-8');
   showToast('Markdown exporté (' + MODELS.length + ' modèles)', true);

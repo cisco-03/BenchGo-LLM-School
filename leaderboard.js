@@ -365,6 +365,9 @@ function aggregateLedger(ledger) {
     // signal fort prime sur la classification par provider, sinon un modèle
     // cloud dont le provider est dans LOCAL_PROVIDERS (ollama, custom...) se
     // retrouverait à tort dans la section des modèles locaux.
+    // Suffixe "-cloud"/":cloud" (Ollama Cloud, ex: "gemma4:31b-cloud") : signal
+    // fort équivalent — un modèle cloud via le daemon local doit JAMAIS être
+    // classé local, même sans école FRONTIER (tâche 2026-09-11).
     isCloud: (ecoles.some(e => e.ecole === 'Post-Doctorat')
       || detectIsCloudFromLedger(ledger)
       || (ledger.provider
@@ -377,10 +380,59 @@ function aggregateLedger(ledger) {
     promptTokens: totalPromptTokens,
     completionTokens: totalCompletionTokens
   };
+  // --- RunCode (mode turbo : examen pur code natif) ---
+  // Un modèle a un historique RunCode si au moins une école RunCode-* existe
+  // dans le carnet (RunCode-Primaire, RunCode-College-Lycee, RunCode-Universite).
+  // Sert au badge ⚡ RunCode · Turbo sur la carte + la modale (2 modes distincts :
+  // benchmark sandbox classique vs examen code natif turbo).
+  const runcodeEcoles = (ecoles || []).filter(e => /^RunCode-/i.test(e.ecole || ''));
+  if (runcodeEcoles.length > 0) {
+    const lastRc = runcodeEcoles[runcodeEcoles.length - 1];
+    agg.runCode = {
+      ecoles: runcodeEcoles.map(e => e.ecole),
+      diplome: null,
+      specialite: null,
+      specialiteVerdict: null
+    };
+    // Récupère les détails (diplôme, spécialité) depuis le carnet brut.
+    const rcRaw = (ledger.ecoles && Object.values(ledger.ecoles).find(v => {
+      const best = normalizeEcoleEntryLb(v).best;
+      return best && /^RunCode-/i.test(best.ecole || '');
+    })) || null;
+    const rcBest = rcBestOf(rcRaw);
+    if (rcBest) {
+      agg.runCode.diplome = rcBest.diplome || null;
+      agg.runCode.specialite = rcBest.specialite || null;
+      agg.runCode.specialiteVerdict = rcBest.specialiteVerdict || null;
+      // Bilan par langage du tremplin (tentatives/réussites/latence par
+      // langage) : alimente les barres de la modale + l'orientation grande
+      // école (tâche 2026-09-11c).
+      agg.runCode.languageStats = rcBest.languageStats || [];
+      // Dernière école RunCode : on réutilise son pct/score pour l'affichage turbo.
+      agg.runCode.pct = lastRc ? lastRc.pct : null;
+      agg.runCode.score = lastRc ? lastRc.score : null;
+      agg.runCode.max = lastRc ? lastRc.max : null;
+      agg.runCode.parcours = rcBest.parcours || null;
+      agg.runCode.date = rcBest.date || null;
+    }
+  } else {
+    agg.runCode = null;
+  }
   // Calcul du coût via pricing.js. Pour les anciens carnets sans tokens
   // détaillés, estimateModelCost gère le fallback (promptTokens ≈ 3×completion).
   agg.cost = pricing.estimateModelCost(agg) || null;
   return agg;
+}
+
+// Meilleure tentative RunCode d'une entrée d'école brute (toutes écoles RunCode-*).
+function rcBestOf(raw) {
+  if (!raw) return null;
+  const attempts = (raw && raw.attempts && Array.isArray(raw.attempts)) ? raw.attempts : (raw.best ? [raw.best] : []);
+  let best = null;
+  for (const a of attempts) {
+    if (a && a.runCode && (!best || (a.timestampMs || 0) > (best.timestampMs || 0))) best = a;
+  }
+  return best;
 }
 
 // Heuristique de detection de l origine (cloud vs local) d un modele, pour
@@ -391,17 +443,25 @@ function aggregateLedger(ledger) {
 // donc uniquement des signaux FORTS et sans ambiguite :
 //   1. Slug OpenRouter ":free" (marqueur exclusif aux modeles cloud gratuits —
 //      les modeles locaux n utilisent jamais ce suffixe).
-//   2. Presence du profil FRONTIER dans les attempts (seuls les modeles cloud
+//   2. Suffixe "-cloud" / ":cloud" (marqueur Ollama Cloud — ex: "gemma4:31b-cloud",
+//      modèle distant servi par le proxy ollama.com, JAMAIS un GGUF local).
+//   3. Presence du profil FRONTIER dans les attempts (seuls les modeles cloud
 //      sont testes en FRONTIER — cf. config.js, profil reserve au cloud).
 // Conservative : en cas de doute, on considere le modele comme local. Les
 // modeles cloud payants sans suffixe :free et sans tentative FRONTIER aboutie
 // restent classes en local jusqu a une migration manuelle (--mark-cloud).
 function detectIsCloudFromLedger(ledger) {
   const model = (ledger.model || '').trim();
-  if (!model) return false;
+  const display = (ledger.displayName || '').trim();
+  if (!model && !display) return false;
   // Signal 1 : suffixe OpenRouter ":free".
   if (/:free$/i.test(model)) return true;
-  // Signal 2 : au moins une tentative enregistree avec le profil FRONTIER.
+  // Signal 2 : suffixe Ollama Cloud ("-cloud" en fin de nom, ex: "gemma4:31b-cloud").
+  // Tâche 2026-09-11 : un modèle Ollama cloud via le daemon local (proxy
+  // ollama.com) doit JAMAIS être classé local, même sans école FRONTIER.
+  if (/-cloud$/i.test(model) || /-cloud$/i.test(display)) return true;
+  if (/:cloud$/i.test(model) || /:cloud$/i.test(display)) return true;
+  // Signal 3 : au moins une tentative enregistree avec le profil FRONTIER.
   const ecoles = Object.values(ledger.ecoles || {});
   for (const ec of ecoles) {
     const attempts = (ec && ec.attempts) || [];
@@ -772,6 +832,9 @@ function buildLeaderboardHTML(entries) {
       cost: e.cost || null,
       promptTokens: e.promptTokens || 0,
       completionTokens: e.completionTokens || 0,
+      // --- RunCode (mode turbo : examen pur code natif) ---
+      // Exposé au client pour le badge ⚡ sur la carte + section dédiée modale.
+      runCode: e.runCode || null,
       verdict,
       cat,
       paramSize: psize,
@@ -816,6 +879,12 @@ function buildLeaderboardHTML(entries) {
             className: t.className,
             isMandatory: t.isMandatory,
             rawResponse: t.rawResponse || null,
+            // Champs RunCode (école RunCode-*) : 1 exercice natif par classe.
+            runCode: !!t.runCode,
+            language: t.language || null,
+            exerciseId: t.exerciseId || null,
+            passed: t.passed != null ? !!t.passed : null,
+            attempts: t.attempts || null,
             evalResults: (t.evalResults || []).map(r => ({
               id: r.id,
               taskType: r.taskType || null,
@@ -2528,6 +2597,22 @@ function renderCards() {
     } else {
       originBadge = ' <span class="badge local" title="Modèle local (LM Studio)">🏠 Local</span>';
     }
+    // Badge ⚡ RunCode · Turbo : le modèle a passé l'examen code natif (mode turbo).
+    // Deux modes distincts : benchmark sandbox classique vs RunCode turbo.
+    // Tooltip : spécialité + diplôme + pct de l'examen.
+    // Badge tremplin (tâche 2026-09-11c) : ✔ recommandé (≥ 40 %), ⚠ sous le
+    // seuil (jamais éliminatoire — orientation seulement).
+    var rcBadge = '';
+    if (m.runCode) {
+      var rcTip = 'RunCode (mode turbo) : examen pur code natif réussi —';
+      if (m.runCode.specialite) rcTip += ' spécialité ' + m.runCode.specialite.toUpperCase();
+      if (m.runCode.diplome) rcTip += ' · diplôme ' + m.runCode.diplome;
+      if (m.runCode.pct != null) rcTip += ' · ' + m.runCode.pct + '%';
+      var rcGate = (m.runCode.pct != null && m.runCode.pct >= 40);
+      var rcIcon = rcGate ? '⚡' : '⚡';
+      var rcCol = rcGate ? '#58a6ff' : '#d29922';
+      rcBadge = ' <span class="badge runcode" title="' + esc(rcTip) + '" style="color:' + rcCol + ';border-color:' + rcCol + '55;background:' + rcCol + '18">' + rcIcon + ' RunCode · Turbo</span>';
+    }
     // Badge 📄 : apparaît quand le rapport intégral de ce modèle a déjà été
     // exporté (téléchargé) au moins une fois. Persistance via localStorage
     // (clé par shortName) pour garder le suivi entre deux générations du
@@ -2573,7 +2658,7 @@ function renderCards() {
         '<div class="rank">' + rankDisp + '</div>' +
         '<div class="model-name">' +
           '<div class="name-line"><span class="cat-icon">' + dynCat.icon + '</span>' + esc(shownName) + posArrow + '</div>' +
-          '<div class="badges">' + szBadge + originBadge + ' ' + quantBadge + ' ' + noteBadge + ' ' + trendBadge + exportedBadge + dateBadge + '</div>' +
+          '<div class="badges">' + szBadge + originBadge + ' ' + rcBadge + ' ' + quantBadge + ' ' + noteBadge + ' ' + trendBadge + exportedBadge + dateBadge + '</div>' +
         '</div>' +
         '<div class="mini-stats">' +
           '<div class="mini-stat"><span class="lbl">%</span><span class="val" style="color:' + pc + '">' + dispPct(m.pct) + '%</span><div class="pct-bar-wrap"><div class="pct-bar-fill" style="width:' + Math.max(2,dispPct(m.pct)) + '%;background:' + pc + '"></div></div></div>' +
@@ -2909,6 +2994,50 @@ function openModal(idx) {
   }
   body += '</tbody></table>';
 
+  // --- RunCode (mode turbo : examen pur code natif) ---
+  // Section dédiée si le modèle a un historique RunCode : parcours, diplôme,
+  // spécialité (le domaine d'excellence déterminé par le professeur) + verdict.
+  // Depuis le mode diagnostic (tâche 2026-09-11c) : barres par langage du
+  // bilan tremplin (aptitudes mesurées par langage, jamais éliminatoires).
+  if (m.runCode) {
+    var rc = m.runCode;
+    body += '<h3>⚡ RunCode · Turbo <span style="font-size:var(--fs-small);color:var(--text-dim);font-weight:400">pré-examen code natif (tremplin vers la grande école)</span></h3>';
+    body += '<div class="full-stats">';
+    body += statBox('Parcours', rc.parcours || '—');
+    body += statBox('Diplôme', rc.diplome || 'Non diplômé');
+    body += statBox('Score', (rc.score != null ? rc.score + ' / ' + rc.max : '—'));
+    body += statBoxBar('Réussite', rc.pct != null ? rc.pct + '%' : '—', rc.pct != null ? pctColor(rc.pct) : '#8b949e', rc.pct);
+    body += statBox('Spécialité', rc.specialite ? '<span style="color:#58a6ff;font-size:1.2em">' + esc(rc.specialite.toUpperCase()) + '</span>' : '—');
+    body += '</div>';
+    if (rc.specialiteVerdict) {
+      body += '<div class="report-teacher" style="margin-top:var(--space-s)">🎓 ' + esc(rc.specialiteVerdict) + '</div>';
+    }
+    // Barres par langage : le bilan d'aptitudes du tremplin (chaque langage
+    // tenté = une barre avec le taux de réussite). Seuils 40 % affichés à
+    // titre d'ORIENTATION (le pré-examen n'est jamais éliminatoire).
+    var rcLangs = rc.languageStats || [];
+    if (rcLangs.length > 0) {
+      body += '<div style="margin-top:var(--space-s)">';
+      body += '<div style="color:var(--text-dim);font-size:var(--fs-small);margin-bottom:6px">Aptitudes par langage (mesurées au tremplin — orientation, non éliminatoire) :</div>';
+      var rcSorted = rcLangs.slice().sort(function (a, b) { return (b.rate || 0) - (a.rate || 0); });
+      for (var rci = 0; rci < rcSorted.length; rci++) {
+        var rl = rcSorted[rci];
+        var rlPct = rl.rate != null ? rl.rate : 0;
+        var rlColor = pctColor(rlPct);
+        var rlLabel = rl.language ? rl.language.toUpperCase() : '?';
+        var rlDetail = rl.passed + '/' + rl.total;
+        if (rl.avgLatencyMs != null) rlDetail += ' · ' + (rl.avgLatencyMs / 1000).toFixed(1) + 's';
+        body += '<div style="display:flex;align-items:center;gap:10px;margin:4px 0">'
+          + '<span style="min-width:110px;font-size:var(--fs-small);color:var(--text)">' + esc(rlLabel) + '</span>'
+          + '<span style="flex:1;height:10px;border-radius:5px;background:var(--bg-ter);overflow:hidden">'
+          + '<span style="display:block;height:100%;width:' + Math.max(2, rlPct) + '%;background:' + rlColor + ';border-radius:5px"></span></span>'
+          + '<span style="min-width:90px;text-align:right;font-size:var(--fs-small);color:var(--text-dim)">' + esc(rlDetail) + '</span>'
+          + '</div>';
+      }
+      body += '</div>';
+    }
+  }
+
   // --- Tarif cloud estimé par école (tâche 2026-08-04) ---
   // Affiché uniquement pour les modèles cloud payants. Les valeurs sont des
   // ESTIMATIONS (cf. pricing.js) : le coût réel dépend du tokenizer et des
@@ -2981,6 +3110,17 @@ function openModal(idx) {
     }
     for (var t of tiers) {
       body += '<div class="report-tier">';
+      // --- École RunCode (1 exercice natif par classe, pas de tier sandbox) ---
+      // Un tier RunCode porte passed/language/exerciseId au lieu d'evalResults.
+      if (t.runCode) {
+        var rcOk = t.passed;
+        var rcSt = rcOk ? '<span class="th-badge mand">✔ Réussi</span>' : '<span class="th-badge opt">✘ Échoué</span>';
+        body += '<div class="report-tier-head" onclick="toggleReport(this)"><span class="caret">▶</span><span class="th-title">' + esc(t.className || 'Classe ?') + ' — ' + esc(t.language || '?').toUpperCase() + ' (' + esc(t.exerciseId || '') + ')</span>' + rcSt + '</div>';
+        body += '<div class="report-tier-body">';
+        body += '<div class="report-empty">' + (rcOk ? 'Exercice de débugging natif réussi' : 'Exercice de débugging natif échoué') + (t.attempts > 1 ? ' (après ' + t.attempts + ' tentatives)' : '') + '.</div>';
+        body += '</div></div>';
+        continue;
+      }
       var mandBadge = t.isMandatory
         ? '<span class="th-badge mand">Obligatoire</span>'
         : '<span class="th-badge opt">Optionnel</span>';
@@ -4358,8 +4498,8 @@ document.addEventListener('keydown', function(e) { if (e.key === 'Escape' && UPD
 function buildLeaderboardMarkdown(entries) {
   let md = `# 🏇 Classement BenchGo V3\n\n`;
   md += `> Généré le ${new Date().toLocaleString('fr-FR')} — ${entries.length} modèle(s) classé(s)\n\n`;
-  md += `| Rang | Modèle | Quantif. | Points | % | Note | Mvt | Oblig. | Santé | Bonus | Aide | Rat. | Écoles | Temps | Vitesse | Coût ≈ | Verdict | Forces & Faiblesses |\n`;
-  md += `|---:|---|:---:|---|---:|:---:|:---:|---:|---:|---:|---:|---:|---:|---|---|---:|---|---|\n`;
+  md += `| Rang | Modèle | Orig. | Quantif. | Points | % | Note | Mvt | Oblig. | Santé | Bonus | Aide | Rat. | Écoles | Temps | Vitesse | Coût ≈ | Verdict | Forces & Faiblesses |\n`;
+  md += `|---:|---|:---:|:---:|---|---:|:---:|:---:|---:|---:|---:|---:|---:|---:|---|---:|---|---|---|\n`;
 
   for (let i = 0; i < entries.length; i++) {
     const e = entries[i];
@@ -4389,8 +4529,14 @@ function buildLeaderboardMarkdown(entries) {
     if (args.forces.length > 0) argsText.push('**Forces :** ' + args.forces.join(', '));
     if (args.faiblesses.length > 0) argsText.push('**Faiblesses :** ' + args.faiblesses.join(', '));
     if (args.notes.length > 0) argsText.push('*' + args.notes.join(', ') + '*');
+    // Badge RunCode (mode turbo) : préfixé au nom dans la ligne de classement.
+    const runcodeTag = e.runCode ? ' ⚡' : '';
+    // Colonne Orig. : ☁️ cloud (API) / 🏠 local (LM Studio). Permet de repérer
+    // d'un coup d'œil les modèles cloud dans le rang global mélangé (tâche
+    // 2026-09-11 : un modèle Ollama cloud ne doit jamais passer pour local).
+    const origTag = e.isCloud ? '☁️' : '🏠';
 
-    md += `| ${medal} | ${e.displayName || e.model} | ${quant} | ${e.score}/${e.max} | ${e.pct}% | ${grade.grade} | ${mvt} | ${e.mandatoryTotal > 0 ? e.mandatoryPct + '%' : '—'} | ${e.globalLifeScore} | ${e.optionalBonus > 0 ? '+' + e.optionalBonus : '—'} | ${e.helpCount || '—'} | ${e.retriedCount || '—'} | ${e.ecoleCount} | ${temps} | ${vit} | ${cout} | ${verdict.label} | ${argsText.join(' · ')} |\n`;
+    md += `| ${medal} | ${runcodeTag}${e.displayName || e.model} | ${origTag} | ${quant} | ${e.score}/${e.max} | ${e.pct}% | ${grade.grade} | ${mvt} | ${e.mandatoryTotal > 0 ? e.mandatoryPct + '%' : '—'} | ${e.globalLifeScore} | ${e.optionalBonus > 0 ? '+' + e.optionalBonus : '—'} | ${e.helpCount || '—'} | ${e.retriedCount || '—'} | ${e.ecoleCount} | ${temps} | ${vit} | ${cout} | ${verdict.label} | ${argsText.join(' · ')} |\n`;
   }
 
   md += `\n---\n\n## Détail par modèle\n\n`;
@@ -4399,11 +4545,26 @@ function buildLeaderboardMarkdown(entries) {
     const grade = letterGrade(e.pct);
     const args = buildArguments(e);
     md += `### ${e.displayName || e.model}\n\n`;
+    md += `- **Origine :** ${e.isCloud ? '☁️ Cloud (API' + (e.provider ? ' · ' + e.provider : '') + ')' : '🏠 Local (LM Studio)'}\n`;
     md += `- **Quantification :** ${e.quantization || '—'}\n`;
     md += `- **Score global :** ${e.score}/${e.max} (${e.pct}%) — Note ${grade.grade}\n`;
     md += `- **Obligatoire :** ${e.mandatoryTotal > 0 ? e.mandatoryPassed + '/' + e.mandatoryTotal + ' (' + e.mandatoryPct + '%)' : 'N/A'}\n`;
     md += `- **Santé :** ${e.globalLifeScore} PV | **Bonus :** +${e.optionalBonus}\n`;
     md += `- **Aide :** ${e.helpCount}x | **Rattrapage :** ${e.retriedCount}x | **Écoles :** ${e.ecoleCount}\n`;
+    // RunCode (mode turbo) : parcours, diplôme, spécialité + bilan tremplin.
+    if (e.runCode) {
+      const rcParts = [];
+      if (e.runCode.diplome) rcParts.push('**Diplôme :** ' + e.runCode.diplome);
+      if (e.runCode.pct != null) rcParts.push('**Réussite :** ' + e.runCode.pct + '%');
+      if (e.runCode.specialite) rcParts.push('**Spécialité :** ' + String(e.runCode.specialite).toUpperCase());
+      md += `- **⚡ RunCode (turbo) :** ${rcParts.length > 0 ? rcParts.join(' | ') : 'passé'}\n`;
+      // Bilan tremplin par langage (tâche 2026-09-11c) : une ligne par langage
+      // tenté, avec le taux de réussite + la latence moyenne.
+      const rcLangs = e.runCode.languageStats || [];
+      if (rcLangs.length > 0) {
+        md += `  - *Aptitudes par langage (tremplin — orientation) :* ${rcLangs.slice().sort((a, b) => (b.rate || 0) - (a.rate || 0)).map(l => String(l.language).toUpperCase() + ' ' + l.passed + '/' + l.total + ' (' + (l.rate || 0) + '%)' + (l.avgLatencyMs != null ? ' · ' + (l.avgLatencyMs / 1000).toFixed(1) + 's' : '')).join(' · ')}\n`;
+      }
+    }
     md += `- **Verdict :** ${verdict.label}\n`;
     if (e.elapsedMs > 0 || e.tokens > 0) {
       md += `- **Temps d'inférence :** ${formatDuration(e.elapsedMs)} | **Tokens :** ${e.tokens} | **Vitesse :** ${e.tokensPerSecond > 0 ? e.tokensPerSecond + ' t/s' : '—'} | **Temps réel :** ${formatDuration(e.wallMs)}\n`;

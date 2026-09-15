@@ -446,10 +446,107 @@ async function askTeacherToCorrectStudentAnalysis({ teacherConfig, task, errors,
   return null;
 }
 
+// --- Professeur Maître Absolu (Examen Polyglotte — Code Natif) ---
+// Client distinct utilisé par adaptive-exam.js pour l'examen de débugging code
+// natif. Contrairement au correcteur Free Router ci-dessus, celui-ci cible UN
+// provider/modèle choisi (défaut groq/llama-3.3-70b-versatile) et fait ses
+// propres appels fetch directement (pas via queryFn) : le professeur doit être
+// cognitivement supérieur à l'élève. Supporte OpenAI-compat + Anthropic natif.
+class TeacherClient {
+  constructor(config = {}) {
+    this.provider = config.provider || process.env.TEACHER_PROVIDER || 'groq';
+    this.model = config.model || process.env.TEACHER_MODEL || 'llama-3.3-70b-versatile';
+    this.apiKey = config.apiKey || process.env[`${this.provider.toUpperCase()}_API_KEY`];
+    this.baseUrl = this.resolveDefaultBaseUrl();
+  }
+
+  resolveDefaultBaseUrl() {
+    const urls = {
+      groq: 'https://api.groq.com/openai/v1',
+      openai: 'https://api.openai.com/v1',
+      openrouter: 'https://openrouter.ai/api/v1',
+      anthropic: 'https://api.anthropic.com/v1',
+      mistral: 'https://api.mistral.ai/v1',
+      ollama: 'http://localhost:11434/v1',
+      'lm-studio': 'http://localhost:1234/v1'
+    };
+    return urls[this.provider] || urls.groq;
+  }
+
+  async ask(prompt, systemInstruction = 'Tu es Le Professeur Maître Absolu de BenchGo-LLM-School. Tu juges avec une rigueur chirurgicale sur le code natif.', options = {}) {
+    if (this.provider === 'anthropic') {
+      return this.callAnthropic(prompt, systemInstruction, options);
+    }
+    return this.callOpenAICompat(prompt, systemInstruction, options);
+  }
+
+  async callOpenAICompat(prompt, systemInstruction, options) {
+    const payload = {
+      model: this.model,
+      messages: [
+        { role: 'system', content: systemInstruction },
+        { role: 'user', content: prompt }
+      ],
+      temperature: options.temperature ?? 0.0,
+      max_tokens: options.max_tokens ?? 100
+    };
+
+    const headers = { 'Content-Type': 'application/json' };
+    if (this.apiKey) {
+      headers['Authorization'] = `Bearer ${this.apiKey}`;
+    }
+
+    const response = await fetch(`${this.baseUrl}/chat/completions`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(payload)
+    });
+
+    if (!response.ok) {
+      throw new Error(`[LE PROFESSEUR - ERREUR ${this.provider}] HTTP ${response.status}: ${await response.text()}`);
+    }
+
+    const data = await response.json();
+    return data.choices[0].message.content.trim();
+  }
+
+  async callAnthropic(prompt, systemInstruction, options) {
+    const payload = {
+      model: this.model,
+      system: systemInstruction,
+      messages: [
+        { role: 'user', content: prompt }
+      ],
+      temperature: options.temperature ?? 0.0,
+      max_tokens: options.max_tokens ?? 100
+    };
+
+    const headers = {
+      'Content-Type': 'application/json',
+      'x-api-key': this.apiKey,
+      'anthropic-version': '2023-06-01'
+    };
+
+    const response = await fetch(`${this.baseUrl}/messages`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(payload)
+    });
+
+    if (!response.ok) {
+      throw new Error(`[LE PROFESSEUR - ERREUR anthropic] HTTP ${response.status}: ${await response.text()}`);
+    }
+
+    const data = await response.json();
+    return data.content[0].text.trim();
+  }
+}
+
 module.exports = {
   askTeacherToCorrectStudentAnalysis,
   buildTeacherPrompt,
   fetchFreeModels,
   callCloudTeacher,
-  TEACHER_SYSTEM_PROMPT
+  TEACHER_SYSTEM_PROMPT,
+  TeacherClient
 };

@@ -398,10 +398,12 @@ async function queryLLM(prompt, difficulty, tierId, isMandatory, spinner, option
       // l'interprète comme un arrêt immédiat (isFatalSlugError).
       const isInvalidModelId = status === 400 && /not a valid model/i.test(errorBody);
       const isInvalidModel = status === 404 && /model.*not found|does not exist|no such model/i.test(errorBody);
-      if (isInvalidModelId || isInvalidModel) {
+      const isBatchOnlyModel = status === 404 && /only available through the Batch API|Filter Batch-Only Endpoints/i.test(errorBody);
+      if (isInvalidModelId || isInvalidModel || isBatchOnlyModel) {
         const err = new Error(msg);
         err.isFatalSlugError = true;
-        err.code = isInvalidModelId ? 'E400_INVALID_MODEL_ID' : 'E404_MODEL_NOT_FOUND';
+        err.isBatchOnlyError = isBatchOnlyModel;
+        err.code = isInvalidModelId ? 'E400_INVALID_MODEL_ID' : (isBatchOnlyModel ? 'E404_BATCH_ONLY_MODEL' : 'E404_MODEL_NOT_FOUND');
         throw err;
       }
       throw new Error(msg);
@@ -494,12 +496,21 @@ async function queryLLM(prompt, difficulty, tierId, isMandatory, spinner, option
       // Erreur code-court propagée au runner (affichage propre + log).
       // isFatalSlugError (slug invalide) : TOUJOURS fatale, même en
       // isMandatory=false, pour arrêter net au lieu de parcourir 6 classes.
+      // HTTP_400 "Failed to load model" (provider local via --provider=lmstudio
+      // en RunCode) : arch GGUF inconnue du runtime llama.cpp de LM Studio
+      // (ex: k2-horizon). Code E507 + message explicite au lieu du JSON brut
+      // (tâche 2026-09-11).
+      const isLoadFailure = /HTTP_400/.test(reason) && /failed to load model/i.test(reason);
       const code = error.isFatalSlugError
         ? (error.code || 'E400_INVALID_MODEL_ID')
+        : isLoadFailure ? 'E507_LM_LOAD_FAILED'
         : isTimeout ? 'E502_LM_TIMEOUT'
         : /ECONNRESET|ECONNREFUSED|ENOTFOUND|EHOSTUNREACH/.test(error.code || reason) ? 'E503_LM_UNREACHABLE'
         : 'E504_LM_HTTP_ERROR';
-      throw new BenchgoError(code, `Cloud Tier ${tierId} — ${reason}`);
+      const friendlyReason = code === 'E507_LM_LOAD_FAILED'
+        ? `Le modèle ne peut pas être chargé par LM Studio : architecture GGUF non supportée par le runtime llama.cpp actuel (modèle trop récent pour le runtime installé). Mettez LM Studio à jour (runtimes), ou testez un autre GGUF. Ce modèle est inutilisable en l'état : vous pouvez le supprimer de LM Studio (UI → poubelle) pour libérer de l'espace disque. Détail : ${reason}`
+        : `Cloud Tier ${tierId} — ${reason}`;
+      throw new BenchgoError(code, friendlyReason);
     } else {
       // isEmptyResponse (réponse vide 200 OK) : on propage l'erreur avec le
       // flag pour que le runner puisse compter les réponses vides consécutives

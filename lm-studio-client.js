@@ -273,8 +273,15 @@ async function queryLLM(prompt, difficulty, tierId, isMandatory, spinner, option
     // aux logs LM Studio et aux timeouts undici).
     const isUnreachable = /ECONNREFUSED|ECONNRESET|ENOTFOUND|EHOSTUNREACH/.test(error.code || error.message || '');
     const isHttpErr = /^HTTP_\d+/.test(error.message || '');
+    // HTTP_400 "Failed to load model" : le GGUF a une architecture inconnue du
+    // runtime llama.cpp de LM Studio (ex: k2-horizon — arch trop récente, non
+    // supportée par llama.cpp à la date du GGUF). Erreur définitive du modèle,
+    // pas un problème réseau ni de config BenchGo : message dédié au lieu du
+    // JSON brut illisible (tâche 2026-09-11).
+    const isLoadFailure = isHttpErr && /failed to load model/i.test(error.message || '');
     const code = isTimeout ? 'E502_LM_TIMEOUT'
       : isUnreachable ? 'E503_LM_UNREACHABLE'
+      : isLoadFailure ? 'E507_LM_LOAD_FAILED'
       : isHttpErr ? 'E504_LM_HTTP_ERROR'
       : 'E504_LM_HTTP_ERROR';
     logger.apiRequest(tierId || '?', duration, 'ERREUR');
@@ -300,7 +307,15 @@ async function queryLLM(prompt, difficulty, tierId, isMandatory, spinner, option
       // Erreur code-court : propagée au runner qui l'affichera proprement (sans
       // stack brute par défaut) et la journalisera. On ne fait plus process.exit
       // ici — le handler global de main() gère la sortie.
-      throw new BenchgoError(code, `Tier ${tierId} (obligatoire) — ${reason}`);
+      // Cas E507 : on remplace le JSON brut par un diagnostic explicite (arch
+      // GGUF inconnue du runtime llama.cpp de LM Studio → mettre LM Studio à
+      // jour ou attendre le support de l'architecture ; modèle intrinsèquement
+      // non chargeable, un re-test ne changera rien tant que le runtime n'évolue
+      // pas).
+      const friendlyReason = code === 'E507_LM_LOAD_FAILED'
+        ? `Le modèle ne peut pas être chargé par LM Studio : architecture GGUF non supportée par le runtime llama.cpp actuel (souvent : modèle trop récent pour le runtime installé). Mettez LM Studio à jour (runtimes llama.cpp), ou testez un autre GGUF du même modèle. Ce modèle est inutilisable en l'état : vous pouvez le supprimer de LM Studio (UI → poubelle) pour libérer de l'espace disque. Détail : ${reason}`
+        : `Tier ${tierId} (obligatoire) — ${reason}`;
+      throw new BenchgoError(code, friendlyReason);
     } else {
       console.error(`\n  \x1b[33m[WARN ${code}]\x1b[0m API Tier ${tierId} échoué (optionnel) : ${reason}`);
       logger.warn(`API Tier ${tierId} (optionnel) ignoré — ${code} — ${reason}`);
