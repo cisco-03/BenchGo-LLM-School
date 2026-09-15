@@ -111,6 +111,28 @@ Actions :
 4. Professeur muet → vérifier la clé du professeur (`--teacher-api-key=`) ;
    le repli mécanique garantit toujours un verdict de spécialité.
 
+## Probleme 9: Modele non chargeable — « unknown model architecture »
+
+Cas :
+- le run s arrete au pre-flight avec le code **E507_LM_LOAD_FAILED**
+- l avertissement « MODÈLE NON COMPATIBLE — ARCHITECTURE GGUF NON SUPPORTÉE » s affiche
+- night-batch affiche « lms load echoue » avec `unknown model architecture: 'xxx'`
+
+Ce n est **NI un bug BenchGo NI un GGUF corrompu** : l architecture du GGUF (ex :
+`k2-horizon`) n est pas connue du runtime llama.cpp installe dans LM Studio. Le
+support peut mettre **2-3 semaines** a arriver (fork editeur ou PR upstream).
+
+Actions :
+1. Verifier : `lms load <modelKey>` → message `unknown model architecture: 'xxx'` = confirme.
+2. Consulter la liste des modeles mis de cote : `node night-batch.js --incompatible-list`
+   (registre `.benchgo-incompatible.json`, avec arch, quant, editeur et dates).
+3. Solutions : mettre **LM Studio + runtimes llama.cpp** a jour, ou **retelercharger le
+   GGUF sur Hugging Face** quand l editeur/support aura evolue.
+4. Le modele est auto-blackliste (exclu des batchs) : desisolez-le avec
+   `node night-batch.js --isoler=!!<num>` apres mise a jour du runtime — cela retire
+   aussi son entree du registre des incompatibles.
+5. Pour liberer l espace disque : supprimez le modele dans LM Studio (UI → poubelle).
+
 ## Bonnes pratiques
 
 - lancer depuis la racine du projet (le dossier contenant `runner.js`)

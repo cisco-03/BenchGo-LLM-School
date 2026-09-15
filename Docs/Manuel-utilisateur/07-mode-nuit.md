@@ -222,7 +222,14 @@ Ici les modelKeys sont `ornith-1.0-9b@q4_k_m`, `mythos-9b-unhinged`, `qwen/qwen3
 | `--teacher-api-key=<clé>` | Clé API du provider du professeur (inutile pour les providers locaux ollama/lmstudio/custom). |
 | `--teacher-endpoint=<url>` | Endpoint perso (provider `custom`). |
 | `--class-by-class` (ou `--cbc`) | Chaque exercice (tier) d'une école est lancé dans un **process séparé** avec un timeout de 45 min. Un tier gelé ne bloque plus tout le batch : on passe automatiquement au tier suivant. Idéal pour éviter les hangs nocturnes. |
-| `--tiers=0` | Filtre rapide : ne teste que le **1er exercice** (tier 0) de chaque école. Combine avec `--class-by-class` et `--schools=LIGHT` pour trier vite les modèles faibles. `--tiers=0,1` = 2 premiers exercices, etc. (sans ce flag = tous les exercices). |
+| `--tiers=0` | Filtre rapide : ne teste que le **1er exercice** (tier 0) de chaque école. Combine avec `--class-by-class` et `--schools=LIGHT` pour trier vite les modèles faibles. `--tiers=0,1` = 2 premiers exercices, etc. (sans ce flag = tous les exercices). En mode « Exercice par exercice », tapez `obli` pour ne jouer que les classes **obligatoires** (~60-70 % du temps, carnet écrit quand même). |
+| `--list-only` | Affiche le tableau des modèles (statut, score, vitesse, écoles manquantes) puis quitte — aucun test lancé. Les numéros servent à `--isoler`. |
+| `--incompatible-list` | Liste les modèles **mis de côté** (architecture GGUF non supportée par le runtime llama.cpp de LM Studio) avec rappel de les retélécharger quand le support sera ajouté. One-shot, aucun daemon requis. |
+| `--isoler=!N` / `--isoler=!!N` | Isole (`!`) ou désisole (`!!`) le modèle n° N de la liste `--list-only`. Aucun batch lancé — applique et quitte. |
+| `--skip` | (Second terminal, pendant un batch en cours) Interrompt le modèle en cours (≤3 s) et passe au suivant. Le modèle est consigné « passé avec --skip » (ni échec ni blacklist). Ctrl+C reste l'arrêt COMPLET. |
+| `--resume` | Reprise : ignore les écoles déjà au carnet et, en mode classe-par-classe, les exercices déjà passés (mémorisés dans `.benchgo-progress.json`). Reprend exactement là où la session s'était arrêtée. |
+| `--force-detect` | Réindexe les GGUF orphelins (présents sur disque mais absents de `lms ls`) avant de lister. |
+| `--hybrid` | Active l'auto-soumission GitHub (seuil 50 %) pendant le batch. |
 
 ### Exemples
 
@@ -295,6 +302,48 @@ Pour **chaque modèle** de la file d'attente, et pour **chaque école** sélecti
 
 À la fin de chaque modèle, le script affiche un résumé horodaté. À la toute fin, un
 **bilan global** récapitule tous les runs (durée, succès/échecs, chemins des rapports).
+
+### ⚡ Tremplin RunCode Turbo (pré-examen automatique)
+
+Avant la grande école, tout modèle **sans examen RunCode au carnet** passe d'abord le
+pré-examen RunCode (`node runner.js --exam-code`) — le parcours suit la scolarité de la
+première école planifiée (LIGHT → Primaire, STANDARD → Collège-Lycée, EXPERT/DOCTORAT →
+Université). Objectif : **mesurer les aptitudes par langage** (~10-20 min) avant
+d'engager 1h+ de grande école.
+
+- **File réordonnée** : les modèles avec un tremplin au carnet passent en premier
+  (tri par score RunCode décroissant), les modèles sans pré-examen ensuite — les
+  prometteurs donnent leurs carnets tôt dans la nuit.
+- **Jamais éliminatoire** : sous le seuil souple de **40 %**, un simple avertissement
+  ambre est affiché (« modèle non recommandé pour un run complet ») mais la grande
+  école est lancée quand même.
+- **Option « obli »** (mode Exercice par exercice) : ne joue que les classes
+  **obligatoires** de chaque école sélectionnée — la consolidation « all » se déclenche
+  quand même, donc le carnet est écrit pour ~60-70 % du temps.
+
+### ⚠️ Pré-test de santé + registre des incompatibles
+
+Après le chargement, chaque modèle reçoit un **ping de santé** (« Reply with: OK »).
+Trois déclencheurs d'**auto-blacklist** : échec de chargement (`lms load` KO), ping KO,
+ou run KO systémique (toutes les écoles échouées). Le modèle est exclu des batchs
+suivants ; désisolez-le avec `!!<num>` si vous corrigez le problème.
+
+Cas particulier **« architecture GGUF non supportée »** (ex : k2-horizon) : le modèle
+est trop récent pour le runtime llama.cpp de LM Studio — le support peut mettre 2-3
+semaines à arriver. Ce n'est **ni un bug BenchGo ni un GGUF corrompu** : BenchGo
+affiche un avertissement complet « ⚠⚠⚠ MODÈLE NON COMPATIBLE », enregistre le modèle
+dans le registre `.benchgo-incompatible.json` et l'auto-blackliste.
+
+```powershell
+# Liste des modèles mis de côté (rappel : retéléchargez-les sur Hugging Face
+# quand le support de l'architecture sera ajouté à llama.cpp)
+node night-batch.js --incompatible-list
+```
+
+Les modèles incompatibles affichent le badge **INCOMPATIBLE** (rouge) et la raison
+« Incompatible : arch non supportée » dans `--list-only`. La désisolation
+(`--isoler=!!N` ou `!!N` interactif) retire aussi l'entrée du registre — utile après
+une mise à jour de LM Studio.
 
 ### Fichiers MTP (Multi-Token Prediction)
 
@@ -486,9 +535,16 @@ Vérifiez l'orthographe : `LIGHT`, `STANDARD`, `EXPERT`, `DOCTORAT`, `auto`,
 `auto-per-model` (insensible à la casse).
 
 ### « lms load échoué »
-Le modèle n'a pas pu être chargé en mémoire (souvent un problème de RAM disponible).
-Le script ignore ce modèle et passe au suivant (marqué `KO load_failed` dans le bilan).
-Libérez de la RAM ou choisissez un modèle plus petit.
+Le modèle n'a pas pu être chargé en mémoire. Deux causes principales :
+1. **RAM insuffisante** : le script ignore ce modèle et passe au suivant (marqué
+   `KO load_failed` dans le bilan). Libérez de la RAM ou choisissez un modèle plus petit.
+2. **Architecture GGUF inconnue du runtime llama.cpp** (ex : k2-horizon) : le modèle a
+   un problème de STRUCTURE — il est trop récent pour le runtime installé. BenchGo
+   affiche l'avertissement « MODÈLE NON COMPATIBLE » et enregistre le modèle au
+   registre (voir §6). Vérifiez avec `lms load <modelKey>` : le message
+   `unknown model architecture: 'xxx'` confirme. Solution : mettre LM Studio + runtimes
+   à jour, ou retélécharger le GGUF plus tard. Consultez `node night-batch.js
+   --incompatible-list`.
 
 ### Un modèle reste chargé après un Ctrl+C
 Si vous interrompez brutalement le script (Ctrl+C en plein chargement), le modèle en cours
@@ -549,6 +605,12 @@ consulter `Export-Rapports/` le matin.
 | Avec professeur IA (provider local Ollama) | ajouter `--teacher-provider=ollama --teacher-model=llama3.2` |
 | Avec professeur IA (provider cloud) | ajouter `--teacher-provider=openrouter --teacher-model=<modèle>` |
 | Filtre rapide : 1er exercice seulement | ajouter `--class-by-class --tiers=0` |
+| Classes obligatoires seulement (carnet écrit) | mode « Exercice par exercice » → taper `obli` |
+| Liste des modèles (sans test) | `node night-batch.js --list-only` |
+| Isoler / désisoler un modèle | `node night-batch.js --isoler=!N` / `--isoler=!!N` |
+| Passer au modèle suivant (batch en cours) | `node night-batch.js --skip` (second terminal) |
+| Reprendre une session interrompue | ajouter `--resume` |
+| Liste des modèles incompatibles | `node night-batch.js --incompatible-list` |
 | Connaître les modelKeys | `lms ls` |
 | Décharger un modèle resté en mémoire | `lms unload --all` |
 | Voir les résultats le matin | `Export-Rapports/classement.html` |

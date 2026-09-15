@@ -38,3 +38,12 @@ Université), 1 exercice aléatoire par classe parmi 16 langages, verdict final
 de **spécialité** (le domaine d'excellence du modèle). Les résultats comptent
 pour le classement général (badge `⚡ RunCode · Turbo`). Commandes dans
 [02-commandes.md](02-commandes.md#runcode--examen-pur-code-natif-mode-turbo).
+
+**Tremplin automatique (mode nuit)** : tout modèle sans examen RunCode au carnet
+passe d'abord le pré-examen RunCode, puis la grande école (voir
+[07-mode-nuit.md](07-mode-nuit.md#-tremplin-runcode-turbo-pré-examen-automatique)).
+
+**Modèles incompatibles** : un GGUF trop récent pour le runtime llama.cpp de LM
+Studio ne charge pas — BenchGo l'avertit, le met de côté et tient la liste
+(`node night-batch.js --incompatible-list`). Voir
+[07-mode-nuit.md](07-mode-nuit.md#-pré-test-de-santé--registre-des-incompatibles).

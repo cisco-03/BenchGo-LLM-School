@@ -221,7 +221,35 @@ node runner.js --provider=openrouter --model=<slug:free> --exam-code --teacher-p
 > Le résultat est enregistré dans le carnet (école `RunCode-Primaire` /
 > `RunCode-College-Lycee` / `RunCode-Universite`) et **compte pour le classement
 > général** avec le badge `⚡ RunCode · Turbo`. Journal de dépannage :
-> `Export-Rapports/exam_*.log`.
+> `Export-Rapports/exam_*.log`. En **mode nuit**, le tremplin RunCode est lancé
+> AUTOMATIQUEMENT avant la grande école (jamais éliminatoire — seuil souple 40 %).
+
+### Mode nuit — tremplin, isolement et incompatibles
+
+```powershell
+# Liste des modèles (statut, score, vitesse) — aucun test lancé
+node night-batch.js --list-only
+
+# Isoler le modèle n° 4 de la liste (exclut des batchs) / désisoler
+node night-batch.js --isoler=!4
+node night-batch.js --isoler=!!4
+
+# Passer au modèle suivant pendant un batch (second terminal)
+node night-batch.js --skip
+
+# Reprendre une session interrompue (écoles au carnet + tiers passés sautés)
+node night-batch.js --resume
+
+# Liste des modèles INCOMPATIBLES (arch GGUF non supportée par llama.cpp)
+node night-batch.js --incompatible-list
+```
+
+> Le **tremplin RunCode Turbo** est automatique en mode nuit : tout modèle sans
+> examen RunCode au carnet passe le pré-examen AVANT la grande école (file
+> réordonnée, jamais éliminatoire). Un GGUF avec une architecture inconnue du
+> runtime llama.cpp (ex : k2-horizon) déclenche l'avertissement « MODÈLE NON
+> COMPATIBLE » et rejoint le registre des incompatibles — retéléchargez-le sur
+> Hugging Face quand le support sera ajouté (détail : chapitre 7, §6).
 
 ---
 
