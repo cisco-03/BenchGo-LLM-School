@@ -1155,8 +1155,10 @@ node runner.js --provider=openrouter --model=<slug:free> --exam-code \
 4. Vérifier `parseCliArgs()` expose bien les nouveaux flags : `node -e "const {parseCliArgs}=require('./config'); process.argv=['node','runner.js','--force']; console.log(parseCliArgs().force)"`.
 5. Mettre à jour `Docs/CHANGELOG.md`. Ne pas committer sans demande explicite.
 6. **Rapport final en format Logseq dans `Memories-BenchGo/Tasks.md`** : à CHAQUE fin de session de tâches, ajouter le bilan en bas du fichier (après le contenu existant), avec ce format EXACT :
-   - `- ## <Jour> <N> <mois> <année>` (ex: `- ## Vendredi 11 septembre 2026`) — 1 onglet d'indentation.
-   - `- ### <T1/T2/...> — <titre court de la tâche>` (indentation 2 niveaux, tab) suivi de `collapsed:: true` (indentation 3 niveaux).
+   - **Titres Logseq SANS tiret (correction 2026-09-16, remplace la règle 2026-09-15)** : une ligne de titre Logseq ne porte JAMAIS de tiret (`-`) avant les dièses. La forme `	- ### T1 — titre` (tab + tiret + dièses) est INTERDITE : Logseq ne supporte pas un tiret collé à un titre (rendu cassé). Les formes valides sont :
+     - `	## <Jour> <N> <mois> <année>` (tab + dièses, SANS tiret) pour le titre de date.
+     - `		### T1 — <titre court>` (2 tabs + dièses, SANS tiret) pour le sous-titre de tâche.
+     - `			- <fait>` (3 tabs + tiret + texte) pour les puces du corps (le tiret reste légitime sur les puces, jamais sur les titres).
    - Chaque fait/clé de correction en `- ...` (indentation 3 niveaux), une idée par puce, **gras** pour les causes/constats importants, `code` pour les chemins/fonctions/commandes.
    - La DERNIÈRE puce de chaque tâche porte les vérifications passées (tests, syntaxe, inline-JS...).
    - Exemple concret (référence, session 2026-09-11) : lignes 118-138 de ce même fichier `Memories-BenchGo/Tasks.md` (T1 badge RunCode, T2 compartiments, T3 k2-horizon, T4 modèles cloud). Ce format est la demande EXPLICITE de l'utilisateur : toujours y répondre ainsi à la fin des tâches, avec le résumé du raisonnement/énoncé par tâche.
@@ -1166,7 +1168,9 @@ node runner.js --provider=openrouter --model=<slug:free> --exam-code \
      - `**### texte ou titre**` =>> INTERDIT (astérisques autour de toute la ligne titre, avant le dièse).
      - `### **titre ou texte**` =>> AUTORISÉ (dièses d'abord, gras ensuite sur le seul texte).
      - `-** ### titre ou texte**` =>> INTERDIT SURTOUT avec les tirets + titre (puce + astérisques avant le dièse : rendu Logseq cassé).
-     - Règle simple : une ligne de titre commence TOUJOURS par son dièse (`###`), jamais par un astérisque ni par une puce suivie d'astérisques. Pour les sous-titres de tâches dans `Memories-BenchGo/Tasks.md`, la forme valide est `	- ### T1 — titre` (tab + tiret + dièses, SANS astérisques du tout).
+      - Règle simple : une ligne de titre commence TOUJOURS par son dièse (`###`), jamais par un astérisque ni par une puce suivie d'astérisques. Pour les sous-titres de tâches dans `Memories-BenchGo/Tasks.md`, la forme valide est `		### T1 — titre` (2 tabs + dièses, SANS tiret ni astérisques — cf. correction 2026-09-16).
+   - **JAMAIS de tirets collés à un astérisque (demande utilisateur 2026-09-15, valable AUSSI dans les réponses du chat)** : la forme `-**` (tiret suivi immédiatement d'astérisques) n'est pas compatible Logseq. Ne JAMAIS écrire de ligne commençant par `-**` ni coller des astérisques juste après un tiret (dans `Memories-BenchGo/Tasks.md` comme dans toute réponse affichée au chat qui pourrait être copiée dans Logseq). Le tiret de puce et le gras sont toujours séparés : puce seule pour le corps (`- texte`), dièses seuls pour les titres (`### titre`), et si du gras est nécessaire dans le corps, il commence APRÈS un espace (`- **texte**`, jamais `- **texte` collé à la puce sans espace).
+   - **Réponses du chat en TEXTE NORMAL compatible Logseq (demande utilisateur 2026-09-16)** : le résumé final de session s'écrit SANS markdown de structure (pas de `##`/`###` en titres, pas de tables, pas de blocs de code). Forme attendue : un texte plat — une phrase d'introduction courte, puis une puce par fait (`- ...`) avec **gras** pour les points importants et `code` pour les chemins/fonctions/commandes, une idée par puce, la dernière puce portant les vérifications passées. Exemple : « 4 corrections pour RunCode Turbo (demandes du Tasks.md) : » suivi de puces `- **Cause** : ...`. Jamais de tiret collé à du gras (`-**`), jamais de titres `#` dans le chat.
 
 ## Outils de diagnostic (`scripts/`)
 

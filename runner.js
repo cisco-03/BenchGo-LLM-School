@@ -63,6 +63,7 @@ const { exportCsv: exportRunsCsv, detectUnstableModels } = scoreLedger;
 const { resolveOpenRouterSlug, resolveKiloSlug } = require('./model-resolver');
 const archWarning = require('./arch-warning');
 const { runSubmitAction } = require('./submit-action');
+const runcodeQueue = require('./runcode-queue');
 
 const DEFAULT_CONTEXT_LIMIT_TOKENS = 16384;
 const MAX_RATTRAPAGE_ATTEMPTS = 1;
@@ -1172,7 +1173,8 @@ async function main() {
            forgetKey: forgetKeyName, listKeys: listKeysFlag, noSaveKeys: noSaveKeysFlag, force: forceFlag,
             restoreCarnets: restoreCarnetsFlag,
             submit: submitFlag, noTelemetry: noTelemetryFlag, githubToken: cliGithubToken,
-            noUpdateCheck: noUpdateCheckFlag, dryRun: dryRunFlag, hybrid: hybridFlag } = cliArgs;
+            noUpdateCheck: noUpdateCheckFlag, dryRun: dryRunFlag, hybrid: hybridFlag,
+            queueRuncode: queueRuncodeFlag } = cliArgs;
   let tierArg = tierArgRaw;
 
   if (dryRunFlag) logger.info('CLI: --dry-run actif — validation de la configuration sans exécution');
@@ -1826,6 +1828,43 @@ async function main() {
         } catch (e) {
           logger.warn('Régénération classement RunCode échouée : ' + e.message);
           console.log(`  \x1b[33m⚠ Classement non régénéré après l'examen : ${e.message}\x1b[0m`);
+        }
+
+        // --- Liste d'attente de la grande école (tâche 2026-09-16) ---
+        // Le modèle peut être « mis en réserve » : il rejoint une liste
+        // persistante (.benchgo-runcode-queue.json) que night-batch.js lit au
+        // démarrage pour passer les inscrits EN PRIORITÉ (tête de file). Le
+        // flag --queue-runcode force l'inscription (batch), sinon on propose
+        // en interactif (TTY uniquement — jamais de prompt en mode nuit).
+        const examMeta = {
+          displayName: examModelName,
+          quantization: resolvedQuantization || null,
+          parcours: result.parcours,
+          pct: examResult.pct,
+          specialite: examResult.specialite,
+          diplome: examResult.diplome
+        };
+        if (queueRuncodeFlag || (!forceFlag && process.stdin.isTTY && process.stdout.isTTY)) {
+          if (queueRuncodeFlag) {
+            runcodeQueue.enqueue(examShort, examMeta);
+            console.log(`  \x1b[35m⏳ Modèle mis en réserve dans la liste d'attente de la grande école (${runcodeQueue.QUEUE_FILE}).\x1b[0m`);
+            logger.info(`RunCode: ${examShort} ajouté à la liste d'attente grande école (--queue-runcode).`);
+          } else {
+            const wantsQueue = await askYesNo(`  Mettre ${examShort} en réserve pour la grande école (liste d'attente — il passera en priorité au prochain batch de nuit) ?`, true);
+            if (wantsQueue) {
+              runcodeQueue.enqueue(examShort, examMeta);
+              console.log(`  \x1b[35m⏳ Modèle mis en réserve dans la liste d'attente de la grande école (${runcodeQueue.QUEUE_FILE}).\x1b[0m`);
+              console.log(`  \x1b[90mLancez un batch de nuit (node night-batch.js) : il sera proposé en tête de file.\x1b[0m`);
+              logger.info(`RunCode: ${examShort} ajouté à la liste d'attente grande école (confirmation utilisateur).`);
+            } else {
+              // Retrait éventuel : si le modèle était déjà en réserve et refuse
+              // de nouveau, on le retire (la liste reste fidèle aux volontés).
+              if (runcodeQueue.dequeue(examShort)) {
+                console.log(`  \x1b[90m${examShort} retiré de la liste d'attente de la grande école.\x1b[0m`);
+                logger.info(`RunCode: ${examShort} retiré de la liste d'attente grande école.`);
+              }
+            }
+          }
         }
       } else {
         logger.warn('RunCode: aucun exercice joué (max=0) — carnet NON écrit. Vérifier le coffre-fort (.teacher-vault/vault_polyglot.json).');

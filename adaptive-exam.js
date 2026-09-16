@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const { TeacherClient } = require('./teacher-client');
+const { Spinner } = require('./progress-bar');
 
 function loadSecretVault() {
   const vaultPath = path.join(__dirname, '.teacher-vault', 'vault_polyglot.json');
@@ -156,7 +157,11 @@ function computeSpecialtyStats(details) {
 // Journalisation : la réponse brute du professeur et l'erreur éventuelle sont
 // tracées dans le journal d'examen (indispensable pour diagnostiquer un verdict
 // vide, un professeur muet ou un repli mécanique inattendu).
-async function determineSpecialty(teacher, modelName, specialtyStats, reportCard, logFileOnly) {
+// NB : `log` (affichage console + journal) est une const locale de
+// runAdaptiveSchoolExam — elle est passée en 6e paramètre. La référencer
+// directement ici lèverait un ReferenceError (même famille que le bug
+// « details is not defined » corrigé ci-dessous dans le calcul de latence).
+async function determineSpecialty(teacher, modelName, specialtyStats, reportCard, logFileOnly, log) {
   const { specialty, stats } = specialtyStats;
   if (!specialty) return null;
 
@@ -165,6 +170,12 @@ async function determineSpecialty(teacher, modelName, specialtyStats, reportCard
   ).join('\n');
 
   let verdictText = null;
+  // Spinner interactif (demande utilisateur 2026-09-16) : l'appel au professeur
+  // cloud prend 5-30s — sans rotation, l'écran semble figé après le bilan par
+  // langage et l'utilisateur croit à un plantage (le « ressenti du professeur »
+  // était invisible). Le spinner affiche l'attente puis le résultat tombe.
+  const verdictSpinner = new Spinner('Le professeur rédige son verdict');
+  if (log) verdictSpinner.start();
   try {
     const prompt = `[VERDICT FINAL - SPÉCIALISATION]
 Tu as fait passer un examen de débugging multi-langages à un modèle.
@@ -181,7 +192,22 @@ Pas de tableau, pas de code, pas de préambule. 3 phrases maximum.`;
     // Trace de diagnostic : la réponse BRUTE du professeur (jamais perdue).
     if (logFileOnly) logFileOnly(`[verdict professeur brut] ${verdictText}`);
     if (!verdictText) logFileOnly && logFileOnly('[verdict professeur] Réponse VIDE du professeur — repli mécanique.');
+    if (verdictText) {
+      if (log) {
+        verdictSpinner.stop('Verdict du professeur reçu');
+        // Le ressenti du professeur s'affiche ICI, en direct (et non seulement
+        // dans le bilan final du runner) — l'utilisateur voit la conclusion au
+        // moment où elle arrive.
+        log('');
+        log(`🎓 [VERDICT DU PROFESSEUR] ${verdictText}`);
+      } else {
+        verdictSpinner.stop('Verdict du professeur reçu');
+      }
+    } else {
+      verdictSpinner.fail('Le professeur n\'a rien répondu — verdict mécanique');
+    }
   } catch (e) {
+    verdictSpinner.fail(`Le professeur est injoignable (${e && e.message ? e.message : e})`);
     // Trace de diagnostic : l'erreur du professeur (réseau, clé, quota...).
     if (logFileOnly) logFileOnly(`[verdict professeur] ERREUR : ${e && e.message ? e.message : e} — repli mécanique.`);
     verdictText = null;
@@ -206,8 +232,10 @@ Pas de tableau, pas de code, pas de préambule. 3 phrases maximum.`;
     rate: Math.round(s.rate * 100), classes: s.classes,
     // Latence moyenne (ms) sur les exercices du langage : indicateur de
     // fluidité par domaine (le tremplin compare aussi la vitesse).
+    // NB : les latences brutes vivent dans reportCard.details (le paramètre
+    // details n'existe pas ici — bug « details is not defined » corrigé).
     avgLatencyMs: (() => {
-      const lat = (details || []).filter(d => d.language === s.language).map(d => d.latency || 0);
+      const lat = (reportCard.details || []).filter(d => d.language === s.language).map(d => d.latency || 0);
       return lat.length > 0 ? Math.round(lat.reduce((a, b) => a + b, 0) / lat.length) : null;
     })()
   }));
@@ -462,11 +490,12 @@ ${exercise.prompt}`;
       log(`   ${s.language.toUpperCase().padEnd(12)} ${s.passed}/${s.total} (${ratePct}%) — classes : ${s.classes.join(', ')}`);
     }
     if (specialtyStats.specialty) {
-      const sp = await determineSpecialty(teacher, studentModelName, specialtyStats, reportCard, logFileOnly);
-      if (sp) {
-        log('');
-        log(`🎓 [VERDICT DU PROFESSEUR] ${sp.verdict}`);
-      }
+      // Le verdict est affiché EN DIRECT par determineSpecialty (spinner + log
+      // « 🎓 [VERDICT DU PROFESSEUR] » dès la réception) — demandes 2026-09-16.
+      // `log` est passé explicitement : determineSpecialty est définie au niveau
+      // module et ne peut pas fermer sur la const locale de runAdaptiveSchoolExam.
+      const sp = await determineSpecialty(teacher, studentModelName, specialtyStats, reportCard, logFileOnly, log);
+      if (!sp) log('   ℹ️ Aucun verdict de spécialité possible (professeur indisponible).');
     } else {
       log('   ℹ️ Pas encore assez d\'exercices par langage pour déclarer une spécialité fiable.');
     }

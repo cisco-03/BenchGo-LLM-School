@@ -39,6 +39,7 @@ const path = require('path');
 const { PROFILES, detectProfileFromModelName } = require('./config');
 const { printEntryHelp, wantsHelp } = require('./cli-help');
 const archWarning = require('./arch-warning');
+const runcodeQueue = require('./runcode-queue');
 
 const PROJECT_ROOT = __dirname;
 const RUNNER = path.join(PROJECT_ROOT, 'runner.js');
@@ -1023,8 +1024,21 @@ function listLlmModels() {
         const incompat = !nonLlm ? (archWarning.loadIncompatible()[modelKey] || null) : null;
         status = { kind: 'nonllm', tested: [], missing: [], quant: ledger ? ledger.quantization : null, reason: nonLlm ? 'Modèle non-LLM (OCR/embedding/rerank/vision)' : (incompat ? 'Incompatible : arch non supportée' : 'Isolé manuellement'), archIncompatible: incompat ? (incompat.architecture || '?') : null };
       } else if (!ledger || testedSchools.length === 0) {
-        // Pas de carnet : jamais testé avec succès. Mais a-t-on déjà tenté ?
-        if (failedRun) {
+        // Pas de carnet d'école classique : jamais testé avec succès à la grande
+        // école. Mais le tremplin RunCode a-t-il été passé (écoles RunCode-*) ?
+        // Avant le fix 2026-09-16, ledgerSchoolKeys ignorait les écoles
+        // RunCode-* (ECOLE_NAME_TO_KEY ne mappe que les écoles classiques) :
+        // un modèle n'ayant passé QUE RunCode (ex: neohorse-1-4b) restait
+        // affiché « · à tester » alors qu'un carnet avec score existe.
+        const rcInfo = runCodeGateInfo(ledger);
+        if (rcInfo.done) {
+          status = {
+            kind: 'runcode', tested: [], missing: relevantKeys.slice(),
+            quant: ledger ? ledger.quantization : null,
+            runCode: rcInfo,
+            reason: runCodeStatusReason(rcInfo)
+          };
+        } else if (failedRun) {
           status = {
             kind: 'failed', tested: [], missing: relevantKeys.slice(),
             quant: ledger ? ledger.quantization : null,
@@ -1102,11 +1116,13 @@ function listLlmModels() {
       if (aNonLlm && !bNonLlm) return 1;
       if (!aNonLlm && bNonLlm) return -1;
       if (aNonLlm && bNonLlm) return (a.displayName || '').localeCompare(b.displayName || '');
-      // Ordre de priorité : testés (complete/partial avec metrics) > échec > jamais.
+      // Ordre de priorité : testés (complete/partial avec metrics) > runcode
+      // (tremplin passé, score au carnet) > échec > jamais.
       const rankKind = k => {
         if (k === 'complete' || k === 'partial') return 0;
-        if (k === 'failed') return 1;
-        return 2; // never
+        if (k === 'runcode') return 1;
+        if (k === 'failed') return 2;
+        return 3; // never
       };
       const ra = rankKind(a.status.kind);
       const rb = rankKind(b.status.kind);
@@ -1121,6 +1137,10 @@ function listLlmModels() {
         if (mb.score !== ma.score) return mb.score - ma.score;
         return (mb.globalLifeScore || 0) - (ma.globalLifeScore || 0);
       }
+      // Modèles runcode sans metrics classiques : tri par pct du tremplin.
+      const rcA = a.status.runCode;
+      const rcB = b.status.runCode;
+      if (rcA && rcB && (rcB.pct || 0) !== (rcA.pct || 0)) return (rcB.pct || 0) - (rcA.pct || 0);
       return (a.displayName || '').localeCompare(b.displayName || '');
     });
     return { ok: true, models };
@@ -1133,6 +1153,9 @@ function statusBadge(status) {
   if (!status) return { label: '?', color: C.gray };
   if (status.kind === 'nonllm')   return status.archIncompatible ? { label: 'INCOMPATIBLE', color: C.red } : { label: 'NON APPLICABLE', color: C.gray };
   if (status.kind === 'failed')   return { label: 'ÉCHEC',          color: C.red };
+  // RunCode : tremplin passé (écoles RunCode-* au carnet), grande école à venir.
+  // Label magenta distinct de PARTIEL pour montrer la progression réelle.
+  if (status.kind === 'runcode')  return { label: 'RUNCODE',       color: C.magenta };
   if (status.kind === 'never')   return { label: 'JAMAIS TESTE', color: C.yellow };
   if (status.kind === 'partial') return { label: 'PARTIEL',      color: C.magenta };
   return { label: 'COMPLET', color: C.green };
@@ -1163,6 +1186,8 @@ function groupModelsByStatus(list) {
     const kind = m.status && m.status.kind;
     if (kind === 'complete') groups.tested.push(m);
     else if (kind === 'partial') groups.partial.push(m);
+    // RunCode (tremplin passé) : compté comme testé (un score existe au carnet).
+    else if (kind === 'runcode') groups.tested.push(m);
     else if (kind === 'failed') groups.failed.push(m);
     else if (kind === 'nonllm') groups.isolated.push(m);
     else groups.never.push(m);
@@ -1252,7 +1277,17 @@ function recomputeStatus(m) {
   const failedRun = runStatusFromHistory(m.modelKey);
   let status;
   if (!ledger || testedSchools.length === 0) {
-    if (failedRun) {
+    // Tremplin RunCode passé (écoles RunCode-*) mais grande école à venir :
+    // statut dédié, cohérent avec listLlmModels (fix 2026-09-16).
+    const rcInfo = runCodeGateInfo(ledger);
+    if (rcInfo.done) {
+      status = {
+        kind: 'runcode', tested: [], missing: relevantKeys.slice(),
+        quant: ledger ? ledger.quantization : null,
+        runCode: rcInfo,
+        reason: runCodeStatusReason(rcInfo)
+      };
+    } else if (failedRun) {
       status = {
         kind: 'failed', tested: [], missing: relevantKeys.slice(),
         quant: ledger ? ledger.quantization : null,
@@ -1363,7 +1398,7 @@ function printModelsList(models, { interactive = true } = {}) {
     const mt = m.metrics;
     return mt && mt.elapsedMs > 0 ? fmtDuration(mt.elapsedMs).length : 0;
   }));
-  const missW = Math.max(22, ...models.map(m => (m.status.noCarnet && m.status.reason)
+  const missW = Math.max(22, ...models.map(m => (m.status.reason && (m.status.noCarnet || m.status.kind === 'runcode'))
     ? m.status.reason.length
     : (missingSchoolsLabel(m.status) || '').length));
 
@@ -1410,7 +1445,10 @@ function printModelsList(models, { interactive = true } = {}) {
     // Modèles « PARTIEL sans carnet » (bug 2026-09-02) : la liste des écoles
     // manquantes liste TOUTES les écoles (aucune validée) — on affiche plutôt
     // la raison compacte pour expliquer le PARTIEL.
-    const missStr = missing && !m.status.noCarnet
+    // Idem pour les modèles « RUNCODE » (tremplin passé, grande école à venir) :
+    // la raison (parcours · pct · spécialité) est plus informative que la liste
+    // brute des écoles manquantes.
+    const missStr = missing && !m.status.noCarnet && m.status.kind !== 'runcode'
       ? `${C.gray}${missing.padEnd(missW)}${C.reset}`
       : m.status.reason
         ? `${C.gray}${m.status.reason.slice(0, missW).padEnd(missW)}${C.reset}`
@@ -2031,6 +2069,18 @@ function runCodeGateInfo(ledger) {
   };
 }
 
+// Raison compacte du statut « RunCode » (tremplin passé, grande école à venir).
+// Affichée dans la colonne « Écoles manquantes » du tableau (--list-only) et
+// comme détail des statuts du questionnaire. Compact : la largeur de colonne
+// missW est calculée dessus.
+function runCodeStatusReason(rcInfo) {
+  const parts = [];
+  if (rcInfo.parcours) parts.push(`RunCode ${rcInfo.parcours}`);
+  if (rcInfo.pct != null) parts.push(`${rcInfo.pct}%`);
+  if (rcInfo.specialite) parts.push(String(rcInfo.specialite).toUpperCase());
+  return parts.length > 0 ? parts.join(' · ') : 'RunCode passé';
+}
+
 // Lance l'examen RunCode (node runner.js --exam-code) pour un modèle local.
 // Le parcours suit la même scolarité que l'école cible (un modèle STANDARD
 // passe College-Lycee) : le pre-examen mesure les aptitudes au bon niveau.
@@ -2481,6 +2531,7 @@ async function main() {
       'Pré-test de santé : chaque modèle reçoit un ping après chargement ; les modèles défectueux (load_failed, health check KO, run KO systémique) sont auto-blacklistés.',
       'Ctrl+C reste l\'arrêt COMPLET (décharge + serveur). Pour ÉCOURTER un modèle sans tout arrêter : node night-batch.js --skip dans un second terminal.',
       '--skip est consommé par le batch (≤3s) : le run en cours est killé, le modèle est consigné « passé avec --skip » (ni échec ni blacklist), et la file continue.',
+      'Liste d\'attente RunCode : les modèles « mis en réserve » après node runner.js --exam-code passent en tête de file. Retirez-les avec : node -e "require(\'./runcode-queue\').dequeue(\'<modelKey>\')"',
       '--resume se combine avec --models/--schools/--class-by-class : les tiers déjà passés sont mémorisés dans .benchgo-progress.json et sautés.'
     ]);
     process.exit(0);
@@ -2701,6 +2752,39 @@ async function main() {
       console.log(`  ${C.yellow}Aucun modele selectionne. Abandon.${C.reset}`);
       if (serverHandle.startedByUs) stopServer();
       process.exit(0);
+    }
+  }
+
+  // --- Liste d'attente RunCode (tâche 2026-09-16) ---
+  // Les modèles « mis en réserve » après leur tremplin RunCode (depuis le
+  // runner : proposition après l'examen ou flag --queue-runcode) passent en
+  // PRIORITÉ : on les remonte en tête de file (ordre d'inscription conservé),
+  // AVANT le reste de la sélection. Les inscrits présents dans la sélection
+  // sont déplacés, pas dupliqués. Les entrées dont le GGUF n'existe plus
+  // (absents de lms ls) sont purgées de la liste (obsolètes).
+  const queuedEntries = runcodeQueue.listQueue();
+  if (queuedEntries.length > 0) {
+    const queuedKeys = new Set(queuedEntries.map(e => e.modelKey));
+    const present = queuedEntries.filter(e => models.some(m => m.modelKey === e.modelKey));
+    const obsolete = queuedEntries.filter(e => !models.some(m => m.modelKey === e.modelKey));
+    for (const e of obsolete) runcodeQueue.dequeue(e.modelKey);
+    if (present.length > 0) {
+      const queuedSelected = present
+        .map(e => selected.find(m => m.modelKey === e.modelKey))
+        .filter(Boolean);
+      const rest = selected.filter(m => !queuedKeys.has(m.modelKey));
+      selected = [...queuedSelected, ...rest];
+      console.log(`\n  ${C.magenta}⏳ Liste d'attente RunCode (grande école) : ${present.length} modèle(s) en réserve passent en TÊTE de file :${C.reset}`);
+      for (const e of present) {
+        const extra = e.pct != null
+          ? ` — tremplin ${e.pct}%${e.specialite ? `, spécialité ${String(e.specialite).toUpperCase()}` : ''}`
+          : '';
+        console.log(`  ${C.bold}  • ${e.displayName || e.modelKey}${C.reset}${C.gray}${extra}${C.reset}`);
+      }
+      console.log(`  ${C.gray}(Inscrits après leur examen RunCode — node runner.js --exam-code propose la mise en réserve.)${C.reset}\n`);
+      if (obsolete.length > 0) {
+        console.log(`  ${C.gray}${obsolete.length} entrée(s) obsolète(s) purgée(s) de la liste (GGUF absent de lms ls).${C.reset}`);
+      }
     }
   }
 
@@ -3081,6 +3165,16 @@ async function main() {
       continue;
     }
     console.log(`\n  ${modelOk ? C.green : C.red}[${nowClock()}] Modele ${m.displayName} termine (${modelSchools.length} ecole(s)).${C.reset}`);
+
+    // --- Consommation de la liste d'attente RunCode (tâche 2026-09-16) ---
+    // Un modèle inscrit en réserve qui vient de terminer TOUTES ses écoles
+    // planifiées avec succès sort de la liste : sa dette envers la grande
+    // école est payée. En cas d'échec ou de --skip, l'entrée est conservée
+    // (il restera prioritaire au prochain batch pour finir son parcours).
+    if (modelOk && runcodeQueue.isQueued(m.modelKey)) {
+      runcodeQueue.dequeue(m.modelKey);
+      console.log(`  ${C.magenta}⏳ ${m.displayName} terminé — retiré de la liste d'attente RunCode (grande école passée).${C.reset}`);
+    }
 
     // Auto-blacklist si TOUTES les écoles ont échoué en run_ko (et aucune n'a
     // réussi). Un modèle qui rate toutes ses écoles a un problème systémique

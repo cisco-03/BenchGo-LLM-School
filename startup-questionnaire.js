@@ -146,8 +146,12 @@ const STATUS_BADGE_COLORS = {
 };
 
 // Glyphe ANSI par statut (kind) : compact, lisible dans le menu numéroté.
+// runcode : tremplin RunCode passé (écoles RunCode-* au carnet), grande école
+// à venir (fix 2026-09-16 : la liste ne se mettait pas à jour après un examen
+// RunCode réussi — les écoles RunCode-* étaient ignorées par ledgerSchoolKeys).
 const STATUS_GLYPHS = {
   complete: { glyph: '✓', color: '\x1b[32m' },
+  runcode:  { glyph: '⚡', color: '\x1b[35m' },
   partial:  { glyph: '~', color: '\x1b[35m' },
   failed:   { glyph: '✘', color: '\x1b[31m' },
   never:    { glyph: '·', color: '\x1b[33m' },
@@ -169,6 +173,11 @@ function _statusMapForModels(models) {
       const mt = m.metrics;
       let detail = badge.label;
       if (mt) detail += ` · ${mt.pct}%${mt.tokensPerSecond > 0 ? ` · ${mt.tokensPerSecond} t/s` : ''}`;
+      // Statut runcode : le pct du tremplin est dans m.status.runCode (pas de
+      // metrics classiques) — l'afficher pour que le menu montre le score.
+      else if (kind === 'runcode' && m.status.runCode && m.status.runCode.pct != null) {
+        detail += ` · ${m.status.runCode.pct}%${m.status.runCode.specialite ? ` · ${String(m.status.runCode.specialite).toUpperCase()}` : ''}`;
+      }
       else if (m.status.reason) detail += ` (${m.status.reason})`;
       map.set(norm(m.modelKey), { kind, badge, detail });
     }
@@ -314,7 +323,7 @@ async function runStartupQuestionnaire(cliArgs) {
         // Repli silencieux : si lms/carnets indisponibles, liste simple.
         const statusMap = provider === 'lmstudio' ? _statusMapForModels(models) : new Map();
         if (statusMap.size > 0) {
-          console.log('  \x1b[90mStatuts : ✓ testé (score) · ~ partiel · ✘ échec · · à tester · ⊘ isolé. Tapez "list" pour le tableau détaillé.\x1b[0m');
+          console.log('  \x1b[90mStatuts : ✓ testé (score) · ⚡ RunCode (tremplin passé) · ~ partiel · ✘ échec · · à tester · ⊘ isolé. Tapez "list" pour le tableau détaillé.\x1b[0m');
         }
         console.log(`  \x1b[32m${models.length} modèle(s) ${provider === 'lmstudio' ? 'LM Studio' : 'Ollama'} détecté(s) :\x1b[0m`);
         models.forEach((m, i) => {

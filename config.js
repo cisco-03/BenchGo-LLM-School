@@ -249,6 +249,13 @@ function parseCliArgs() {
   // config globale, puis quitte sans lancer l'auto-profilage ni l'évaluation.
   const dryRunFlag = rawArgs.includes('--dry-run');
 
+  // --- --queue-runcode (tâche 2026-09-16) : liste d'attente RunCode ---
+  // Met automatiquement le modèle en réserve dans la liste d'attente de la
+  // grande école (.benchgo-runcode-queue.json) après l'examen RunCode, sans
+  // prompt interactif (mode batch). Sans ce flag, la mise en réserve est
+  // PROPOSÉE à la fin de l'examen (TTY uniquement).
+  const queueRuncodeFlag = rawArgs.includes('--queue-runcode');
+
   // --- --hybrid : mode nuit hybride (CLI + auto-soumission GitHub si seuil) ---
   // Plan §5 (Intégration). Activé par night-batch.js ou manuellement.
   const hybridFlag = rawArgs.includes('--hybrid');
@@ -273,7 +280,8 @@ function parseCliArgs() {
             forgetKey: forgetKeyRaw, listKeys: listKeysFlag, noSaveKeys: noSaveKeysFlag, force: forceFlag,
             restoreCarnets: restoreCarnetsFlag,
             submit: submitFlag, noTelemetry: noTelemetryFlag, githubToken: githubTokenRaw,
-            noUpdateCheck: noUpdateCheckFlag, dryRun: dryRunFlag, hybrid: hybridFlag };
+            noUpdateCheck: noUpdateCheckFlag, dryRun: dryRunFlag, hybrid: hybridFlag,
+            queueRuncode: queueRuncodeFlag };
 }
 
 function detectProfileFromModelName(modelName) {

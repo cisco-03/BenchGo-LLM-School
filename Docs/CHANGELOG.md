@@ -1,5 +1,75 @@
 # CHANGELOG - Carnet de Notes BenchGo
 
+## 2026-09-16b — fix(runcode) : la liste des modèles ne se mettait pas à jour après un examen RunCode (statut « · à tester » persistant)
+
+### Contexte & problème rencontré
+Signalé dans `Memories-BenchGo/Tasks.md` : « j'ai détecté une autre erreur sur le résultat "RunCode" modèle : neohorse-1-4b — la liste ne se met pas à jour, normalement il doit être coché une fois le test fini (en RunCode) ». Après un examen RunCode réussi (carnet écrit avec les écoles `RunCode-Primaire` 60% et `RunCode-College-Lycee` 63%), le modèle apparaissait toujours « · à tester » dans le menu du questionnaire (section 2) et « JAMAIS TESTE » dans `night-batch.js --list-only`. L'utilisateur s'étonne : la mise à jour ne se produit qu'avec night-batch.js ? Non : le carnet était bien écrit par runner.js, c'est la LECTURE du statut qui ignorait les écoles RunCode.
+
+### Cause racine
+`ledgerSchoolKeys()` (night-batch.js) convertit les noms d'écoles du carnet vers les clés SCHOOLS via `ECOLE_NAME_TO_KEY`, qui ne mappe que les écoles classiques (`Primaire→LIGHT`, `College-Lycee→STANDARD`, `Universite→EXPERT`, `Doctorat-These→DOCTORAT`, `Post-Doctorat→FRONTIER`). Les écoles `RunCode-Primaire` / `RunCode-College-Lycee` / `RunCode-Universite` n'y figurent PAS → `testedSchools` vide → branche `!ledger || testedSchools.length === 0` → statut `never` (glyphe `·`). Night-batch n'était impliqué que parce que c'est lui qui affiche les statuts ; le carnet RunCode était correct depuis 2026-09-10b.
+
+### Modifications apportées
+
+**`night-batch.js`** :
+- Nouveau statut `runcode` dans `listLlmModels()` et `recomputeStatus()` (désisolation) : quand aucune école classique au carnet MAIS un tremplin RunCode passé (`runCodeGateInfo(ledger).done`), statut `{ kind: 'runcode', runCode: rcInfo, reason: runCodeStatusReason(rcInfo) }`.
+- Nouvelle fonction `runCodeStatusReason(rcInfo)` : raison compacte `RunCode <parcours> · <pct>% · <SPÉCIALITÉ>` (ex: `RunCode College-Lycee · 63% · CSHARP`) affichée dans la colonne « Écoles manquantes » (largeur `missW` recalculée pour l'inclure).
+- `statusBadge()` : label `RUNCODE` magenta (distinct de PARTIEL) pour le kind `runcode`.
+- Tri de `listLlmModels()` : les `runcode` se classent après les testés (complete/partial) et avant les échecs ; égalité triée par pct du tremplin.
+- `groupModelsByStatus()` : les `runcode` comptent dans le compartiment `tested` (un score existe au carnet).
+
+**`startup-questionnaire.js`** :
+- `STATUS_GLYPHS` : nouvelle entrée `runcode: ⚡` magenta (tremplin passé).
+- `_statusMapForModels()` : pour le kind `runcode`, affiche le pct + spécialité du tremplin (pas de metrics classiques).
+- Ligne d'aide des statuts mise à jour : `✓ testé (score) · ⚡ RunCode (tremplin passé) · ~ partiel · ✘ échec · · à tester · ⊘ isolé`.
+
+### Vérifications
+- `node --check` night-batch.js + startup-questionnaire.js : OK.
+- Cas réel `neohorse-1-4b` : `kind=runcode`, badge `RUNCODE`, raison `RunCode College-Lycee · 63% · CSHARP`, rang 13 (après les testés) — au lieu de « never/· » avant le fix.
+- `groupModelsByStatus` : neohorse présent dans `groups.tested` (11 testés, 2 partiels, 3 échecs, 5 jamais).
+- Table `--list-only` : lignes `RUNCODE` avec pct tremplin + raison compacte, alignement des colonnes préservé.
+- `node tests/run-tests.js` : 31/31.
+
+## 2026-09-16 — fix(runcode) : « details is not defined » + verdict professeur visible/spinner + liste d'attente grande école
+
+### Contexte & problème rencontré
+RunCode Turbo sur `granite-4.2-3b` (LIGHT, parcours Primaire) : l'examen se déroule normalement (9 exercices, bilan par langage affiché) puis `❌ Erreur lors de l'examen : details is not defined` — rien ne se passe après : ni verdict du professeur, ni bilan final, ni carnet (l'erreur remontait au catch de runner.js:1833 qui la avalait). L'utilisateur (`Memories-BenchGo/Tasks.md`) signale : « Quel dommage ! il ne se passe rien à la fin de l'analyse, on n'a pas le ressenti du professeur », « PAS DE PROPOSITION pour la grande école (ou mettre en réserve ?) », « verdict du professeur ? plus interactif avec spinner ? », « en mode RunCode : pas de carnet ou peut être pas besoin ? ».
+
+### Cause racine
+`determineSpecialty()` (adaptive-exam.js) référençait la variable `details` (calcul de `avgLatencyMs`) qui n'existait PAS dans sa signature — reliquat d'un refactor. Le `ReferenceError` était levé après l'affichage du bilan par langage, tuant : l'appel professeur (verdict), le bilan final, et l'écriture du carnet (bloc `examMax > 0` jamais atteint). Deux bugs de la même famille dans la même fonction.
+
+### Modifications apportées
+
+**`adaptive-exam.js` — 2 bugs de closure corrigés + verdict interactif** :
+- Bug 1 : `avgLatencyMs` lit désormais `reportCard.details` (paramètre disponible) au lieu de `details` inconnu — le carnet + le verdict reviennent.
+- Bug 2 (révélé par le test du fix 1) : le spinner du verdict appelle `log()` — const locale de `runAdaptiveSchoolExam` inaccessible au niveau module. `log` est passé en 6e paramètre de `determineSpecialty()`.
+- **Verdict du professeur affiché EN DIRECT** : spinner « Le professeur rédige son verdict » pendant l'appel cloud (5-30s), puis `🎓 [VERDICT DU PROFESSEUR] <verdict>` dès la réception — le ressenti s'affiche au moment où il arrive (et non seulement dans le bilan final du runner).
+- Réponses vides/erreurs professeur : messages spinner dédiés (« n'a rien répondu — verdict mécanique » / « injoignable (...) »), repli mécanique inchangé (jamais de verdict vide).
+
+**`runcode-queue.js` (nouveau module) — liste d'attente RunCode → grande école** :
+- File persistante `.benchgo-runcode-queue.json` : `{ entries: [{ modelKey, addedAt, displayName, quantization, parcours, pct, specialite, diplome }] }`.
+- `enqueue()` (dédupliqué par modelKey, refresh des métadonnées sans changer l'ordre), `dequeue()`, `listQueue()` (purge automatique > 30 jours), `isQueued()`.
+- Écriture atomique (tmp + rename), tolérante (fichier corrompu = file vide).
+
+**`runner.js` — mise en réserve proposée après l'examen** :
+- Après l'écriture du carnet RunCode : en TTY, `askYesNo` « Mettre <shortName> en réserve pour la grande école (liste d'attente — il passera en priorité au prochain batch de nuit) ? » ; refus = retrait éventuel de la file (la liste reste fidèle aux volontés).
+- **NOUVEAU FLAG `--queue-runcode`** : inscrit automatiquement (mode batch/non-TTY), jamais de prompt.
+- Réponse au questionnement carnet : le carnet RunCode EST écrit (bloc existant `examMax > 0`) — il était simplement jamais atteint à cause du bug.
+
+**`night-batch.js` — la grande école consomme la liste** :
+- Après la sélection des modèles : les inscrits présents dans `lms ls` sont remontés EN TÊTE DE FILE (ordre d'inscription conservé), avec affichage (tremplin %, spécialité). Les entrées dont le GGUF n'existe plus sont purgées.
+- Après un passage complet réussi : l'entrée est retirée (dette payée). Échec/`--skip` = conservé (resteront prioritaires au prochain batch).
+- `--help` : mention de la liste d'attente + commande de retrait manuel.
+
+**`config.js`** : `parseCliArgs` expose `queueRuncode`.
+
+### Vérifications
+- `node --check` sur adaptive-exam.js, config.js, runner.js, night-batch.js, runcode-queue.js : OK.
+- `node tests/run-tests.js` : 31/31.
+- Test déterministe `determineSpecialty` (professeur mocké, sandbox vm) : verdict reçu, affichage live `🎓`, `avgLatencyMs` calculé (12750 = moyenne 1500/24000), repli mécanique OK.
+- Test `runcode-queue` : enqueue → isQueued → dedup/refresh → dequeue → isQueued false : OK.
+- Test tri tête-de-file night-batch (logique extraite) : inscrit remonté en 1re position : OK.
+- `parseCliArgs().queueRuncode` : true avec `--queue-runcode`, false sans : OK.
+
 ## 2026-09-15 — feat(arch-warning) : avertissement « modèle non compatible » + registre des incompatibles (arch GGUF non supportée par llama.cpp)
 
 ### Contexte & problème rencontré
