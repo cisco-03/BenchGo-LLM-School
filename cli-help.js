@@ -77,6 +77,14 @@ const HELP_TEXT = `
   \x1b[1m--parcours=\x1b[0m           RunCode : parcours scolaire Primaire | College-Lycee | Universite
                           (défaut : déduit du profil/du nom du modèle).
                           Ex: node runner.js --provider=groq --model=llama-3.3-70b-versatile --exam-code
+  \x1b[1m--flash\x1b[0m              Mode FLASH : grande école ACCÉLÉRÉE — 1 exercice par classe
+                          (au lieu de 10-15), tiré en priorité parmi les compétences
+                          découvertes au tremplin RunCode. Pensé pour les machines à
+                          PEU DE RAM (flash memory + interrogation flash) : l'examen
+                          complet dure ~10x moins longtemps. Score au carnet (école
+                          Flash-<École>) mais NON comptabilisé dans le classement
+                          (non comparable à un examen complet). Réglage :
+                          node runner.js all --flash --profile=STANDARD
 
 \x1b[1mEXEMPLES\x1b[0m
   \x1b[90m# Benchmark local complet (LM Studio) en auto-détection\x1b[0m
@@ -87,6 +95,8 @@ const HELP_TEXT = `
   node runner.js 2 --profile=LIGHT
   \x1b[90m# Mode nuit batch (force, pas de questions, soumission auto)\x1b[0m
   node runner.js all --force --submit --github-token=ghp_...
+  \x1b[90m# MODE FLASH : examen accéléré (1 exercice/classe, peu de RAM)\x1b[0m
+  node runner.js all --flash --profile=STANDARD
   \x1b[90m# Charger un preset existant\x1b[0m
   node runner.js --preset=mon-modele
   \x1b[90m# Voir le dernier run\x1b[0m

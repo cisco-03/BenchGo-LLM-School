@@ -236,8 +236,25 @@ function computeTrend(attempts) {
 
 // Agrège un carnet en une entrée de classement (utilise la meilleure tentative par école).
 function aggregateLedger(ledger) {
-  const rawEntries = Object.values(ledger.ecoles || {});
-  if (rawEntries.length === 0) return null;
+  // MODE FLASH (tâche 2026-09-16c) : les écoles Flash-* (examen accéléré,
+  // 1 exercice/classe) sont EXCLUES du classement général. Un score FLASH
+  // n'est pas comparable à un score complet (1 vs 10-15 exercices par
+  // classe) — les mélanger fausserait le rang et le pct. Le carnet garde
+  // l'historique (consultable dans la modale si d'autres écoles existent),
+  // mais les stats de classement n'en tiennent pas compte. Le reste du
+  // traitement (RunCode, coût, tendance) s'opère sur la liste filtrée.
+  const rawEntriesAll = Object.values(ledger.ecoles || {});
+  const rawEntries = rawEntriesAll.filter(raw => {
+    const best = normalizeEcoleEntryLb(raw).best;
+    return !(best && (best.flash === true || /^Flash-/i.test(best.ecole || '')));
+  });
+  if (rawEntriesAll.length === 0) return null;
+  if (rawEntries.length === 0) {
+    // Carnet UNIQUEMENT Flash : aucun score comparable — pas d'entrée de
+    // classement (le modèle reste visible dans night-batch --list-only via
+    // l'historique des runs, mais pas dans le leaderboard).
+    return null;
+  }
 
   let score = 0, max = 0, globalLifeScore = 0, optionalBonus = 0;
   let helpCount = 0, retriedCount = 0;

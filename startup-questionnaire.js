@@ -562,6 +562,38 @@ async function runStartupQuestionnaire(cliArgs) {
   console.log(`  \x1b[1;35m→ Cible : ${tierArg}\x1b[0m`);
   console.log('');
 
+  // --- 9. MODE FLASH (tâche 2026-09-16c) : examen accéléré ---
+  // Proposé quand la cible est « all » (le mode FLASH est un mode de grande
+  // école, pas un mode de classe unique). L'utilisateur à PEU DE RAM choisit
+  // FLASH : 1 exercice par classe au lieu de 10-15 → l'examen dure ~10x
+  // moins longtemps (la VRAM/RAM est sollicitée beaucoup moins longtemps).
+  // Tirage orienté par le tremplin RunCode si disponible.
+  let flashMode = cliArgs.flash === true;
+  if (tierArg === 'all') {
+    _printSection('9. Mode d\'examen');
+    console.log('  \x1b[90mC = Classique : examen complet (10-15 exercices par classe) — mesure de référence.\x1b[0m');
+    console.log('  \x1b[90mF = FLASH ⚡ : examen accéléré (1 exercice par classe, tiré des compétences RunCode).\x1b[0m');
+    console.log('  \x1b[90m    Pensé pour les machines à PEU DE RAM : l\'examen dure ~10x moins longtemps.\x1b[0m');
+    console.log('  \x1b[90m    Score au carnet (école Flash-<École>) mais NON compté dans le classement.\x1b[0m');
+    const flashRaw = await _askFreeText('  Mode (Entrée = Classique, C/F) :', { allowEmpty: true });
+    const fv = (flashRaw || '').trim().toLowerCase();
+    if (fv === 'f' || fv === 'flash') {
+      flashMode = true;
+      console.log('  \x1b[1;35m⚡ → Mode FLASH activé : 1 exercice par classe.\x1b[0m');
+      logger.info('Questionnaire : mode FLASH choisi par l\'utilisateur (interactif).');
+    } else {
+      console.log('  \x1b[90m→ Mode Classique (examen complet).\x1b[0m');
+    }
+    console.log('');
+  }
+  if (flashMode && tierArg !== 'all') {
+    // FLASH n'a de sens qu'en grande école complète (les tiers individuels
+    // restent tels quels). Cohérence CLI : on désactive silencieusement + log.
+    console.log('  \x1b[33m⚡ Mode FLASH ignoré (cible = classe unique — FLASH ne s\'applique qu\'à « all »).\x1b[0m');
+    logger.info('Questionnaire : FLASH demandé mais cible != all — désactivé.');
+    flashMode = false;
+  }
+
   // --- Récapitulatif ---
   console.log('  \x1b[1;36m━━━━━━━━━━━━━ RÉCAPITULATIF ━━━━━━━━━━━━━\x1b[0m');
   console.log(`  Fournisseur   : ${provider}`);
@@ -572,6 +604,7 @@ async function runStartupQuestionnaire(cliArgs) {
   console.log(`  Profil        : ${profileArg}`);
   console.log(`  Contexte max  : ${contextLimitTokens} tokens`);
   console.log(`  Cible         : ${tierArg}`);
+  console.log(`  Mode d'examen : ${flashMode ? '\x1b[1;35m⚡ FLASH (accéléré)\x1b[0m' : 'Classique (complet)'}`);
   console.log(`  Professeur    : ${teacherConfig.enabled ? 'OpenRouter (Free Router)' : 'auto-analyse classique'}`);
   console.log('');
 
@@ -585,6 +618,7 @@ async function runStartupQuestionnaire(cliArgs) {
     teacherConfig,
     quantization,
     tierArg,
+    flash: flashMode,
     isInteractive: true
   };
 }

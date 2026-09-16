@@ -260,6 +260,13 @@ function parseCliArgs() {
   // Plan §5 (Intégration). Activé par night-batch.js ou manuellement.
   const hybridFlag = rawArgs.includes('--hybrid');
 
+  // --- --flash (tâche 2026-09-16c) : Mode FLASH — grande école accélérée ---
+  // Pense aux machines à PEU DE RAM (flash memory) et à l'interrogation flash
+  // (interro éclair en classe) : 1 exercice par classe au lieu de 10-15, tiré
+  // de préférence parmi les compétences découvertes au passage RunCode
+  // (tremplin). Durée ~10x plus courte, VRAM/RAM sollicitée moins longtemps.
+  const flashFlag = rawArgs.includes('--flash');
+
   const profileArgExplicit = profileArgRaw ? profileArgRaw.toUpperCase() : null;
   const parsedContextLimit = contextLimitRaw ? parseInt(contextLimitRaw, 10) : null;
   const contextLimitTokens = Number.isInteger(parsedContextLimit) && parsedContextLimit > 0
@@ -281,7 +288,7 @@ function parseCliArgs() {
             restoreCarnets: restoreCarnetsFlag,
             submit: submitFlag, noTelemetry: noTelemetryFlag, githubToken: githubTokenRaw,
             noUpdateCheck: noUpdateCheckFlag, dryRun: dryRunFlag, hybrid: hybridFlag,
-            queueRuncode: queueRuncodeFlag };
+            queueRuncode: queueRuncodeFlag, flash: flashFlag };
 }
 
 function detectProfileFromModelName(modelName) {

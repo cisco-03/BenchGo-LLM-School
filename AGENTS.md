@@ -42,6 +42,7 @@ OS : Windows, PowerShell 5.1. Projet Node.js 18+ **sans `package.json`** (module
 | Soumettre un carnet existant (sans run) | `node runner.js --submit` (dernier carnet) / `--submit --model=<nom>` (ciblé) |
 | Professeur IA avec provider custom | `node runner.js --teacher-provider=<provider> --teacher-model=<model>` |
 | RunCode code natif | `node runner.js --provider=<provider> --model=<model> --exam-code` (flag `--exam-code` = mode **RunCode**) |
+| Mode FLASH (grande école accélérée) | `node runner.js all --flash --profile=STANDARD` (1 exercice/classe, petites RAM) |
 | Liste LM Studio triée par score local | `node night-batch.js --list-only` |
 | Forcer la détection (réindexer les GGUF orphelins) | `node night-batch.js --force-detect` |
 | Isoler/désisoler un modèle LM Studio | `node night-batch.js --isoler=!<num>` (isoler) / `--isoler=!!<num>` (désisoler) — numéro = position dans `--list-only`. Ou interaction `!<num>` / `!!<num>` pendant la sélection `night-batch.js` |
@@ -164,6 +165,35 @@ Bug undici : `TypeError: Cannot assign to read only property 'name' of object 'E
 
 ### Écoles séquentielles
 Si modèle > 3B paramètres, le runner peut enchaîner LIGHT puis STANDARD dans le même run (même clé, test de capacité partagé, santé réinitialisée).
+
+### Mode FLASH — grande école accélérée (tâche 2026-09-16c)
+
+**Fichiers touchés :** `config.js`, `runner.js`, `startup-questionnaire.js`, `cli-help.js`, `night-batch.js`, `leaderboard.js`, `consolidate-leaderboard.js`, `Docs/CHANGELOG.md`, `AGENTS.md`.
+
+**Principe :** Le mode `--flash` exécute la grande école avec **1 exercice par classe** (au lieu de 10-15), tiré en PRIORITÉ parmi les compétences découvertes au tremplin RunCode (bilan `languageStats` du carnet). Pensé pour les machines à PEU DE RAM : la VRAM/RAM est sollicitée ~10x moins longtemps. Le nom FLASH veut dire les deux : flash memory (petite RAM) + interrogation flash (interro éclair scolaire). C'est une OPTION EN SUPPLÉMENT : le score FLASH est enregistré au carnet (école `Flash-<École>`) mais n'est JAMAIS comptabilisé dans le classement général ni dans les statuts night-batch (non comparable à un examen complet).
+
+**Fonctions :**
+- `buildFlashTaskSelection(tierData, flashStats)` (dans `runner.js`) → `{ tasks: [1 exercice], picked, basis }`. `flashStats` = `languageStats` du carnet RunCode (majeure du professeur pèse +5, langages réussis +3, tentés +1). Sans stats → tirage aléatoire pur.
+- `runSchool()` : résout `isFlashSchool` (flashFlag + tierArg='all'), école du carnet `Flash-<École>`, lit le bilan RunCode du carnet (`flashStats`), injecte `tierData._flashTasks` avant chaque tier.
+- `runTierAttempt()` : consomme `tierData._flashTasks` (copie JSON) puis `delete tierData._flashTasks` (hygiène du cache tiers).
+- `--flash` (config.js `parseCliArgs`) → `flash: true`. Questionnaire étape 9 : choix `C/F` (défaut Classique). `flashFlag` est un `let` (levé par le questionnaire, jamais abaissé).
+
+**Pour modifier :**
+1. **Changer la pondération du tirage** : éditer `scoreTask()` + `keywordToLang` dans `buildFlashTaskSelection()` (runner.js) — la carte langage→exercice se base sur les IDs/labels des tiers.
+2. **Changer le nombre d'exercices par classe** (ex: 2) : modifier `buildFlashTaskSelection()` pour renvoyer `scored.slice(0, K)` et la bannière.
+3. **Recompter FLASH dans le classement** (NON recommandé) : retirer le filtre `flash === true || /^Flash-/i` dans `aggregateLedger()` (leaderboard.js), `aggregateCarnet()` (consolidate-leaderboard.js), `ledgerSchoolKeys()` + `computeLedgerMetrics()` (night-batch.js).
+4. **Réactiver les soumissions en FLASH** : retirer le test `!isFlashRun` sur `proposeCommunitySubmission` et `hybridFlag` (runner.js).
+5. **Désactiver la propostion interactive** : retirer la section 9 du questionnaire (startup-questionnaire.js) — le flag CLI `--flash` reste actif.
+6. **Tester** : `node runner.js all --flash --profile=STANDARD --dry-run` (bannière ⚡ + config valide), puis un vrai run LIGHT (courant).
+
+**Pièges :**
+- `tierData._flashTasks` est SUPPRIMÉ après consumption (`delete`) : le cache tiers (`tier-loader.js`, objets partagés) ne doit JAMAIS garder la sélection — sinon le prochain run non-FLASH n'aurait qu'1 exercice par classe.
+- Le tirage FLASH n'a accès qu'aux métadonnées `id`/`label` des tâches : les `keywordToLang` doivent refléter les IDs réellement présents dans les tiers (`react`, `geojson`, `powershell`, `python`, `async`, `sql`...). Un tier sans correspondance retombe sur l'aléatoire (poids 0, `+ Math.random()` départage).
+- Les écoles `Flash-*` sont IGNORÉES par `ledgerSchoolKeys` (comme les `RunCode-*`) : un modèle qui n'a passé QUE Flash reste « à tester » pour la grande école — c'est voulu.
+- Le rattrapage, la pénalité de raisonnement excessif et la sentinelles fonctionnent normalement en FLASH : seul le tirage change.
+- `--flash` avec une cible tier unique (`node runner.js 2 --flash`) : le mode est DÉSACTIVÉ silencieusement (le flag ne s'applique qu'à `all`) — le questionnaire log cette correction.
+- Le classement est quand même régénéré après un run FLASH (`generateLeaderboard`) : le carnet a changé, le HTML/MD doit être à jour même si l'école Flash n'y apparaît pas.
+- LOGS : chaque sélection FLASH est journalisée (`logger.info`) — classe, exercice choisi, total disponibles, base du tirage. Toujours conserver ces logs (règle d'or debug).
 
 ### Sortie temps réel du mode nuit + carnets orphelins (tâche 2026-08-10)
 

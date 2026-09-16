@@ -412,10 +412,15 @@ function matchLedger(modelKey, ledgers) {
 
 // Renvoie la liste des cles SCHOOLS effectivement testees par un carnet
 // (convertit les noms d'ecoles humains -> cles SCHOOLS).
+// MODE FLASH (tâche 2026-09-16c) : les écoles Flash-* (examen accéléré) ne
+// SONT PAS des écoles complètes — une école Flash-Primaire au carnet ne doit
+// JAMAIS faire croire que LIGHT est testé (sinon night-batch afficherait le
+// modèle « testé » alors que son examen n'a porté que sur 1 exercice/classe).
 function ledgerSchoolKeys(ledger) {
   if (!ledger || !ledger.ecoles) return [];
   const keys = [];
   for (const humain of Object.keys(ledger.ecoles)) {
+    if (/^Flash-/i.test(humain)) continue; // école FLASH : jamais comptée comme complète
     const k = ECOLE_NAME_TO_KEY[humain];
     if (k) keys.push(k);
   }
@@ -454,11 +459,19 @@ function pickBestLocal(attempts) {
 // pct global, score, sante, vitesse (tok/s), tentatives (max sur une ecole),
 // tendance (delta de pct entre les 2 dernieres tentatives globales), temps
 // total d'inference. Renvoie null si le carnet est vide / absent.
+// MODE FLASH (tâche 2026-09-16c) : les écoles Flash-* sont exclues des
+// metriques (score accéléré non comparable) — un carnet uniquement Flash
+// renvoie null (le modèle reste affiché via le statut, pas via les metrics).
 // Ces metriques alimentent les nouvelles colonnes de --list-only et le tri
 // du plus fort au plus faible.
 function computeLedgerMetrics(ledger) {
   if (!ledger || !ledger.ecoles) return null;
-  const entries = Object.values(ledger.ecoles).map(normalizeEcoleEntryLocal).filter(e => e.best);
+  const entries = Object.values(ledger.ecoles).map(normalizeEcoleEntryLocal).filter(e => {
+    if (!e.best) return false;
+    // École FLASH : jamais comptée dans les métriques de classement.
+    if (e.best.flash === true || /^Flash-/i.test(e.best.ecole || '')) return false;
+    return true;
+  });
   if (entries.length === 0) return null;
   let score = 0, max = 0, globalLifeScore = 0;
   let totalTokens = 0, totalElapsedMs = 0;

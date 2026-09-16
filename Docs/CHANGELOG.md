@@ -1,5 +1,37 @@
 # CHANGELOG - Carnet de Notes BenchGo
 
+## 2026-09-16c — feat(runner) : Mode FLASH (grande école accélérée, petites RAM) + fix vitesse RunCode (0.96 t/s absurde)
+
+### Contexte & problème rencontré
+Deux demandes de `Memories-BenchGo/Tasks.md` (2026-09-16) : (1) « CLI Tous les modes : un modèle a produit 0.96 t/s !! impossible ! le modèle aurait gelé ! » — le carnet RunCode de `granite-4.2-8b` affichait 438 tokens pour 457 798 ms d'inférence (10 questions de débugging), soit 0.96 t/s. (2) « Mode runner grande école : accélérer le processus des examens : proposer dans le cli professeur, un mode rapide [node runner.js] — 1. un exercice par classe : au choix parmi les compétences découvertes lors du passage RunCode — 3. pourquoi ce mode rapide ? tu as pensé aux utilisateurs qui ne possèdent pas beaucoup de RAM ?? Moins de ram plus c'est long !! pour les examens ! ».
+
+### Cause racine (vitesse RunCode)
+`runner.js` lit `spinnerExam.tokenCount` à la FIN de l'examen pour le champ `tokens` du carnet. Or le spinner est RÉUTILISÉ à chaque question avec `spinnerExam.tokenCount = 0` (reset de l'adaptateur `studentClient.generate()`). Le carnet ne comptait donc que les tokens de la DERNIÈRE question (~40 tokens) contre plusieurs minutes d'inférence cumulée sur 10+ questions → vitesse absurde. Tous les carnets RunCode étaient affectés : granite-4.2-8b 0.96 t/s, granite-4.2-3b 1.16, kai-os_grug-12b 1.32, neohorse-1-4b 2.82. Le même bug existait sur le grand benchmark (écoles classiques) : `tierSpinner.tokenCount` pointe vers le spinner de la DERNIÈRE tentative, mais la valeur est lue immédiatement après chaque appel (pas de cumul différé) — pas de bug là.
+
+### Modifications apportées
+
+**Fix vitesse RunCode (`runner.js`) :**
+- Nouvel accumulateur `examTokensTotal` (closure de l'adaptateur `studentClient.generate()`) : `examTokensTotal += spinnerExam.tokenCount` après CHAQUE appel réussi. Le carnet RunCode lit `examTokensTotal` (cumul exact sur toutes les questions, entretien inclus) au lieu de `spinnerExam.tokenCount` (dernière question seule).
+
+**Mode FLASH (`config.js`, `runner.js`, `startup-questionnaire.js`, `cli-help.js`, `night-batch.js`, `leaderboard.js`, `consolidate-leaderboard.js`) :**
+- `--flash` (config.js) : flag CLI du Mode FLASH — grande école ACCÉLÉRÉE, 1 exercice par classe (au lieu de 10-15), pensé pour les machines à PEU DE RAM (flash memory + interrogation flash : le nom veut dire les deux). L'examen complet dure ~10x moins longtemps.
+- `buildFlashTaskSelection(tierData, flashStats)` (runner.js) : sélection de 1 exercice par classe, tirage BIAISÉ par le tremplin RunCode — le bilan `languageStats` du carnet (langages tentés/réussis/spécialité du professeur) pondère les exercices dont le nom évoque un langage joué (ex: `react` → React Hook, `geojson` → GeoJSON RFC 7946). Sans tremplin (stats vides) : tirage aléatoire pur. Le mode FLASH reste utilisable SANS avoir passé RunCode.
+- Injection dans `runSchool()` : avant chaque tier, `tierData._flashTasks = [1 exercice]` (log de la sélection : classe, exercice choisi, total disponibles, base du tirage). `runTierAttempt()` consomme `_flashTasks` si présent (copie JSON pour ne pas polluer le cache tiers) puis le supprime (hygiène du cache).
+- École du carnet `Flash-<École>` (ex: `Flash-Primaire`) + champ `flash: true` sur la tentative : l'école complète N'EST JAMAIS écrasée (un score FLASH n'est pas comparable à un examen complet). Rapport rangé sous `Export-Rapports/<date>/Flash-<École>/<PROFIL>/` avec nom de fichier taggé `_flash`.
+- Exclusion du classement : `aggregateLedger()` (leaderboard.js) et `aggregateCarnet()` (consolidate-leaderboard.js) filtrent les écoles `flash === true || /^Flash-/i` — carnet UNIQUEMENT Flash → pas d'entrée de classement. `ledgerSchoolKeys()` et `computeLedgerMetrics()` (night-batch.js) : écoles Flash jamais comptées comme écoles complètes (le modèle reste honnêtement « à tester » pour la grande école réelle).
+- Soumissions sautées : `proposeCommunitySubmission` et auto-soumission hybride ne s'exécutent pas en FLASH (log explicite). La génération du classement reste lancée (le HTML/MD doit refléter les carnets à jour même si l'école Flash n'y figure pas).
+- Questionnaire interactif (étape 9 « Mode d'examen ») : choix `C = Classique` (défaut, Entrée) / `F = FLASH ⚡`. FLASH ignoré si la cible est une classe unique (le mode ne s'applique qu'à « all »).
+- CLI : `node runner.js all --flash --profile=STANDARD` (tout le reste fonctionne comme la grande école classique : même questionnaire, même pre-flight, même test de capacité, même rattrapage désactivé — seul le tirage d'exercices change).
+- Aide : `cli-help.js` — section `--flash` + exemple dans EXEMPLES.
+- LOGS (règle d'or) : chaque étape FLASH est journalisée (`logger.info`) — lecture du bilan RunCode (nb de langages), sélection par classe (classe, exercice, total, base du tirage), école du carnet Flash-, rangement du rapport, écriture carnet, saut des soumissions. Diagnostic complet possible depuis `logs/benchgo_*.log`.
+
+### Vérifications
+- `node --check` : runner.js, config.js, cli-help.js, startup-questionnaire.js, night-batch.js, leaderboard.js, consolidate-leaderboard.js — tous OK.
+- `node tests/run-tests.js` : 31/31.
+- `node leaderboard.js` + `node scripts/check-inline-js.js` : OK (JS inline valide).
+- Tests isolés (extraits compilés) : `ledgerSchoolKeys` Flash+Primaire+College → `["LIGHT","STANDARD"]`, Flash seul → `[]` ; `computeLedgerMetrics` Flash seul → `null`, mixte → pct=80 score=80/100 (Flash exclu) ; `buildFlashTaskSelection` → 1 exercice, base « compétence RunCode » / « tirage aléatoire » ; `aggregateLedger` réel : carnet Flash seul → null, mixte → score 80/100 ecoleCount 1 (OK).
+- Dry-run `node runner.js all --flash --dry-run` : bannière « ⚡ ACTIF » + config valide. Sans `--flash` : aucune régression.
+
 ## 2026-09-16b — fix(runcode) : la liste des modèles ne se mettait pas à jour après un examen RunCode (statut « · à tester » persistant)
 
 ### Contexte & problème rencontré

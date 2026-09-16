@@ -329,7 +329,16 @@ async function runTierAttempt({ tierNum, tierData, isMandatory, profileArg, cont
 
   let tierScore = 0;
   let attemptsLeft = 12;
-  let availableTasks = JSON.parse(JSON.stringify(tierData.tasks));
+  // MODE FLASH (tâche 2026-09-16c) : le caller (runSchool) peut réduire le tier
+  // à 1 exercice via tierData._flashTasks (sélection biaisée RunCode). On
+  // travaille sur une COPIE (la mutation availableTasks ne doit pas altérer le
+  // cache tiers — loadTiers renvoie les objets partagés).
+  const isFlashTier = Array.isArray(tierData._flashTasks) && tierData._flashTasks.length > 0;
+  if (isFlashTier) {
+    logger.info(`Mode FLASH (tier ${tierNum}) : ${tierData._flashTasks.length} exercice(s) au lieu de ${(tierData.tasks || []).length}.`);
+  }
+  let availableTasks = JSON.parse(JSON.stringify(isFlashTier ? tierData._flashTasks : tierData.tasks));
+  delete tierData._flashTasks; // hygiène : ne pas laisser la sélection polluer le cache tiers
   // Carnet du professeur : accumulateur des demandes émises pendant ce tier.
   // Les entrées sont écrites dans Carnet-Professeur/<date>/<ecole>/ par le
   // caller, une fois le modelName et la date connus.
@@ -1174,11 +1183,16 @@ async function main() {
             restoreCarnets: restoreCarnetsFlag,
             submit: submitFlag, noTelemetry: noTelemetryFlag, githubToken: cliGithubToken,
             noUpdateCheck: noUpdateCheckFlag, dryRun: dryRunFlag, hybrid: hybridFlag,
-            queueRuncode: queueRuncodeFlag } = cliArgs;
+            queueRuncode: queueRuncodeFlag, flash: flashFlagCli } = cliArgs;
+  // flashFlag est mutable : le questionnaire interactif (étape 9) peut aussi
+  // l'activer (choix « F »). Le flag CLI --flash reste prioritaire — on ne
+  // fait que LEVER le flag depuis le questionnaire, jamais l'abaisser.
+  let flashFlag = flashFlagCli === true;
   let tierArg = tierArgRaw;
 
   if (dryRunFlag) logger.info('CLI: --dry-run actif — validation de la configuration sans exécution');
   if (hybridFlag) logger.info('CLI: --hybrid actif — auto-soumission GitHub si seuil atteint');
+  if (flashFlag) logger.info('CLI: --flash actif — Mode FLASH (grande école accélérée, 1 exercice par classe)');
 
   // --- Flags d'action unique : traités puis sortie immédiate ---
   // --list-presets / --list-keys : affichage puis exit.
@@ -1429,6 +1443,13 @@ async function main() {
       // une seule classe. En interactif, seul un choix explicite de l'utilisateur
       // restreint la cible ; sinon on reste sur "all".
       if (qConfig.tierArg) tierArg = qConfig.tierArg;
+      // MODE FLASH (tâche 2026-09-16c) : choix interactif « F » à l'étape 9
+      // du questionnaire. Le flag CLI --flash reste prioritaire (flashFlag
+      // déjà true) ; on ne fait que lever le flag ici, jamais l'abaisser.
+      if (qConfig.flash) {
+        flashFlag = true;
+        logger.info('Questionnaire : mode FLASH activé (étape 9).');
+      }
       // Mémorise aussi la clé élève dans secrets pour réutilisation cross-école.
       if (resolvedApiKey) secrets.rememberSecret(resolvedProvider, resolvedApiKey, true);
     }
@@ -1705,6 +1726,14 @@ async function main() {
     console.log(`  \x1b[90mProfesseur : ${teacherConfigResolved && teacherConfigResolved.enabled ? `${teacherConfigResolved.provider} (${teacherConfigResolved.model || 'auto'})` : 'désactivé'}\x1b[0m`);
     console.log("  \x1b[90mSuivi     : les questions du professeur et la réflexion de l'élève s'affichent EN DIRECT.\x1b[0m\n");
     const spinnerExam = new Spinner('Examen RunCode en cours...');
+    // Cumul des tokens sur TOUTES les questions de l'examen (bug 0.96 t/s,
+    // tâche 2026-09-16c) : spinnerExam.tokenCount est remis à ZÉRO à chaque
+    // nouvelle question (reset ci-dessous) — lire spinnerExam.tokenCount à la
+    // fin de l'examen ne comptait que les tokens de la DERNIÈRE question. Sur
+    // un examen de 10 questions (~40 tokens lues chacune), le carnet affichait
+    // ~40 tokens pour plusieurs minutes d'inférence → vitesse absurde (ex:
+    // granite-4.2-8b 0.96 t/s). On accumule ici après CHAQUE appel réussi.
+    let examTokensTotal = 0;
     const studentClient = {
       async generate(_model, prompt, opts = {}) {
         const maxTokens = (opts && opts.max_tokens) || 256;
@@ -1722,6 +1751,9 @@ async function main() {
             temperature: temp
           });
           spinnerExam.stop('Réponse reçue');
+          // Cumul AVANT le reset suivant : tokens produits par CETTE question
+          // (content + reasoning, comptés par le client LLM pendant le streaming).
+          examTokensTotal += (spinnerExam.tokenCount || 0);
           return (resp && resp.content) || '';
         } catch (err) {
           spinnerExam.fail('Appel de l\'élève échoué');
@@ -1773,7 +1805,10 @@ async function main() {
         const examTime = `${padExam(nowExam.getHours())}-${padExam(nowExam.getMinutes())}-${padExam(nowExam.getSeconds())}`;
         const examEcole = PARCOURS_ECOLE[result.parcours] || 'RunCode-Primaire';
         const examElapsed = (result.details || []).reduce((s, d) => s + (d.latency || 0), 0);
-        const examTokens = spinnerExam.tokenCount || 0;
+        // Tokens cumulés sur TOUTES les questions (fix 0.96 t/s) : examTokensTotal
+        // est alimenté par l'adaptateur studentClient.generate() après chaque appel.
+        // spinnerExam.tokenCount seul ne comptait que la DERNIÈRE question.
+        const examTokens = examTokensTotal;
         const examShort = shortNameWithQuant(examModelName, resolvedQuantization || null);
         const examResult = {
           profile: result.parcoursProfile || 'LIGHT',
@@ -2092,6 +2127,9 @@ async function main() {
   }
   console.log(`  \x1b[1;33mContexte max        :\x1b[0m \x1b[1;33m${contextLimitTokens} tokens\x1b[0m`);
   console.log(`  \x1b[1;33mQuantification      :\x1b[0m ${resolvedQuantization ? `\x1b[1;35m${resolvedQuantization}\x1b[0m` : '\x1b[90m— (inconnue)\x1b[0m'}`);
+  if (flashFlag) {
+    console.log(`  \x1b[1;35mMode FLASH          :\x1b[0m \x1b[1;35m⚡ ACTIF — 1 exercice par classe (grandes écoles accélérées, pensé petites RAM)\x1b[0m`);
+  }
   console.log('');
 
   // --- --dry-run : validation de la configuration sans exécution ---
@@ -2341,6 +2379,66 @@ async function main() {
   // filterProfile reste null → aucun filtrage des tâches (toutes exécutées).
   const filterProfile = null;
 
+  // --- MODE FLASH (tâche 2026-09-16c) : sélection d'exercices accélérée ---
+  // Le mode --flash exécute la grande école avec 1 exercice par classe au lieu
+  // des 10-15 habituels. L'exercice est tiré en PRIORITÉ parmi les compétences
+  // découvertes au passage RunCode (tremplin) : le bilan par langage du carnet
+  // (languageStats) oriente le tirage vers les exercices qui ressemblent à ce
+  // que le modèle a déjà joué (majeure d'abord, puis réussis, puis aléatoire).
+  // Objectifs utilisateur : (1) examens plus courts pour les machines à peu de
+  // RAM (la VRAM/RAM est sollicitée 10x moins longtemps), (2) réutiliser la
+  // mesure RunCode pour un examen « au choix parmi les compétences découvertes ».
+  // Le nom FLASH évoque la flash memory (petite RAM) ET l'interrogation flash
+  // (interro éclair scolaire). École marquée `flash: true` dans le carnet —
+  // exclue du classement général (mesure non comparable à l'école complète).
+  function buildFlashTaskSelection(tierData, flashStats) {
+    const tasks = tierData.tasks || [];
+    if (tasks.length <= 1) return { tasks: tasks.slice(), picked: tasks.length, basis: 'seul exercice' };
+    // Score de chaque exercice : correspondance avec les langages RunCode.
+    // La majeure (langage d'excellence du professeur) pèse le plus fort, les
+    // langages réussis au tremplin ensuite, les langages simplement tentés
+    // donnent un léger bonus. Algorithique pur (math, geojson...) sans
+    // correspondance reste éligible (poids 0) : un tier sans aucun exercice
+    // correspondant retomberait sur un tirage aléatoire sinon.
+    const statByLang = {};
+    for (const s of (flashStats || [])) statByLang[s.language] = s;
+    const keywordToLang = {
+      react: 'react', hook: 'react', jsx: 'react',
+      geojson: 'geojson', 'rfc 7946': 'geojson',
+      powershell: 'powershell', 'ps1': 'powershell',
+      python: 'python', limiter: 'python',
+      async: 'javascript', promesse: 'javascript', promise: 'javascript',
+      sql: 'sql', json: 'javascript'
+    };
+    const scoreTask = (t) => {
+      const hay = `${t.id || ''} ${t.label || ''}`.toLowerCase();
+      let best = 0;
+      for (const [kw, lang] of Object.entries(keywordToLang)) {
+        if (!hay.includes(kw)) continue;
+        const st = statByLang[lang];
+        if (!st) continue;
+        let sc = 1;
+        if (flashStats && flashStats.specialite === lang) sc += 5;
+        if (st.rate >= 0.75) sc += 3;
+        else if (st.rate >= 0.5) sc += 2;
+        else sc += 1;
+        sc += Math.min(2, st.total * 0.5);
+        best = Math.max(best, sc);
+      }
+      return best;
+    };
+    const scored = tasks.map(t => ({ t, sc: scoreTask(t) + Math.random() }));
+    scored.sort((a, b) => b.sc - a.sc);
+    const picked = scored[0].t;
+    return {
+      tasks: [picked],
+      picked: 1,
+      basis: (scored[0].sc - Math.random() > 0) && Object.keys(statByLang).length > 0
+        ? 'compétence RunCode'
+        : 'tirage aléatoire'
+    };
+  }
+
   // --- runSchool : exécute UNE école (un profil) de bout en bout.
   // Fonction imbriquée dans main() pour hériter (closure) de toute la config
   // résolue : provider, modèle, clés, queryFn, auto-profilage, professeur,
@@ -2352,13 +2450,21 @@ async function main() {
     // l'école courante, pas l'école principale du run.
     let profileArg = schoolProfileArg;
     const profile = PROFILES[profileArg];
-    const ecoleLabel = PROFILES[profileArg]?.ecole || profileArg;
+    // MODE FLASH : l'école du carnet porte le préfixe « Flash- » (ex:
+    // Flash-Primaire). L'école complète reste intouchée — un score FLASH n'est
+    // PAS comparable à un score complet (1 exercice/classe vs 10-15) et ne
+    // doit jamais s'y substituer ni polluer le classement général.
+    const isFlashSchool = flashFlag && tierArg === 'all';
+    const ecoleLabel = isFlashSchool
+      ? `Flash-${PROFILES[profileArg]?.ecole || profileArg}`
+      : (PROFILES[profileArg]?.ecole || profileArg);
+    if (isFlashSchool) logger.info(`Mode FLASH : école du carnet = ${ecoleLabel} (école complète ${profile.ecole} préservée).`);
 
     // Bannière de configuration de l'école. Affichée pour CHAQUE école (1re
     // comprise) : profil, école et tiers de l'école courante. La config globale
     // (mode, contexte, quantification) a déjà été affichée par main() une fois.
     console.log(`  \x1b[1;36m━━━ CONFIGURATION DE L'ÉCOLE ━━━\x1b[0m`);
-    console.log(`  \x1b[1;33mÉcole              :\x1b[0m \x1b[1;33m${profile.ecole}\x1b[0m`);
+    console.log(`  \x1b[1;33mÉcole              :\x1b[0m \x1b[1;33m${ecoleLabel}\x1b[0m`);
     console.log(`  \x1b[1;33mProfil             :\x1b[0m \x1b[1;33m${profile.label}\x1b[0m`);
     console.log(`  \x1b[1;33mClasses obligatoires:\x1b[0m \x1b[1;33m${profile.mandatory.map(t => tierToClasseNum(profileArg, t)).join(', ')}\x1b[0m`);
     if (profile.optional.length > 0) {
@@ -2466,9 +2572,46 @@ async function main() {
   const MAX_EMPTY_RESPONSES = 3;
   let consecutiveEmptyResponses = 0;
 
+  // --- MODE FLASH : lecture du bilan RunCode (une seule fois par école) ---
+  // Les languageStats du tremplin orientent le tirage de l'exercice par classe.
+  // Lecture résiliente : carnet absent ou languageStats vide → tirage aléatoire
+  // pur (le mode FLASH reste utilisable SANS tremplin, juste plus long à viser).
+  let flashStats = [];
+  if (flashFlag && tierArg === 'all') {
+    try {
+      const flashShort = shortNameWithQuant(preKnownModelName || resolvedCloudModel || 'modele-inconnu', resolvedQuantization || null);
+      const flashLedger = scoreLedger.loadLedger(flashShort);
+      for (const rawEntry of Object.values(flashLedger.ecoles || {})) {
+        const entry = scoreLedger.getEcoleBest(rawEntry);
+        // On prend la MEILLEURE tentative RunCode disponible (tous parcours).
+        if (entry && entry.runCode && Array.isArray(entry.languageStats) && entry.languageStats.length > flashStats.length) {
+          flashStats = entry.languageStats.slice();
+        }
+      }
+      if (flashStats.length > 0) {
+        logger.info(`Mode FLASH : bilan RunCode chargé — ${flashStats.length} langage(s) : ` + flashStats.map(s => `${s.language}(${s.passed}/${s.total})`).join(', '));
+        console.log(`  \x1b[35m⚡ FLASH : tirage orienté par le tremplin RunCode (${flashStats.length} langage(s) au carnet).\x1b[0m`);
+      } else {
+        logger.info('Mode FLASH : aucun bilan RunCode au carnet — tirage aléatoire pur (tremplin non passé).');
+        console.log(`  \x1b[90m⚡ FLASH : pas de tremplin RunCode au carnet — tirage aléatoire par classe.\x1b[0m`);
+      }
+    } catch (e) {
+      logger.warn(`Mode FLASH : lecture du carnet RunCode impossible (${e.message}) — tirage aléatoire.`);
+      flashStats = [];
+    }
+  }
+
   for (const tierNum of tierKeys) {
     const tierData = tiers[tierNum];
     const isMandatory = profile.mandatory.includes(tierNum);
+
+    // --- MODE FLASH : réduit le tier à 1 exercice (log de la sélection) ---
+    if (flashFlag && tierArg === 'all') {
+      const sel = buildFlashTaskSelection(tierData, flashStats);
+      tierData._flashTasks = sel.tasks;
+      logger.info(`Mode FLASH : classe ${tierToClasseNum(profileArg, tierNum)} — 1 exercice sélectionné sur ${tierData.tasks.length} (${sel.basis}) : ${sel.tasks[0].id}`);
+      console.log(`  \x1b[35m⚡ FLASH : 1 exercice par classe (${sel.basis}) — ${sel.tasks[0].id} sélectionné parmi ${tierData.tasks.length}.\x1b[0m`);
+    }
 
     let attemptNumber = 1;
     let bestResult = null;
@@ -2952,17 +3095,21 @@ async function main() {
   const pad = n => String(n).padStart(2, '0');
   const dateStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
   const timeStr = `${pad(now.getHours())}-${pad(now.getMinutes())}-${pad(now.getSeconds())}`;
-  const filename = `rapport_v3_${shortName}_${profileArg.toLowerCase()}${tierTag}_${timeStr}.md`;
+  const filename = `rapport_v3_${shortName}_${profileArg.toLowerCase()}${isFlashSchool ? '_flash' : ''}${tierTag}_${timeStr}.md`;
 
   // Classification : Export-Rapports/<AAAA-MM-JJ>/<ÉCOLE>/<NIVEAU-OU-CLASSE>/<fichier>
   // Le dossier intermédiaire sous l'école représente soit la classe (en mode tier
   // unique) soit le niveau/profil (en mode "all"). Le nom du fichier porte l'heure
   // (HH-MM-SS) pour distinguer plusieurs runs d'une même journée et faire le lien
   // avec le fichier de log associé.
+  // MODE FLASH : le dossier d'export porte le préfixe Flash- (Flash-Primaire)
+  // pour distinguer visuellement les rapports accélérés des rapports complets.
   const ecole = (PROFILES[profileArg] && PROFILES[profileArg].ecole) || profileArg;
+  const exportEcoleLabel = isFlashSchool ? `Flash-${ecole}` : ecole;
+  if (isFlashSchool) logger.info(`Mode FLASH : rapport rangé sous Export-Rapports/${dateStr}/${exportEcoleLabel}/ (fichier taggé _flash).`);
   const exportDir = path.join(__dirname, 'Export-Rapports');
   const dateDir = path.join(exportDir, dateStr);
-  const ecoleDir = path.join(dateDir, ecole);
+  const ecoleDir = path.join(dateDir, exportEcoleLabel);
 
   let targetDir = ecoleDir;
   if (tierArg && tierArg !== "all") {
@@ -3072,7 +3219,11 @@ async function main() {
   if (effectiveModel && tierArg === "all") {
     const ecoleResult = {
       profile: profileArg,
-      ecole: ecole,
+      // MODE FLASH : l'école du carnet est Flash-<École> (jamais l'école
+      // complète). Le flag flash:true permet au leaderboard et à night-batch
+      // de distinguer un examen accéléré d'un examen complet sans parser le nom.
+      ecole: exportEcoleLabel,
+      flash: Boolean(isFlashSchool),
       score: globalScore.passed,
       max: globalScore.total,
       pct: pctGlobal,
@@ -3111,6 +3262,10 @@ async function main() {
     };
     const bilanMd = scoreLedger.saveAndBuildBilan(shortName, effectiveModel, ecoleResult, resolvedQuantization || null, isCloudMode ? resolvedProvider : 'local');
     if (bilanMd) globalReport += bilanMd;
+    if (isFlashSchool) {
+      logger.info(`Mode FLASH : carnet écrit — école ${exportEcoleLabel}, score ${globalScore.passed}/${globalScore.total} (${pctGlobal}%), flash=true.`);
+      console.log(`  \x1b[35m⚡ FLASH : carnet mis à jour (école ${exportEcoleLabel}) — non comptabilisé dans le classement général (examen accéléré).\x1b[0m`);
+    }
   }
 
   // --- Section Benchmarking intégré (§2 Performance) ---
@@ -3130,6 +3285,8 @@ async function main() {
 
   // --- Génération du classement global (HTML + Markdown) ---
   // Après chaque run complet, on régénère le classement de tous les modèles testés.
+  // MODE FLASH : régénération aussi (le carnet Flash- est écrit, il faut
+  // rafraîchir le HTML/MD même si l'école est exclue du classement général).
   if (tierArg === "all") {
     console.log(`  \x1b[35mGénération du classement...\x1b[0m`);
     leaderboard.generateLeaderboard();
@@ -3254,7 +3411,12 @@ async function main() {
   // son carnet de scores sur le dépôt communautaire via une Pull Request GitHub.
   // Cela alimente le classement consolidé visible par tous. --submit force la
   // proposition (sans confirmation) ; sinon on demande en interactif.
-  if (lastResult && lastResult.shortName && tierArg === 'all') {
+  // MODE FLASH : pas de soumission — un score FLASH (1 exercice/classe) n'est
+  // pas comparable à un score complet et ne doit pas alimenter le classement
+  // public (comparaison inter-modèles faussée).
+  const isFlashRun = flashFlag && tierArg === 'all';
+  if (isFlashRun) logger.info('Mode FLASH : soumission communautaire sautée (examen accéléré non comparable).');
+  if (lastResult && lastResult.shortName && tierArg === 'all' && !isFlashRun) {
     // --force (mode batch/nuit/cloud) : on ne propose RIEN. stdio: 'inherit'
     // rend isTTY true même en non-interactif → sans ce court-circuit, le prompt
     // « Envoyer vos résultats ? » bloquait la file d'attente toute la nuit.
@@ -3345,7 +3507,10 @@ async function main() {
   // si le seuil de qualité est atteint (≥ 50%). En cas d'échec réseau, le
   // modèle est mis en file persistante pour retry au prochain run. On draine
   // aussi la file d'attente existante au démarrage du prochain run --hybrid.
-  if (hybridFlag && lastResult && lastResult.shortName && tierArg === 'all') {
+  // MODE FLASH : jamais d'auto-soumission (score accéléré non comparable).
+  if (hybridFlag && isFlashRun) {
+    logger.info('Mode FLASH : auto-soumission hybride sautée (examen accéléré non comparable).');
+  } else if (hybridFlag && lastResult && lastResult.shortName && tierArg === 'all') {
     console.log(`  \x1b[1;35m━━━ MODE HYBRIDE — AUTO-SOUMISSION GITHUB ━━━\x1b[0m`);
     const hybridToken = cliGithubToken || communitySync.getStoredGithubToken();
     // Draine d\\'abord la file d\\'attente (soumissions précédentes en échec).

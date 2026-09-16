@@ -131,6 +131,11 @@ function detectIsCloudFromCarnet(carnet) {
 }
 
 // Agrège un carnet en une entrée de classement (meilleure tentative par école).
+// MODE FLASH (tâche 2026-09-16c) : les écoles Flash-* (examen accéléré,
+// 1 exercice/classe) sont EXCLUES du classement communautaire — un score
+// FLASH n'est pas comparable à un score complet. Le filtre est appliqué en
+// tête de boucle (continu) : score, tokens, écoleCount n'en tiennent pas
+// compte. Un carnet UNIQUEMENT Flash produit ecoleCount=0 → null (hors classement).
 function aggregateCarnet(carnet) {
   if (!carnet || !carnet.ecoles) return null;
   const ecoleEntries = Object.entries(carnet.ecoles);
@@ -151,6 +156,8 @@ function aggregateCarnet(carnet) {
       best = raw;
     }
     if (!best) continue;
+    // MODE FLASH : école accélérée → jamais comptée dans le classement.
+    if (best.flash === true || /^Flash-/i.test(best.ecole || ecoleName)) continue;
     ecoleCount++;
     score += best.score || 0;
     max += best.max || 0;
