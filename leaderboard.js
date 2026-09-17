@@ -2584,11 +2584,14 @@ function renderCards() {
     if (activeCat !== 'all' && dynCat.key !== activeCat) { skippedCat++; continue; }
     shown++;
 
-    var globalRank = m.globalRank || (i + 1);
-    // En mode tri récent, les médailles/couleurs restent liées au rang global (score).
-    var cardClass = globalRank === 1 ? 'gold' : globalRank === 2 ? 'silver' : globalRank === 3 ? 'bronze' : '';
-    var rankDisp = globalRank <= 3
-      ? '<span class="medal">' + (globalRank === 1 ? '🥇' : globalRank === 2 ? '🥈' : '🥉') + '</span>'
+    // Médailles et numéros suivent la vue FILTRÉE (séquence 1,2,3... continue).
+    // Avant : les médailles étaient liées au rang global (toutes origines) →
+    // avec le filtre Local, la 1re carte portait 🥉 (rang global 3) puis « 2 »,
+    // « 3 » — séquence visuelle incohérente. Le rang global reste affiché dans
+    // la modale (mRank), la carte montre la position dans la vue active.
+    var cardClass = shown === 1 ? 'gold' : shown === 2 ? 'silver' : shown === 3 ? 'bronze' : '';
+    var rankDisp = shown <= 3
+      ? '<span class="medal">' + (shown === 1 ? '🥇' : shown === 2 ? '🥈' : '🥉') + '</span>'
       : shown;
     var posArrow = positionArrow(m.positionDelta);
     var pc = pctColor(m.pct);

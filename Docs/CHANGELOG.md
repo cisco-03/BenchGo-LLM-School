@@ -1,5 +1,24 @@
 # CHANGELOG - Carnet de Notes BenchGo
 
+## 2026-09-17a — fix(leaderboard) : Médailles/cadres du podium liés à la vue filtrée (sélecteur Origine)
+
+### Contexte & problème rencontré
+Signalement utilisateur : « les badges de position de classement ne sont pas à la bonne place » + « en local le badge 1 s'affiche puis cela passe directement au 3, le cloud c'est pareil ». Sur `Export-Rapports/classement.html` comme sur `gh-pages-output/community-leaderboard.html`, choisir Local ou Cloud dans le sélecteur Origine produisait une séquence de rangs cassée : la 1re carte locale (ornith, rang global 3) affichait 🥉, puis « 2 », « 3 » — et côté cloud 🥇 🥈 puis « 3 » (rang global 4). Le podium visuel sautait.
+
+### Cause racine
+Dans le JS inline de `renderCards()` (les deux fichiers), les médailles 🥇🥈🥉 et les cadres `.gold/.silver/.bronze` étaient calculés sur le **rang global** (`m.globalRank` dans leaderboard.js, `MODELS.indexOf(m)` dans consolidate-leaderboard.js — toutes origines mélangées), tandis que les numéros à partir de la 4e place utilisaient `shown` (position dans la vue filtrée). Deux référentiels mélangés dans la même liste → séquence incohérente dès qu'un filtre Origine (ou tout filtre) écrête la liste.
+
+### Corrections
+- `leaderboard.js` (JS inline `renderCards`) : `cardClass` et `rankDisp` calculés sur `shown` (position dans la vue filtrée) au lieu de `m.globalRank`. Le rang global reste visible dans la modale (`mRank`) — un seul référentiel par surface.
+- `consolidate-leaderboard.js` (JS inline `renderCards`) : idem, `cardClass`/`rankDisp` sur `shown` au lieu de `MODELS.indexOf(m)`.
+- `consolidate-leaderboard.js` (`openModal`) : clarifié — la modale garde le rang général (idx+1) car la carte affiche désormais la position dans la vue filtrée.
+
+### Vérification
+- `node --check leaderboard.js` + `node --check consolidate-leaderboard.js` : OK.
+- `node leaderboard.js` + `node consolidate-leaderboard.js` : régénération OK.
+- `node scripts/check-inline-js.js` sur les deux HTML : OK.
+- Simulation DOM (`renderCards` exécuté en VM sur le HTML généré) : séquence de badges 🥇🥈🥉 4 5 6... valide pour Origine=all, local ET cloud sur les deux classements (40/20/20 cartes + 82/70/12 cartes).
+
 ## 2026-09-16c — feat(runner) : Mode FLASH (grande école accélérée, petites RAM) + fix vitesse RunCode (0.96 t/s absurde)
 
 ### Contexte & problème rencontré

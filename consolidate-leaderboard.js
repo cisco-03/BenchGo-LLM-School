@@ -1726,9 +1726,12 @@ function renderCards() {
     var i = MODELS.indexOf(m);
     shown++;
 
-    var cardClass = i === 0 ? 'gold' : i === 1 ? 'silver' : i === 2 ? 'bronze' : '';
-    var rankDisp = i < 3
-      ? '<span class="medal">' + (i === 0 ? '🥇' : i === 1 ? '🥈' : '🥉') + '</span>'
+    // Médailles et numéros suivent la vue FILTRÉE (séquence 1,2,3... continue).
+    // Avant : médailles liées à la position globale → filtre Local, la 1re carte
+    // portait une médaille de rang global puis « 2 », « 3 » — séquence cassée.
+    var cardClass = shown === 1 ? 'gold' : shown === 2 ? 'silver' : shown === 3 ? 'bronze' : '';
+    var rankDisp = shown <= 3
+      ? '<span class="medal">' + (shown === 1 ? '🥇' : shown === 2 ? '🥈' : '🥉') + '</span>'
       : shown;
     var pc = pctColor(m.pct);
     var sc = m.globalLifeScore < 0 ? '#f85149' : '#3fb950';
@@ -1824,7 +1827,10 @@ function attachScrollAnimations() {
 function openModal(idx) {
   var m = MODELS[idx];
   if (!m) return;
-  document.getElementById('mRank').innerHTML = (idx < 3 ? '<span class="medal">' + (idx === 0 ? '🥇' : idx === 1 ? '🥈' : '🥉') + '</span>' : (idx + 1));
+  // Rang global (toutes origines mélangées) — la carte elle-même affiche la
+  // position dans la vue filtrée, la modale garde le rang général.
+  var gr = idx + 1;
+  document.getElementById('mRank').innerHTML = (gr <= 3 ? '<span class="medal">' + (gr === 1 ? '🥇' : gr === 2 ? '🥈' : '🥉') + '</span>' : gr);
   document.getElementById('mTitle').innerHTML = esc(m.displayName || m.model) + positionArrow(m.positionDelta);
   var vb = document.getElementById('mVerdict');
   vb.textContent = m.verdict.label;
