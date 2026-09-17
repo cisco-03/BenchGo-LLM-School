@@ -1,0 +1,624 @@
+{
+  "schemaVersion": 1,
+  "benchgoVersion": "V3",
+  "userId": "2181628c20fe6a0e",
+  "pseudo": "FlexoDiv",
+  "submittedAt": "2026-09-17T08:42:46.594Z",
+  "integrityHash": "688e3ea9aa1264c5",
+  "carnet": {
+    "model": "granite-4.2-8b",
+    "shortName": "granite-4.2-8b_q4_k_m",
+    "ecoles": {
+      "RunCode-College-Lycee": {
+        "best": {
+          "profile": "STANDARD",
+          "ecole": "RunCode-College-Lycee",
+          "runCode": true,
+          "parcours": "College-Lycee",
+          "diplome": "1ere",
+          "specialite": "sql",
+          "specialiteVerdict": "Spécialité : SQL — réussi 2/2 exercice(s) (100%) dans ce langage au fil des classes.",
+          "languageStats": [
+            {
+              "language": "sql",
+              "passed": 2,
+              "failed": 0,
+              "total": 2,
+              "rate": 100,
+              "classes": [
+                "2nde",
+                "2nde"
+              ],
+              "avgLatencyMs": 27735
+            },
+            {
+              "language": "csharp",
+              "passed": 1,
+              "failed": 1,
+              "total": 2,
+              "rate": 50,
+              "classes": [
+                "5eme",
+                "5eme"
+              ],
+              "avgLatencyMs": 39896
+            },
+            {
+              "language": "rust",
+              "passed": 1,
+              "failed": 0,
+              "total": 1,
+              "rate": 100,
+              "classes": [
+                "6eme"
+              ],
+              "avgLatencyMs": 47590
+            },
+            {
+              "language": "html",
+              "passed": 1,
+              "failed": 0,
+              "total": 1,
+              "rate": 100,
+              "classes": [
+                "6eme"
+              ],
+              "avgLatencyMs": 19112
+            },
+            {
+              "language": "bash",
+              "passed": 1,
+              "failed": 0,
+              "total": 1,
+              "rate": 100,
+              "classes": [
+                "4eme"
+              ],
+              "avgLatencyMs": 19156
+            },
+            {
+              "language": "typescript",
+              "passed": 1,
+              "failed": 0,
+              "total": 1,
+              "rate": 100,
+              "classes": [
+                "4eme"
+              ],
+              "avgLatencyMs": 4688
+            },
+            {
+              "language": "c",
+              "passed": 1,
+              "failed": 0,
+              "total": 1,
+              "rate": 100,
+              "classes": [
+                "3eme"
+              ],
+              "avgLatencyMs": 16717
+            },
+            {
+              "language": "kotlin",
+              "passed": 1,
+              "failed": 0,
+              "total": 1,
+              "rate": 100,
+              "classes": [
+                "3eme"
+              ],
+              "avgLatencyMs": 45266
+            },
+            {
+              "language": "cpp",
+              "passed": 1,
+              "failed": 0,
+              "total": 1,
+              "rate": 100,
+              "classes": [
+                "1ere"
+              ],
+              "avgLatencyMs": 46501
+            },
+            {
+              "language": "ruby",
+              "passed": 0,
+              "failed": 1,
+              "total": 1,
+              "rate": 0,
+              "classes": [
+                "1ere"
+              ],
+              "avgLatencyMs": 37877
+            },
+            {
+              "language": "javascript",
+              "passed": 0,
+              "failed": 1,
+              "total": 1,
+              "rate": 0,
+              "classes": [
+                "Terminale"
+              ],
+              "avgLatencyMs": 45772
+            },
+            {
+              "language": "perl",
+              "passed": 0,
+              "failed": 1,
+              "total": 1,
+              "rate": 0,
+              "classes": [
+                "Terminale"
+              ],
+              "avgLatencyMs": 39859
+            }
+          ],
+          "declaration": {
+            "majeure": "javascript",
+            "mineure": "python",
+            "niveau": "standard"
+          },
+          "disqualified": false,
+          "score": 10,
+          "max": 14,
+          "pct": 71,
+          "mandatoryPassed": 10,
+          "mandatoryTotal": 14,
+          "globalLifeScore": 0,
+          "optionalBonus": 0,
+          "helpCount": 0,
+          "retriedCount": 0,
+          "date": "2026-09-16",
+          "time": "14-51-13",
+          "reportFile": "Export-Rapports/exam_granite_4_2_8b_1789562574947.log",
+          "selfProfile": null,
+          "tiers": [
+            {
+              "tierNum": -1,
+              "runCode": true,
+              "className": "6eme",
+              "language": "rust",
+              "exerciseId": "rs_col_01_mutable_borrow",
+              "passed": true,
+              "attempts": 2
+            },
+            {
+              "tierNum": -1,
+              "runCode": true,
+              "className": "6eme",
+              "language": "html",
+              "exerciseId": "html_6e_01_semantic_tag",
+              "passed": true,
+              "attempts": 2
+            },
+            {
+              "tierNum": -1,
+              "runCode": true,
+              "className": "5eme",
+              "language": "csharp",
+              "exerciseId": "cs_5e_01_async_task",
+              "passed": false,
+              "attempts": 2
+            },
+            {
+              "tierNum": -1,
+              "runCode": true,
+              "className": "5eme",
+              "language": "csharp",
+              "exerciseId": "cs_5e_02_string_interp",
+              "passed": true,
+              "attempts": 2
+            },
+            {
+              "tierNum": -1,
+              "runCode": true,
+              "className": "4eme",
+              "language": "bash",
+              "exerciseId": "sh_4e_02_strict_mode",
+              "passed": true,
+              "attempts": 2
+            },
+            {
+              "tierNum": -1,
+              "runCode": true,
+              "className": "4eme",
+              "language": "typescript",
+              "exerciseId": "ts_4e_01_enum",
+              "passed": true,
+              "attempts": 1
+            },
+            {
+              "tierNum": -1,
+              "runCode": true,
+              "className": "3eme",
+              "language": "c",
+              "exerciseId": "c_3e_01_malloc_sizeof",
+              "passed": true,
+              "attempts": 2
+            },
+            {
+              "tierNum": -1,
+              "runCode": true,
+              "className": "3eme",
+              "language": "kotlin",
+              "exerciseId": "kt_3e_01_null_safety",
+              "passed": true,
+              "attempts": 2
+            },
+            {
+              "tierNum": -1,
+              "runCode": true,
+              "className": "2nde",
+              "language": "sql",
+              "exerciseId": "sql_2e_02_limit",
+              "passed": true,
+              "attempts": 2
+            },
+            {
+              "tierNum": -1,
+              "runCode": true,
+              "className": "2nde",
+              "language": "sql",
+              "exerciseId": "sql_2e_01_join",
+              "passed": true,
+              "attempts": 2
+            },
+            {
+              "tierNum": -1,
+              "runCode": true,
+              "className": "1ere",
+              "language": "ruby",
+              "exerciseId": "rb_1e_01_safe_nav",
+              "passed": false,
+              "attempts": 2
+            },
+            {
+              "tierNum": -1,
+              "runCode": true,
+              "className": "1ere",
+              "language": "cpp",
+              "exerciseId": "cpp_1e_01_const_ref_param",
+              "passed": true,
+              "attempts": 2
+            },
+            {
+              "tierNum": -1,
+              "runCode": true,
+              "className": "Terminale",
+              "language": "javascript",
+              "exerciseId": "js_term_01_event_loop_order",
+              "passed": false,
+              "attempts": 2
+            },
+            {
+              "tierNum": -1,
+              "runCode": true,
+              "className": "Terminale",
+              "language": "perl",
+              "exerciseId": "pl_term_01_hash_access",
+              "passed": false,
+              "attempts": 2
+            }
+          ],
+          "quantization": "Q4_K_M",
+          "elapsedMs": 457798,
+          "wallMs": 457798,
+          "tokens": 438,
+          "tokensPerSecond": 0.96,
+          "promptTokens": 0,
+          "completionTokens": 438,
+          "timestampMs": 1789563073629,
+          "timestampIso": "2026-09-16T12:51:13.629Z"
+        },
+        "attempts": [
+          {
+            "profile": "STANDARD",
+            "ecole": "RunCode-College-Lycee",
+            "runCode": true,
+            "parcours": "College-Lycee",
+            "diplome": "1ere",
+            "specialite": "sql",
+            "specialiteVerdict": "Spécialité : SQL — réussi 2/2 exercice(s) (100%) dans ce langage au fil des classes.",
+            "languageStats": [
+              {
+                "language": "sql",
+                "passed": 2,
+                "failed": 0,
+                "total": 2,
+                "rate": 100,
+                "classes": [
+                  "2nde",
+                  "2nde"
+                ],
+                "avgLatencyMs": 27735
+              },
+              {
+                "language": "csharp",
+                "passed": 1,
+                "failed": 1,
+                "total": 2,
+                "rate": 50,
+                "classes": [
+                  "5eme",
+                  "5eme"
+                ],
+                "avgLatencyMs": 39896
+              },
+              {
+                "language": "rust",
+                "passed": 1,
+                "failed": 0,
+                "total": 1,
+                "rate": 100,
+                "classes": [
+                  "6eme"
+                ],
+                "avgLatencyMs": 47590
+              },
+              {
+                "language": "html",
+                "passed": 1,
+                "failed": 0,
+                "total": 1,
+                "rate": 100,
+                "classes": [
+                  "6eme"
+                ],
+                "avgLatencyMs": 19112
+              },
+              {
+                "language": "bash",
+                "passed": 1,
+                "failed": 0,
+                "total": 1,
+                "rate": 100,
+                "classes": [
+                  "4eme"
+                ],
+                "avgLatencyMs": 19156
+              },
+              {
+                "language": "typescript",
+                "passed": 1,
+                "failed": 0,
+                "total": 1,
+                "rate": 100,
+                "classes": [
+                  "4eme"
+                ],
+                "avgLatencyMs": 4688
+              },
+              {
+                "language": "c",
+                "passed": 1,
+                "failed": 0,
+                "total": 1,
+                "rate": 100,
+                "classes": [
+                  "3eme"
+                ],
+                "avgLatencyMs": 16717
+              },
+              {
+                "language": "kotlin",
+                "passed": 1,
+                "failed": 0,
+                "total": 1,
+                "rate": 100,
+                "classes": [
+                  "3eme"
+                ],
+                "avgLatencyMs": 45266
+              },
+              {
+                "language": "cpp",
+                "passed": 1,
+                "failed": 0,
+                "total": 1,
+                "rate": 100,
+                "classes": [
+                  "1ere"
+                ],
+                "avgLatencyMs": 46501
+              },
+              {
+                "language": "ruby",
+                "passed": 0,
+                "failed": 1,
+                "total": 1,
+                "rate": 0,
+                "classes": [
+                  "1ere"
+                ],
+                "avgLatencyMs": 37877
+              },
+              {
+                "language": "javascript",
+                "passed": 0,
+                "failed": 1,
+                "total": 1,
+                "rate": 0,
+                "classes": [
+                  "Terminale"
+                ],
+                "avgLatencyMs": 45772
+              },
+              {
+                "language": "perl",
+                "passed": 0,
+                "failed": 1,
+                "total": 1,
+                "rate": 0,
+                "classes": [
+                  "Terminale"
+                ],
+                "avgLatencyMs": 39859
+              }
+            ],
+            "declaration": {
+              "majeure": "javascript",
+              "mineure": "python",
+              "niveau": "standard"
+            },
+            "disqualified": false,
+            "score": 10,
+            "max": 14,
+            "pct": 71,
+            "mandatoryPassed": 10,
+            "mandatoryTotal": 14,
+            "globalLifeScore": 0,
+            "optionalBonus": 0,
+            "helpCount": 0,
+            "retriedCount": 0,
+            "date": "2026-09-16",
+            "time": "14-51-13",
+            "reportFile": "Export-Rapports/exam_granite_4_2_8b_1789562574947.log",
+            "selfProfile": null,
+            "tiers": [
+              {
+                "tierNum": -1,
+                "runCode": true,
+                "className": "6eme",
+                "language": "rust",
+                "exerciseId": "rs_col_01_mutable_borrow",
+                "passed": true,
+                "attempts": 2
+              },
+              {
+                "tierNum": -1,
+                "runCode": true,
+                "className": "6eme",
+                "language": "html",
+                "exerciseId": "html_6e_01_semantic_tag",
+                "passed": true,
+                "attempts": 2
+              },
+              {
+                "tierNum": -1,
+                "runCode": true,
+                "className": "5eme",
+                "language": "csharp",
+                "exerciseId": "cs_5e_01_async_task",
+                "passed": false,
+                "attempts": 2
+              },
+              {
+                "tierNum": -1,
+                "runCode": true,
+                "className": "5eme",
+                "language": "csharp",
+                "exerciseId": "cs_5e_02_string_interp",
+                "passed": true,
+                "attempts": 2
+              },
+              {
+                "tierNum": -1,
+                "runCode": true,
+                "className": "4eme",
+                "language": "bash",
+                "exerciseId": "sh_4e_02_strict_mode",
+                "passed": true,
+                "attempts": 2
+              },
+              {
+                "tierNum": -1,
+                "runCode": true,
+                "className": "4eme",
+                "language": "typescript",
+                "exerciseId": "ts_4e_01_enum",
+                "passed": true,
+                "attempts": 1
+              },
+              {
+                "tierNum": -1,
+                "runCode": true,
+                "className": "3eme",
+                "language": "c",
+                "exerciseId": "c_3e_01_malloc_sizeof",
+                "passed": true,
+                "attempts": 2
+              },
+              {
+                "tierNum": -1,
+                "runCode": true,
+                "className": "3eme",
+                "language": "kotlin",
+                "exerciseId": "kt_3e_01_null_safety",
+                "passed": true,
+                "attempts": 2
+              },
+              {
+                "tierNum": -1,
+                "runCode": true,
+                "className": "2nde",
+                "language": "sql",
+                "exerciseId": "sql_2e_02_limit",
+                "passed": true,
+                "attempts": 2
+              },
+              {
+                "tierNum": -1,
+                "runCode": true,
+                "className": "2nde",
+                "language": "sql",
+                "exerciseId": "sql_2e_01_join",
+                "passed": true,
+                "attempts": 2
+              },
+              {
+                "tierNum": -1,
+                "runCode": true,
+                "className": "1ere",
+                "language": "ruby",
+                "exerciseId": "rb_1e_01_safe_nav",
+                "passed": false,
+                "attempts": 2
+              },
+              {
+                "tierNum": -1,
+                "runCode": true,
+                "className": "1ere",
+                "language": "cpp",
+                "exerciseId": "cpp_1e_01_const_ref_param",
+                "passed": true,
+                "attempts": 2
+              },
+              {
+                "tierNum": -1,
+                "runCode": true,
+                "className": "Terminale",
+                "language": "javascript",
+                "exerciseId": "js_term_01_event_loop_order",
+                "passed": false,
+                "attempts": 2
+              },
+              {
+                "tierNum": -1,
+                "runCode": true,
+                "className": "Terminale",
+                "language": "perl",
+                "exerciseId": "pl_term_01_hash_access",
+                "passed": false,
+                "attempts": 2
+              }
+            ],
+            "quantization": "Q4_K_M",
+            "elapsedMs": 457798,
+            "wallMs": 457798,
+            "tokens": 438,
+            "tokensPerSecond": 0.96,
+            "promptTokens": 0,
+            "completionTokens": 438,
+            "timestampMs": 1789563073629,
+            "timestampIso": "2026-09-16T12:51:13.629Z"
+          }
+        ]
+      }
+    },
+    "lastUpdated": "2026-09-16T12:51:13.632Z",
+    "provider": "lmstudio",
+    "isCloud": false,
+    "quantization": "Q4_K_M"
+  }
+}
