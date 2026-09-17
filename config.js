@@ -292,7 +292,12 @@ function parseCliArgs() {
 }
 
 function detectProfileFromModelName(modelName) {
+  // Les gros modèles cloud frontière sont nommés en TRILLIARDS de paramètres
+  // (ex: Kimi K2.6 1T = 1 trilliard = 1000 milliards = 1000B). Le pattern T
+  // est testé EN PREMIER : un nom comme "1.2TB" matcherait sinon B (1.2B, faux).
+  // Conversion : 1T → 1000B (échelle interne en milliards).
   const sizePatterns = [
+    /([\d]+[.,]?[\d]*)\s*t(?![a-z])/i,
     /([\d]+[.,]?[\d]*)\s*b/i,
     /([\d]+[.,]?[\d]*)\s*billion/i,
     /([\d]+[.,]?[\d]*)\s*g/
@@ -303,6 +308,10 @@ function detectProfileFromModelName(modelName) {
     const match = modelName.match(pattern);
     if (match) {
       paramSize = parseFloat(match[1].replace(',', '.'));
+      // Suffixe T (trilliard) → conversion en milliards (1T = 1000B).
+      if (match[0].slice(-1).toLowerCase() === 't') {
+        paramSize = paramSize * 1000;
+      }
       break;
     }
   }

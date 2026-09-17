@@ -382,6 +382,34 @@ Si modèle > 3B paramètres, le runner peut enchaîner LIGHT puis STANDARD dans 
 - `consolidate-leaderboard.js` copie le tracker avec `fs.copyFileSync`. Si `scripts/gguf-tracker.html` est absent, un avertissement est loggé mais la génération continue.
 - **Le fichier DOIT être versionné dans git** (exception `.gitignore` `!scripts/gguf-tracker.html`, section 4bis). La CI fait un checkout du dépôt AVANT de lancer `consolidate-leaderboard.js` : un fichier non-commité n'existe pas en CI → copie silencieusement sautée → **404 GitHub Pages** (bug 2026-09-02). Après toute modification du tracker : commit + push + `gh workflow run consolidate.yml -R cisco-03/BenchGo-LLM-School`.
 
+### GGUF Tracker — API HF par curseur + filtres/tri/recherche réparés (tâche 2026-09-17c)
+
+**Fichiers touchés :** `scripts/gguf-tracker.html`, `tests/test-gguf-tracker.js` (nouveau), `Docs/CHANGELOG.md`, `AGENTS.md`.
+
+**Principe :** Audit expérimental de l'API HF : `library=gguf` et `offset` sont silencieusement IGNORÉS (repos non-GGUF renvoyés, toutes les pages identiques). La pagination officielle = header `Link: <url>; rel="next"` (curseur, exposé CORS). Le tracker fetchait donc des repos aléatoires → « Nouveaux » ne détectait rien, « Charger plus » re-fetchait la même page, et la recherche ne filtrait que localement. Corrections : fetch par curseur + `filter=gguf`, recherche serveur (`search=` + `filter=gguf`) déclenchée par Entrée, sélecteur de tri (récent/ancien/téléchargements/nom), strip des tokens de quantification dans `normalizeModelName()` déplacé AVANT la suppression des séparateurs (les `\b` étaient du code mort), récepteur postMessage qui réapplique toujours les filtres (le parent envoie après le rendu), messages de liste vide contextuels, notifications durcies (garde `'Notification' in window`, try/catch sur `new Notification`, `.catch()` sur `requestPermission`).
+
+**Fonctions :**
+- `extractNextCursor(linkHeader)` / `fetchPage(cursor)` / `fetchSearchPage(query, cursor)` (dans `scripts/gguf-tracker.html`) → pagination et recherche serveur par curseur.
+- `sortRawModels()` → tri de `rawModels` selon `#sortSelect` (recent/ancien/downloads/nom), appelé après chaque fusion et dans `applyFilters()`.
+- `searchServer()` / `onSearchInput()` → recherche serveur HF (Entrée) + retour au filtrage local dès nouvelle saisie.
+- `updateEmptyMessage()` → message explicatif quand `filteredCache` est vide (nouveaux/testés/favoris/éditeurs/recherche).
+- `tests/test-gguf-tracker.js` → 16 cas (unitaires via vm + DOM factice, système sur le source, intégration réseau via `spawnSync` — 60s timeout, pas de faux verts).
+
+**Pour modifier :**
+1. **Changer la taille de page / le tri API** : `fetchPage()` / `fetchSearchPage()` (`limit=250`).
+2. **Changer les modes de tri** : `sortRawModels()` + `<option>` de `#sortSelect`.
+3. **Désactiver la recherche serveur** : retirer listener `keydown` + `#serverSearchBtn` + `searchServer()`/`onSearchInput()`.
+4. **Modifier la normalisation** : `normalizeModelName()` — ordre critique : strip tokens AVANT suppression séparateurs.
+5. **Tester** : `node tests/run-tests.js` ; `node leaderboard.js` + `node consolidate-leaderboard.js` + `node scripts/check-inline-js.js`.
+
+**Pièges :**
+- `offset` ne renvoie PAS d'erreur (ignoré silencieusement) : un test visuel « ça marche » passe à côté du bug.
+- `library=gguf` ≠ `filter=gguf` : seul `filter=gguf` filtre réellement (matche le tag).
+- Le header `Link` est bien exposé CORS par HF — le navigateur peut suivre le curseur directement.
+- La recherche serveur `search=` est stricte : un nom complet avec quantification peut ne rien renvoyer (message vide conseille un terme plus court).
+- Les tests d'intégration réseau sont synchrones via `spawnSync` : sans réseau, échec affiché (jamais de faux verts).
+- Commit du tracker OBLIGATOIRE après modification (cf. bug 2026-09-02, 404 GitHub Pages).
+
 ### Bandeaux → Badges dans l'en-tête (tâche 2026-08-08)
 
 **Fichiers touchés :** `leaderboard.js`, `consolidate-leaderboard.js`.

@@ -385,11 +385,21 @@ function aggregateLedger(ledger) {
     // Suffixe "-cloud"/":cloud" (Ollama Cloud, ex: "gemma4:31b-cloud") : signal
     // fort équivalent — un modèle cloud via le daemon local doit JAMAIS être
     // classé local, même sans école FRONTIER (tâche 2026-09-11).
-    isCloud: (ecoles.some(e => e.ecole === 'Post-Doctorat')
-      || detectIsCloudFromLedger(ledger)
-      || (ledger.provider
-          ? !LOCAL_PROVIDERS.has(String(ledger.provider).toLowerCase())
-          : (ledger.isCloud === true))),
+    // originManual (tâche 2026-09-17b) : le choix MANUEL de l'utilisateur dans
+    // la modale ('cloud' | 'local') prime sur TOUTE heuristique — il permet de
+    // corriger une auto-détection fausse sans modifier le carnet à la main.
+    isCloud: ledger.originManual === 'cloud'
+      ? true
+      : ledger.originManual === 'local'
+        ? false
+        : (ecoles.some(e => e.ecole === 'Post-Doctorat')
+          || detectIsCloudFromLedger(ledger)
+          || (ledger.provider
+              ? !LOCAL_PROVIDERS.has(String(ledger.provider).toLowerCase())
+              : (ledger.isCloud === true))),
+    // Choix manuel d'origine ('cloud' | 'local' | null). Exposé au client pour
+    // la carte Origine de la modale (badge marqué « origine forcée »).
+    originManual: ledger.originManual || null,
     // --- Tarif cloud estimé (tâche 2026-08-04) ---
     // Les tokens estimés servent au calcul du coût. Si les champs détaillés
     // sont absents (anciens carnets), on estime promptTokens ≈ 3×completion
@@ -684,6 +694,19 @@ function getCategory(entry, rank = null) {
   return { key: 'catastrophe', label: 'Échec total', icon: '💥', color: '#dc3545' };
 }
 
+// Formate une taille de paramètres (en milliards, interne) pour l'affichage.
+// Les gros modèles cloud frontière sont nommés en TRILLIARDS (ex: Kimi K2.6 1T) :
+// 1000B et plus s'affiche en T (1T), 900B reste en B (pas de 0.9T ambigu).
+// 550B → "550B" ; 1000B → "1T" ; 1500B → "1.5T".
+function formatParamSizeShort(n) {
+  if (!isFinite(n) || n <= 0) return '?B';
+  if (n >= 1000) {
+    const t = Math.round((n / 1000) * 100) / 100;
+    return (Number.isInteger(t) ? t : t.toString().replace('.', ',')) + 'T';
+  }
+  return (Number.isInteger(n) ? n : n.toString().replace('.', ',')) + 'B';
+}
+
 // Taille de paramètres détectée depuis le nom du modèle.
 // Retourne { key, label, short, icon } pour le filtrage et l'affichage.
 //   - petit   : < 3B  (profil LIGHT)
@@ -696,10 +719,10 @@ function getParamSize(modelName) {
   if (paramSize === null) {
     return { key: 'inconnu', label: 'Taille inconnue', short: '?B', icon: '❓', paramSize: null, detected: null };
   }
-  if (paramSize < 3)   return { key: 'petit',    label: 'Petit (< 3B)',    short: paramSize + 'B', icon: '🐱', paramSize, detected };
-  if (paramSize <= 15) return { key: 'standard', label: 'Standard (3B–15B)', short: paramSize + 'B', icon: '📦', paramSize, detected };
-  if (paramSize <= 30) return { key: 'expert',   label: 'Expert (15B–30B)',  short: paramSize + 'B', icon: '🎓', paramSize, detected };
-  return                 { key: 'doctorat', label: 'Doctorat (> 30B)',   short: paramSize + 'B', icon: '🧠', paramSize, detected };
+  if (paramSize < 3)   return { key: 'petit',    label: 'Petit (< 3B)',    short: formatParamSizeShort(paramSize), icon: '🐱', paramSize, detected };
+  if (paramSize <= 15) return { key: 'standard', label: 'Standard (3B–15B)', short: formatParamSizeShort(paramSize), icon: '📦', paramSize, detected };
+  if (paramSize <= 30) return { key: 'expert',   label: 'Expert (15B–30B)',  short: formatParamSizeShort(paramSize), icon: '🎓', paramSize, detected };
+  return                 { key: 'doctorat', label: 'Doctorat (> 30B)',   short: formatParamSizeShort(paramSize), icon: '🧠', paramSize, detected };
 }
 
 // Valide qu'une école est adaptée au nombre de paramètres d'un modèle.
@@ -735,10 +758,10 @@ function getParamSizeFromValue(val) {
   if (!isFinite(paramSize) || paramSize <= 0) {
     return { key: 'inconnu', label: 'Taille inconnue', short: '?B', icon: '❓', paramSize: null, detected: 'manual' };
   }
-  if (paramSize < 3)   return { key: 'petit',    label: 'Petit (< 3B)',    short: paramSize + 'B', icon: '🐱', paramSize, detected: 'manual' };
-  if (paramSize <= 15) return { key: 'standard', label: 'Standard (3B–15B)', short: paramSize + 'B', icon: '📦', paramSize, detected: 'manual' };
-  if (paramSize <= 30) return { key: 'expert',   label: 'Expert (15B–30B)',  short: paramSize + 'B', icon: '🎓', paramSize, detected: 'manual' };
-  return                 { key: 'doctorat', label: 'Doctorat (> 30B)',   short: paramSize + 'B', icon: '🧠', paramSize, detected: 'manual' };
+  if (paramSize < 3)   return { key: 'petit',    label: 'Petit (< 3B)',    short: formatParamSizeShort(paramSize), icon: '🐱', paramSize, detected: 'manual' };
+  if (paramSize <= 15) return { key: 'standard', label: 'Standard (3B–15B)', short: formatParamSizeShort(paramSize), icon: '📦', paramSize, detected: 'manual' };
+  if (paramSize <= 30) return { key: 'expert',   label: 'Expert (15B–30B)',  short: formatParamSizeShort(paramSize), icon: '🎓', paramSize, detected: 'manual' };
+  return                 { key: 'doctorat', label: 'Doctorat (> 30B)',   short: formatParamSizeShort(paramSize), icon: '🧠', paramSize, detected: 'manual' };
 }
 
 function gradeColor(grade) {
@@ -1462,6 +1485,11 @@ function buildLeaderboardHTML(entries) {
   .model-displayname-value { font-weight: 700; color: var(--accent); font-size: var(--fs-small); word-break: break-word; }
   .model-displayname-edit { display: flex; flex-direction: column; gap: var(--space-xs); }
   .model-displayname-edit input { width: 100%; }
+  /* Section origine manuelle (modale) — local vs cloud frontière */
+  .model-origin-section { display: flex; flex-direction: column; gap: var(--space-xs); }
+  .model-origin-display { display: inline-flex; align-items: center; gap: 6px; }
+  .model-origin-value { font-weight: 700; color: var(--accent); font-size: var(--fs-small); }
+  .model-origin-edit { display: flex; flex-direction: column; gap: var(--space-xs); }
   .btn-sm { padding: 4px 12px; font-size: var(--fs-small); border-radius: var(--r-sm); }
 
   /* Rapport intégral (modale) — sections repliables par école/tier */
@@ -2613,9 +2641,9 @@ function renderCards() {
     // spécifique (OpenRouter...) pour éviter la redondance visuelle.
     var originBadge;
     if (m.isCloud) {
-      originBadge = ' <span class="badge provider" title="Modèle cloud (API)" style="color:#d29922;border-color:#d2992255;background:#d2992218">☁️ Cloud</span>';
+      originBadge = ' <span class="badge provider" title="Modèle cloud (API)' + (m.originManual ? ' — origine forcée manuellement' : '') + '" style="color:#d29922;border-color:#d2992255;background:#d2992218">☁️ Cloud</span>';
     } else {
-      originBadge = ' <span class="badge local" title="Modèle local (LM Studio)">🏠 Local</span>';
+      originBadge = ' <span class="badge local" title="Modèle local (LM Studio)' + (m.originManual ? ' — origine forcée manuellement' : '') + '">🏠 Local</span>';
     }
     // Badge ⚡ RunCode · Turbo : le modèle a passé l'examen code natif (mode turbo).
     // Deux modes distincts : benchmark sandbox classique vs RunCode turbo.
@@ -2764,6 +2792,7 @@ function openModal(idx) {
   body += statBox('Rattrapage', m.retriedCount > 0 ? m.retriedCount + 'x' : '—');
   body += statBox('Écoles', m.ecoleCount);
   body += statBox('Quantif.', m.quantization ? '<span id="quantStatVal" style="color:#bc8cff">' + esc(m.quantization) + '</span>' : '<span id="quantStatVal">—</span>');
+  body += statBox('Origine', '<span id="originStatVal" style="color:' + (m.isCloud ? '#d29922' : '#3fb950') + '">' + (m.isCloud ? '☁️ Cloud' : '🏠 Local') + '</span>');
   // --- Chronométrie : durée d'inférence, tokens produits, vitesse moyenne ---
   // Affichés seulement si des données existent (carnets récents post-2026-07-21).
   if (m.elapsedMs > 0 || m.tokens > 0) {
@@ -2816,7 +2845,7 @@ function openModal(idx) {
     body += '<div class="model-params-display"><span class="model-params-value">' + psDisp.icon + ' ' + esc(psDisp.short) + '</span></div>';
     body += '<button class="btn btn-primary btn-sm" onclick="editModelParamSize(' + idx + ')">✎ Modifier</button>';
   } else {
-    body += '<p style="color:var(--text-muted);font-size:var(--fs-small);">Taille non détectée. Cliquez pour la saisir (en B).</p>';
+    body += '<p style="color:var(--text-muted);font-size:var(--fs-small);">Taille non détectée. Cliquez pour la saisir (en B, ou T pour les gros modèles cloud).</p>';
     body += '<button class="btn btn-primary btn-sm" onclick="editModelParamSize(' + idx + ')">+ Ajouter</button>';
   }
   body += '</div>';
@@ -2879,6 +2908,24 @@ function openModal(idx) {
   } else {
     body += '<p style="color:var(--text-muted);font-size:var(--fs-small);">Nom brut : <code>' + esc(m.model) + '</code>. Cliquez sur « Ajouter » pour personnaliser le titre affiché.</p>';
     body += '<button class="btn btn-primary btn-sm" onclick="editModelDisplayName(' + idx + ')">+ Ajouter</button>';
+  }
+  body += '</div></div></div>';
+  // Colonne 6 : Origine (choix manuel local vs cloud frontière). L'auto-détection
+  // (provider, école FRONTIER, suffixe :free/-cloud) peut se tromper sur les
+  // carnets anciens ou les providers locaux détournés en cloud (Ollama distant).
+  // Persistance : carnet via /api/model-origin (originManual = 'cloud'|'local'),
+  // sinon localStorage. Le choix manuel PRIME sur toute heuristique.
+  var currentOriginManual = m.originManual || _getModelOriginLocal(m.shortName);
+  body += '<div class="action-card">';
+  body += '<h4>🌐 Origine</h4>';
+  body += '<p>Choisir si ce modèle est local (LM Studio/Ollama local) ou cloud frontière (API distante).</p>';
+  body += '<div class="card-content"><div class="model-origin-section" id="modelOriginSection">';
+  if (currentOriginManual) {
+    body += '<div class="model-origin-display"><span class="model-origin-value">' + (currentOriginManual === 'cloud' ? '☁️ Cloud frontière' : '🏠 Local') + '</span></div>';
+    body += '<button class="btn btn-primary btn-sm" onclick="editModelOrigin(' + idx + ')">✎ Modifier</button>';
+  } else {
+    body += '<p style="color:var(--text-muted);font-size:var(--fs-small);">Détection auto : ' + (m.isCloud ? '☁️ Cloud' : '🏠 Local') + '. Cliquez pour forcer l&#39;origine manuellement.</p>';
+    body += '<button class="btn btn-primary btn-sm" onclick="editModelOrigin(' + idx + ')">✎ Choisir</button>';
   }
   body += '</div></div></div>';
   body += '</div>';
@@ -3609,14 +3656,26 @@ function _setModelParamSizeLocal(shortName, val) {
     localStorage.setItem(MODEL_PARAMSIZE_LS_KEY, JSON.stringify(map));
   } catch (e) {}
 }
+// Formate une taille de paramètres (en milliards, interne) côté client.
+// Les gros modèles cloud frontière s'affichent en TRILLIARDS (ex: Kimi K2.6 1T) :
+// 1000B et plus → T (1T, 1,5T), sinon B (12B). Identique à formatParamSizeShort
+// côté serveur (dupliqué : le JS inline n'a pas accès aux modules Node).
+function _formatParamSizeShort(n) {
+  if (!isFinite(n) || n <= 0) return '?B';
+  if (n >= 1000) {
+    var t = Math.round((n / 1000) * 100) / 100;
+    return (Number.isInteger(t) ? t : String(t).replace('.', ',')) + 'T';
+  }
+  return (Number.isInteger(n) ? n : String(n).replace('.', ',')) + 'B';
+}
 // Reconstruit l'objet paramSize côté client à partir d'une valeur numérique.
 function _paramSizeFromValue(val) {
   var n = parseFloat(val);
   if (!isFinite(n) || n <= 0) return { key: 'inconnu', label: 'Taille inconnue', short: '?B', icon: '❓', paramSize: null };
-  if (n < 3)   return { key: 'petit',    label: 'Petit (< 3B)',    short: n + 'B', icon: '🐱', paramSize: n };
-  if (n <= 15) return { key: 'standard', label: 'Standard (3B–15B)', short: n + 'B', icon: '📦', paramSize: n };
-  if (n <= 30) return { key: 'expert',   label: 'Expert (15B–30B)',  short: n + 'B', icon: '🎓', paramSize: n };
-  return             { key: 'doctorat', label: 'Doctorat (> 30B)',   short: n + 'B', icon: '🧠', paramSize: n };
+  if (n < 3)   return { key: 'petit',    label: 'Petit (< 3B)',    short: _formatParamSizeShort(n), icon: '🐱', paramSize: n };
+  if (n <= 15) return { key: 'standard', label: 'Standard (3B–15B)', short: _formatParamSizeShort(n), icon: '📦', paramSize: n };
+  if (n <= 30) return { key: 'expert',   label: 'Expert (15B–30B)',  short: _formatParamSizeShort(n), icon: '🎓', paramSize: n };
+  return             { key: 'doctorat', label: 'Doctorat (> 30B)',   short: _formatParamSizeShort(n), icon: '🧠', paramSize: n };
 }
 function editModelParamSize(idx) {
   var m = MODELS[idx];
@@ -3624,16 +3683,37 @@ function editModelParamSize(idx) {
   if (!section) return;
   var current = m.paramSizeManual || _getModelParamSizeLocal(m.shortName) || '';
   var html = '<div class="model-params-edit">';
-  html += '<input type="number" id="modelParamSizeInput" class="search" style="width:min(100%,200px)" value="' + esc(current) + '" placeholder="14" min="0.5" max="500" step="0.5" />';
-  html += '<span style="font-size:var(--fs-small);color:var(--text-muted);">milliards de paramètres (B)</span>';
-  html += '<div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;">';
+  html += '<input type="number" id="modelParamSizeInput" class="search" style="width:min(100%,200px)" value="' + esc(current) + '" placeholder="14 ou 1 (T)" min="0.5" step="0.5" />';
+  html += '<span style="font-size:var(--fs-small);color:var(--text-muted);">milliards de paramètres (B) — ou trilliards (T) pour les gros modèles cloud (Kimi K2.6 1T → saisir 1 en T)</span>';
+  html += '<div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;align-items:center;">';
+  html += '<label class="quant-field" style="flex-direction:row;align-items:center;gap:6px;"><input type="radio" name="psUnit" value="B" checked onchange="onParamSizeUnitChange(' + idx + ')"><span style="font-size:var(--fs-small);color:var(--text);">B (milliards)</span></label>';
+  html += '<label class="quant-field" style="flex-direction:row;align-items:center;gap:6px;"><input type="radio" name="psUnit" value="T" onchange="onParamSizeUnitChange(' + idx + ')"><span style="font-size:var(--fs-small);color:var(--text);">T (trilliards)</span></label>';
   html += '<button class="btn btn-primary btn-sm" onclick="saveModelParamSize(' + idx + ')">💾 Enregistrer</button>';
   if (current) html += '<button class="btn btn-sm" onclick="saveModelParamSize(' + idx + ',true)" style="background:var(--bg-3);color:var(--red);">🗑 Effacer</button>';
   html += '<button class="btn btn-sm" onclick="cancelEditModelParamSize(' + idx + ')" style="background:var(--bg-3);color:var(--text-muted);">Annuler</button>';
   html += '</div></div>';
   section.innerHTML = html;
+  // Radio T pré-coché si la valeur manuelle existante est déjà en trilliards.
+  if (current && parseFloat(current) >= 1000) {
+    var tRadio = section.querySelector('input[type=radio][value=T]');
+    if (tRadio) tRadio.checked = true;
+  }
   var input = document.getElementById('modelParamSizeInput');
   if (input) { input.focus(); input.select(); }
+}
+// Change l'unité (B/T) de la saisie manuelle : convertit la valeur affichée
+// pour que l'utilisateur voie immédiatement l'équivalent (12 B ↔ 0,012 T ;
+// 1 T ↔ 1000 B). Le carnet stocke toujours la valeur en milliards.
+function onParamSizeUnitChange(idx) {
+  var section = document.getElementById('modelParamSizeSection');
+  if (!section) return;
+  var input = document.getElementById('modelParamSizeInput');
+  if (!input) return;
+  var tRadio = section.querySelector('input[type=radio][value=T]');
+  if (!tRadio) return;
+  var n = parseFloat(String(input.value).replace(',', '.'));
+  if (!isFinite(n) || n <= 0) return;
+  input.value = tRadio.checked ? Math.round((n / 1000) * 1e6) / 1e6 : n * 1000;
 }
 function cancelEditModelParamSize(idx) {
   var m = MODELS[idx];
@@ -3646,7 +3726,7 @@ function cancelEditModelParamSize(idx) {
     html += '<div class="model-params-display"><span class="model-params-value">' + ps.icon + ' ' + esc(ps.short) + '</span></div>';
     html += '<button class="btn btn-primary btn-sm" onclick="editModelParamSize(' + idx + ')">✎ Modifier</button>';
   } else {
-    html += '<p style="color:var(--text-muted);font-size:var(--fs-small);">Taille non détectée. Cliquez pour la saisir (en milliards de paramètres).</p>';
+    html += '<p style="color:var(--text-muted);font-size:var(--fs-small);">Taille non détectée. Cliquez pour la saisir (en milliards B, ou trilliards T pour les gros modèles cloud).</p>';
     html += '<button class="btn btn-primary btn-sm" onclick="editModelParamSize(' + idx + ')">+ Ajouter</button>';
   }
   section.innerHTML = html;
@@ -3682,6 +3762,114 @@ function _saveModelParamSizeFallback(idx, val) {
   cancelEditModelParamSize(idx);
   renderCards();
   showToast(val ? 'Paramètres enregistrés localement (localStorage — lancez --serve pour persister dans le carnet)' : 'Paramètres effacés (local)', true);
+}
+
+// --- Gestion de l'origine manuelle (modale) : local vs cloud frontière ---
+// Même architecture que le lien/quantification/note : persistance double
+// (serveur → carnet JSON, ou localStorage en fallback). Le choix manuel PRIME
+// sur toute heuristique de détection (provider, école FRONTIER, suffixe :free).
+var MODEL_ORIGIN_LS_KEY = 'benchgo_model_origins';
+function _getModelOriginLocal(shortName) {
+  try {
+    var map = JSON.parse(localStorage.getItem(MODEL_ORIGIN_LS_KEY) || '{}');
+    return map[shortName] || null;
+  } catch (e) { return null; }
+}
+function _setModelOriginLocal(shortName, val) {
+  try {
+    var map = JSON.parse(localStorage.getItem(MODEL_ORIGIN_LS_KEY) || '{}');
+    if (val) map[shortName] = val; else delete map[shortName];
+    localStorage.setItem(MODEL_ORIGIN_LS_KEY, JSON.stringify(map));
+  } catch (e) {}
+}
+// Ouvre le choix d'origine : 2 radios (Local / Cloud frontière) + bouton
+// « Auto » pour effacer le choix manuel et revenir à la détection.
+function editModelOrigin(idx) {
+  var m = MODELS[idx];
+  var section = document.getElementById('modelOriginSection');
+  if (!section) return;
+  var current = m.originManual || _getModelOriginLocal(m.shortName) || '';
+  var html = '<div class="model-origin-edit">';
+  html += '<label class="quant-field" style="flex-direction:row;align-items:center;gap:6px;"><input type="radio" name="originChoice" value="local"' + (current === 'local' ? ' checked' : '') + '><span style="font-size:var(--fs-small);color:var(--text);">🏠 Local (LM Studio / Ollama local)</span></label>';
+  html += '<label class="quant-field" style="flex-direction:row;align-items:center;gap:6px;"><input type="radio" name="originChoice" value="cloud"' + (current === 'cloud' ? ' checked' : '') + '><span style="font-size:var(--fs-small);color:var(--text);">☁️ Cloud frontière (API distante)</span></label>';
+  html += '<div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;">';
+  html += '<button class="btn btn-primary btn-sm" onclick="saveModelOrigin(' + idx + ')">💾 Enregistrer</button>';
+  if (current) html += '<button class="btn btn-sm" onclick="saveModelOrigin(' + idx + ',true)" style="background:var(--bg-3);color:var(--red);">↩ Retour auto</button>';
+  html += '<button class="btn btn-sm" onclick="cancelEditModelOrigin(' + idx + ')" style="background:var(--bg-3);color:var(--text-muted);">Annuler</button>';
+  html += '</div></div>';
+  section.innerHTML = html;
+}
+// Annule l'édition et restaure l'affichage normal de l'origine.
+function cancelEditModelOrigin(idx) {
+  var m = MODELS[idx];
+  var section = document.getElementById('modelOriginSection');
+  if (!section) return;
+  var current = m.originManual || _getModelOriginLocal(m.shortName);
+  var html = '';
+  if (current) {
+    html += '<div class="model-origin-display"><span class="model-origin-value">' + (current === 'cloud' ? '☁️ Cloud frontière' : '🏠 Local') + '</span></div>';
+    html += '<button class="btn btn-primary btn-sm" onclick="editModelOrigin(' + idx + ')">✎ Modifier</button>';
+  } else {
+    html += '<p style="color:var(--text-muted);font-size:var(--fs-small);">Détection auto : ' + (m.isCloud ? '☁️ Cloud' : '🏠 Local') + '. Cliquez pour forcer l&#39;origine manuellement.</p>';
+    html += '<button class="btn btn-primary btn-sm" onclick="editModelOrigin(' + idx + ')">✎ Choisir</button>';
+  }
+  section.innerHTML = html;
+}
+// Sauvegarde l'origine manuelle (serveur → carnet JSON, ou localStorage en
+// fallback). erase=true efface le choix manuel (retour à la détection auto).
+function saveModelOrigin(idx, erase) {
+  var m = MODELS[idx];
+  var sel = section = document.getElementById('modelOriginSection');
+  var picked = null;
+  if (!erase) {
+    var radio = sel ? sel.querySelector('input[type=radio][name=originChoice]:checked') : null;
+    picked = radio ? radio.value : null;
+    if (!picked) { showToast('Choisissez Local ou Cloud', false); return; }
+  }
+  fetch('/api/model-origin?shortName=' + encodeURIComponent(m.shortName), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ origin: picked })
+  }).then(function(r) { return r.ok ? r.json() : null; }).then(function(data) {
+    if (data && data.ok) {
+      m.originManual = picked;
+      _setModelOriginLocal(m.shortName, picked);
+      if (picked) m.isCloud = (picked === 'cloud');
+      cancelEditModelOrigin(idx);
+      _refreshOriginDisplay(idx);
+      renderCards();
+      showToast(picked ? 'Origine enregistrée (carnet) : ' + (picked === 'cloud' ? 'Cloud' : 'Local') : 'Origine manuelle effacée (détection auto)', true);
+    } else {
+      _saveModelOriginFallback(idx, picked);
+    }
+  }).catch(function() {
+    _saveModelOriginFallback(idx, picked);
+  });
+}
+// Fallback hors-serveur : localStorage uniquement.
+function _saveModelOriginFallback(idx, picked) {
+  var m = MODELS[idx];
+  _setModelOriginLocal(m.shortName, picked);
+  m.originManual = picked;
+  if (picked) m.isCloud = (picked === 'cloud');
+  cancelEditModelOrigin(idx);
+  _refreshOriginDisplay(idx);
+  renderCards();
+  showToast(picked ? 'Origine enregistrée localement (localStorage — lancez --serve pour persister dans le carnet)' : 'Origine manuelle effacée (local)', true);
+}
+// Rafraîchit le statBox Origine en haut de modale après sauvegarde/effacement.
+function _refreshOriginDisplay(idx) {
+  var m = MODELS[idx];
+  var stat = document.getElementById('originStatVal');
+  if (stat) {
+    stat.innerHTML = m.isCloud ? '☁️ Cloud' : '🏠 Local';
+    stat.style.color = m.isCloud ? '#d29922' : '#3fb950';
+  }
+  var vb = document.getElementById('mVerdictOrigin');
+  if (vb) {
+    vb.textContent = m.isCloud ? '☁️ Cloud' : '🏠 Local';
+    vb.style.background = m.isCloud ? '#d29922' : '#3fb950';
+  }
 }
 
 // --- Gestion du nom d'affichage personnalisé (modale) ---
@@ -4399,12 +4587,18 @@ if (_btnMd) _btnMd.addEventListener('click', exportLeaderboardMd);
     var lsUrl = _getModelUrlLocal(m.shortName);
     var lsNote = _getModelNoteLocal(m.shortName);
     var lsParam = _getModelParamSizeLocal(m.shortName);
+    var lsOrigin = _getModelOriginLocal(m.shortName);
     if (lsQuant) m.quantization = lsQuant;
     if (lsUrl) m.modelUrl = lsUrl;
     if (lsNote) m.note = lsNote;
     if (lsParam) {
       m.paramSizeManual = lsParam;
       m.paramSize = _paramSizeFromValue(lsParam);
+    }
+    // Origine manuelle : le choix utilisateur PRIME sur la détection auto.
+    if (lsOrigin) {
+      m.originManual = lsOrigin;
+      m.isCloud = (lsOrigin === 'cloud');
     }
   }
 })();
@@ -5960,6 +6154,53 @@ function startServer(port) {
       }
     }
 
+    // API : origine manuelle d'un modèle (local vs cloud frontière, choix dans
+    // la modale). GET /api/model-origin?shortName=... → { ok, origin }
+    // POST /api/model-origin?shortName=... (body: { origin: 'cloud'|'local'|null }) → carnet.
+    // Le choix manuel (ledger.originManual) prime sur toute heuristique de
+    // détection lors de l'agrégation (cf. aggregateLedger).
+    if (url.pathname === '/api/model-origin') {
+      const shortName = url.searchParams.get('shortName');
+      if (!shortName) {
+        res.writeHead(400, securityHeaders);
+        res.end(JSON.stringify({ ok: false, error: 'shortName manquant' }));
+        return;
+      }
+      const { loadLedger } = require('./score-ledger');
+      if (req.method === 'GET') {
+        const ledger = loadLedger(shortName);
+        res.writeHead(200, securityHeaders);
+        res.end(JSON.stringify({ ok: true, origin: ledger.originManual || null }));
+        return;
+      }
+      if (req.method === 'POST') {
+        let body;
+        try { body = await readJsonBody(req); } catch (e) {
+          res.writeHead(400, securityHeaders);
+          res.end(JSON.stringify({ ok: false, error: e.message }));
+          return;
+        }
+        const origin = (body.origin === 'cloud' || body.origin === 'local') ? body.origin : null;
+        try {
+          const ledger = loadLedger(shortName);
+          if (origin) {
+            ledger.originManual = origin;
+          } else {
+            delete ledger.originManual;
+          }
+          const { saveLedger } = require('./score-ledger');
+          saveLedger(ledger);
+          logger.info('API: Origine de ' + shortName + ' mise à jour — ' + (origin || '(détection auto)'));
+          res.writeHead(200, securityHeaders);
+          res.end(JSON.stringify({ ok: true, origin: origin }));
+        } catch (e) {
+          res.writeHead(200, securityHeaders);
+          res.end(JSON.stringify({ ok: false, error: e.message }));
+        }
+        return;
+      }
+    }
+
     // API : nom d'affichage personnalisé d'un modèle (saisie depuis la modale).
     // GET  /api/model-displayname?shortName=... → { ok, displayName }
     // POST /api/model-displayname?shortName=... (body: { displayName }) → carnet.
@@ -6124,7 +6365,7 @@ function startServer(port) {
           if (!local) { unchanged.push(sn); return; }
           // Comparaison des champs pertinents (pas tout le carnet — juste les
           // champs qui justifient une mise a jour de la soumission).
-          const fields = ['quantization', 'note', 'paramSize', 'modelUrl', 'model', 'shortName'];
+          const fields = ['quantization', 'note', 'paramSize', 'modelUrl', 'model', 'shortName', 'originManual'];
           let isChanged = false;
           for (const f of fields) {
             const localVal = local[f] != null ? String(local[f]) : '';

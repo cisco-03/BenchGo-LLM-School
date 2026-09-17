@@ -1,5 +1,86 @@
 # CHANGELOG - Carnet de Notes BenchGo
 
+## 2026-09-17c — fix(gguf-tracker) : API HF paginée par curseur + filter=gguf, filtres Nouveaux/Testés, tri, recherche serveur, notifications durcies
+
+### Contexte & problème rencontré
+Demande utilisateur sur le GGUF Tracker (`scripts/gguf-tracker.html`) : « vérifier et corriger : la fonction "Nouveaux", "testés" cela ne fonctionne pas ; implémenter un système de classement du plus récent au plus ancien (sélecteur de filtre) ; vérifier le système de notifications (navigateur) ; corriger le système de recherche interne Hugging Face, il y a beaucoup de problèmes, les requêtes n'aboutissent pas. » Diagnostic expérimental confirmé sur l'API HF réelle : le paramètre `library=gguf` est silencieusement IGNORÉ (repos non-GGUF renvoyés, ex. repos `safetensors` purs), et le paramètre `offset` est silencieusement ignoré (toutes les pages renvoient les mêmes repos) — la pagination officielle est désormais un curseur via le header de réponse `Link` (`rel="next"`). Conséquences en cascade : le tracker chargeait des repos aléatoires non-GGUF (filtrés ensuite par `isLLMGGUFModel` → liste presque vide), « Charger plus » re-fetchait la même page, « Nouveaux » ne détectait presque rien (les vrais GGUF arrivaient rarement), et la recherche interne ne trouvait que dans les modèles déjà chargés.
+
+### Cause racine
+1. `fetchPage(offset)` construisait `?library=gguf&...&offset=N` : les DEUX paramètres sont obsolètes côté API HF (tests live : `library=` ignoré, `offset=3/limit=3` renvoie la même page que `offset=0`). La page API renvoie maintenant un header `Link: <url>; rel="next"` contenant le curseur de la page suivante (header exposé CORS, `access-control-expose-headers` inclut `Link`).
+2. `normalizeModelName()` exécutait le strip des tokens de quantification (`\b(gguf|q4_k_m|instruct|...)\b`) APRÈS la suppression des séparateurs (`/@/_.\-/` et `[^a-z0-9]`) : les `\b` ne matchent plus jamais sur une chaîne sans frontières non-mot → code mort, quantifications non normalisées, rapprochement « Testés » défaillant.
+3. Le récepteur postMessage ne réappliquait les filtres que si `rawModels.length > 0` : le message du classement parent arrive souvent APRÈS le 1er rendu → badge TESTE jamais appliqué.
+4. La recherche ne filtrait que localement (`repoId.toLowerCase().includes(search)`) sur la seule colonne `repoId` — aucun accès serveur.
+
+### Corrections
+- `scripts/gguf-tracker.html` — `fetchPage(cursor)` : URL de base `?filter=gguf&sort=lastModified&direction=-1&limit=250`, suit le curseur du header `Link` via `extractNextCursor()` ; `hasMore = !!nextCursor` (plus de comparaison `page.length === PAGE_SIZE`).
+- `scripts/gguf-tracker.html` — `fetchSearchPage(query, cursor)` : recherche serveur `search=<q>&filter=gguf` (API HF supporte `search` combiné à `filter=gguf`, testé live avec `gemma` : 5 repos, tous GGUF).
+- `scripts/gguf-tracker.html` — `searchServer()` + `onSearchInput()` + champ Enter (listener `keydown`) : la saisie filtre localement en continu ; valider par Entrée interroge le serveur HF, fusionne les résultats dans `rawModels` (nouveaux ajoutés à `newModelsSet`), affiche un bouton « Relancer la recherche serveur » et un message si 0 résultat. `currentOffset` remplacé par `currentCursor`.
+- `scripts/gguf-tracker.html` — sélecteur de tri `#sortSelect` : Plus récent d'abord (défaut) / Plus ancien d'abord / Téléchargements / Nom (A-Z). `sortRawModels()` trie explicitement après chaque fusion (le cache localStorage + API désordonne) et avant chaque `applyFilters()`.
+- `scripts/gguf-tracker.html` — `normalizeModelName()` : strip des tokens DÉPLACÉ avant la suppression des séparateurs (les `\b` redeviennent efficaces) → `bartowski/Qwen2.5-7B-Instruct-GGUF` → `bartowskiqwen257b` (avant : `bartowskiqwen257binstructgguf`).
+- `scripts/gguf-tracker.html` — récepteur postMessage : réapplique TOUJOURS les filtres (le parent envoie après le rendu) ; recherche locale élargie au nom de modèle sans l'auteur (`repoId + ' ' + modelName`).
+- `scripts/gguf-tracker.html` — `updateEmptyMessage()` : message explicatif contextuel quand la liste est vide (nouveaux/testés/favoris/éditeurs/recherche), hint sous la recherche (« appuyez sur Entrée pour interroger le serveur »), erreur API mise en évidence (`status .err`).
+- `scripts/gguf-tracker.html` — notifications durcies : `testNotification()` garde `Notification.permission` derrière `'Notification' in window` (crash sur navigateurs sans API), `sendDesktopNotification()` try/catch (permission révoquée en session → statut rafraîchi, alerte sonore conservée), `requestNotifyPermission()` gère le `.catch()`.
+- `tests/test-gguf-tracker.js` (nouveau) — 16 cas auto-découverts par `tests/run-tests.js` : unitaires (isLLMGGUFModel, normalizeModelName, isModelTested, parseParamsB, sortRawModels, applyFilters newOnly/testedOnly) via extraction du JS inline dans un contexte `vm` avec DOM/localStorage factices (les `let` d'état sont convertis en `var` pour être accessibles) ; système (absence `offset=`/`library=`, présence curseur/sélecteur de tri/recherche serveur, syntaxe `vm.Script`) ; intégration RÉELLE (API HF : filter=gguf uniquement GGUF, pagination curseur page1≠page2, search+filter=gguf, tri lastModified descendant) exécutée en process enfant `spawnSync` (le framework est synchrone, réseau indisponible = échec affiché, jamais faux vert).
+
+### Pour modifier
+1. **Changer la taille de page / le tri de l'API** : éditer `fetchPage()` (`limit=${PAGE_SIZE}` — 250 accepté, 1000 aussi) et `fetchSearchPage()` dans `scripts/gguf-tracker.html`.
+2. **Changer les modes de tri** : éditer `sortRawModels()` (modes recent/ancien/downloads/nom) + les `<option>` de `#sortSelect`.
+3. **Désactiver la recherche serveur** : retirer le listener `keydown` sur `#searchInput` + le bouton `#serverSearchBtn` + `searchServer()`/`onSearchInput()`.
+4. **Modifier la normalisation des noms** : éditer `normalizeModelName()` — l'ordre est critique : strip des tokens AVANT suppression des séparateurs.
+5. **Changer les messages de liste vide** : éditer `updateEmptyMessage()` dans `scripts/gguf-tracker.html`.
+6. **Tester** : `node tests/run-tests.js` (47/47, dont 4 intégration réseau) ; `node leaderboard.js` + `node consolidate-leaderboard.js` + `node scripts/check-inline-js.js` (le tracker est recopié vers `gh-pages-output/` à chaque génération).
+
+### Pièges
+- Le header `Link` est exposé CORS par HF (`access-control-expose-headers` inclut `Link`) : le navigateur peut le lire — pas besoin de proxy.
+- `offset` ne renvoie PAS d'erreur : il est ignoré. Un test visuel « ça marche » peut donc passer à côté (mêmes repos affichés, impression de pagination).
+- `library=gguf` et `filter=gguf` ne sont pas équivalents : seul `filter=gguf` (matche le tag) filtre réellement.
+- La recherche serveur `search=` est stricte : un nom complet avec quantification (`Qwen3.8-9B-Instruct-2507-GGUF`) peut ne rien renvoyer — le message vide conseille un terme plus court.
+- Les tests d'intégration réseau sont SYNCHRONES via `spawnSync` (60s timeout) : sans réseau, ils échouent avec mention « réseau indisponible » — c'est voulu (pas de faux verts).
+- Après modification du tracker : `commit` OBLIGATOIRE (`!scripts/gguf-tracker.html` exception `.gitignore`), sinon CI → 404 GitHub Pages (bug 2026-09-02).
+
+## 2026-09-17b — feat(leaderboard) : Origine manuelle local/cloud dans la modale + paramètres en trilliards (T) pour les gros modèles cloud
+
+### Contexte & problème rencontré
+Deux demandes utilisateur : (1) « Ajoute dans la modale leaderboard la quantification nombre de paramètres pour les gros modèles cloud Frontières, tu as oublié… attention c'est en trilliards de paramètres comme par exemple Kimi 2.6 1T » — le champ de saisie manuelle `paramSize` était borné à `max="500"` (milliards) et l'affichage n'exprimait jamais les trilliards : un Kimi K2.6 1T (1000 milliards) était impossible à saisir correctement. (2) « Ajoute dans la modale : la possibilité de choisir en manuel si c'est un modèle local ou cloud frontière » — la détection d'origine (provider, école FRONTIER, suffixe `:free`/`-cloud`) peut se tromper (ex: `kimi-k2.6` avec `provider=ollama` + `isCloud=false` malgré l'école Post-Doctorat), et l'utilisateur n'avait aucun moyen de corriger depuis l'interface.
+
+### Cause racine
+`detectProfileFromModelName()` (config.js) ne reconnaissait que les suffixes `b`/`billion`/`g` — pas de pattern `T` (trilliard). Côté modale, `_paramSizeFromValue()` (leaderboard.js) affichait tout en `B` et l'input était plafonné à 500. Pour l'origine : `aggregateLedger()` (leaderboard.js) et `aggregateCarnet()` (consolidate-leaderboard.js) calculent `isCloud` uniquement par heuristique, sans surcharge possible.
+
+### Corrections
+- `config.js` : pattern `([\d]+[.,]?[\d]*)\s*t(?![a-z])` testé EN PREMIER dans `detectProfileFromModelName()` — un suffixe `T` (trilliard) convertit la valeur ×1000 (1T → 1000B, 1,2T → 1200B). Le pattern T est prioritaire sur B pour que « 1.2TB » ne matche pas « 1.2B ». Le `(?![a-z])` évite les faux positifs (`t2`, `t4`, `T5`, `tts` ne matchent pas). Détecté → DOCTORAT (≥ 30B).
+- `leaderboard.js` (serveur) : `formatParamSizeShort(n)` — affiche `1T` dès ≥ 1000B (1T, 1,5T), `12B` sinon ; utilisée par `getParamSize()` et `getParamSizeFromValue()` (badges carte + modale).
+- `leaderboard.js` (JS inline) : `_formatParamSizeShort()` dupliquée côté client ; `_paramSizeFromValue()` l'utilise (badge, carte d'action, après sauvegarde). Input d'édition : plus de plafond (`max` supprimé), radio B/T avec conversion live (`onParamSizeUnitChange()` — 1 T ↔ 1000 B), le carnet stocke TOUJOURS la valeur en milliards. Le radio T est pré-coché si la valeur existante est ≥ 1000.
+- `leaderboard.js` (serveur) : nouvelle API `GET/POST /api/model-origin?shortName=...` — écrit `ledger.originManual` (`'cloud'` | `'local'`, POST `origin: null` efface). Priorité dans `aggregateLedger()` : `originManual` PRIME sur toute heuristique (école Post-Doctorat, `detectIsCloudFromLedger`, provider). `originManual` exposé au client (carte, tooltip « origine forcée »).
+- `leaderboard.js` (JS inline) : colonne 6 « 🌐 Origine » dans la grille d'actions de la modale — radios 🏠 Local / ☁️ Cloud frontière + bouton « ↩ Retour auto » (efface le choix manuel). Persistance double : serveur → carnet, sinon localStorage (`benchgo_model_origins`). statBox « Origine » ajouté aux Statistiques (id `originStatVal`, rafraîchi après save). Fusion localStorage au chargement (`_mergeLocalOverrides`) : `originManual` override `isCloud`.
+- `consolidate-leaderboard.js` : `getParamSize()` accepte le pattern T (prioritaire sur B, ×1000) + `formatParamSizeShort()` (1T/1,5T) ; `aggregateCarnet()` lit `carnet.originManual` avec priorité sur les heuristiques ; `originManual` sérialisé dans le JSON client ; statBox « Origine » avec mention « (choix manuel) » ; tooltip badge carte « origine forcée manuellement ».
+- `leaderboard.js` (`/api/submit-check`) : champ `originManual` ajouté aux champs comparés → une origine modifiée déclenche la re-soumission communautaire.
+
+### Pour modifier
+1. **Changer le seuil d'affichage T** : éditer `formatParamSizeShort()` (leaderboard.js serveur) et `_formatParamSizeShort()` (JS inline du même fichier) — remplacer `n >= 1000` par un autre seuil. Les deux copies doivent rester synchronisées.
+2. **Changer la conversion trilliard** : `×1000` dans `detectProfileFromModelName()` (config.js) et dans `getParamSize()` (consolidate-leaderboard.js).
+3. **Rendre l'origine manuelle non prioritaire** : retirer les branches `ledger.originManual === 'cloud' ? true : ...` dans `aggregateLedger()` (leaderboard.js) et `aggregateCarnet()` (consolidate-leaderboard.js).
+4. **Désactiver la carte Origine** : supprimer la colonne 6 dans `openModal()` (leaderboard.js) + les fonctions `editModelOrigin`/`saveModelOrigin`/`cancelEditModelOrigin`/`_saveModelOriginFallback`/`_refreshOriginDisplay` + l'API `/api/model-origin`.
+5. **Tester** : `node -e "console.log(JSON.stringify(require('./config').detectProfileFromModelName('kimi-k2.6-1t')))"` → `{paramSize:1000,detected:'DOCTORAT'}` ; `node leaderboard.js` + `node consolidate-leaderboard.js` + `node scripts/check-inline-js.js`.
+
+### Pièges
+- Le pattern T est testé AVANT B dans `detectProfileFromModelName()` : un nom « 1.2TB » (taille disque) matche T et donne 1200B — faux positif possible mais les noms de modèles BenchGo ne contiennent jamais de taille disque (quantifications du type Q4_K_M ne matchent pas).
+- `(?![a-z])` dans le pattern T est essentiel : `t2`, `t4` (GPU), `T5`, `turbo-16k`, `tts` ne doivent pas matche. `quant-t5-small` → null (vérifié).
+- Le carnet stocke TOUJOURS `paramSize` en milliards (1000 pour 1T) — la conversion est à l'affichage uniquement. Ne JAMAIS stocker 1 en carnet pour 1T.
+- `originManual` est comparé en POST par valeur exacte `'cloud'`/`'local'` — toute autre valeur est ignorée (null → efface). Le choix manuel survit aux re-tests du carnet (runTierAttempt ne touche pas à ce champ).
+- Le statBox « Origine » est recalculé après save via `_refreshOriginDisplay()` — ne pas le rendre statique.
+- Sur le classement communautaire (lecture seule), l'origine manuelle s'affiche mais n'est PAS éditable — la modification se fait sur le leaderboard local (`node leaderboard.js --serve`), puis re-soumission (`node runner.js --submit --model=<nom>`).
+
+### Vérification
+- `node --check config.js` + `node --check leaderboard.js` + `node --check consolidate-leaderboard.js` : OK.
+- `node tests/run-tests.js` : 31/31 passés.
+- `node verify_tiers.js` : 368 exec OK / 388 (20 skip), 0 problème.
+- `node leaderboard.js` + `node consolidate-leaderboard.js` : régénération OK.
+- `node scripts/check-inline-js.js` : JS inline valide sur les deux HTML.
+- Exécution VM du JS inline (stubs DOM complets) : 40/40 cartes rendues, modale Kimi contient la carte « 🌐 Origine » + la section Paramètres avec mention T ; `onParamSizeUnitChange` convertit 1 T ↔ 1000 B ; `_saveModelOriginFallback(idx,'cloud')` → `isCloud=true, originManual='cloud'`.
+- Logique de priorité originManual testée sur 4 cas (forcé local malgré FRONTIER, forcé cloud, auto FRONTIER, auto local) : tous conformes.
+- `node runner.js all --provider=lmstudio --model=kimi-k2.6-1t@q4 --dry-run --profile=DOCTORAT` : config valide.
+- Détection T : `kimi-k2.6-1t`/`Kimi K2.6 1T` → 1000B DOCTORAT ; `model-1.2t` → 1200B ; `quant-t5-small`, `it-t2-iter`, `model-t4-variant`, `granite-t8-model` → null (pas de faux positif) ; `12b`, `2.6b`, `31b`, `9b`, `4b` inchangés.
+
 ## 2026-09-17a — fix(leaderboard) : Médailles/cadres du podium liés à la vue filtrée (sélecteur Origine)
 
 ### Contexte & problème rencontré

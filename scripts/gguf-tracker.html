@@ -109,7 +109,7 @@
 
     /* Filtres */
     .filters {
-      display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px;
+      display: grid; grid-template-columns: 1.3fr 1fr 1.1fr; gap: 16px;
       padding: 16px; background: var(--bg-2);
       border: 1px solid var(--border); border-radius: var(--r-md);
     }
@@ -122,6 +122,18 @@
     }
     .filter-input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(88,166,255,0.18); }
     .filter-input::placeholder { color: var(--text-dim); }
+    select.filter-input {
+      appearance: none; -webkit-appearance: none;
+      background-image: linear-gradient(45deg, transparent 50%, var(--text-muted) 50%), linear-gradient(135deg, var(--text-muted) 50%, transparent 50%);
+      background-position: calc(100% - 16px) 55%, calc(100% - 11px) 55%;
+      background-size: 5px 5px, 5px 5px;
+      background-repeat: no-repeat;
+      padding-right: 30px;
+      cursor: pointer;
+    }
+    select.filter-input option { background: var(--bg-1); color: var(--text); }
+    .search-hint { font-size: 10px; color: var(--text-dim); margin-top: 4px; }
+    .search-hint b { color: var(--text-muted); font-weight: 600; }
     .size-row { display: flex; align-items: center; gap: 8px; }
     .size-row input[type="range"] { width: 100%; accent-color: var(--accent); }
     .size-val { font-weight: 700; color: var(--accent); font-size: var(--fs-small); min-width: 36px; text-align: right; }
@@ -135,6 +147,7 @@
 
     /* Statut */
     #status { font-size: var(--fs-tiny); color: var(--text-muted); }
+    #status .err { color: var(--red); font-weight: 600; }
 
     /* Liste des modeles */
     .model-list {
@@ -244,8 +257,9 @@
     <!-- Filtres -->
     <div class="filters">
       <div>
-        <label class="filter-label" for="searchInput">Recherche / Nom</label>
-        <input type="text" id="searchInput" class="filter-input" placeholder="ex: Qwen, Mistral, DeepSeek..." oninput="applyFilters()">
+        <label class="filter-label" for="searchInput">Recherche (serveur Hugging Face)</label>
+        <input type="text" id="searchInput" class="filter-input" placeholder="ex: Qwen, Mistral, DeepSeek..." oninput="onSearchInput()">
+        <div class="search-hint">Recherche locale dans les modeles deja charges ; appuyez sur <b>Entree</b> pour interroger le serveur Hugging Face.</div>
       </div>
       <div>
         <label class="filter-label">Taille Max (Milliards de params)</label>
@@ -253,6 +267,15 @@
           <input type="range" id="sizeRange" min="1" max="80" value="80" oninput="document.getElementById('sizeVal').innerText = this.value + 'B'; applyFilters();">
           <span id="sizeVal" class="size-val">80B</span>
         </div>
+      </div>
+      <div>
+        <label class="filter-label" for="sortSelect">Tri des resultats</label>
+        <select id="sortSelect" class="filter-input" onchange="applyFilters()">
+          <option value="recent" selected>Plus recent d'abord</option>
+          <option value="ancien">Plus ancien d'abord</option>
+          <option value="downloads">Telechargements (decroissant)</option>
+          <option value="nom">Nom (A-Z)</option>
+        </select>
       </div>
       <div class="filter-toggles">
         <label>
@@ -279,8 +302,10 @@
     <div id="modelList" class="model-list"></div>
 
     <div class="bottom-actions">
+      <div id="emptyMsg" style="display:none; color: var(--text-muted); font-size: var(--fs-small); text-align: center;"></div>
       <button class="btn" id="showMoreBtn" onclick="showMore()" style="display:none"></button>
       <button class="btn btn-primary" id="loadMoreApiBtn" onclick="loadMoreApi()" style="display:none">Charger plus de modeles depuis l'API</button>
+      <button class="btn" id="serverSearchBtn" onclick="searchServer()" style="display:none"></button>
     </div>
   </div>
 
@@ -313,7 +338,7 @@
     let testedModels = new Set();
     let audioCtx = null;
     let autoCheckInterval = null;
-    let currentOffset = 0;
+    let currentCursor = null;
     let hasMore = false;
     let filteredCache = [];
 
@@ -366,19 +391,25 @@
           testedModels.add(normalizeModelName(name));
         }
       });
-      if (rawModels.length > 0) applyFilters();
+      // Réapplique les filtres même si la liste était vide au 1er rendu
+      // (le postMessage du classement parent arrive souvent après le chargement).
+      if (typeof applyFilters === 'function') applyFilters();
     });
 
     // Normalise un nom de modèle pour le rapprochement :
     // - minuscules
     // - retire les accents
+    // - retire les tokens de quantification/format (gguf, q4_k_m, instruct...)
+    //   tant que les séparateurs existent ENCORE (les \b du regex exigent des
+    //   frontières non-mot : strip AVANT la suppression des séparateurs, sinon
+    //   le regex ne matche plus rien)
     // - retire les séparateurs (/ - _ . @) pour comparer la racine
     function normalizeModelName(s) {
       return s.toLowerCase()
         .replace(/[áàâä]/g, 'a').replace(/[éèêë]/g, 'e').replace(/[íìîï]/g, 'i').replace(/[óòôö]/g, 'o').replace(/[úùûü]/g, 'u')
+        .replace(/\b(gguf|quantized|imatrix|ofm|instruct|chat|it|v\d+|q\d+[_a-z]*|iq\d+[_a-z]*|f16|fp16|bp16)\b/g, '')
         .replace(/[@/_.\-]/g, '')
         .replace(/\s+/g, '')
-        .replace(/\b(gguf|quantized|imatrix|ofm|instruct|chat|it|v\d+|q\d+[_a-z]*|iq\d+[_a-z]*|f16|fp16|bp16)\b/g, '')
         .replace(/[^a-z0-9]/g, '');
     }
 
@@ -427,7 +458,7 @@
     }
 
     // Filtre les repos qui ne sont PAS des modeles LLM GGUF.
-    // L'API ?library=gguf n'est pas stricte : elle retourne aussi des datasets,
+    // L'API ?filter=gguf n'est pas stricte : elle retourne aussi des datasets,
     // des repos vides, des modeles de vision, etc.
     // Critere : library_name === "gguf" OU tags contient "gguf", ET
     // pipeline_tag dans LLM_PIPELINE_TAGS (ou pas de pipeline_tag mais
@@ -495,6 +526,8 @@
       if ('Notification' in window) {
         Notification.requestPermission().then(perm => {
           updateNotifyStatus();
+        }).catch(() => {
+          updateNotifyStatus();
         });
       }
     }
@@ -518,18 +551,29 @@
 
     function sendDesktopNotification(title, body, url) {
       if (document.getElementById('desktopAlert').checked && 'Notification' in window && Notification.permission === 'granted') {
-        const notif = new Notification(title, {
-          body: body,
-          icon: 'https://huggingface.co/front/assets/huggingface_logo-noborder.svg'
-        });
-        if (url) {
-          notif.onclick = () => window.open(url, '_blank');
+        try {
+          const notif = new Notification(title, {
+            body: body,
+            icon: 'https://huggingface.co/front/assets/huggingface_logo-noborder.svg'
+          });
+          if (url) {
+            notif.onclick = () => window.open(url, '_blank');
+          }
+        } catch (e) {
+          // Permission révoquée en cours de session ou API restreinte : on
+          // rafraichit l'affichage du statut, l'alerte sonore reste active.
+          console.warn('Notification navigateur impossible :', e);
+          updateNotifyStatus();
         }
       }
     }
 
     function testNotification() {
       playNotificationSound();
+      if (!('Notification' in window)) {
+        updateNotifyStatus();
+        return;
+      }
       if (Notification.permission !== 'granted') {
         requestNotifyPermission();
       } else {
@@ -545,14 +589,41 @@
       spin.style.display = on ? 'inline-block' : 'none';
     }
 
-    // --- RÉCUPÉRATION & DÉTECTION (API paginée) ---
-    async function fetchPage(offset) {
-      const url = `${API_URL}?library=gguf&sort=lastModified&direction=-1&limit=${PAGE_SIZE}&offset=${offset}`;
+    // --- RÉCUPÉRATION & DÉTECTION (API paginée par curseur) ---
+    // L'API HF a abandonné le paramètre offset (il est silencieusement ignoré :
+    // toutes les pages renvoient les mêmes repos). La pagination officielle passe
+    // désormais par le header de réponse "Link" contenant l'URL de la page
+    // suivante (curseur). On suit ce curseur pour "Charger plus".
+    // NB : le filtre par bibliothèque (paramètre "library") n'est pas fiable sur
+    // cette API (repos non-GGUF renvoyés) : on utilise "filter=gguf" qui matche
+    // le tag gguf des repos. Voir fetchPage() ci-dessous.
+    function extractNextCursor(linkHeader) {
+      if (!linkHeader) return null;
+      const m = linkHeader.match(/<([^>]+)>;\s*rel="next"/);
+      return m ? m[1] : null;
+    }
+
+    async function fetchPage(cursor) {
+      const url = cursor || `${API_URL}?filter=gguf&sort=lastModified&direction=-1&limit=${PAGE_SIZE}`;
       const res = await fetch(url);
       if (!res.ok) {
         throw new Error(`HTTP ${res.status} ${res.statusText}`);
       }
-      return res.json();
+      const data = await res.json();
+      return { data, nextCursor: extractNextCursor(res.headers.get('link')) };
+    }
+
+    // Recherche serveur : l'API HF supporte "search" combiné à "filter=gguf".
+    // Le tri lastModified est conservé pour rester cohérent avec la liste principale.
+    async function fetchSearchPage(query, cursor) {
+      const base = `${API_URL}?filter=gguf&search=${encodeURIComponent(query)}&sort=lastModified&direction=-1&limit=${PAGE_SIZE}`;
+      const url = cursor || base;
+      const res = await fetch(url);
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status} ${res.statusText}`);
+      }
+      const data = await res.json();
+      return { data, nextCursor: extractNextCursor(res.headers.get('link')) };
     }
 
     async function loadModels(reset = true) {
@@ -562,19 +633,22 @@
         // On ne vide PAS rawModels au reset : on fusionne avec les modèles
         // persistés et les nouveaux de l'API. newModelsSet est réinitialisé
         // pour ne détecter que les vrais nouveaux de cette session.
-        currentOffset = 0;
+        currentCursor = null;
         newModelsSet = new Set();
+        // Retire les modèles qui ne passent plus le filtre LLM (données anciennes).
+        rawModels = rawModels.filter(m => isLLMGGUFModel(m));
       }
       setRefreshing(true);
       const status = document.getElementById('status');
       status.innerHTML = 'Interrogation de l\'API Hugging Face...';
       try {
-        const page = await fetchPage(currentOffset);
-        hasMore = Array.isArray(page) && page.length === PAGE_SIZE;
+        const page = await fetchPage(currentCursor);
+        hasMore = !!page.nextCursor;
+        currentCursor = page.nextCursor;
 
         const knownIds = new Set(rawModels.map(m => m.id));
         let apiCount = 0;
-        page.forEach(m => {
+        page.data.forEach(m => {
           // Filtre : on ne garde que les vrais modeles LLM GGUF
           if (!isLLMGGUFModel(m)) return;
           apiCount++;
@@ -616,12 +690,15 @@
           );
         }
 
+        // Les nouveaux arrivés de l'API sont triés en tête (lastModified desc côté
+        // API, mais la fusion avec le cache localStorage peut désordonner).
+        sortRawModels();
         applyFilters();
         document.getElementById('loadMoreApiBtn').style.display = hasMore ? 'inline-flex' : 'none';
       } catch (err) {
         // Si l'API échoue, on affiche quand même les modèles persistés
         const now = new Date().toLocaleTimeString('fr-FR');
-        status.innerHTML = `${rawModels.length} modele(s) en memoire (hors-ligne) - echec API a ${now} : ${escapeHtml(err.message)}`;
+        status.innerHTML = `${rawModels.length} modele(s) en memoire (hors-ligne) - echec API a ${now} : <span class="err">${escapeHtml(err.message)}</span>`;
         applyFilters();
       } finally {
         isLoading = false;
@@ -631,8 +708,67 @@
 
     async function loadMoreApi() {
       if (isLoading || !hasMore) return;
-      currentOffset += PAGE_SIZE;
       await loadModels(false);
+    }
+
+    // --- Recherche serveur Hugging Face ---
+    // La recherche locale filtre uniquement les modèles déjà chargés en mémoire.
+    // Pour chercher dans tout HF, l'utilisateur valide avec Entrée (ou via le
+    // bouton dédié) : on interroge alors l'API avec search= + filter=gguf et on
+    // fusionne les résultats dans la liste (tri + filtres habituels réappliqués).
+    let serverSearchActive = false;
+    let serverSearchQuery = '';
+
+    function onSearchInput() {
+      // Saisie en cours : retour à la recherche locale (annule le mode serveur).
+      if (serverSearchActive) {
+        serverSearchActive = false;
+        serverSearchQuery = '';
+        document.getElementById('serverSearchBtn').style.display = 'none';
+      }
+      applyFilters();
+    }
+
+    async function searchServer() {
+      const q = document.getElementById('searchInput').value.trim();
+      if (!q || isLoading) return;
+      serverSearchActive = true;
+      serverSearchQuery = q;
+      const btn = document.getElementById('serverSearchBtn');
+      btn.style.display = 'none';
+      const status = document.getElementById('status');
+      const prev = status.innerHTML;
+      status.innerHTML = `Recherche serveur HF : "${escapeHtml(q)}"...`;
+      try {
+        const page = await fetchSearchPage(q);
+        const knownIds = new Set(rawModels.map(m => m.id));
+        let added = 0;
+        page.data.forEach(m => {
+          if (!isLLMGGUFModel(m)) return;
+          if (!knownIds.has(m.id)) {
+            rawModels.push(m);
+            added++;
+            if (!tracked[m.id]) newModelsSet.add(m.id);
+          }
+          tracked[m.id] = m.lastModified;
+        });
+        localStorage.setItem('hf_tracked_models', JSON.stringify(tracked));
+        saveStoredModels();
+        sortRawModels();
+        const now = new Date().toLocaleTimeString('fr-FR');
+        status.innerHTML = `${rawModels.length} modele(s) en memoire - recherche serveur "${escapeHtml(q)}" : ${added} nouveau(x) modele(s) - a ${now}`;
+        document.getElementById('serverSearchBtn').style.display = 'inline-flex';
+        btn.innerText = `Relancer la recherche serveur ("${q}")`;
+        applyFilters();
+        if (added === 0) {
+          document.getElementById('emptyMsg').style.display = 'block';
+          document.getElementById('emptyMsg').innerText = `Aucun modele GGUF trouve sur HF pour "${q}". Essayez un terme plus court (ex: nom de famille du modele).`;
+        }
+      } catch (err) {
+        status.innerHTML = `Echec recherche serveur : <span class="err">${escapeHtml(err.message)}</span>`;
+        document.getElementById('serverSearchBtn').style.display = 'inline-flex';
+        btn.innerText = `Relancer la recherche serveur ("${q}")`;
+      }
     }
 
     function updateAlertBanner() {
@@ -697,14 +833,37 @@
       }
     }
 
+    // --- TRI ---
+    // La fusion cache localStorage + API peut désordonner la liste : on trie
+    // explicitement selon le sélecteur avant filtrage/rendu.
+    function sortRawModels() {
+      const mode = (document.getElementById('sortSelect') || {}).value || 'recent';
+      rawModels.sort((a, b) => {
+        if (mode === 'recent' || mode === 'ancien') {
+          const da = new Date(a.lastModified || 0).getTime() || 0;
+          const db = new Date(b.lastModified || 0).getTime() || 0;
+          return mode === 'recent' ? db - da : da - db;
+        }
+        if (mode === 'downloads') {
+          return (b.downloads || 0) - (a.downloads || 0);
+        }
+        // mode 'nom' : A-Z (insensible à la casse)
+        const na = (a.id || '').toLowerCase();
+        const nb = (b.id || '').toLowerCase();
+        return na < nb ? -1 : na > nb ? 1 : 0;
+      });
+    }
+
     // --- FILTRES & RENDU (par chunks) ---
     function applyFilters() {
-      const search = document.getElementById('searchInput').value.toLowerCase();
+      const search = document.getElementById('searchInput').value.toLowerCase().trim();
       const favOnly = document.getElementById('favOnly').checked;
       const newOnly = document.getElementById('newOnly').checked;
       const testedOnly = document.getElementById('testedOnly').checked;
       const reputableOnly = document.getElementById('reputableOnly').checked;
       const maxSize = parseInt(document.getElementById('sizeRange').value, 10) || 80;
+
+      sortRawModels();
 
       filteredCache = rawModels.filter(m => {
         const repoId = m.id || '';
@@ -726,7 +885,11 @@
           if (!isReputableName) return false;
         }
 
-        if (search && !repoId.toLowerCase().includes(search)) return false;
+        if (search) {
+          // Recherche sur le repo complet + le nom de modèle (sans l'auteur).
+          const hay = (repoId + ' ' + modelName).toLowerCase();
+          if (!hay.includes(search)) return false;
+        }
 
         const sizeB = parseParamsB(modelName);
         if (sizeB !== null && sizeB > maxSize) return false;
@@ -736,6 +899,34 @@
 
       renderedCount = RENDER_CHUNK;
       renderFiltered();
+      updateEmptyMessage(favOnly, newOnly, testedOnly, reputableOnly, search, serverSearchActive, serverSearchQuery);
+    }
+
+    function updateEmptyMessage(favOnly, newOnly, testedOnly, reputableOnly, search, serverSearchActive, serverSearchQuery) {
+      const el = document.getElementById('emptyMsg');
+      if (filteredCache.length > 0) {
+        el.style.display = 'none';
+        el.innerText = '';
+        return;
+      }
+      el.style.display = 'block';
+      let msg;
+      if (newOnly) {
+        msg = 'Aucun NOUVEAU modele dans cette session. Les modeles "nouveaux" sont ceux apparus depuis votre dernier passage (marques NOUVEAU). Utilisez le bouton Tester le Son & Alerte puis Rafraichir pour redetecter.';
+      } else if (testedOnly) {
+        msg = 'Aucun modele teste detecte. Le classement parent envoie la liste des modeles testes via postMessage : ouvrez le tracker depuis le badge du classement BenchGo.';
+      } else if (favOnly) {
+        msg = 'Aucun favori. Cliquez sur l\'etoile d\'une carte pour l\'ajouter.';
+      } else if (reputableOnly) {
+        msg = 'Aucun modele d\'editeur verifie (bartowski, unsloth, mradermacher...) dans la liste chargee. Cliquez sur "Charger plus de modeles depuis l\'API".';
+      } else if (search) {
+        msg = serverSearchActive
+          ? `Aucun resultat GGUF pour la recherche serveur "${search}". Essayez un terme plus court.`
+          : `Aucun modele charge ne contient "${search}". Appuyez sur Entree dans la recherche pour interroger le serveur Hugging Face.`;
+      } else {
+        msg = 'Aucun modele affiche. Cliquez sur "Rafraichir" pour interroger l\'API Hugging Face.';
+      }
+      el.innerText = msg;
     }
 
     function renderFiltered() {
@@ -816,6 +1007,14 @@
     }
 
     updateNotifyStatus();
+
+    // Recherche serveur : Entrée dans le champ déclenche la requête HF.
+    document.getElementById('searchInput').addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        searchServer();
+      }
+    });
 
     document.addEventListener('click', () => {
       if (document.getElementById('desktopAlert').checked

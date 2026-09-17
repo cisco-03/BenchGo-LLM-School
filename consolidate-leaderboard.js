@@ -261,9 +261,17 @@ function aggregateCarnet(carnet) {
   // suffixe "-cloud"/":cloud" dans le nom (Ollama Cloud, ex: "gemma4:31b-cloud")
   // fait du modèle un modèle DISTANT : il prime sur le provider (tâche 2026-09-11).
   const cloudByName = detectIsCloudFromCarnet(carnet) && /-(cloud|free)$/i.test(carnet.displayName || carnet.model || '');
-  const isCloud = cloudByName || (carnet.provider
-    ? !LOCAL_PROVIDERS.has(String(carnet.provider).toLowerCase())
-    : Boolean(carnet.isCloud || detectIsCloudFromCarnet(carnet)));
+  // originManual (tâche 2026-09-17b) : le choix MANUEL de l'utilisateur dans la
+  // modale ('cloud' | 'local') prime sur TOUTE heuristique de détection. Il est
+  // propagé dans le carnet soumis (ledger.originManual, écrit par la modale du
+  // leaderboard local via /api/model-origin).
+  const isCloud = carnet.originManual === 'cloud'
+    ? true
+    : carnet.originManual === 'local'
+      ? false
+      : (cloudByName || (carnet.provider
+          ? !LOCAL_PROVIDERS.has(String(carnet.provider).toLowerCase())
+          : Boolean(carnet.isCloud || detectIsCloudFromCarnet(carnet))));
 
   const result = {
     model: carnet.model || carnet.shortName || 'Inconnu',
@@ -279,6 +287,7 @@ function aggregateCarnet(carnet) {
     publisher: carnet.publisher || null,
     provider: carnet.provider || null,
     isCloud,
+    originManual: carnet.originManual || null,
     score, max, pct, globalLifeScore, optionalBonus,
     mandatoryPassed, mandatoryTotal, mandatoryPct,
     helpCount, retriedCount,
@@ -388,14 +397,28 @@ function buildConsolidatedHTML(entries) {
   }
 
   // Taille du modèle par nom
+  // Les gros modèles cloud frontière sont nommés en TRILLIARDS (ex: Kimi K2.6 1T
+  // = 1000 milliards). getParamSize lit la valeur déjà convertie en milliards
+  // (carnet contient le nom ; la regex du nom matche T → x1000 côté agrégation
+  // est faite dans config.js detectProfileFromModelName, ici on lit e.model).
+  function formatParamSizeShort(n) {
+    if (!isFinite(n) || n <= 0) return '?';
+    if (n >= 1000) {
+      const t = Math.round((n / 1000) * 100) / 100;
+      return (Number.isInteger(t) ? t : String(t).replace('.', ',')) + 'T';
+    }
+    return (Number.isInteger(n) ? n : String(n).replace('.', ',')) + 'B';
+  }
   function getParamSize(modelName) {
-    const m = (modelName || '').match(/([\d]+[.,]?[\d]*)\s*b/i);
+    const m = (modelName || '').match(/([\d]+[.,]?[\d]*)\s*t(?![a-z])/i) || (modelName || '').match(/([\d]+[.,]?[\d]*)\s*b/i);
     if (!m) return { key: 'inconnu', icon: '❓', label: 'Taille inconnue', short: '?' };
-    const size = parseFloat(m[1].replace(',', '.'));
-    if (size < 3) return { key: 'petit', icon: '🐱', label: '< 3B', short: size + 'B' };
-    if (size <= 15) return { key: 'standard', icon: '📦', label: '3B-15B', short: size + 'B' };
-    if (size <= 30) return { key: 'expert', icon: '🎓', label: '15B-30B', short: size + 'B' };
-    return { key: 'doctorat', icon: '🧠', label: '> 30B', short: size + 'B' };
+    const sizeRaw = parseFloat(m[1].replace(',', '.'));
+    // Suffixe T (trilliard) → conversion en milliards (1T = 1000B).
+    const size = m[0].slice(-1).toLowerCase() === 't' ? sizeRaw * 1000 : sizeRaw;
+    if (size < 3) return { key: 'petit', icon: '🐱', label: '< 3B', short: formatParamSizeShort(size) };
+    if (size <= 15) return { key: 'standard', icon: '📦', label: '3B-15B', short: formatParamSizeShort(size) };
+    if (size <= 30) return { key: 'expert', icon: '🎓', label: '15B-30B', short: formatParamSizeShort(size) };
+    return { key: 'doctorat', icon: '🧠', label: '> 30B', short: formatParamSizeShort(size) };
   }
 
   function validateSchoolForParamSize(paramSize, ecoleName) {
@@ -540,6 +563,7 @@ function buildConsolidatedHTML(entries) {
       quantization: e.quantization, modelUrl: e.modelUrl || null,
       note: e.note || null,
       provider: e.provider || null, isCloud: Boolean(e.isCloud),
+      originManual: e.originManual || null,
       provInfo,
       pct: e.pct, score: e.score, max: e.max,
       grade, globalLifeScore: e.globalLifeScore,
@@ -1752,9 +1776,9 @@ function renderCards() {
     // affiche « Cloud » et non le provider spécifique pour éviter la redondance.
     var originBadge = '';
     if (m.isCloud) {
-      originBadge = '<span class="badge provider" title="Modèle cloud (API)" style="color:#d29922;border-color:#d2992255;background:#d2992218">☁️ Cloud</span>';
+      originBadge = '<span class="badge provider" title="Modèle cloud (API)' + (m.originManual ? ' — origine forcée manuellement' : '') + '" style="color:#d29922;border-color:#d2992255;background:#d2992218">☁️ Cloud</span>';
     } else {
-      originBadge = '<span class="badge local" title="Modèle local (LM Studio)">🏠 Local</span>';
+      originBadge = '<span class="badge local" title="Modèle local (LM Studio)' + (m.originManual ? ' — origine forcée manuellement' : '') + '">🏠 Local</span>';
     }
     // Badge ⚡ RunCode · Turbo : le modèle a passé l'examen code natif (mode turbo).
     // Deux modes distincts : benchmark sandbox classique vs RunCode turbo.
@@ -1854,7 +1878,8 @@ function openModal(idx) {
   body += statBox('Aide prof.', m.helpCount > 0 ? m.helpCount + 'x' : '—');
   body += statBox('Rattrapage', m.retriedCount > 0 ? m.retriedCount + 'x' : '—');
   body += statBox('Écoles', m.ecoleCount);
-  body += statBox('Quantif.', m.quantization ? '<span style="color:#bc8cff">' + esc(m.quantization) + '</span>' : '—');
+    body += statBox('Quantif.', m.quantization ? '<span style="color:#bc8cff">' + esc(m.quantization) + '</span>' : '—');
+    body += statBox('Origine', '<span style="color:' + (m.isCloud ? '#d29922' : '#3fb950') + '">' + (m.isCloud ? '☁️ Cloud' : '🏠 Local') + (m.originManual ? ' (choix manuel)' : '') + '</span>');
   if (m.elapsedMs > 0 || m.tokens > 0) {
     body += statBox('Temps inf.', fmtDurJS(m.elapsedMs));
     body += statBox('Tokens', m.tokens > 0 ? m.tokens : '—');
