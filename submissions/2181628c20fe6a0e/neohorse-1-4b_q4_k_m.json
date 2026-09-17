@@ -1,0 +1,670 @@
+{
+  "schemaVersion": 1,
+  "benchgoVersion": "V3",
+  "userId": "2181628c20fe6a0e",
+  "pseudo": "FlexoDiv",
+  "submittedAt": "2026-09-17T08:42:52.080Z",
+  "integrityHash": "28d9fb826f9f7f97",
+  "carnet": {
+    "model": "neohorse-1-4b",
+    "shortName": "neohorse-1-4b_q4_k_m",
+    "ecoles": {
+      "RunCode-College-Lycee": {
+        "best": {
+          "profile": "STANDARD",
+          "ecole": "RunCode-College-Lycee",
+          "runCode": true,
+          "parcours": "College-Lycee",
+          "diplome": "4eme",
+          "specialite": "csharp",
+          "specialiteVerdict": "Spécialité : CSHARP — réussi 1/2 exercice(s) (50%) dans ce langage au fil des classes.",
+          "languageStats": [
+            {
+              "language": "csharp",
+              "passed": 1,
+              "failed": 1,
+              "total": 2,
+              "rate": 50,
+              "classes": [
+                "5eme",
+                "5eme"
+              ],
+              "avgLatencyMs": 16604
+            },
+            {
+              "language": "rust",
+              "passed": 1,
+              "failed": 0,
+              "total": 1,
+              "rate": 100,
+              "classes": [
+                "6eme"
+              ],
+              "avgLatencyMs": 17197
+            },
+            {
+              "language": "javascript",
+              "passed": 1,
+              "failed": 0,
+              "total": 1,
+              "rate": 100,
+              "classes": [
+                "6eme"
+              ],
+              "avgLatencyMs": 13359
+            },
+            {
+              "language": "bash",
+              "passed": 1,
+              "failed": 0,
+              "total": 1,
+              "rate": 100,
+              "classes": [
+                "4eme"
+              ],
+              "avgLatencyMs": 21123
+            },
+            {
+              "language": "typescript",
+              "passed": 1,
+              "failed": 0,
+              "total": 1,
+              "rate": 100,
+              "classes": [
+                "4eme"
+              ],
+              "avgLatencyMs": 8727
+            },
+            {
+              "language": "c",
+              "passed": 0,
+              "failed": 1,
+              "total": 1,
+              "rate": 0,
+              "classes": [
+                "3eme"
+              ],
+              "avgLatencyMs": 3292
+            },
+            {
+              "language": "java",
+              "passed": 0,
+              "failed": 1,
+              "total": 1,
+              "rate": 0,
+              "classes": [
+                "3eme"
+              ],
+              "avgLatencyMs": 21650
+            }
+          ],
+          "declaration": {
+            "majeure": "javascript",
+            "mineure": "typescript",
+            "niveau": "expert"
+          },
+          "disqualified": false,
+          "score": 5,
+          "max": 8,
+          "pct": 63,
+          "mandatoryPassed": 5,
+          "mandatoryTotal": 8,
+          "globalLifeScore": 0,
+          "optionalBonus": 0,
+          "helpCount": 0,
+          "retriedCount": 0,
+          "date": "2026-09-16",
+          "time": "13-33-09",
+          "reportFile": "Export-Rapports/exam_neohorse_1_4b_1789558247333.log",
+          "selfProfile": null,
+          "tiers": [
+            {
+              "tierNum": -1,
+              "runCode": true,
+              "className": "6eme",
+              "language": "rust",
+              "exerciseId": "rs_col_01_mutable_borrow",
+              "passed": true,
+              "attempts": 2
+            },
+            {
+              "tierNum": -1,
+              "runCode": true,
+              "className": "6eme",
+              "language": "javascript",
+              "exerciseId": "js_6e_01_template_literal",
+              "passed": true,
+              "attempts": 2
+            },
+            {
+              "tierNum": -1,
+              "runCode": true,
+              "className": "5eme",
+              "language": "csharp",
+              "exerciseId": "cs_5e_02_string_interp",
+              "passed": false,
+              "attempts": 1
+            },
+            {
+              "tierNum": -1,
+              "runCode": true,
+              "className": "5eme",
+              "language": "csharp",
+              "exerciseId": "cs_5e_01_async_task",
+              "passed": true,
+              "attempts": 2
+            },
+            {
+              "tierNum": -1,
+              "runCode": true,
+              "className": "4eme",
+              "language": "bash",
+              "exerciseId": "sh_4e_01_exit_code",
+              "passed": true,
+              "attempts": 2
+            },
+            {
+              "tierNum": -1,
+              "runCode": true,
+              "className": "4eme",
+              "language": "typescript",
+              "exerciseId": "ts_4e_02_union_type",
+              "passed": true,
+              "attempts": 2
+            },
+            {
+              "tierNum": -1,
+              "runCode": true,
+              "className": "3eme",
+              "language": "c",
+              "exerciseId": "c_3e_01_malloc_sizeof",
+              "passed": false,
+              "attempts": 1
+            },
+            {
+              "tierNum": -1,
+              "runCode": true,
+              "className": "3eme",
+              "language": "java",
+              "exerciseId": "java_3e_01_list_generic",
+              "passed": false,
+              "attempts": 2
+            }
+          ],
+          "quantization": "Q4_K_M",
+          "elapsedMs": 118555,
+          "wallMs": 118555,
+          "tokens": 334,
+          "tokensPerSecond": 2.82,
+          "promptTokens": 0,
+          "completionTokens": 334,
+          "timestampMs": 1789558389242,
+          "timestampIso": "2026-09-16T11:33:09.242Z"
+        },
+        "attempts": [
+          {
+            "profile": "STANDARD",
+            "ecole": "RunCode-College-Lycee",
+            "runCode": true,
+            "parcours": "College-Lycee",
+            "diplome": "4eme",
+            "specialite": "csharp",
+            "specialiteVerdict": "Spécialité : CSHARP — réussi 1/2 exercice(s) (50%) dans ce langage au fil des classes.",
+            "languageStats": [
+              {
+                "language": "csharp",
+                "passed": 1,
+                "failed": 1,
+                "total": 2,
+                "rate": 50,
+                "classes": [
+                  "5eme",
+                  "5eme"
+                ],
+                "avgLatencyMs": 16604
+              },
+              {
+                "language": "rust",
+                "passed": 1,
+                "failed": 0,
+                "total": 1,
+                "rate": 100,
+                "classes": [
+                  "6eme"
+                ],
+                "avgLatencyMs": 17197
+              },
+              {
+                "language": "javascript",
+                "passed": 1,
+                "failed": 0,
+                "total": 1,
+                "rate": 100,
+                "classes": [
+                  "6eme"
+                ],
+                "avgLatencyMs": 13359
+              },
+              {
+                "language": "bash",
+                "passed": 1,
+                "failed": 0,
+                "total": 1,
+                "rate": 100,
+                "classes": [
+                  "4eme"
+                ],
+                "avgLatencyMs": 21123
+              },
+              {
+                "language": "typescript",
+                "passed": 1,
+                "failed": 0,
+                "total": 1,
+                "rate": 100,
+                "classes": [
+                  "4eme"
+                ],
+                "avgLatencyMs": 8727
+              },
+              {
+                "language": "c",
+                "passed": 0,
+                "failed": 1,
+                "total": 1,
+                "rate": 0,
+                "classes": [
+                  "3eme"
+                ],
+                "avgLatencyMs": 3292
+              },
+              {
+                "language": "java",
+                "passed": 0,
+                "failed": 1,
+                "total": 1,
+                "rate": 0,
+                "classes": [
+                  "3eme"
+                ],
+                "avgLatencyMs": 21650
+              }
+            ],
+            "declaration": {
+              "majeure": "javascript",
+              "mineure": "typescript",
+              "niveau": "expert"
+            },
+            "disqualified": false,
+            "score": 5,
+            "max": 8,
+            "pct": 63,
+            "mandatoryPassed": 5,
+            "mandatoryTotal": 8,
+            "globalLifeScore": 0,
+            "optionalBonus": 0,
+            "helpCount": 0,
+            "retriedCount": 0,
+            "date": "2026-09-16",
+            "time": "13-33-09",
+            "reportFile": "Export-Rapports/exam_neohorse_1_4b_1789558247333.log",
+            "selfProfile": null,
+            "tiers": [
+              {
+                "tierNum": -1,
+                "runCode": true,
+                "className": "6eme",
+                "language": "rust",
+                "exerciseId": "rs_col_01_mutable_borrow",
+                "passed": true,
+                "attempts": 2
+              },
+              {
+                "tierNum": -1,
+                "runCode": true,
+                "className": "6eme",
+                "language": "javascript",
+                "exerciseId": "js_6e_01_template_literal",
+                "passed": true,
+                "attempts": 2
+              },
+              {
+                "tierNum": -1,
+                "runCode": true,
+                "className": "5eme",
+                "language": "csharp",
+                "exerciseId": "cs_5e_02_string_interp",
+                "passed": false,
+                "attempts": 1
+              },
+              {
+                "tierNum": -1,
+                "runCode": true,
+                "className": "5eme",
+                "language": "csharp",
+                "exerciseId": "cs_5e_01_async_task",
+                "passed": true,
+                "attempts": 2
+              },
+              {
+                "tierNum": -1,
+                "runCode": true,
+                "className": "4eme",
+                "language": "bash",
+                "exerciseId": "sh_4e_01_exit_code",
+                "passed": true,
+                "attempts": 2
+              },
+              {
+                "tierNum": -1,
+                "runCode": true,
+                "className": "4eme",
+                "language": "typescript",
+                "exerciseId": "ts_4e_02_union_type",
+                "passed": true,
+                "attempts": 2
+              },
+              {
+                "tierNum": -1,
+                "runCode": true,
+                "className": "3eme",
+                "language": "c",
+                "exerciseId": "c_3e_01_malloc_sizeof",
+                "passed": false,
+                "attempts": 1
+              },
+              {
+                "tierNum": -1,
+                "runCode": true,
+                "className": "3eme",
+                "language": "java",
+                "exerciseId": "java_3e_01_list_generic",
+                "passed": false,
+                "attempts": 2
+              }
+            ],
+            "quantization": "Q4_K_M",
+            "elapsedMs": 118555,
+            "wallMs": 118555,
+            "tokens": 334,
+            "tokensPerSecond": 2.82,
+            "promptTokens": 0,
+            "completionTokens": 334,
+            "timestampMs": 1789558389242,
+            "timestampIso": "2026-09-16T11:33:09.242Z"
+          }
+        ]
+      },
+      "RunCode-Primaire": {
+        "best": {
+          "profile": "LIGHT",
+          "ecole": "RunCode-Primaire",
+          "runCode": true,
+          "parcours": "Primaire",
+          "diplome": "CE1",
+          "specialite": "javascript",
+          "specialiteVerdict": "Spécialité : JAVASCRIPT — réussi 2/2 exercice(s) (100%) dans ce langage au fil des classes.",
+          "languageStats": [
+            {
+              "language": "javascript",
+              "passed": 2,
+              "failed": 0,
+              "total": 2,
+              "rate": 100,
+              "classes": [
+                "CP",
+                "CE1"
+              ],
+              "avgLatencyMs": 26413
+            },
+            {
+              "language": "php",
+              "passed": 1,
+              "failed": 0,
+              "total": 1,
+              "rate": 100,
+              "classes": [
+                "CP"
+              ],
+              "avgLatencyMs": 12778
+            },
+            {
+              "language": "typescript",
+              "passed": 0,
+              "failed": 1,
+              "total": 1,
+              "rate": 0,
+              "classes": [
+                "CE1"
+              ],
+              "avgLatencyMs": 20832
+            },
+            {
+              "language": "java",
+              "passed": 0,
+              "failed": 1,
+              "total": 1,
+              "rate": 0,
+              "classes": [
+                "CE2"
+              ],
+              "avgLatencyMs": 24435
+            }
+          ],
+          "declaration": {
+            "majeure": "javascript",
+            "mineure": "typescript",
+            "niveau": "expert"
+          },
+          "disqualified": false,
+          "score": 3,
+          "max": 5,
+          "pct": 60,
+          "mandatoryPassed": 3,
+          "mandatoryTotal": 5,
+          "globalLifeScore": 0,
+          "optionalBonus": 0,
+          "helpCount": 0,
+          "retriedCount": 0,
+          "date": "2026-09-16",
+          "time": "13-40-12",
+          "reportFile": "Export-Rapports/exam_neohorse_1_4b_1789558687592.log",
+          "selfProfile": null,
+          "tiers": [
+            {
+              "tierNum": -1,
+              "runCode": true,
+              "className": "CP",
+              "language": "php",
+              "exerciseId": "php_cp_01_strict_comparison",
+              "passed": true,
+              "attempts": 2
+            },
+            {
+              "tierNum": -1,
+              "runCode": true,
+              "className": "CP",
+              "language": "javascript",
+              "exerciseId": "js_cp_01_isnan_strict",
+              "passed": true,
+              "attempts": 2
+            },
+            {
+              "tierNum": -1,
+              "runCode": true,
+              "className": "CE1",
+              "language": "javascript",
+              "exerciseId": "js_ce1_01_array_copy",
+              "passed": true,
+              "attempts": 2
+            },
+            {
+              "tierNum": -1,
+              "runCode": true,
+              "className": "CE1",
+              "language": "typescript",
+              "exerciseId": "ts_ce1_01_const_assertion",
+              "passed": false,
+              "attempts": 2
+            },
+            {
+              "tierNum": -1,
+              "runCode": true,
+              "className": "CE2",
+              "language": "java",
+              "exerciseId": "java_ce2_01_type_mismatch",
+              "passed": false,
+              "attempts": 2
+            }
+          ],
+          "quantization": "Q4_K_M",
+          "elapsedMs": 110871,
+          "wallMs": 110871,
+          "tokens": 401,
+          "tokensPerSecond": 3.62,
+          "promptTokens": 0,
+          "completionTokens": 401,
+          "timestampMs": 1789558812698,
+          "timestampIso": "2026-09-16T11:40:12.698Z"
+        },
+        "attempts": [
+          {
+            "profile": "LIGHT",
+            "ecole": "RunCode-Primaire",
+            "runCode": true,
+            "parcours": "Primaire",
+            "diplome": "CE1",
+            "specialite": "javascript",
+            "specialiteVerdict": "Spécialité : JAVASCRIPT — réussi 2/2 exercice(s) (100%) dans ce langage au fil des classes.",
+            "languageStats": [
+              {
+                "language": "javascript",
+                "passed": 2,
+                "failed": 0,
+                "total": 2,
+                "rate": 100,
+                "classes": [
+                  "CP",
+                  "CE1"
+                ],
+                "avgLatencyMs": 26413
+              },
+              {
+                "language": "php",
+                "passed": 1,
+                "failed": 0,
+                "total": 1,
+                "rate": 100,
+                "classes": [
+                  "CP"
+                ],
+                "avgLatencyMs": 12778
+              },
+              {
+                "language": "typescript",
+                "passed": 0,
+                "failed": 1,
+                "total": 1,
+                "rate": 0,
+                "classes": [
+                  "CE1"
+                ],
+                "avgLatencyMs": 20832
+              },
+              {
+                "language": "java",
+                "passed": 0,
+                "failed": 1,
+                "total": 1,
+                "rate": 0,
+                "classes": [
+                  "CE2"
+                ],
+                "avgLatencyMs": 24435
+              }
+            ],
+            "declaration": {
+              "majeure": "javascript",
+              "mineure": "typescript",
+              "niveau": "expert"
+            },
+            "disqualified": false,
+            "score": 3,
+            "max": 5,
+            "pct": 60,
+            "mandatoryPassed": 3,
+            "mandatoryTotal": 5,
+            "globalLifeScore": 0,
+            "optionalBonus": 0,
+            "helpCount": 0,
+            "retriedCount": 0,
+            "date": "2026-09-16",
+            "time": "13-40-12",
+            "reportFile": "Export-Rapports/exam_neohorse_1_4b_1789558687592.log",
+            "selfProfile": null,
+            "tiers": [
+              {
+                "tierNum": -1,
+                "runCode": true,
+                "className": "CP",
+                "language": "php",
+                "exerciseId": "php_cp_01_strict_comparison",
+                "passed": true,
+                "attempts": 2
+              },
+              {
+                "tierNum": -1,
+                "runCode": true,
+                "className": "CP",
+                "language": "javascript",
+                "exerciseId": "js_cp_01_isnan_strict",
+                "passed": true,
+                "attempts": 2
+              },
+              {
+                "tierNum": -1,
+                "runCode": true,
+                "className": "CE1",
+                "language": "javascript",
+                "exerciseId": "js_ce1_01_array_copy",
+                "passed": true,
+                "attempts": 2
+              },
+              {
+                "tierNum": -1,
+                "runCode": true,
+                "className": "CE1",
+                "language": "typescript",
+                "exerciseId": "ts_ce1_01_const_assertion",
+                "passed": false,
+                "attempts": 2
+              },
+              {
+                "tierNum": -1,
+                "runCode": true,
+                "className": "CE2",
+                "language": "java",
+                "exerciseId": "java_ce2_01_type_mismatch",
+                "passed": false,
+                "attempts": 2
+              }
+            ],
+            "quantization": "Q4_K_M",
+            "elapsedMs": 110871,
+            "wallMs": 110871,
+            "tokens": 401,
+            "tokensPerSecond": 3.62,
+            "promptTokens": 0,
+            "completionTokens": 401,
+            "timestampMs": 1789558812698,
+            "timestampIso": "2026-09-16T11:40:12.698Z"
+          }
+        ]
+      }
+    },
+    "lastUpdated": "2026-09-16T11:40:12.700Z",
+    "provider": "lmstudio",
+    "isCloud": false,
+    "quantization": "Q4_K_M"
+  }
+}
