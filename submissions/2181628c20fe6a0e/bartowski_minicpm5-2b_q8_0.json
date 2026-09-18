@@ -3,8 +3,8 @@
   "benchgoVersion": "V3",
   "userId": "2181628c20fe6a0e",
   "pseudo": "FlexoDiv",
-  "submittedAt": "2026-09-11T07:42:38.932Z",
-  "integrityHash": "3d9b71b356e24bba",
+  "submittedAt": "2026-09-18T11:26:40.149Z",
+  "integrityHash": "73d12ea11014faaa",
   "carnet": {
     "model": "bartowski/minicpm5-2b",
     "shortName": "bartowski_minicpm5-2b_q8_0",
@@ -3852,9 +3852,11 @@
         ]
       }
     },
-    "lastUpdated": "2026-09-10T17:48:47.059Z",
+    "lastUpdated": "2026-09-18T11:23:36.498Z",
     "provider": "lmstudio",
     "isCloud": false,
-    "quantization": "Q8_0"
+    "quantization": "Q8_0",
+    "displayName": "bartowski_minicpm5-2b_q8_0",
+    "originManual": "local"
   }
 }
