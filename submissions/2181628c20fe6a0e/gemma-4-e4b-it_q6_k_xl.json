@@ -3,8 +3,8 @@
   "benchgoVersion": "V3",
   "userId": "2181628c20fe6a0e",
   "pseudo": "FlexoDiv",
-  "submittedAt": "2026-09-07T06:40:42.332Z",
-  "integrityHash": "317420c2519fdada",
+  "submittedAt": "2026-09-18T16:50:35.130Z",
+  "integrityHash": "1cd8158782a66b78",
   "carnet": {
     "model": "gemma-4-e4b-it",
     "shortName": "gemma-4-e4b-it_q6_k_xl",
@@ -9262,12 +9262,13 @@
         ]
       }
     },
-    "lastUpdated": "2026-09-05T09:15:46.083Z",
+    "lastUpdated": "2026-09-18T13:49:01.785Z",
     "provider": "lmstudio",
     "isCloud": false,
     "quantization": "Q6_K_XL",
     "displayName": "gemma-4-e4b-it-Q6_K_XL",
     "modelUrl": "https://huggingface.co/unsloth/gemma-4-E4B-it-GGUF",
-    "paramSize": 8
+    "paramSize": 8,
+    "originManual": "local"
   }
 }
