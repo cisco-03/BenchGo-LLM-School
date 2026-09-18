@@ -165,7 +165,7 @@ async function runSubmitAction(cliArgs) {
   }
   console.log('');
 
-  console.log('  \x1b[35mSoumission en cours...\x1b[0m');
+    console.log('  \x1b[35mSoumission en cours...\x1b[0m');
   try {
     const result = await communitySync.submitResults(shortName, ledger, token, {
       pseudo: pseudo || null,
@@ -182,6 +182,22 @@ async function runSubmitAction(cliArgs) {
     } else {
       console.log(`  \x1b[33mMerge auto impossible : ${result.mergeMessage || 'raison inconnue'}\x1b[0m`);
       console.log('  \x1b[90mLe propriétaire du dépôt validera votre PR manuellement.\x1b[0m');
+    }
+    // Le carnet soumis est désormais dans submissions/ → régénère la vue LOCALE
+    // du classement communautaire (gh-pages-output/) pour que le modèle soumis
+    // soit immédiatement visible dans le classement communautaire ouvert depuis
+    // le leaderboard local (bouton « 🌍 Classement communautaire »). Sans cette
+    // régénération, le HTML local reste périmé jusqu'au prochain
+    // consolidate-leaderboard.js manuel OU au déploiement CI en ligne (déploiement
+    // éventuellement long) — le modèle paraissait « absent du classement
+    // communautaire » alors qu'il n'était que non-régénéré localement (bug
+    // nex-agi 2026-09-18). Échec silencieux : la CI reconstruit de toute façon.
+    try {
+      require('./consolidate-leaderboard').regenerate();
+      console.log('  \x1b[90mClassement communautaire local régénéré : gh-pages-output/community-leaderboard.html\x1b[0m');
+    } catch (e2) {
+      logger.warn('Régénération du classement communautaire local échouée : ' + e2.message);
+      console.log('  \x1b[90m(Régénération locale impossible — la CI la reconstruira. Lancez node consolidate-leaderboard.js pour forcer.)\x1b[0m');
     }
     console.log('  \x1b[90mMerci pour votre participation !\x1b[0m\n');
   } catch (e) {

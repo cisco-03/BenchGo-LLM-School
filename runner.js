@@ -1138,6 +1138,17 @@ async function proposeCommunitySubmission(shortName, options) {
       console.log(`  \x1b[33mMerge auto impossible : ${result.mergeMessage || 'raison inconnue'}\x1b[0m`);
       console.log('  \x1b[90mLe propriétaire du dépôt validera votre PR manuellement.\x1b[0m');
     }
+    // Régénère la vue LOCALE du classement communautaire (gh-pages-output/) :
+    // la soumission a écrit submissions/<userId>/<shortName>.json, le HTML local
+    // doit refléter le modèle immédiatement (sinon « absent du classement
+    // communautaire » jusqu'au prochain consolidate manuel / déploiement CI —
+    // bug nex-agi 2026-09-18). Échec silencieux : la CI reconstruit de toute façon.
+    try {
+      require('./consolidate-leaderboard').regenerate();
+      console.log('  \x1b[90mClassement communautaire local régénéré : gh-pages-output/community-leaderboard.html\x1b[0m');
+    } catch (e2) {
+      logger.warn('Régénération du classement communautaire local échouée : ' + e2.message);
+    }
     console.log('  \x1b[90mMerci pour votre participation !\x1b[0m');
     console.log('  \x1b[90mPour renvoyer un carnet mis à jour : node runner.js --submit\x1b[0m\n');
   } catch (e) {

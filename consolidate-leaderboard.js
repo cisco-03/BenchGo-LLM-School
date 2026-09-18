@@ -371,12 +371,28 @@ function deduplicateAndMerge(entries) {
 }
 
 // Génère le HTML du classement consolidé — même style que le leaderboard principal.
+// Génère le HTML du classement consolidé — même style que le leaderboard principal.
+// Retourne la liste VISIBLE (triée) : les modèles cloud sans réponse exploitable
+// (score === 0 ET tokens === 0) sont masqués, aligné sur le comportement du CLI
+// (leaderboard.js#printCloudLeaderboard, filtre score===0 && tokens===0). Ce sont
+// des échecs d'infrastructure (rate-limit, dépubli, timeout), jamais une vraie
+// performance — les afficher à 0% polluerait le classement. Le carnet est
+// conservé ; un re-test fructueux fera réapparaître le modèle. Le JSON écrit par
+// main() utilise cette même liste → HTML et JSON toujours cohérents.
 function buildConsolidatedHTML(entries) {
+  const visible = entries.filter(e => !(e.isCloud && e.score === 0 && e.tokens === 0));
+  const hiddenCount = entries.length - visible.length;
+  if (hiddenCount > 0) {
+    console.log(`${hiddenCount} modèle(s) cloud sans réponse exploitable (0 point / 0 token) masqué(s) du classement.`);
+  }
+  entries = visible;
   entries.sort((a, b) => {
     if (b.pct !== a.pct) return b.pct - a.pct;
     if (b.score !== a.score) return b.score - a.score;
     return b.globalLifeScore - a.globalLifeScore;
   });
+  // Expose la liste visible/triée pour le JSON de main() (HTML et JSON cohérents).
+  buildConsolidatedHTML.lastVisible = entries;
 
   const generatedAt = new Date().toLocaleString('fr-FR');
 
@@ -2536,11 +2552,13 @@ function main() {
   }
 
   // Dédoublonne et fusionne
-  const merged = deduplicateAndMerge(entries);
+  let merged = deduplicateAndMerge(entries);
   console.log(`${merged.length} modèle(s) unique(s) après fusion.`);
 
-  // Génère les fichiers
+  // Génère les fichiers. buildConsolidatedHTML filtre (clouds 0 point / 0 token
+  // masqués) et trie la liste retournée → le JSON reflète exactement le HTML.
   const html = buildConsolidatedHTML(merged);
+  merged = buildConsolidatedHTML.lastVisible || merged;
   fs.mkdirSync(OUTPUT_DIR, { recursive: true });
   fs.writeFileSync(OUTPUT_HTML, html, 'utf8');
   fs.writeFileSync(OUTPUT_JSON, JSON.stringify({
@@ -2562,6 +2580,16 @@ function main() {
   }
 
   console.log(`Classement consolidé généré : ${path.basename(OUTPUT_HTML)}`);
+  return entries;
+}
+
+// Régénération par un autre module (ex: submit-action.js après une soumission).
+// `main()` est déjà appelé au chargement du module (usage CLI) ; l'appelant a
+// simplement besoin de relancer la génération après l'ajout d'une soumission
+// dans submissions/. Réutilise main() tel quel (lecture disque + régénération).
+// Ne crash jamais l'appelant : les erreurs sont propagées pour logging.
+function regenerate() {
+  main();
 }
 
 // --- CLI ---
@@ -2578,5 +2606,7 @@ if (wantsHelp(process.argv.slice(2))) {
   ]);
   process.exit(0);
 }
+
+module.exports = { regenerate };
 
 main();

@@ -1,5 +1,33 @@
 # CHANGELOG - Carnet de Notes BenchGo
 
+## 2026-09-18b — fix(classement) : modèle soumis invisible dans le classement communautaire local, clouds 0/0 masqués du consolidé
+
+### Contexte & problème rencontré
+Signalement : « je viens de tester un modèle cloud frontière (`nex-agi_nex-n2.5-pro_free`), il n'apparaît pas normalement dans le classement en localhost ni dans le classement communautaire, je le trouve nulle part. Si je clique sur le bouton Récents, là oui il apparaît, mais si je re-clique sur Récents il disparaît. Contrôle et corrige. »
+
+### Diagnostic (3 constats)
+1. **Classement local (`classement.html`) : PAS de bug.** Le modèle est bien présent (carte 26/42, `isCloud=true`, 92%, `globalRank=26`). Le comportement décrit est le fonctionnement NORMAL du toggle « 🕒 Récents » : tri par date ↔ retour à l'ordre par score. `nex-agi` est le modèle le plus récemment testé → 1re carte en mode Récents, retour à la carte 26 en mode score. Simulation vm complète validée (ordre par défaut → Récents → retour : carte 26 → 1 → 26).
+2. **Classement communautaire EN LIGNE (gh-pages) : PAS de bug.** La PR `community: soumission nex-agi_nex-n2.5-pro_free` (commit 7633cad) est mergée et le JSON déployé contient bien le modèle (91 entrées, carte 43/91 en ligne).
+3. **Classement communautaire LOCAL (`gh-pages-output/community-leaderboard.html`) : VRAI BUG.** Le HTML local datait d'avant la soumission : la PR avait été mergée sur `origin/main` par la CI, mais le dépôt local n'avait pas fait `git pull` ET aucune régénération n'était déclenchée après la soumission. `node consolidate-leaderboard.js` lisait les soumissions sur disque → 97 fichiers SANS `nex-agi`. Résultat : le modèle paraissait « absent du classement communautaire » alors qu'il était seulement absent du HTML local périmé. La soumission écrivait `submissions/` côté GitHub mais la vue locale n'était jamais rafraîchie.
+
+### Corrections
+- `submit-action.js` — après une soumission réussie (PR mergée ou non), régénère la vue locale du classement communautaire via `require('./consolidate-leaderboard').regenerate()` ; message CLI « Classement communautaire local régénéré ». Échec silencieux (warn + hint `node consolidate-leaderboard.js`) : la CI reconstruit de toute façon.
+- `runner.js` — même ajout dans `proposeCommunitySubmission()` (soumission post-run, 2e chemin de soumission).
+- `consolidate-leaderboard.js` — (a) nouvelle fonction exportée `regenerate()` (réutilise `main()` ; le module continue d'exécuter `main()` au chargement pour l'usage CLI) ; (b) `buildConsolidatedHTML()` masque désormais les modèles **cloud sans réponse exploitable** (`score === 0 && tokens === 0`, échecs d'infrastructure : rate-limit, dépubli, timeout) — aligné sur `printCloudLeaderboard` du CLI qui masquait déjà ces entrées mais pas le HTML consolidé ; (c) `main()` écrit le JSON depuis la liste VISIBLE retournée (`buildConsolidatedHTML.lastVisible`) → HTML et JSON toujours cohérents (avant : `nvidia/nemotron-nano-12b-2-vl:free` 0% restait dans le JSON et donc consultable via le JSON alors qu'absent du HTML).
+
+### Pour modifier
+1. **Désactiver la régénération post-soumission** : commenter le bloc `try { require('./consolidate-leaderboard').regenerate() ... }` dans `submit-action.js` (~ligne 187) et `runner.js` (fin de `proposeCommunitySubmission`).
+2. **Réafficher les clouds 0/0 dans le consolidé** : supprimer le bloc `const visible = entries.filter(...)` en tête de `buildConsolidatedHTML` (consolidate-leaderboard.js ~ligne 380) et restaurer `merged` sans le filtre dans `main()`.
+3. **Changer le critère de masquage** : éditer le prédicat `!(e.isCloud && e.score === 0 && e.tokens === 0)` (ex: ajouter `&& e.pct === 0`).
+4. **Tester** : `node consolidate-leaderboard.js` (doit logger « N modèle(s) cloud sans réponse exploitable masqué(s) »), `node scripts/check-inline-js.js`, `node tests/run-tests.js`, puis `node runner.js --submit --model=<carnet>` → la régénération locale doit suivre la soumission.
+
+### Pièges
+- La régénération locale ne tire PAS les nouvelles soumissions des AUTRES utilisateurs : `gh-pages-output/` reflète uniquement `submissions/` sur disque. Pour voir les soumissions distantes : `git pull` puis `node consolidate-leaderboard.js` (ou attendre le déploiement CI en ligne).
+- `regenerate()` relance `main()` qui relit tout `submissions/` (~100 fichiers JSON) : coût ~1-2s, négligeable en fin de soumission.
+- Le JSON `community-leaderboard.json` est désormais filtré/trié comme le HTML (liste `buildConsolidatedHTML.lastVisible`) : tout consommateur du JSON (ex: scripts externes) ne verra plus les clouds 0/0.
+- Le toggle « Récents » du leaderboard local permute `MODELS` en place via `_originalModels` : comportement voulu, ne pas « corriger » le retour à l'ordre par score (c'est un toggle, pas un filtre persistant).
+- Un modèle local à score 0 n'est PAS masqué (seuls les clouds 0/0 le sont) : cohérent avec le CLI qui ne filtre que la section cloud.
+
 ## 2026-09-18 — fix(modale+runtimes) : rang réel dans la modale, timeout ping 90s, référence modèle en fin de tableau
 
 ### Contexte & problème rencontré
