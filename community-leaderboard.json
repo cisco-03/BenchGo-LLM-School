@@ -31409,15 +31409,15 @@
     },
     {
       "model": "openbmb/minicpm5-2b@q8_0",
-      "displayName": null,
+      "displayName": "openbmb_minicpm5-2b_q8_0",
       "shortName": "minicpm5-2b-q8-0",
       "quantization": "Q8_0",
-      "modelUrl": "https://huggingface.co/openbmb/minicpm5-2b@q8_0",
+      "modelUrl": "https://huggingface.co/openbmb/MiniCPM5-2B-GGUF",
       "note": null,
       "publisher": null,
       "provider": "lmstudio",
       "isCloud": false,
-      "originManual": null,
+      "originManual": "local",
       "score": 2744,
       "max": 2868,
       "pct": 96,
@@ -32385,7 +32385,7 @@
         "Primaire"
       ],
       "pseudo": "FlexoDiv",
-      "submittedAt": "2026-09-11T07:42:33.152Z",
+      "submittedAt": "2026-09-18T16:50:21.512Z",
       "cost": null,
       "runCode": {
         "ecoles": [
@@ -104237,6 +104237,6 @@
       ]
     }
   ],
-  "generatedAt": "2026-09-18T11:27:39.350Z",
+  "generatedAt": "2026-09-18T16:50:43.391Z",
   "totalSubmissions": 97
 }
