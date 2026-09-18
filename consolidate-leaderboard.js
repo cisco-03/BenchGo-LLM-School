@@ -1750,6 +1750,12 @@ function renderCards() {
     var i = MODELS.indexOf(m);
     shown++;
 
+    // Rang VISIBLE (position dans la vue filtrée active) mémorisé sur le modèle :
+    // la modale l'utilise pour afficher le même numéro que la carte (bug
+    // 2026-09-18 : la modale montrait l'index du tableau global au lieu du
+    // rang affiché quand le filtre Local/Cloud actif change le classement).
+    m.viewRank = shown;
+
     // Médailles et numéros suivent la vue FILTRÉE (séquence 1,2,3... continue).
     // Avant : médailles liées à la position globale → filtre Local, la 1re carte
     // portait une médaille de rang global puis « 2 », « 3 » — séquence cassée.
@@ -1851,9 +1857,10 @@ function attachScrollAnimations() {
 function openModal(idx) {
   var m = MODELS[idx];
   if (!m) return;
-  // Rang global (toutes origines mélangées) — la carte elle-même affiche la
-  // position dans la vue filtrée, la modale garde le rang général.
-  var gr = idx + 1;
+  // Rang VISIBLE (position dans la vue filtrée active, posé par renderCards) —
+  // le même numéro que la carte cliquée. Repli : index+1 si la modale est
+  // ouverte avant le premier rendu (jamais en pratique).
+  var gr = m.viewRank || (idx + 1);
   document.getElementById('mRank').innerHTML = (gr <= 3 ? '<span class="medal">' + (gr === 1 ? '🥇' : gr === 2 ? '🥈' : '🥉') + '</span>' : gr);
   document.getElementById('mTitle').innerHTML = esc(m.displayName || m.model) + positionArrow(m.positionDelta);
   var vb = document.getElementById('mVerdict');

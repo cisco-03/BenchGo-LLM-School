@@ -99,7 +99,7 @@ Tous les modules sont à la racine (pas de sous-dossiers pour les sources). Les 
 - **`consolidate-leaderboard.js`** — génère le HTML du classement communautaire. Lancé en local pour tester (`node consolidate-leaderboard.js` → `gh-pages-output/`), et en CI via GitHub Actions pour déployer sur `gh-pages`. Le workflow `consolidate.yml` lit les soumissions, régénère le HTML, commit sur `gh-pages`, GitHub Pages déploie.
 - **`tiers/`** — 18 fichiers `tier{N}_{profile}.json`.
 
-Timeouts clés (`config.js`) : `EVAL_TIMEOUT_MS` = 10s (sandbox VM), `API_TIMEOUT_MS` = 1500s (25 min). Le test de capacité (`capability-check.js`) a son propre timeout (30s/tentative, 2 tentatives max, ~20-30s attendu). `PROFILING_TIMEOUT_MS` (600s) reste défini pour rétrocompatibilité mais n'est plus appelé par le runner.
+Timeouts clés (`config.js`) : `EVAL_TIMEOUT_MS` = 10s (sandbox VM), `API_TIMEOUT_MS` = 1500s (25 min). Le test de capacité (`capability-check.js`) a son propre timeout (90s/tentative depuis 2026-09-18, 2 tentatives max, ~30-60s attendu) ; le ping pre-flight du runner (`PING_TIMEOUT_MS` dans `runner.js`) et le health check night-batch (`HEALTH_CHECK_TIMEOUT_MS`) sont aussi à 90s (demande utilisateur : les 30s coupaient des modèles lents répondant en 40-60s). `PROFILING_TIMEOUT_MS` (600s) reste défini pour rétrocompatibilité mais n'est plus appelé par le runner.
 
 ---
 
@@ -153,6 +153,12 @@ Seuls LIGHT et STANDARD sont éligibles. EXPERT, DOCTORAT, FRONTIER ne le sont p
 
 ### Échelle letterGrade
 `A ≥ 90, B ≥ 80, C ≥ 70, D ≥ 60, F < 60`. Seuils `>=` descendants (A prime sur B).
+
+### Rang de la modale = rang de la vue filtrée (tâche 2026-09-18)
+La modale des classements (leaderboard.js + consolidate-leaderboard.js) affiche le MÊME rang que la carte cliquée : position dans la VUE FILTRÉE active (`m.viewRank`, posé par `renderCards()`), pas le rang global mélangé. Avant le fix, filtre Local → 3e carte ouvrait une modale « 13 » (rang global) — incohérence visuelle. Le rang global (`m.globalRank`) reste utilisé par le MD/CSV/CLI ; ne pas le supprimer de `modelsData`. Pour revenir à l'ancien comportement : `openModal()` → `m.globalRank` (leaderboard ~ligne 2778) / `idx + 1` (consolidate ~ligne 1863).
+
+### Rappel du modèle en fin de tableau CLI (tâche 2026-09-18)
+La fin du tableau d'exercices d'un tier (`runTierAttempt`) et le tableau des classes (`printScorecard`, 3 sites d'appel) affichent `# Modèle : <nom>` (source : `responseModelName` du streaming, repli `providerConfig.model`, puis `Modele_En_Attente`). Pour le retirer : supprimer le bloc `tierModelRef` (runner.js ~ligne 1000) et le paramètre `modelRef` de `printScorecard`.
 
 ### Path des exports
 Rapports : `Export-Rapports/<AAAA-MM-JJ>/<ÉCOLE>/<CLASSE>/rapport_v3_*.md` (timestamp local, pas UTC). `Export-Rapports/.carnet/` : carnets JSON. Classement : `Export-Rapports/classement.html` et `classement.md` (écrasés à chaque run).

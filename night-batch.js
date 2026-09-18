@@ -1968,10 +1968,12 @@ function unloadAll() {
 // modèle s'est chargé, puis a gelé sur le premier exercice.
 //
 // Le health check envoie une requête /v1/chat/completions triviale ("Reply
-// with: OK") avec un timeout court (30 s). Si le modèle répond dans les
-// temps, il est sain. Sinon, on le marque health_failed et on l'auto-
-// blackliste pour éviter de retenter un modèle défectueux nuit après nuit.
-const HEALTH_CHECK_TIMEOUT_MS = 30000;
+// with: OK") avec un timeout de 90s (demande utilisateur 2026-09-18 : les 30s
+// historiques coupaient des modèles lents qui répondaient bien en 40-60s).
+// Si le modèle répond dans les temps, il est sain. Sinon, on le marque
+// health_failed et on l'auto-blackliste pour éviter de retenter un modèle
+// défectueux nuit après nuit.
+const HEALTH_CHECK_TIMEOUT_MS = 90000;
 
 async function healthCheck(modelKey) {
   const controller = new AbortController();

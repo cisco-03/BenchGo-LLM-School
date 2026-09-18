@@ -1,5 +1,40 @@
 # CHANGELOG - Carnet de Notes BenchGo
 
+## 2026-09-18 — fix(modale+runtimes) : rang réel dans la modale, timeout ping 90s, référence modèle en fin de tableau
+
+### Contexte & problème rencontré
+Demande utilisateur (`Memories-BenchGo/Tasks.md`, 2026-09-18) : (1) « quand je choisis local et je clique sur celui en 3e position (OpenBMB MiniCPM5 2B Q8_0), la modale m'affiche 13 au lieu de 3 » ; (2) « le timeout 30s du ping est trop court, des modèles n'ont pas le temps de répondre » (constat réel : réponse reçue en 43.5s après 2 échecs de ping) ; (3) « afficher la référence du modèle tout le temps en fin de tableau, pour tous les exercices — dans le CLI il y a tellement d'énoncés qu'il faut remonter à la roulette pour savoir qui a répondu ».
+
+### Cause racine
+1. `openModal()` (leaderboard.js) lisait `m.globalRank` (rang du classement GÉNÉRAL mélangé local+cloud, 1-indexé sur la liste complète MODELS) et consolidate-leaderboard.js lisait `idx + 1` (index du tableau global). Or la carte affiche la position dans la VUE FILTRÉE (filtre Local/Cloud + catégorie + recherche). Exemple réel : `openbmb_minicpm5-2b_q8_0` = 3e des locaux (médaille 🥉 sur la carte) mais 13e au rang global → modale « 13 » sous les yeux de l'utilisateur.
+2. Le ping pre-flight (`runner.js`), le test de capacité (`capability-check.js`) et le health check night-batch (`night-batch.js`) plafonnaient chacun à 30s par tentative : les modèles cloud lents (raisonnement long, réseau distant) répondaient correctement en 40-60s mais étaient abattus en timeout → faux échec, 3 tentatives gaspillées, voire recalé.
+3. Aucun rappel du nom du modèle en fin de tableau CLI : l'utilisateur perdait la référence après chaque longue table d'exercices.
+
+### Corrections
+- `leaderboard.js` — `renderCards()` pose désormais `m.viewRank = shown` (position dans la vue filtrée active) sur chaque carte rendue ; `openModal()` affiche `m.viewRank || m.globalRank || (idx+1)` — la modale montre le MÊME numéro que la carte cliquée (3e reste 3e avec la modale ouverte), la médaille 🥇/🥈/🥉 suit.
+- `consolidate-leaderboard.js` — idem : `m.viewRank = shown` dans `renderCards()`, `openModal()` lit `m.viewRank || (idx+1)`.
+- `runner.js` — ping pre-flight : timeout par tentative `PING_TIMEOUT_MS = 90000` (90s au lieu de 30s). Une tentative suffit pour les modèles lents (le cas réel 43.5s passe du premier coup au lieu de 2 échecs + 3s d'attente + 3e essai).
+- `capability-check.js` — `CAPABILITY_TIMEOUT_MS = 90000` (90s au lieu de 30s). Bannière CLI mise à jour (~30-60s attendu).
+- `night-batch.js` — `HEALTH_CHECK_TIMEOUT_MS = 90000` (90s au lieu de 30s) : le ping pré-batch « Reply with: OK » ne tue plus les modèles lents à se charger/délibérer.
+- `runner.js` — référence du modèle en fin de tableau : (a) table détaillée des exercices de fin de tier (`runTierAttempt`) affiche `# Modèle : <nom>` après TOTAL TIER (source : `responseModelName` réel du streaming, repli `providerConfig.model` puis `Modele_En_Attente`) ; (b) `printScorecard()` accepte un paramètre `modelRef` et affiche la même ligne sous le tableau des classes — passé aux 3 sites d'appel (`runSchool` : en cours, après rattrapage, final).
+
+### Pour modifier
+1. **Revenir au rang global dans la modale** : remplacer `m.viewRank || m.globalRank` par `m.globalRank` dans `openModal()` (leaderboard.js ~ligne 2778) et `m.viewRank || (idx+1)` par `idx + 1` (consolidate-leaderboard.js ~ligne 1863).
+2. **Changer le timeout du ping** : éditer `PING_TIMEOUT_MS` dans `runner.js` (~ligne 2240).
+3. **Changer le timeout du test de capacité** : éditer `CAPABILITY_TIMEOUT_MS` dans `capability-check.js` (les deux mentions de la bannière CLI dans `runner.js` sont décoratives).
+4. **Changer le timeout du health check night-batch** : éditer `HEALTH_CHECK_TIMEOUT_MS` dans `night-batch.js`.
+5. **Retirer le rappel modèle** : supprimer le bloc `tierModelRef` (fin de `runTierAttempt`) et le paramètre `modelRef` de `printScorecard()`.
+6. **Tester** : `node --check` sur chaque fichier, `node tests/run-tests.js`, `node leaderboard.js` + `node consolidate-leaderboard.js` + `node scripts/check-inline-js.js`, puis un run cloud : le ping doit tolérer 40-60s de latence sans warning.
+
+### Pièges
+- `viewRank` est posé par `renderCards()` au moment du rendu : si les filtres changent, il est recalculé au prochain rendu — toujours en phase avec les cartes visibles (médailles et rangs partagent le même compteur `shown`).
+- Le rang de la modale suit donc la VUE active (filtre Local → rangs locaux ; filtre Cloud → rangs cloud) : c'est le comportement demandé (cohérence carte ↔ modale), PAS le rang global mélangé.
+- Le `globalRank` reste utilisé par le serveur CLI (`buildLeaderboardMarkdown`, sections locales/cloud distinctes) et par les exports : ne pas le supprimer de `modelsData`.
+- `printScorecard` reçoit `modelName` depuis `runSchool` : en début d'école (avant toute réponse) il vaut « Modele_En_Attente » — la ligne `# Modèle` n'apparaît qu'après le 1er tableau de classe (les tableaux de classes arrivent toujours APRÈS au moins un tier répondu).
+- Le rappel en fin de tier utilise `responseModelName` (nom EXACT renvoyé par l'API, ex: `openbmb_minicpm5-2b_q8_0`), le repli cloud est le slug demandé.
+- 90s × 3 tentatives de ping = pire cas 4m30 avant arrêt E505 : acceptable en mode nuit, ne PAS réduire sans repasser sur les modèles lents.
+- Le health check night-batch blackliste toujours sur timeout : à 90s, un modèle qui délibère plus de 90s sans produire de content/reasoning est probablement gelé — comportement voulu.
+
 ## 2026-09-17c — fix(gguf-tracker) : API HF paginée par curseur + filter=gguf, filtres Nouveaux/Testés, tri, recherche serveur, notifications durcies
 
 ### Contexte & problème rencontré

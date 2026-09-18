@@ -1,4 +1,4 @@
-// capability-check.js — Test de capacité rapide (~20-30s max) d'un modèle élève.
+// capability-check.js — Test de capacité rapide (~30-60s max) d'un modèle élève.
 //
 // Remplace l'auto-profilage (self-profiling.js) et le profilage externe
 // (external-profiling.js) qui prenaient 1-10 min et bloquaient les utilisateurs.
@@ -25,15 +25,16 @@ const CAPABILITY_PROMPT =
   "Pour chaque exercice, tu devras ecrire du code JavaScript et l'evaluer.\n\n" +
   "Es-tu capable de realiser cet examen ? Reponds UNIQUEMENT par OUI ou par NON.";
 
-// Budget temps : on veut ~20-30s maximum. Timeout par tentative court.
-const CAPABILITY_TIMEOUT_MS = 30000;
+// Budget temps : 90s par tentative (demande utilisateur 2026-09-18 — les 30s
+// historiques coupaient des modèles lents qui répondaient bien en 40-60s).
+const CAPABILITY_TIMEOUT_MS = 90000;
 // max_tokens 512 (pas 16) : les modèles de raisonnement (:free thinking)
 // consomment d'abord le budget en phase de pensée (delta.reasoning) avant de
 // produire la réponse. Avec 16 tokens, tout est mangé par le raisonnement →
 // content vide → verdict INDETERMINE systématique (OUI par défaut au bout de
 // 2 tentatives gaspillées). 512 laisse raisonner puis répondre OUI/NON.
 const CAPABILITY_MAX_TOKENS = 512;
-const MAX_ATTEMPTS = 2;              // 2 tentatives max (déjà ~30s pire cas)
+const MAX_ATTEMPTS = 2;              // 2 tentatives max (déjà ~90s pire cas)
 
 // Détecte si la réponse exprime une capacité (OUI) ou une incapacité (NON).
 // Ordre de priorité : NON est testé en premier car un "non, je ne suis pas

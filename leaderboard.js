@@ -2612,11 +2612,17 @@ function renderCards() {
     if (activeCat !== 'all' && dynCat.key !== activeCat) { skippedCat++; continue; }
     shown++;
 
+    // Rang VISIBLE (position dans la vue filtrée active) mémorisé sur le modèle :
+    // la modale l'utilise pour afficher le même numéro que la carte (bug
+    // 2026-09-18 : la modale montrait le rang global — 13e — au lieu du 3e
+    // affiché quand le filtre Local/Cloud actif change le classement visible).
+    m.viewRank = shown;
+
     // Médailles et numéros suivent la vue FILTRÉE (séquence 1,2,3... continue).
     // Avant : les médailles étaient liées au rang global (toutes origines) →
     // avec le filtre Local, la 1re carte portait 🥉 (rang global 3) puis « 2 »,
-    // « 3 » — séquence visuelle incohérente. Le rang global reste affiché dans
-    // la modale (mRank), la carte montre la position dans la vue active.
+    // « 3 » — séquence visuelle incohérente. La modale (mRank) affiche désormais
+    // ce même rang visible (m.viewRank) pour rester cohérente avec la carte.
     var cardClass = shown === 1 ? 'gold' : shown === 2 ? 'silver' : shown === 3 ? 'bronze' : '';
     var rankDisp = shown <= 3
       ? '<span class="medal">' + (shown === 1 ? '🥇' : shown === 2 ? '🥈' : '🥉') + '</span>'
@@ -2766,7 +2772,10 @@ function attachScrollAnimations() {
 function openModal(idx) {
   var m = MODELS[idx];
   var posArrowHtml = positionArrow(m.positionDelta);
-  var gr = m.globalRank || (idx + 1);
+  // Rang affiché = position dans la VUE FILTRÉE active (m.viewRank, posé par
+  // renderCards) — le même numéro que la carte cliquée. Repli : rang global si
+  // la modale est ouverte avant le premier rendu (jamais en pratique).
+  var gr = m.viewRank || m.globalRank || (idx + 1);
   document.getElementById('mRank').innerHTML = (gr <= 3 ? '<span class="medal">' + (gr === 1 ? '🥇' : gr === 2 ? '🥈' : '🥉') + '</span>' : gr) + posArrowHtml;
   document.getElementById('mTitle').textContent = m.displayName || m.model;
   var vb = document.getElementById('mVerdict');

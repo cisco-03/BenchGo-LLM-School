@@ -123,7 +123,7 @@ function extractStudentCode(rawResponse, taskId) {
 // --- Traduction pédagogique des erreurs techniques brutes du moteur JS ---
 // (Implémentation déplacée vers scoring-utils.js — importée ci-dessus.)
 
-function printScorecard(scorecard, ecoleLabel, isFinal, globalLifeScore) {
+function printScorecard(scorecard, ecoleLabel, isFinal, globalLifeScore, modelRef) {
   const subtitle = isFinal ? 'FINAL' : 'EN COURS';
   console.log('');
   console.log(`  \x1b[1;36m━━━ TABLEAU DES SCORES — ${ecoleLabel} (${subtitle}) ━━━\x1b[0m`);
@@ -185,6 +185,11 @@ function printScorecard(scorecard, ecoleLabel, isFinal, globalLifeScore) {
     for (const fl of footerLines) {
       console.log(`  ${fl}`);
     }
+  }
+  // Rappel du modèle (demande utilisateur 2026-09-18) : référence affichée en
+  // fin de tableau pour savoir qui a passé ces exercices sans remonter l'historique.
+  if (modelRef) {
+    console.log(`  \x1b[90m# Modèle : ${modelRef}\x1b[0m`);
   }
   console.log('');
 }
@@ -992,6 +997,13 @@ async function runTierAttempt({ tierNum, tierData, isMandatory, profileArg, cont
   for (const fl of finRes.footerLines) {
     console.log(`  ${fl}`);
   }
+  // Rappel du modèle (demande utilisateur 2026-09-18) : après un long tableau
+  // d'exercices, il faut remonter loin pour retrouver QUI a répondu. On
+  // réaffiche la référence du modèle élève en fin de tableau pour se repérer.
+  const tierModelRef = responseModelName
+    || (providerConfig && providerConfig.model)
+    || 'Modele_En_Attente';
+  console.log(`  \x1b[90m# Modèle : ${tierModelRef}\x1b[0m`);
   console.log('');
 
   const evalResults = Object.values(evalResultsMap);
@@ -2201,7 +2213,7 @@ async function main() {
   // --- Test de capacité (Capability Check) ---
   // Remplace l'auto-profilage + profilage externe (1-10 min) qui bloquaient les
   // utilisateurs. Un SEUL appel au modèle lui demande s'il est capable de passer
-  // l'examen (~20-30s max).
+  // l'examen (~30-60s max).
   //   - OUI  → le runner valide et commence les exercices (toutes les tâches, aucun filtrage).
   //   - NON  → modèle recalé définitivement (exit 0 propre, pas de pénalité, pas de carnet).
   // Le pre-flight check (rate-limit 200/400 vide) reste actif juste au-dessus.
@@ -2231,6 +2243,11 @@ async function main() {
     let loadFailure = false;
     let loadFailureDetail = null;
     const MAX_PING_ATTEMPTS = 3;
+    // 90s par tentative (demande utilisateur 2026-09-18) : les 30s historiques
+    // coupaient des modèles lents qui répondaient correctement en 40-60s
+    // (ex: réponse reçue en 43.5s). Avec 90s, une seule tentative suffit au
+    // lieu de 3 échecs + 3 attentes.
+    const PING_TIMEOUT_MS = 90000;
 
     while (pingAttempts < MAX_PING_ATTEMPTS && !pingOk) {
       pingAttempts++;
@@ -2247,7 +2264,7 @@ async function main() {
           // avant de produire le contenu. Avec 8 tokens, tout est mangé par le
           // raisonnement → content vide → faux E505 (modèle déclaré mort alors
           // qu'il fonctionne). 512 laisse largement raisonner puis répondre.
-          { contextLimitTokens, providerConfig, timeoutMs: 30000, maxTokens: 512 }
+          { contextLimitTokens, providerConfig, timeoutMs: PING_TIMEOUT_MS, maxTokens: 512 }
         );
         if (pingResult && pingResult.content && pingResult.content.trim().length > 0) {
           pingOk = true;
@@ -2341,10 +2358,10 @@ async function main() {
     console.log('');
   }
 
-  // --- Test de capacité : OUI/NON (~20-30s) ---
+  // --- Test de capacité : OUI/NON (~30-60s) ---
   // Un seul appel au modèle élève. Pas de filtrage, pas d'Indice de Calibration.
   console.log(`  \x1b[1;35m━━━ TEST DE CAPACITÉ ━━━\x1b[0m`);
-  console.log(`  \x1b[35mOn demande au modèle s'il est capable de passer l'examen (~20-30s).\x1b[0m\n`);
+  console.log(`  \x1b[35mOn demande au modèle s'il est capable de passer l'examen (~30-60s).\x1b[0m\n`);
 
   const capSpinner = new Spinner('Test de capacité : question au modèle');
   capSpinner.start();
@@ -2740,7 +2757,7 @@ async function main() {
           evalResults: bestResult.evalResults || []
         });
       }
-      printScorecard(tierScorecard, ecoleLabel, false, gameState.globalLifeScore);
+      printScorecard(tierScorecard, ecoleLabel, false, gameState.globalLifeScore, modelName);
 
       // --- Sentinelles sanitaires (§4 Maintenabilité) ---
       // Vérifie la cohérence des résultats du tier (NaN, sommes de points,
@@ -2903,7 +2920,7 @@ async function main() {
       }
       // Réimprime le tableau de scores mis à jour après le rattrapage.
       if (tierScorecard.length > 0) {
-        printScorecard(tierScorecard, ecoleLabel, false, gameState.globalLifeScore);
+        printScorecard(tierScorecard, ecoleLabel, false, gameState.globalLifeScore, modelName);
       }
     } else {
       console.log(`  \x1b[1;90m→ Pas de rattrapage : l'élève s'en sort suffisamment bien (aucun critère rempli).\x1b[0m`);
@@ -2914,7 +2931,7 @@ async function main() {
 
   // Tableau récapitulatif final de l'école
   if (tierScorecard.length > 0) {
-    printScorecard(tierScorecard, ecoleLabel, true, gameState.globalLifeScore);
+    printScorecard(tierScorecard, ecoleLabel, true, gameState.globalLifeScore, modelName);
     globalReport += buildScorecardReport(tierScorecard, ecoleLabel, gameState.globalLifeScore);
   }
 
