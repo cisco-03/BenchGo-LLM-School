@@ -3,8 +3,8 @@
   "benchgoVersion": "V3",
   "userId": "2181628c20fe6a0e",
   "pseudo": "FlexoDiv",
-  "submittedAt": "2026-09-11T07:42:33.152Z",
-  "integrityHash": "93ac6859fefcb32d",
+  "submittedAt": "2026-09-18T16:50:21.512Z",
+  "integrityHash": "fa5f18a5ce43cff3",
   "carnet": {
     "model": "openbmb/minicpm5-2b@q8_0",
     "shortName": "openbmb_minicpm5-2b_q8_0",
@@ -3870,9 +3870,13 @@
         ]
       }
     },
-    "lastUpdated": "2026-09-10T19:16:16.466Z",
+    "lastUpdated": "2026-09-18T13:57:05.628Z",
     "provider": "lmstudio",
     "isCloud": false,
-    "quantization": "Q8_0"
+    "quantization": "Q8_0",
+    "paramSize": 2,
+    "originManual": "local",
+    "displayName": "openbmb_minicpm5-2b_q8_0",
+    "modelUrl": "https://huggingface.co/openbmb/MiniCPM5-2B-GGUF"
   }
 }
