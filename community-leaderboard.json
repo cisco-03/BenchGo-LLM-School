@@ -39563,13 +39563,13 @@
       "model": "ornith-1.5-9b-mtp-ashq1-remix",
       "displayName": null,
       "shortName": "ornith-1-5-9b-mtp-ashq1-remix",
-      "quantization": null,
+      "quantization": "Q4_K_S",
       "modelUrl": null,
       "note": null,
       "publisher": null,
       "provider": "lmstudio",
       "isCloud": false,
-      "originManual": null,
+      "originManual": "local",
       "score": 5551,
       "max": 5854,
       "pct": 95,
@@ -41494,7 +41494,7 @@
         "College-Lycee"
       ],
       "pseudo": "FlexoDiv",
-      "submittedAt": "2026-09-11T07:42:44.649Z",
+      "submittedAt": "2026-09-18T16:50:28.219Z",
       "cost": null,
       "runCode": {
         "ecoles": [
@@ -51742,7 +51742,7 @@
       "publisher": null,
       "provider": "lmstudio",
       "isCloud": false,
-      "originManual": null,
+      "originManual": "local",
       "score": 5625,
       "max": 6059,
       "pct": 93,
@@ -53595,7 +53595,7 @@
         "College-Lycee"
       ],
       "pseudo": "FlexoDiv",
-      "submittedAt": "2026-09-07T06:40:42.332Z",
+      "submittedAt": "2026-09-18T16:50:35.130Z",
       "cost": null,
       "runCode": null,
       "contributors": 1,
@@ -104237,6 +104237,6 @@
       ]
     }
   ],
-  "generatedAt": "2026-09-18T16:50:43.391Z",
+  "generatedAt": "2026-09-18T16:51:05.415Z",
   "totalSubmissions": 97
 }
