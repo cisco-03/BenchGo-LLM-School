@@ -5041,25 +5041,36 @@ function printUntestedLmStudioModels() {
   }
 
   if (total > 0) {
-    console.log(`  \x1b[33m━━━ MODÈLES LM STUDIO NON TESTÉS (${total}) ━━━\x1b[0m`);
-    console.log(`  \x1b[90m${result.models.length} modèle(s) téléchargé(s) dans LM Studio, ${total} absent(s) du classement.\x1b[0m`);
+    console.log(`  \x1b[1;33m━━━ BLOC 2 — MODÈLES LM STUDIO NON TESTÉS (${total}) ━━━\x1b[0m`);
+    console.log(`  \x1b[37m${result.models.length} modèle(s) téléchargé(s) dans LM Studio (LLM textuels), ${total} pas encore testé(s) ou en échec.\x1b[0m`);
 
     const headers = ['Modèle', 'Param', 'Quant', 'Statut', 'Écoles manquantes'];
     const aligns = ['left', 'right', 'left', 'left', 'left'];
     const rows = [];
 
+    // Couleur du nom de modèle selon le statut : le nom porte la couleur du
+    // badge (demande utilisateur 2026-09-20 — tout était en gris, illisible).
+    const KIND_COLOR = {
+      never: '\x1b[33m',   // jaune : à tester
+      failed: '\x1b[31m',  // rouge : en échec
+      partial: '\x1b[35m'  // magenta : partiel
+    };
+
     for (const m of neverTested) {
       const badge = nightBatch.statusBadge(m.status);
-      rows.push([modelKeyDisplayLabel(m), m.params || '?', m.quant || '?', badge.label, nightBatch.missingSchoolsLabel(m.status) || '—']);
+      const c = KIND_COLOR.never;
+      rows.push([`${c}${modelKeyDisplayLabel(m)}\x1b[0m`, m.params || '?', m.quant || '?', `${badge.color}${badge.label}\x1b[0m`, nightBatch.missingSchoolsLabel(m.status) || '—']);
     }
     for (const m of failed) {
       const badge = nightBatch.statusBadge(m.status);
+      const c = KIND_COLOR.failed;
       // Affiche la raison d'échec plutôt que les écoles manquantes (on les a tentées).
       const reason = m.status.reason || 'Échec';
-      rows.push([modelKeyDisplayLabel(m), m.params || '?', m.quant || '?', badge.label, reason]);
+      rows.push([`${c}${modelKeyDisplayLabel(m)}\x1b[0m`, m.params || '?', m.quant || '?', `${badge.color}${badge.label}\x1b[0m`, `\x1b[31m${reason}\x1b[0m`]);
     }
     for (const m of partial) {
       const badge = nightBatch.statusBadge(m.status);
+      const c = KIND_COLOR.partial;
       // Si une école a échoué (run KO), on l'indique explicitement.
       let missing = nightBatch.missingSchoolsLabel(m.status) || '—';
       if (m.status.failedSchool) {
@@ -5070,21 +5081,21 @@ function printUntestedLmStudioModels() {
         // des écoles manquantes.
         missing = m.status.reason;
       }
-      rows.push([modelKeyDisplayLabel(m), m.params || '?', m.quant || '?', badge.label, missing]);
+      rows.push([`${c}${modelKeyDisplayLabel(m)}\x1b[0m`, m.params || '?', m.quant || '?', `${badge.color}${badge.label}\x1b[0m`, `\x1b[33m${missing}\x1b[0m`]);
     }
 
     const res = cliTable.table(headers, rows, { colAligns: aligns, separator: '  ' });
     console.log(`  \x1b[90m    ${res.lines[0]}\x1b[0m`);
     console.log(`  \x1b[90m    ${res.sepLine}\x1b[0m`);
     for (let i = 0; i < rows.length; i++) {
-      console.log(`  \x1b[90m${res.lines[i + 2]}\x1b[0m`);
+      console.log(`  ${res.lines[i + 2]}`);
     }
     if (failed.length > 0) {
-      console.log(`  \x1b[90m${failed.length} modèle(s) en échec (load_failed / run KO). Repassez-les après vérification, ou isolez-les (!<num>) s'ils ne sont pas testables.\x1b[0m`);
+      console.log(`  \x1b[31m${failed.length} modèle(s) en échec (load_failed / run KO).\x1b[0m \x1b[37mRepassez-les après vérification, ou isolez-les (!<num>) s'ils ne sont pas testables.\x1b[0m`);
     }
     const noCarnetCount = partial.filter(m => m.status.noCarnet).length;
     if (noCarnetCount > 0) {
-      console.log(`  \x1b[90m${noCarnetCount} modèle(s) PARTIEL « sans carnet » : exercices déjà passés (rapports de tiers) mais aucune école consolidée dans le carnet — relancez node night-batch.js pour générer le carnet.\x1b[0m`);
+      console.log(`  \x1b[35m${noCarnetCount} modèle(s) PARTIEL « sans carnet »\x1b[0m \x1b[37m: exercices déjà passés (rapports de tiers) mais aucune école consolidée dans le carnet — relancez node night-batch.js pour générer le carnet.\x1b[0m`);
     }
     console.log(`  \x1b[90mAstuce : node night-batch.js pour tester ces modèles automatiquement.\x1b[0m`);
   }
@@ -5094,21 +5105,21 @@ function printUntestedLmStudioModels() {
   // peuvent pas passer les écoles BenchGo (pas des LLM textuels).
   if (nonLlm.length > 0) {
     console.log('');
-    console.log(`  \x1b[90m━━━ MODÈLES NON APPLICABLES (${nonLlm.length}) ━━━\x1b[0m`);
-    console.log(`  \x1b[90mModèles non-LLM (OCR, embedding, rerank, vision) ou isolés manuellement — non testables par BenchGo.\x1b[0m`);
+    console.log(`  \x1b[36m━━━ MODÈLES NON APPLICABLES (${nonLlm.length}) ━━━\x1b[0m`);
+    console.log(`  \x1b[37mModèles non-LLM (OCR, embedding, rerank, vision) ou isolés manuellement — non testables par BenchGo.\x1b[0m`);
     const headers = ['Modèle', 'Param', 'Quant', 'Statut', 'Raison'];
     const aligns = ['left', 'right', 'left', 'left', 'left'];
     const rows = [];
     for (const m of nonLlm) {
       const badge = nightBatch.statusBadge(m.status);
       const reason = m.status.reason || (m.nonLlm ? 'Non-LLM détecté' : (m.blacklisted ? 'Isolé manuellement' : '—'));
-      rows.push([modelKeyDisplayLabel(m), m.params || '?', m.quant || '?', badge.label, reason]);
+      rows.push([`\x1b[36m${modelKeyDisplayLabel(m)}\x1b[0m`, m.params || '?', m.quant || '?', `${badge.color}${badge.label}\x1b[0m`, reason]);
     }
     const res = cliTable.table(headers, rows, { colAligns: aligns, separator: '  ' });
     console.log(`  \x1b[90m    ${res.lines[0]}\x1b[0m`);
     console.log(`  \x1b[90m    ${res.sepLine}\x1b[0m`);
     for (let i = 0; i < rows.length; i++) {
-      console.log(`  \x1b[90m${res.lines[i + 2]}\x1b[0m`);
+      console.log(`  ${res.lines[i + 2]}`);
     }
     console.log(`  \x1b[90mAstuce : node night-batch.js --isoler=!<numéro> pour isoler un modèle, --isoler=!!<numéro> pour le désisoler. Numéro = position dans --list-only.\x1b[0m`);
   }
@@ -5346,7 +5357,7 @@ function printLmStudioStatus() {
     console.log('  \x1b[90mLancez d abord un benchmark local : node runner.js all --profile=LIGHT\x1b[0m');
   } else {
     console.log(`  \x1b[1;32mBLOC 1 — MODÈLES TESTÉS (${entries.length})\x1b[0m`);
-    console.log(`  \x1b[90mModèles présents dans LM Studio et déjà évalués — tri du test le plus récent au plus ancien.\x1b[0m`);
+    console.log(`  \x1b[37mModèles présents dans LM Studio et déjà évalués — tri du test le plus récent au plus ancien.\x1b[0m`);
 
     const headers = ['#', 'Modèle LM Studio', 'Dernier Test', 'Niveau', 'Score', 'Statut'];
     const aligns = ['left', 'left', 'left', 'center', 'right', 'left'];
@@ -5365,16 +5376,16 @@ function printLmStudioStatus() {
       if (e.lastTestTs > 0) {
         try {
           const d = new Date(e.lastTestTs);
-          dateLabel = d.toLocaleString('fr-FR', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+          dateLabel = '\x1b[36m' + d.toLocaleString('fr-FR', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) + '\x1b[0m';
         } catch (_) {
           dateLabel = '\x1b[90m?\x1b[0m';
         }
       }
       const niveauLabel = (e.ecoles || []).map(ec => ec.ecole).join(', ') || '\x1b[90m—\x1b[0m';
-      const scoreLabel = `${e.score}/${e.max} (${e.pct}%)`;
+      const scoreLabel = `${grade.color}${e.score}\x1b[0m${grade.color === '\x1b[0m' ? '' : '\x1b[0m'}/${e.max} (${e.pct}%)`;
       rows.push([
         (i + 1) + '.',
-        modelDisplayLabel(e),
+        `\x1b[1m${modelDisplayLabel(e)}\x1b[0m`,
         dateLabel,
         `${grade.color}${grade.grade}\x1b[0m ${niveauLabel}`,
         scoreLabel,
@@ -5436,21 +5447,21 @@ function printLmStudioStatus() {
   // conservé pour l'historique — il n'est pas supprimé automatiquement.
   if (orphanEntries.length > 0) {
     console.log('');
-    console.log(`  \x1b[90m━━━ CARNETS ORPHELINS (${orphanEntries.length}) — MODÈLES SUPPRIMÉS DE LM STUDIO ━━━\x1b[0m`);
-    console.log(`  \x1b[90mCarnets locaux dont le modèle n'est plus dans lms ls. Le carnet .json est conservé pour l'historique.\x1b[0m`);
-    console.log(`  \x1b[90mPour nettoyer : supprimez le fichier dans Export-Rapports/.carnet/<shortName>.json\x1b[0m`);
+    console.log(`  \x1b[33m━━━ CARNETS ORPHELINS (${orphanEntries.length}) — MODÈLES SUPPRIMÉS DE LM STUDIO ━━━\x1b[0m`);
+    console.log(`  \x1b[37mCarnets locaux dont le modèle n'est plus dans lms ls. Le carnet .json est conservé pour l'historique.\x1b[0m`);
+    console.log(`  \x1b[37mPour nettoyer : supprimez le fichier dans Export-Rapports/.carnet/<shortName>.json\x1b[0m`);
     const headers = ['Modèle', 'Quant', 'Écoles testées'];
     const aligns = ['left', 'left', 'left'];
     const rows = [];
     for (const e of orphanEntries) {
       const ecoles = (e.ecoles || []).map(ec => ec.ecole).join(', ') || '\x1b[90m—\x1b[0m';
-      rows.push([e.model || '?', e.quantization || '\x1b[90m—\x1b[0m', ecoles]);
+      rows.push([`\x1b[33m${e.model || '?'}\x1b[0m`, e.quantization || '\x1b[90m—\x1b[0m', `\x1b[37m${ecoles}\x1b[0m`]);
     }
     const res = cliTable.table(headers, rows, { colAligns: aligns, separator: '  ' });
     console.log(`  \x1b[90m    ${res.lines[0]}\x1b[0m`);
     console.log(`  \x1b[90m    ${res.sepLine}\x1b[0m`);
     for (let i = 0; i < rows.length; i++) {
-      console.log(`  \x1b[90m${res.lines[i + 2]}\x1b[0m`);
+      console.log(`  ${res.lines[i + 2]}`);
     }
   }
 
@@ -5538,7 +5549,7 @@ function printLmStudioStatus() {
       // On utilise le model brut (modelKey du carnet) pour --models.
       const schoolsArg = s.missing.join(',');
       const cmd = `node night-batch.js --models=${s.model} --schools=${schoolsArg}`;
-      sugRows.push([name, quant, missingLabel, `\x1b[36m${cmd}\x1b[0m`]);
+      sugRows.push([`\x1b[1;33m${name}\x1b[0m`, quant, `\x1b[33m${missingLabel}\x1b[0m`, `\x1b[36m${cmd}\x1b[0m`]);
     }
     const sugRes = cliTable.table(sugHeaders, sugRows, { colAligns: sugAligns, separator: '  ' });
     console.log(`  \x1b[90m    ${sugRes.lines[0]}\x1b[0m`);
@@ -5547,7 +5558,7 @@ function printLmStudioStatus() {
       console.log(`  ${sugRes.lines[i + 2]}`);
     }
     console.log('');
-    console.log(`  \x1b[33m⚠ Vous avez ${suggestions.length} modèle(s) avec des écoles manquantes.\x1b[0m`);
+    console.log(`  \x1b[1;33m⚠ Vous avez ${suggestions.length} modèle(s) avec des écoles manquantes.\x1b[0m`);
     console.log(`  \x1b[33mVous pouvez retester la nuit suivante les modèles ci-dessus avec les écoles indiquées.\x1b[0m`);
     console.log('');
     console.log(`  \x1b[90mPour tester tous les modèles suggérés d'un coup :\x1b[0m`);
