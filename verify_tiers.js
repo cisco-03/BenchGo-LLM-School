@@ -115,6 +115,42 @@ const SOLUTIONS = {
   algo_defi: 'const valeurMax = (t) => Math.max(...t)',
   // Tier 0 — contrainte négative
   contrainte_negative_0: 'const sansLettreE = (c) => !c.toLowerCase().includes("e");',
+  // Tier 0 — exercices de spécialité (tremplin RunCode, primaire)
+  spe_fizzbuzz_0: 'const fizzBuzz = (n) => n % 15 === 0 ? "FizzBuzz" : (n % 3 === 0 ? "Fizz" : (n % 5 === 0 ? "Buzz" : n));',
+  spe_voyelles_0: 'const compterVoyelles = (s) => { let n = 0; for (const c of s) { if ("aeiou".includes(c.toLowerCase())) n++; } return n; };',
+  spe_palindrome_0: 'const estPalindromeSimple = (c) => { const b = c.toLowerCase(); return b === b.split("").reverse().join(""); };',
+  spe_factorielle_0: 'const factorielle = (n) => { let r = 1; for (let i = 2; i <= n; i++) r *= i; return r; };',
+  spe_anagramme_0: 'const sontAnagrammesSimple = (a, b) => a.length === b.length && a.split("").sort().join("") === b.split("").sort().join("");',
+  spe_premier_0: 'const estPremier = (n) => { if (n < 2) return false; for (let i = 2; i < n; i++) { if (n % i === 0) return false; } return true; };',
+  spe_fibonacci_0: 'const fibonacciIteratif = (n) => { let a = 0, b = 1; for (let i = 0; i < n; i++) { const t = a + b; a = b; b = t; } return a; };',
+  spe_fusion_tri_0: 'const fusionnerTries = (a, b) => { let i = 0, j = 0; const r = []; while (i < a.length && j < b.length) { if (a[i] <= b[j]) r.push(a[i++]); else r.push(b[j++]); } return r.concat(a.slice(i), b.slice(j)); };',
+  // Tier 0 standard (6eme) — exercices de spécialité Collège-Lycée
+  spe_somme_chiffres_0s: 'const sommeDesChiffres = (n) => String(n).split("").reduce((s, c) => s + Number(c), 0);',
+  spe_capitaliser_0s: 'const capitaliserMotsSpe = (s) => s.split(" ").map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(" ");',
+  spe_puissance_sans_op_0s: 'const puissanceSansOperateur = (base, exp) => { let r = 1; for (let i = 0; i < exp; i++) r *= base; return r; };',
+  spe_annees_bissextiles_0s: 'const estBissextile = (annee) => (annee % 4 === 0 && annee % 100 !== 0) || annee % 400 === 0;',
+  spe_frequence_mots_0s: 'const frequenceDesMots = (phrase) => { const r = {}; for (const m of phrase.split(/\\s+/)) { if (!m) continue; r[m] = (r[m] || 0) + 1; } return r; };',
+  spe_inverse_mots_0s: 'const inverserMots = (phrase) => phrase.split(" ").reverse().join(" ");',
+  spe_deuxieme_plus_grand_0s: 'const deuxiemePlusGrand = (t) => { const u = [...new Set(t)].sort((a, b) => b - a); return u.length >= 2 ? u[1] : null; };',
+  spe_chaine_la_plus_longue_0s: 'const chaineLaPlusLongue = (mots) => mots.length ? mots.reduce((a, b) => b.length > a.length ? b : a) : "";',
+  // Tier 1 standard (5eme) — exercices de spécialité Collège-Lycée
+  spe_somme_chiffres_repete_1s: 'const racineNumerique = (n) => { let v = n; while (v >= 10) { v = String(v).split("").reduce((s, c) => s + Number(c), 0); } return v; };',
+  spe_inverser_sans_reverse_1s: 'const inverserSansReverse = (s) => { let r = ""; for (let i = s.length - 1; i >= 0; i--) r += s[i]; return r; };',
+  spe_jointure_simplifiee_1s: 'const jointureSimplifiee = (clients, commandes) => { const nomParId = {}; for (const c of clients) nomParId[c.id] = c.nom; const r = []; for (const cmd of commandes) { if (nomParId[cmd.user_id] !== undefined) r.push(nomParId[cmd.user_id] + " : " + cmd.montant); } return r; };',
+  spe_sans_boucle_moyenne_1s: 'const moyenneAvecReduce = (t) => t.length === 0 ? 0 : t.reduce((s, x) => s + x, 0) / t.length;',
+  spe_tri_mots_1s: 'const trierMots = (mots) => [...mots].sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));',
+  spe_filtrer_valeurs_nulles_1s: 'const filtrerNulles = (t) => t.filter(x => x !== null && x !== undefined);',
+  spe_deux_sommes_1s: 'const deuxSommes = (t, cible) => { const vus = {}; for (let i = 0; i < t.length; i++) { const comp = cible - t[i]; if (comp in vus) return [vus[comp], i]; vus[t[i]] = i; } return null; };',
+  spe_tri_selec_1s: 'const triParSelection = (t) => { const r = [...t]; for (let i = 0; i < r.length - 1; i++) { let m = i; for (let j = i + 1; j < r.length; j++) { if (r[j] < r[m]) m = j; } const tmp = r[i]; r[i] = r[m]; r[m] = tmp; } return r; };',
+  // Tier 2 standard (4eme) — exercices de spécialité Collège-Lycée
+  spe_conversion_binaire_2s: 'const enBinaire = (n) => n.toString(2);',
+  spe_groupage_parite_2s: 'const grouperParPariteSpe = (t) => ({ pairs: t.filter(x => x % 2 === 0), impairs: t.filter(x => x % 2 !== 0) });',
+  spe_supprimer_doublons_consecutifs_2s: 'const sansDoublonsConsecutifs = (t) => t.filter((x, i) => i === 0 || x !== t[i - 1]);',
+  spe_compression_lzw_simple_2s: 'const compresserRLE = (s) => { let r = ""; let i = 0; while (i < s.length) { let j = i; while (j < s.length && s[j] === s[i]) j++; r += s[i] + (j - i); i = j; } return r; };',
+  spe_aplatir_recursif_2s: 'const aplatirRecursif = (t) => { const r = []; for (const x of t) { if (Array.isArray(x)) r.push(...aplatirRecursif(x)); else r.push(x); } return r; };',
+  spe_nombre_mots_uniques_2s: 'const compterMotsUniques = (s) => { const t = s.trim(); return t === "" ? 0 : new Set(t.toLowerCase().split(/\\s+/)).size; };',
+  spe_pgcd_2s: 'const pgcdEuclide = (a, b) => { while (b !== 0) { const t = b; b = a % b; a = t; } return a; };',
+  spe_inverser_entier_2s: 'const inverserEntier = (n) => { const s = String(Math.abs(n)).split("").reverse().join(""); return (n < 0 ? -1 : 1) * Number(s); };',
   // Tier 1 — contrainte stricte
   contrainte_negative_1: 'const exactementNMots = (p, n) => p.trim().split(/\\s+/).filter(Boolean).length === n;',
   // Tier 2 — contrainte négative (pas de Markdown)

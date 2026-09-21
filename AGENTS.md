@@ -178,28 +178,63 @@ Si modèle > 3B paramètres, le runner peut enchaîner LIGHT puis STANDARD dans 
 
 **Principe :** Le mode `--flash` exécute la grande école avec **1 exercice par classe** (au lieu de 10-15), tiré en PRIORITÉ parmi les compétences découvertes au tremplin RunCode (bilan `languageStats` du carnet). Pensé pour les machines à PEU DE RAM : la VRAM/RAM est sollicitée ~10x moins longtemps. Le nom FLASH veut dire les deux : flash memory (petite RAM) + interrogation flash (interro éclair scolaire). C'est une OPTION EN SUPPLÉMENT : le score FLASH est enregistré au carnet (école `Flash-<École>`) mais n'est JAMAIS comptabilisé dans le classement général ni dans les statuts night-batch (non comparable à un examen complet).
 
+**EXAMEN DE SPÉCIALITÉ (tâche 2026-09-20) :** quand le tremplin RunCode a détecté une **spécialité** (`flashStats.specialite`, ex : `sql`, `python`), le tirage FLASH devient un examen de spécialité : `buildFlashTaskSelection()` sélectionne TOUS les exercices de spécialité du tier portant `t.lang === specialite`, plus des compléments classiques jusqu'à `FLASH_TAILLE_EXAMEN` (10, const en haut de runner.js). Ex : tier 0 + spécialité sql → 1 spe (sql) + 9 compléments ; spécialité python → 2 spe + 8 compléments. Sans spécialité exploitable (pas de bilan RunCode, ou langage sans exercice `spe_*` dans ce tier) → repli historique : 1 exercice orienté compétences. Les exercices `spe_*` du tier 0 (`spe_fizzbuzz_0`, `spe_voyelles_0`, `spe_palindrome_0`, `spe_factorielle_0`, `spe_anagramme_0`, `spe_premier_0`, `spe_fibonacci_0`, `spe_fusion_tri_0`) portent chacun un champ `lang` (python/javascript/sql/typescript/react/go/rust/cpp) qui fait le pont RunCode → grande école. Les réponses canoniques + indices + sources web vivent dans le coffre-fort (`.teacher-vault/vault_polyglot.json`, section `grandeEcole.Primaire.tier0`, `.gitignore` — jamais envoyé au modèle).
+
 **Fonctions :**
-- `buildFlashTaskSelection(tierData, flashStats)` (dans `runner.js`) → `{ tasks: [1 exercice], picked, basis }`. `flashStats` = `languageStats` du carnet RunCode (majeure du professeur pèse +5, langages réussis +3, tentés +1). Sans stats → tirage aléatoire pur.
+- `buildFlashTaskSelection(tierData, flashStats)` (dans `runner.js`) → `{ tasks: [1 exercice], picked, basis }`. `flashStats` = `languageStats` du carnet RunCode (majeure du professeur pèse +5, langages réussis +3, tentés +1). Sans stats → tirage aléatoire pur. Avec spécialité + exercices `spe_*` correspondants → examen de spécialité (voir ci-dessus).
 - `runSchool()` : résout `isFlashSchool` (flashFlag + tierArg='all'), école du carnet `Flash-<École>`, lit le bilan RunCode du carnet (`flashStats`), injecte `tierData._flashTasks` avant chaque tier.
 - `runTierAttempt()` : consomme `tierData._flashTasks` (copie JSON) puis `delete tierData._flashTasks` (hygiène du cache tiers).
 - `--flash` (config.js `parseCliArgs`) → `flash: true`. Questionnaire étape 9 : choix `C/F` (défaut Classique). `flashFlag` est un `let` (levé par le questionnaire, jamais abaissé).
 
 **Pour modifier :**
 1. **Changer la pondération du tirage** : éditer `scoreTask()` + `keywordToLang` dans `buildFlashTaskSelection()` (runner.js) — la carte langage→exercice se base sur les IDs/labels des tiers.
-2. **Changer le nombre d'exercices par classe** (ex: 2) : modifier `buildFlashTaskSelection()` pour renvoyer `scored.slice(0, K)` et la bannière.
-3. **Recompter FLASH dans le classement** (NON recommandé) : retirer le filtre `flash === true || /^Flash-/i` dans `aggregateLedger()` (leaderboard.js), `aggregateCarnet()` (consolidate-leaderboard.js), `ledgerSchoolKeys()` + `computeLedgerMetrics()` (night-batch.js).
-4. **Réactiver les soumissions en FLASH** : retirer le test `!isFlashRun` sur `proposeCommunitySubmission` et `hybridFlag` (runner.js).
-5. **Désactiver la propostion interactive** : retirer la section 9 du questionnaire (startup-questionnaire.js) — le flag CLI `--flash` reste actif.
-6. **Tester** : `node runner.js all --flash --profile=STANDARD --dry-run` (bannière ⚡ + config valide), puis un vrai run LIGHT (courant).
+2. **Changer le nombre d'exercices par classe** : éditer `FLASH_TAILLE_EXAMEN` (const en haut de runner.js, défaut 10). En dessous, la sélection spe_* est tronquée ; au-dessus, des compléments classiques remplissent.
+3. **Ajouter des exercices de spécialité au tier suivant** : dupliquer le modèle du tier0 — tâche `spe_<nom>_<tier>` avec champ `lang`, énoncé `[EXERCISE spe_*]` dans le `prompt` APRÈS le bloc algo (suffixe préservé par `updateTiers()`), évaluations `exec`, solutions canoniques dans `verify_tiers.js`, réponse + source dans le coffre-fort (section `grandeEcole`).
+4. **Recompter FLASH dans le classement** (NON recommandé) : retirer le filtre `flash === true || /^Flash-/i` dans `aggregateLedger()` (leaderboard.js), `aggregateCarnet()` (consolidate-leaderboard.js), `ledgerSchoolKeys()` + `computeLedgerMetrics()` (night-batch.js).
+5. **Réactiver les soumissions en FLASH** : retirer le test `!isFlashRun` sur `proposeCommunitySubmission` et `hybridFlag` (runner.js).
+6. **Désactiver la propostion interactive** : retirer la section 9 du questionnaire (startup-questionnaire.js) — le flag CLI `--flash` reste actif.
+7. **Tester** : `node runner.js all --flash --profile=STANDARD --dry-run` (bannière ⚡ + config valide), puis un vrai run LIGHT (courant).
 
 **Pièges :**
 - `tierData._flashTasks` est SUPPRIMÉ après consumption (`delete`) : le cache tiers (`tier-loader.js`, objets partagés) ne doit JAMAIS garder la sélection — sinon le prochain run non-FLASH n'aurait qu'1 exercice par classe.
-- Le tirage FLASH n'a accès qu'aux métadonnées `id`/`label` des tâches : les `keywordToLang` doivent refléter les IDs réellement présents dans les tiers (`react`, `geojson`, `powershell`, `python`, `async`, `sql`...). Un tier sans correspondance retombe sur l'aléatoire (poids 0, `+ Math.random()` départage).
+- Le champ `lang` des exercices `spe_*` doit correspondre EXACTEMENT à un langage des `languageStats` du carnet RunCode (`s.language`) — un langage sans stats au carnet pèse 0. Les `keywordToLang` ne servent qu'au repli (exercices historiques sans `lang`).
 - Les écoles `Flash-*` sont IGNORÉES par `ledgerSchoolKeys` (comme les `RunCode-*`) : un modèle qui n'a passé QUE Flash reste « à tester » pour la grande école — c'est voulu.
 - Le rattrapage, la pénalité de raisonnement excessif et la sentinelles fonctionnent normalement en FLASH : seul le tirage change.
 - `--flash` avec une cible tier unique (`node runner.js 2 --flash`) : le mode est DÉSACTIVÉ silencieusement (le flag ne s'applique qu'à `all`) — le questionnaire log cette correction.
 - Le classement est quand même régénéré après un run FLASH (`generateLeaderboard`) : le carnet a changé, le HTML/MD doit être à jour même si l'école Flash n'y apparaît pas.
-- LOGS : chaque sélection FLASH est journalisée (`logger.info`) — classe, exercice choisi, total disponibles, base du tirage. Toujours conserver ces logs (règle d'or debug).
+- LOGS : chaque sélection FLASH est journalisée (`logger.info`) — classe, exercices choisis, total disponibles, base du tirage (désormais « spécialité <LANG> (N exercice(s) de spécialité sur M) »). Toujours conserver ces logs (règle d'or debug).
+- Les 5 tâches `tache_0a`-`0e` du tier 0 « MANQUANT » au scan des énoncés ne sont PAS des bugs : leurs énoncés portent les IDs `[EXERCISE 0-A]`-`[EXERCISE 0-E]` (extraction par nom de fonction). Les `spe_*`, eux, sont vérifiés par le scan.
+
+### Exercices de spécialité — grande école ciblée par le tremplin (tâche 2026-09-20)
+
+**Fichiers touchés :** `tiers/tier0_light.json`, `.teacher-vault/vault_polyglot.json`, `runner.js`, `verify_tiers.js`, `Docs/CHANGELOG.md`, `Docs/Manuel-utilisateur/03-fonctionnement-benchmark.md`, `Docs/Manuel-utilisateur/06-reference-tiers.md`, `Docs/Manuel-utilisateur/README.md`, `AGENTS.md`, `Memories-BenchGo/Tasks.md`.
+
+**Principe :** Demande utilisateur : « dans la grande école, il faut des exercices supplémentaires pour chaque catégorie de langage. Commence par la Primaire. Grâce au RunCode, le professeur connaît la spécialité du modèle et lui donne les exercices en conséquence — si un modèle est bon en TypeScript, donne-lui TOUS les exercices TypeScript. Les exercices viennent du web (déjà testés et vérifiés, jamais inventés), les réponses sont réservées au professeur, avec la méthode de l'indice. » 8 exercices `spe_*_0` ajoutés au Tier 0 (11 → 19 tâches), chacun avec champ `lang` + évaluations `exec` + sources web officielles. Le mode FLASH les consomme comme examen de spécialité (voir section Mode FLASH).
+
+**Fonctions :**
+- Champ `lang` sur les tâches `spe_*` (tiers JSON) → langage RunCode associé (`python`, `javascript`, `sql`, `typescript`, `react`, `go`, `rust`, `cpp`). Ignoré partout ailleurs (rapports, carnet, leaderboard, mode non-FLASH).
+- `.teacher-vault/vault_polyglot.json` section `grandeEcole.Primaire.tier0` → `{ <id>: { langage, source_officielle, reponse_canonique, variantes_acceptees, indice_professeur } }` pour les 8 exercices. Jamais envoyé au modèle.
+- `verify_tiers.js` → solutions canoniques `spe_*` (486 exec OK / 506 testés).
+
+**Portée actuelle (tâches 2026-09-20 + 2026-09-20b) :**
+- Primaire (LIGHT) : Tier 0 → 8 `spe_*_0` (`tier0_light.json`, section coffre `tier0`).
+- Collège-Lycée (STANDARD) : Tier 0 (6eme) → 8 `spe_*_0s` (`tier0_standard_6eme`), Tier 1 (5eme) → 8 `spe_*_1s` (`tier1_standard_5eme`), Tier 2 (4eme) → 8 `spe_*_2s` (`tier2_standard_4eme`).
+- Université / Expert / Frontier : PAS encore dotés (la mécanique est répétable à l'identique).
+
+**Pour modifier :**
+1. **Ajouter un exercice de spécialité** : cf. point 3 de la section Mode FLASH ci-dessus (tâche + énoncé dans le suffixe du prompt + évaluations + solutions verify_tiers + coffre).
+2. **Étendre au Collège-Lycée** : même mécanique sur `tier1_light.json` (5eme)... avec des classiques publics d'un cran au-dessus (ex : deux-sum léger, puissance sans `**`, tri de mots). Le champ `lang` + section `grandeEcole` du coffre suivent.
+3. **Revenir au FLASH 1 exercice** : dans `buildFlashTaskSelection()`, retirer le bloc `if (specialite) { ... }` — retour au tirage orienté compétences historique.
+4. **Changer la source des réponses** : le coffre `grandeEcole` est additif (pas dans `catalog`/`parcours`) — `adaptive-exam.js` ne le lit pas, seul le professeur humain s'y réfère.
+
+**Pièges :**
+- `updateTiers()` (auto-updater) préserve le suffixe APRÈS le dernier exercice algo de la banque : les énoncés `spe_*` placés APRÈS le dernier algo (ou après `contrainte_*`/`contexte_long_*` quand présent) survivent (vérifié par un `updateTiers()` réel). Ne JAMAIS placer un énoncé custom AVANT le bloc algo.
+- `spe_anagramme_0` : « hello »/« ohell » SONT anagrammes (mêmes lettres) — le cas de test « longueurs différentes » est `listen`/`silents`.
+- FizzBuzz : le test `% 15` doit passer AVANT `% 3` et `% 5` seuls, sinon `fizzBuzz(15)` retourne « Fizz » (l'indice professeur le rappelle).
+- Le champ `lang` est consommé UNIQUEMENT par `buildFlashTaskSelection` : un `spe_*` ne compte JAMAIS plus que les autres en école complète (sans `--flash`, toutes les tâches passent).
+- Les réponses du coffre-fort sont en JavaScript (les évaluateurs de la grande école sont `exec` JS/VM sandbox) : le champ `langage` du coffre désigne la SPÉCIALITÉ RunCode visée, pas le langage d'implémentation du corrigé.
+- Convention de nommage des exos Collège : suffixe `<tierNum>s` (`spe_jointure_simplifiee_1s` = tier 1 standard). Les évaluations historiques des tiers standard « MANQUANT » au scan ne sont PAS des bugs (énoncés extraits par nom de fonction : `additionner`, `pythagore`...).
+- `spe_factorielle_0` (Primaire) est TypeScript (`lang: typescript`) : le champ a été corrigé en 2026-09-20b (il pointait python à tort).
 
 ### Sortie temps réel du mode nuit + carnets orphelins (tâche 2026-08-10)
 

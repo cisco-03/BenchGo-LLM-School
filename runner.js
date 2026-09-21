@@ -68,6 +68,13 @@ const runcodeQueue = require('./runcode-queue');
 const DEFAULT_CONTEXT_LIMIT_TOKENS = 16384;
 const MAX_RATTRAPAGE_ATTEMPTS = 1;
 const MAX_TASK_RETRIES = 1; // Une seule nouvelle tentative par exercice échoué
+// Taille de l'examen de spécialité en mode FLASH (tâche 2026-09-20) : quand le
+// tremplin RunCode détecte une spécialité, le professeur donne TOUS les
+// exercices de spécialité de la classe (8 au Tier 0) PLUS les exercices
+// classiques jusqu'à atteindre ce plafond. Aligné sur la demande : « si un
+// modèle est bon en TypeScript, il faut lui donner 10 exercices TypeScript » —
+// le tier 0 offre 8 spe_* : 8 de spécialité + 2 classiques = examen de 10.
+const FLASH_TAILLE_EXAMEN = 10;
 
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
@@ -1215,7 +1222,7 @@ async function main() {
 
   if (dryRunFlag) logger.info('CLI: --dry-run actif — validation de la configuration sans exécution');
   if (hybridFlag) logger.info('CLI: --hybrid actif — auto-soumission GitHub si seuil atteint');
-  if (flashFlag) logger.info('CLI: --flash actif — Mode FLASH (grande école accélérée, 1 exercice par classe)');
+  if (flashFlag) logger.info('CLI: --flash actif — Mode FLASH (examen de spécialité, 10 exercices max par classe)');
 
   // --- Flags d'action unique : traités puis sortie immédiate ---
   // --list-presets / --list-keys : affichage puis exit.
@@ -2151,7 +2158,7 @@ async function main() {
   console.log(`  \x1b[1;33mContexte max        :\x1b[0m \x1b[1;33m${contextLimitTokens} tokens\x1b[0m`);
   console.log(`  \x1b[1;33mQuantification      :\x1b[0m ${resolvedQuantization ? `\x1b[1;35m${resolvedQuantization}\x1b[0m` : '\x1b[90m— (inconnue)\x1b[0m'}`);
   if (flashFlag) {
-    console.log(`  \x1b[1;35mMode FLASH          :\x1b[0m \x1b[1;35m⚡ ACTIF — 1 exercice par classe (grandes écoles accélérées, pensé petites RAM)\x1b[0m`);
+    console.log(`  \x1b[1;35mMode FLASH          :\x1b[0m \x1b[1;35m⚡ ACTIF — examen de spécialité (${FLASH_TAILLE_EXAMEN} exercices max par classe, pensé petites RAM)\x1b[0m`);
   }
   console.log('');
 
@@ -2419,6 +2426,11 @@ async function main() {
   // Le nom FLASH évoque la flash memory (petite RAM) ET l'interrogation flash
   // (interro éclair scolaire). École marquée `flash: true` dans le carnet —
   // exclue du classement général (mesure non comparable à l'école complète).
+  // EXAMEN DE SPÉCIALITÉ (tâche 2026-09-20) : quand le tremplin détecte une
+  // spécialité, le professeur donne TOUS les exercices de spécialité disponibles
+  // dans ce langage (et non plus 1 seul) : « si un modèle est bon en TypeScript,
+  // donne-lui TOUS les exercices TypeScript de la classe ». Les autres classes
+  // du tier (tache_*, algo_*, contrainte_*) restent jouées en tirage normal.
   function buildFlashTaskSelection(tierData, flashStats) {
     const tasks = tierData.tasks || [];
     if (tasks.length <= 1) return { tasks: tasks.slice(), picked: tasks.length, basis: 'seul exercice' };
@@ -2428,6 +2440,12 @@ async function main() {
     // donnent un léger bonus. Algorithique pur (math, geojson...) sans
     // correspondance reste éligible (poids 0) : un tier sans aucun exercice
     // correspondant retomberait sur un tirage aléatoire sinon.
+    // CIBLAGE DIRECT (tâche 2026-09-20) : les exercices `spe_*` portent un
+    // champ `lang` qui désigne leur langage RunCode (spe_fizzbuzz_0 ->
+    // "python", spe_palindrome_0 -> "sql"...). Ce champ prime sur les mots-
+    // clés : le professeur peut ainsi donner EN PRIORITÉ les exercices de la
+    // spécialité détectée au tremplin, comme demandé (« si la spécialité est
+    // TypeScript, donne-lui des exercices de TypeScript »).
     const statByLang = {};
     for (const s of (flashStats || [])) statByLang[s.language] = s;
     const keywordToLang = {
@@ -2438,23 +2456,52 @@ async function main() {
       async: 'javascript', promesse: 'javascript', promise: 'javascript',
       sql: 'sql', json: 'javascript'
     };
+    const langScore = (lang) => {
+      if (!lang || !statByLang[lang]) return 0;
+      let sc = 1;
+      if (flashStats && flashStats.specialite === lang) sc += 5;
+      if (statByLang[lang].rate >= 0.75) sc += 3;
+      else if (statByLang[lang].rate >= 0.5) sc += 2;
+      else sc += 1;
+      sc += Math.min(2, statByLang[lang].total * 0.5);
+      return sc;
+    };
     const scoreTask = (t) => {
+      // 1) Champ lang explicite (exercices de spécialité) : poids direct.
+      let best = langScore(t.lang);
+      // 2) Repli : mots-clés dans id/label (exercices historiques).
       const hay = `${t.id || ''} ${t.label || ''}`.toLowerCase();
-      let best = 0;
       for (const [kw, lang] of Object.entries(keywordToLang)) {
         if (!hay.includes(kw)) continue;
-        const st = statByLang[lang];
-        if (!st) continue;
-        let sc = 1;
-        if (flashStats && flashStats.specialite === lang) sc += 5;
-        if (st.rate >= 0.75) sc += 3;
-        else if (st.rate >= 0.5) sc += 2;
-        else sc += 1;
-        sc += Math.min(2, st.total * 0.5);
-        best = Math.max(best, sc);
+        best = Math.max(best, langScore(lang));
       }
       return best;
     };
+    const specialite = flashStats && flashStats.specialite ? flashStats.specialite : null;
+    // 1) EXAMEN DE SPÉCIALITÉ : la spécialité est connue et des exercices de
+    // spécialité existent pour elle dans ce tier → on les prend TOUS (plus le
+    // complément classique si le tier en exige plus, cf. FLASH_TAILLE_EXAMEN).
+    // C'est la demande 2026-09-20 : « si un modèle est bon en TypeScript, il
+    // faut lui donner TOUS les exercices TypeScript ».
+    if (specialite) {
+      const speTasks = tasks.filter(t => t.lang === specialite);
+      if (speTasks.length > 0) {
+        const speMelanges = speTasks.slice().sort(() => Math.random() - 0.5);
+        const complements = tasks.filter(t => t.lang !== specialite).sort(() => Math.random() - 0.5);
+        const selection = speMelanges.concat(complements).slice(0, FLASH_TAILLE_EXAMEN);
+        const nbSpe = selection.filter(t => t.lang === specialite).length;
+        return {
+          tasks: selection,
+          picked: selection.length,
+          basis: `spécialité ${specialite.toUpperCase()} (${nbSpe} exercice(s) de spécialité sur ${selection.length})`
+        };
+      }
+      // Pas d'exercice de spécialité pour ce langage dans CE tier : on retombe
+      // sur le tirage orienté par compétences (logique historique ci-dessous).
+      logger.info(`Mode FLASH : aucun exercice de spécialité ${specialite} dans le tier ${tierData.title || ''} — tirage par compétences.`);
+    }
+    // 2) Tirage orienté (pas de spécialité exploitable) : le meilleur score
+    // gagne, avec départage aléatoire (comportement historique 2026-09-16c).
     const scored = tasks.map(t => ({ t, sc: scoreTask(t) + Math.random() }));
     scored.sort((a, b) => b.sc - a.sc);
     const picked = scored[0].t;
@@ -2633,12 +2680,16 @@ async function main() {
     const tierData = tiers[tierNum];
     const isMandatory = profile.mandatory.includes(tierNum);
 
-    // --- MODE FLASH : réduit le tier à 1 exercice (log de la sélection) ---
+    // --- MODE FLASH : sélection des exercices de la classe ---
+    // Avec spécialité détectée : TOUS les exercices de spécialité du tier
+    // (plafonné à FLASH_TAILLE_EXAMEN avec complément classique). Sans
+    // spécialité exploitable : 1 exercice orienté compétences (historique).
     if (flashFlag && tierArg === 'all') {
       const sel = buildFlashTaskSelection(tierData, flashStats);
       tierData._flashTasks = sel.tasks;
-      logger.info(`Mode FLASH : classe ${tierToClasseNum(profileArg, tierNum)} — 1 exercice sélectionné sur ${tierData.tasks.length} (${sel.basis}) : ${sel.tasks[0].id}`);
-      console.log(`  \x1b[35m⚡ FLASH : 1 exercice par classe (${sel.basis}) — ${sel.tasks[0].id} sélectionné parmi ${tierData.tasks.length}.\x1b[0m`);
+      const selIds = sel.tasks.map(t => t.id).join(', ');
+      logger.info(`Mode FLASH : classe ${tierToClasseNum(profileArg, tierNum)} — ${sel.tasks.length} exercice(s) sélectionné(s) sur ${tierData.tasks.length} (${sel.basis}) : ${selIds}`);
+      console.log(`  \x1b[35m⚡ FLASH : ${sel.tasks.length} exercice(s) pour cette classe (${sel.basis}) — sélection : ${selIds}.\x1b[0m`);
     }
 
     let attemptNumber = 1;

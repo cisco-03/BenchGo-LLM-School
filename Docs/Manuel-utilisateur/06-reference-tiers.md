@@ -2,6 +2,34 @@
 
 Cette page donne une vue utilisateur des competences testees.
 
+## Exercices de specialite
+
+Chaque tier (a partir du Tier 0) embarque des **exercices de specialite** en
+plus des taches classiques. Chacun est rattache a un langage du pre-examen
+RunCode via un champ interne : le mode `--flash` s'en sert pour cibler la
+specialite declaree par le professeur (voir
+[03-fonctionnement-benchmark.md](03-fonctionnement-benchmark.md#exercices-de-specialite-grande-ecole)).
+
+Tier 0 (Primaire) : 8 exercices de specialite — FizzBuzz (divisibilite),
+comptage de voyelles, palindrome, factorielle, anagrammes, nombre premier,
+Fibonacci iteratif, fusion de tableaux tries.
+
+Tier 0 (6eme, STANDARD) : 8 exercices — somme des chiffres, capitalisation
+de mots, puissance sans operateur, annee bissextile, frequence des mots,
+inversion de mots, deuxieme plus grand, chaine la plus longue.
+
+Tier 1 (5eme, STANDARD) : 8 exercices — racine numerique, inversion sans
+reverse(), jointure simplifiee, moyenne avec reduce(), tri de mots, filtrage
+des valeurs nulles, deux-nombres-qui-somment, tri par selection.
+
+Tier 2 (4eme, STANDARD) : 8 exercices — conversion binaire, groupage par
+parite, doublons consecutifs, compression RLE, aplatissement recursif, mots
+uniques, PGCD (Euclide), inversion d'entier.
+
+Ce sont des classiques publics (documentes sur des sources web officielles).
+Les corriges ne sont JAMAIS envoyes au modele : seul le professeur les connait
+(coffre-fort secret).
+
 ## Tier 0 - Integration DOM et syntaxe JS
 
 Objectif:

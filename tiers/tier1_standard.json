@@ -6,7 +6,7 @@
     "STANDARD"
   ],
   "optional_for": [],
-  "prompt": "You are taking a TIER 1 technical evaluation for STANDARD models.\n\nSolve 5 JavaScript exercises inspired by a middle school curriculum (5ème).\n\nReturn your answers in Markdown using headers for the exercise IDs and code blocks for the JavaScript functions.\n\n[EXERCISE Math]\nWrite a JavaScript function \"aireRectangle(longueur, largeur)\" that returns the area of the rectangle.\n\n[EXERCISE Francais]\nWrite a JavaScript function \"remplacerA(mot)\" that replaces all 'e' characters in the string with 'a'.\n\n[EXERCISE Physique]\nWrite a JavaScript function \"vitesse(distance, temps)\" that returns distance divided by time. Return 0 if time is 0.\n\n[EXERCISE Anglais]\nWrite a JavaScript function \"traduireAnimal(mot)\" that translates \"chien\" to \"dog\", \"chat\" to \"cat\", and returns \"unknown\" for anything else.\n\n[EXERCISE Info]\nWrite a JavaScript function \"creerEleve(nom, age)\" that returns an object { nom: nom, age: age, classe: '5eme' }.\n\nExpected Markdown format:\n### tache_X\n```javascript\nfunction solution() { ... }\n```\n\n[ALGORITHMIC EXERCISES — code pur, sans culture générale]\nReturn each function using a Markdown header (### <exercise id>) followed by a ```javascript code block.\n\n[EXERCISE algo_facile_1]\nWrite a JavaScript function \"estMultipleDe(n, m)\" that returns true if n is a multiple of m (m !== 0), false otherwise.\n\n[EXERCISE algo_facile_2]\nWrite a JavaScript function \"puissance(base, exp)\" that returns base raised to the power exp (exp >= 0).\n\n[EXERCISE algo_moyen_1]\nWrite a JavaScript function \"compterPairs(tab)\" that returns the count of even numbers in the array.\n\n[EXERCISE algo_difficile_1]\nWrite a JavaScript function \"supprimerDoublons(tab)\" that returns a new array with duplicates removed, preserving first occurrence order.\n\n[EXERCISE algo_defi]\nWrite a JavaScript function \"sommePaires(tab)\" that returns the sum of all even numbers in the array.",
+  "prompt": "You are taking a TIER 1 technical evaluation for STANDARD models.\n\nSolve 5 JavaScript exercises inspired by a middle school curriculum (5ème).\n\nReturn your answers in Markdown using headers for the exercise IDs and code blocks for the JavaScript functions.\n\n[EXERCISE Math]\nWrite a JavaScript function \"aireRectangle(longueur, largeur)\" that returns the area of the rectangle.\n\n[EXERCISE Francais]\nWrite a JavaScript function \"remplacerA(mot)\" that replaces all 'e' characters in the string with 'a'.\n\n[EXERCISE Physique]\nWrite a JavaScript function \"vitesse(distance, temps)\" that returns distance divided by time. Return 0 if time is 0.\n\n[EXERCISE Anglais]\nWrite a JavaScript function \"traduireAnimal(mot)\" that translates \"chien\" to \"dog\", \"chat\" to \"cat\", and returns \"unknown\" for anything else.\n\n[EXERCISE Info]\nWrite a JavaScript function \"creerEleve(nom, age)\" that returns an object { nom: nom, age: age, classe: '5eme' }.\n\nExpected Markdown format:\n### tache_X\n```javascript\nfunction solution() { ... }\n```\n\n[ALGORITHMIC EXERCISES — code pur, sans culture générale]\nReturn each function using a Markdown header (### <exercise id>) followed by a ```javascript code block.\n\n[EXERCISE algo_facile_1]\nWrite a JavaScript function \"estMultipleDe(n, m)\" that returns true if n is a multiple of m (m !== 0), false otherwise.\n\n[EXERCISE algo_facile_2]\nWrite a JavaScript function \"puissance(base, exp)\" that returns base raised to the power exp (exp >= 0).\n\n[EXERCISE algo_moyen_1]\nWrite a JavaScript function \"compterPairs(tab)\" that returns the count of even numbers in the array.\n\n[EXERCISE algo_difficile_1]\nWrite a JavaScript function \"supprimerDoublons(tab)\" that returns a new array with duplicates removed, preserving first occurrence order.\n\n[EXERCISE algo_defi]\nWrite a JavaScript function \"sommePaires(tab)\" that returns the sum of all even numbers in the array.\n\n[EXERCISE spe_somme_chiffres_repete_1s]\nWrite a JavaScript function \"racineNumerique(n)\" that repeatedly sums the digits of n until a single digit remains (e.g. 38 -> 11 -> 2).\n\n[EXERCISE spe_inverser_sans_reverse_1s]\nWrite a JavaScript function \"inverserSansReverse(s)\" that returns the string reversed WITHOUT using .reverse() (loop from the end).\n\n[EXERCISE spe_jointure_simplifiee_1s]\nWrite a JavaScript function \"jointureSimplifiee(clients, commandes)\" that joins the two arrays on the common key (clients have id+nom, commandes have user_id+montant) and returns an array of strings \"nom : montant\" (space around the colon) in the order of the commandes. Orphan commandes (no matching client) are skipped.\n\n[EXERCISE spe_sans_boucle_moyenne_1s]\nWrite a JavaScript function \"moyenneAvecReduce(tab)\" that returns the average of the numbers using .reduce() (empty array -> 0).\n\n[EXERCISE spe_tri_mots_1s]\nWrite a JavaScript function \"trierMots(mots)\" that returns a NEW array of words sorted alphabetically, case-insensitive (do NOT mutate the input).\n\n[EXERCISE spe_filtrer_valeurs_nulles_1s]\nWrite a JavaScript function \"filtrerNulles(tab)\" that returns a NEW array without the null and undefined values (0 and \"\" are KEPT, input not mutated).\n\n[EXERCISE spe_deux_sommes_1s]\nWrite a JavaScript function \"deuxSommes(tab, cible)\" that returns the pair of indices [i, j] (i < j) whose values sum to the target, or null if no pair exists (each value used once).\n\n[EXERCISE spe_tri_selec_1s]\nWrite a JavaScript function \"triParSelection(tab)\" that returns a NEW sorted array (ascending) using selection sort (find the min, swap; do NOT mutate the input).",
   "tasks": [
     {
       "id": "math",
@@ -91,6 +91,260 @@
         }
       ],
       "points": 8
+    },
+    {
+      "id": "spe_somme_chiffres_repete_1s",
+      "label": "Spécialité Python — Racine numérique (addition itérée)",
+      "points": 10,
+      "lang": "python",
+      "hint": "Sommez les chiffres de n, répétez jusqu'à obtenir un seul chiffre (n < 10). Boucle while avec la somme des chiffres.",
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "38 -> 11 -> 2",
+          "setup": "",
+          "call": "racineNumerique(38)",
+          "assert": "result === 2"
+        },
+        {
+          "type": "exec",
+          "description": "Un seul chiffre",
+          "setup": "",
+          "call": "racineNumerique(7)",
+          "assert": "result === 7"
+        },
+        {
+          "type": "exec",
+          "description": "Zéro",
+          "setup": "",
+          "call": "racineNumerique(0)",
+          "assert": "result === 0"
+        },
+        {
+          "type": "exec",
+          "description": "999 -> 27 -> 9",
+          "setup": "",
+          "call": "racineNumerique(999)",
+          "assert": "result === 9"
+        }
+      ]
+    },
+    {
+      "id": "spe_inverser_sans_reverse_1s",
+      "label": "Spécialité JavaScript — Inverser sans reverse()",
+      "points": 10,
+      "lang": "javascript",
+      "hint": "Parcourez la chaîne depuis la fin (boucle i = longueur-1 -> 0) et concaténez — interdiction d'utiliser .reverse().",
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Mot simple",
+          "setup": "",
+          "call": "inverserSansReverse('abc')",
+          "assert": "result === 'cba'"
+        },
+        {
+          "type": "exec",
+          "description": "Un caractère",
+          "setup": "",
+          "call": "inverserSansReverse('x')",
+          "assert": "result === 'x'"
+        },
+        {
+          "type": "exec",
+          "description": "Palindrome",
+          "setup": "",
+          "call": "inverserSansReverse('kayak')",
+          "assert": "result === 'kayak'"
+        }
+      ]
+    },
+    {
+      "id": "spe_jointure_simplifiee_1s",
+      "label": "Spécialité SQL — Jointure simplifiée",
+      "points": 10,
+      "lang": "sql",
+      "hint": "Croisez les deux tableaux par la clé commune (id / user_id) : pour chaque commande, trouvez le nom du client correspondant. Renvoyez un tableau de chaînes 'nom : montant'.",
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Deux commandes",
+          "setup": "",
+          "call": "jointureSimplifiee([{id: 1, nom: 'Alice'}, {id: 2, nom: 'Bob'}], [{user_id: 1, montant: 100}, {user_id: 2, montant: 50}])",
+          "assert": "result.length === 2 && result[0] === 'Alice : 100' && result[1] === 'Bob : 50'"
+        },
+        {
+          "type": "exec",
+          "description": "Commande orpheline ignoree",
+          "setup": "",
+          "call": "jointureSimplifiee([], [{user_id: 9, montant: 10}])",
+          "assert": "result.length === 0"
+        },
+        {
+          "type": "exec",
+          "description": "Ordre des commandes respecte",
+          "setup": "",
+          "call": "jointureSimplifiee([{id: 1, nom: 'X'}], [{user_id: 1, montant: 5}, {user_id: 1, montant: 7}])",
+          "assert": "result.join(';') === 'X : 5;X : 7'"
+        }
+      ]
+    },
+    {
+      "id": "spe_sans_boucle_moyenne_1s",
+      "label": "Spécialité TypeScript — Moyenne avec reduce()",
+      "points": 10,
+      "lang": "typescript",
+      "hint": "Utilisez .reduce() pour sommer le tableau, puis divisez par la longueur. Tableau vide -> 0.",
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Moyenne simple",
+          "setup": "",
+          "call": "moyenneAvecReduce([2, 4, 6])",
+          "assert": "result === 4"
+        },
+        {
+          "type": "exec",
+          "description": "Decimal",
+          "setup": "",
+          "call": "moyenneAvecReduce([1, 2])",
+          "assert": "result === 1.5"
+        },
+        {
+          "type": "exec",
+          "description": "Vide",
+          "setup": "",
+          "call": "moyenneAvecReduce([])",
+          "assert": "result === 0"
+        }
+      ]
+    },
+    {
+      "id": "spe_tri_mots_1s",
+      "label": "Spécialité React — Trier des mots",
+      "points": 10,
+      "lang": "react",
+      "hint": "Utilisez localeCompare() sur les mots en minuscules pour un tri alphabétique insensible à la casse. Ne modifiez PAS le tableau d'origine.",
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Casse melangee",
+          "setup": "",
+          "call": "trierMots(['Banane', 'abricot', 'Citron'])",
+          "assert": "JSON.stringify(result) === JSON.stringify(['abricot', 'Banane', 'Citron'])"
+        },
+        {
+          "type": "exec",
+          "description": "Deja trié",
+          "setup": "",
+          "call": "trierMots(['a', 'b', 'c'])",
+          "assert": "JSON.stringify(result) === JSON.stringify(['a', 'b', 'c'])"
+        },
+        {
+          "type": "exec",
+          "description": "Original non modifie",
+          "setup": "",
+          "call": "trierMots(['b', 'a'])",
+          "assert": "JSON.stringify(result) === JSON.stringify(['a', 'b'])"
+        }
+      ]
+    },
+    {
+      "id": "spe_filtrer_valeurs_nulles_1s",
+      "label": "Spécialité Go — Filtrer les valeurs nulles",
+      "points": 10,
+      "lang": "go",
+      "hint": "Gardez les valeurs qui ne sont ni null ni undefined (t !== null && t !== undefined), sans modifier l'original.",
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Mixte",
+          "setup": "",
+          "call": "filtrerNulles([1, null, 2, undefined, 3])",
+          "assert": "JSON.stringify(result) === JSON.stringify([1, 2, 3])"
+        },
+        {
+          "type": "exec",
+          "description": "Tout nul",
+          "setup": "",
+          "call": "filtrerNulles([null, undefined])",
+          "assert": "JSON.stringify(result) === JSON.stringify([])"
+        },
+        {
+          "type": "exec",
+          "description": "Zero et chaine vide gardes",
+          "setup": "",
+          "call": "filtrerNulles([0, '', null])",
+          "assert": "JSON.stringify(result) === JSON.stringify([0, ''])"
+        }
+      ]
+    },
+    {
+      "id": "spe_deux_sommes_1s",
+      "label": "Spécialité Rust — Deux nombres qui somment",
+      "points": 10,
+      "lang": "rust",
+      "hint": "Parcourez le tableau en mémorisant les valeurs vues dans un objet : si (cible - t[i]) a déjà été vu, renvoyez [index precedent, index courant]. Aucune paire -> null.",
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Solution existe",
+          "setup": "",
+          "call": "deuxSommes([2, 7, 11, 15], 9)",
+          "assert": "Array.isArray(result) && (JSON.stringify(result) === JSON.stringify([0, 1]))"
+        },
+        {
+          "type": "exec",
+          "description": "Pas de solution",
+          "setup": "",
+          "call": "deuxSommes([1, 2, 3], 99)",
+          "assert": "result === null"
+        },
+        {
+          "type": "exec",
+          "description": "Meme valeur deux fois",
+          "setup": "",
+          "call": "deuxSommes([3, 3], 6)",
+          "assert": "Array.isArray(result) && (JSON.stringify(result) === JSON.stringify([0, 1]))"
+        }
+      ]
+    },
+    {
+      "id": "spe_tri_selec_1s",
+      "label": "Spécialité C++ — Tri par sélection",
+      "points": 10,
+      "lang": "cpp",
+      "hint": "Pour chaque position i (sauf la dernière), trouvez l'index du minimum dans la partie restante et échangez tab[i] avec tab[minIdx]. Ne modifiez pas l'original.",
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Desordre complet",
+          "setup": "",
+          "call": "triParSelection([5, 2, 9, 1])",
+          "assert": "JSON.stringify(result) === JSON.stringify([1, 2, 5, 9])"
+        },
+        {
+          "type": "exec",
+          "description": "Deja trié",
+          "setup": "",
+          "call": "triParSelection([1, 2, 3])",
+          "assert": "JSON.stringify(result) === JSON.stringify([1, 2, 3])"
+        },
+        {
+          "type": "exec",
+          "description": "Vide",
+          "setup": "",
+          "call": "triParSelection([])",
+          "assert": "JSON.stringify(result) === JSON.stringify([])"
+        },
+        {
+          "type": "exec",
+          "description": "Negatifs",
+          "setup": "",
+          "call": "triParSelection([-1, -3, 2])",
+          "assert": "JSON.stringify(result) === JSON.stringify([-3, -1, 2])"
+        }
+      ]
     },
     {
       "id": "algo_facile_1",

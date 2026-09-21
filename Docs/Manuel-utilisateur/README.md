@@ -43,6 +43,13 @@ pour le classement général (badge `⚡ RunCode · Turbo`). Commandes dans
 passe d'abord le pré-examen RunCode, puis la grande école (voir
 [07-mode-nuit.md](07-mode-nuit.md#-tremplin-runcode-turbo-pré-examen-automatique)).
 
+**Exercices de spécialité (grande école)** : la grande école réutilise le bilan
+RunCode — chaque tier embarque des exercices supplémentaires classés par langage
+(exercices publics vérifiés, corrigés réservés au professeur). En mode `--flash`,
+le professeur donne tous les exercices de la spécialité détectée. Voir
+[03-fonctionnement-benchmark.md](03-fonctionnement-benchmark.md#exercices-de-specialite-grande-ecole)
+et [06-reference-tiers.md](06-reference-tiers.md).
+
 **Modèles incompatibles** : un GGUF trop récent pour le runtime llama.cpp de LM
 Studio ne charge pas — BenchGo l'avertit, le met de côté et tient la liste
 (`node night-batch.js --incompatible-list`). Voir

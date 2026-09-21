@@ -6,7 +6,7 @@
     "STANDARD"
   ],
   "optional_for": [],
-  "prompt": "You are taking a TIER 0 technical evaluation for STANDARD models.\n\nSolve 5 JavaScript exercises inspired by a middle school curriculum (6ème).\n\nReturn your answers in Markdown using headers for the exercise IDs and code blocks for the JavaScript functions.\n\n[EXERCISE Math]\nWrite a JavaScript function \"additionner(tab)\" that takes an array of numbers and returns their sum.\n\n[EXERCISE Francais]\nWrite a JavaScript function \"majuscule(mot)\" that returns the word with its first letter in uppercase.\n\n[EXERCISE Recherche]\nWrite a JavaScript function \"contientValeur(tab, val)\" that returns true if the array tab contains the value val, false otherwise.\n\n[EXERCISE Absolu]\nWrite a JavaScript function \"valeurAbsolue(n)\" that returns the absolute value of n (a negative number becomes positive, a positive number stays unchanged).\n\n[EXERCISE Info]\nWrite a JavaScript function \"bonjour(nom)\" that returns the string \"Bonjour \" followed by the name and \" !\".\n\nExpected Markdown format:\n### tache_X\n```javascript\nfunction solution() { ... }\n```\n\n[ALGORITHMIC EXERCISES — code pur, sans culture générale]\nReturn each function using a Markdown header (### <exercise id>) followed by a ```javascript code block.\n\n[EXERCISE algo_facile_1]\nWrite a JavaScript function \"estPair(n)\" that returns true if n is even, false otherwise.\n\n[EXERCISE algo_facile_2]\nWrite a JavaScript function \"carre(n)\" that returns n multiplied by itself.\n\n[EXERCISE algo_moyen_1]\nWrite a JavaScript function \"somme1aN(n)\" that returns the sum of all integers from 1 to n (n >= 1).\n\n[EXERCISE algo_difficile_1]\nWrite a JavaScript function \"inverserChaine(s)\" that returns the string reversed (e.g. \"abc\" -> \"cba\").\n\n[EXERCISE algo_defi]\nWrite a JavaScript function \"valeurMax(tab)\" that returns the largest number in a non-empty array.",
+  "prompt": "You are taking a TIER 0 technical evaluation for STANDARD models.\n\nSolve 5 JavaScript exercises inspired by a middle school curriculum (6ème).\n\nReturn your answers in Markdown using headers for the exercise IDs and code blocks for the JavaScript functions.\n\n[EXERCISE Math]\nWrite a JavaScript function \"additionner(tab)\" that takes an array of numbers and returns their sum.\n\n[EXERCISE Francais]\nWrite a JavaScript function \"majuscule(mot)\" that returns the word with its first letter in uppercase.\n\n[EXERCISE Recherche]\nWrite a JavaScript function \"contientValeur(tab, val)\" that returns true if the array tab contains the value val, false otherwise.\n\n[EXERCISE Absolu]\nWrite a JavaScript function \"valeurAbsolue(n)\" that returns the absolute value of n (a negative number becomes positive, a positive number stays unchanged).\n\n[EXERCISE Info]\nWrite a JavaScript function \"bonjour(nom)\" that returns the string \"Bonjour \" followed by the name and \" !\".\n\nExpected Markdown format:\n### tache_X\n```javascript\nfunction solution() { ... }\n```\n\n[ALGORITHMIC EXERCISES — code pur, sans culture générale]\nReturn each function using a Markdown header (### <exercise id>) followed by a ```javascript code block.\n\n[EXERCISE algo_facile_1]\nWrite a JavaScript function \"estPair(n)\" that returns true if n is even, false otherwise.\n\n[EXERCISE algo_facile_2]\nWrite a JavaScript function \"carre(n)\" that returns n multiplied by itself.\n\n[EXERCISE algo_moyen_1]\nWrite a JavaScript function \"somme1aN(n)\" that returns the sum of all integers from 1 to n (n >= 1).\n\n[EXERCISE algo_difficile_1]\nWrite a JavaScript function \"inverserChaine(s)\" that returns the string reversed (e.g. \"abc\" -> \"cba\").\n\n[EXERCISE algo_defi]\nWrite a JavaScript function \"valeurMax(tab)\" that returns the largest number in a non-empty array.\n\n[EXERCISE spe_somme_chiffres_0s]\nWrite a JavaScript function \"sommeDesChiffres(n)\" that returns the sum of the digits of the non-negative integer n (e.g. 123 -> 6).\n\n[EXERCISE spe_capitaliser_0s]\nWrite a JavaScript function \"capitaliserMotsSpe(s)\" that capitalizes each word of the string s (first letter uppercase, the rest lowercase, words separated by single spaces).\n\n[EXERCISE spe_puissance_sans_op_0s]\nWrite a JavaScript function \"puissanceSansOperateur(base, exp)\" that returns base raised to exp WITHOUT using the ** operator or Math.pow (loop or recursion, exp >= 0, exp 0 -> 1).\n\n[EXERCISE spe_annees_bissextiles_0s]\nWrite a JavaScript function \"estBissextile(annee)\" that returns true if the year is a leap year (Gregorian rule: divisible by 4 AND (not by 100 OR by 400)).\n\n[EXERCISE spe_frequence_mots_0s]\nWrite a JavaScript function \"frequenceDesMots(phrase)\" that returns an object mapping each word of the phrase (separated by whitespace) to its number of occurrences.\n\n[EXERCISE spe_inverse_mots_0s]\nWrite a JavaScript function \"inverserMots(phrase)\" that returns the words of the phrase in REVERSE order (single spaces between words).\n\n[EXERCISE spe_deuxieme_plus_grand_0s]\nWrite a JavaScript function \"deuxiemePlusGrand(tab)\" that returns the SECOND largest DISTINCT value of the array (duplicates count once). Return null if fewer than 2 distinct values.\n\n[EXERCISE spe_chaine_la_plus_longue_0s]\nWrite a JavaScript function \"chaineLaPlusLongue(mots)\" that returns the longest word of the array (ties: the FIRST one encountered).",
   "tasks": [
     {
       "id": "math",
@@ -91,6 +91,281 @@
         }
       ],
       "points": 8
+    },
+    {
+      "id": "spe_somme_chiffres_0s",
+      "label": "Spécialité Python — Somme des chiffres",
+      "points": 10,
+      "lang": "python",
+      "hint": "Convertissez n en chaîne, parcourez les caractères et additionnez chaque chiffre converti en nombre.",
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "123 -> 6",
+          "setup": "",
+          "call": "sommeDesChiffres(123)",
+          "assert": "result === 6"
+        },
+        {
+          "type": "exec",
+          "description": "Un seul chiffre",
+          "setup": "",
+          "call": "sommeDesChiffres(7)",
+          "assert": "result === 7"
+        },
+        {
+          "type": "exec",
+          "description": "Zero",
+          "setup": "",
+          "call": "sommeDesChiffres(0)",
+          "assert": "result === 0"
+        },
+        {
+          "type": "exec",
+          "description": "987 -> 24",
+          "setup": "",
+          "call": "sommeDesChiffres(987)",
+          "assert": "result === 24"
+        }
+      ]
+    },
+    {
+      "id": "spe_capitaliser_0s",
+      "label": "Spécialité JavaScript — Capitaliser chaque mot",
+      "points": 10,
+      "lang": "javascript",
+      "hint": "Découpez sur les espaces (s.split(\" \")), mettez la première lettre en majuscule (toUpperCase) et le reste en minuscule, puis recollez (join(\" \")).",
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "hello world",
+          "setup": "",
+          "call": "capitaliserMotsSpe('hello world')",
+          "assert": "result === 'Hello World'"
+        },
+        {
+          "type": "exec",
+          "description": "Deja en majuscule",
+          "setup": "",
+          "call": "capitaliserMotsSpe('BONJOUR A TOUS')",
+          "assert": "result === 'Bonjour A Tous'"
+        },
+        {
+          "type": "exec",
+          "description": "Un seul mot",
+          "setup": "",
+          "call": "capitaliserMotsSpe('javascript')",
+          "assert": "result === 'Javascript'"
+        },
+        {
+          "type": "exec",
+          "description": "Chaine vide",
+          "setup": "",
+          "call": "capitaliserMotsSpe('')",
+          "assert": "result === ''"
+        }
+      ]
+    },
+    {
+      "id": "spe_puissance_sans_op_0s",
+      "label": "Spécialité SQL — Puissance sans opérateur **",
+      "points": 10,
+      "lang": "sql",
+      "hint": "Bouclez exp fois en multipliant un accumulateur par base (start 1). Le cas exp = 0 retourne 1.",
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "2^5 = 32",
+          "setup": "",
+          "call": "puissanceSansOperateur(2, 5)",
+          "assert": "result === 32"
+        },
+        {
+          "type": "exec",
+          "description": "Exp zero",
+          "setup": "",
+          "call": "puissanceSansOperateur(9, 0)",
+          "assert": "result === 1"
+        },
+        {
+          "type": "exec",
+          "description": "3^3 = 27",
+          "setup": "",
+          "call": "puissanceSansOperateur(3, 3)",
+          "assert": "result === 27"
+        },
+        {
+          "type": "exec",
+          "description": "Base 1",
+          "setup": "",
+          "call": "puissanceSansOperateur(1, 100)",
+          "assert": "result === 1"
+        }
+      ]
+    },
+    {
+      "id": "spe_annees_bissextiles_0s",
+      "label": "Spécialité TypeScript — Année bissextile",
+      "points": 10,
+      "lang": "typescript",
+      "hint": "Règle grégorienne : divisible par 4 ET (non divisible par 100 OU divisible par 400).",
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "2024 est bissextile",
+          "setup": "",
+          "call": "estBissextile(2024)",
+          "assert": "result === true"
+        },
+        {
+          "type": "exec",
+          "description": "1900 n'est pas bissextile",
+          "setup": "",
+          "call": "estBissextile(1900)",
+          "assert": "result === false"
+        },
+        {
+          "type": "exec",
+          "description": "2000 est bissextile",
+          "setup": "",
+          "call": "estBissextile(2000)",
+          "assert": "result === true"
+        },
+        {
+          "type": "exec",
+          "description": "2023 non bissextile",
+          "setup": "",
+          "call": "estBissextile(2023)",
+          "assert": "result === false"
+        }
+      ]
+    },
+    {
+      "id": "spe_frequence_mots_0s",
+      "label": "Spécialité React — Fréquence des mots",
+      "points": 10,
+      "lang": "react",
+      "hint": "Découpez la phrase sur les espaces (split(/\\s+/)), comptez chaque mot dans un objet (clé = mot, valeur = occurrence).",
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Deux fois le",
+          "setup": "",
+          "call": "frequenceDesMots('le chat le chien')",
+          "assert": "result['le'] === 2 && result['chat'] === 1 && result['chien'] === 1"
+        },
+        {
+          "type": "exec",
+          "description": "Mots distincts",
+          "setup": "",
+          "call": "frequenceDesMots('a b a')",
+          "assert": "result['a'] === 2 && result['b'] === 1"
+        },
+        {
+          "type": "exec",
+          "description": "Chaine vide",
+          "setup": "",
+          "call": "frequenceDesMots('')",
+          "assert": "Object.keys(result).length === 0"
+        }
+      ]
+    },
+    {
+      "id": "spe_inverse_mots_0s",
+      "label": "Spécialité Go — Inverser l'ordre des mots",
+      "points": 10,
+      "lang": "go",
+      "hint": "Découpez la phrase en mots (split sur les espaces), inversez le tableau, recollez avec des espaces (join(\" \")).",
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Trois mots",
+          "setup": "",
+          "call": "inverserMots('bonjour le monde')",
+          "assert": "result === 'monde le bonjour'"
+        },
+        {
+          "type": "exec",
+          "description": "Un seul mot",
+          "setup": "",
+          "call": "inverserMots('seul')",
+          "assert": "result === 'seul'"
+        },
+        {
+          "type": "exec",
+          "description": "Deux mots",
+          "setup": "",
+          "call": "inverserMots('a b')",
+          "assert": "result === 'b a'"
+        }
+      ]
+    },
+    {
+      "id": "spe_deuxieme_plus_grand_0s",
+      "label": "Spécialité Rust — Deuxième plus grand",
+      "points": 10,
+      "lang": "rust",
+      "hint": "Dédoublonnez ([...new Set(t)]), triez décroissant (sort((a, b) => b - a)) et prenez l'index 1.",
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Classique",
+          "setup": "",
+          "call": "deuxiemePlusGrand([3, 7, 1, 9, 4])",
+          "assert": "result === 7"
+        },
+        {
+          "type": "exec",
+          "description": "Doublons",
+          "setup": "",
+          "call": "deuxiemePlusGrand([5, 5, 2])",
+          "assert": "result === 2"
+        },
+        {
+          "type": "exec",
+          "description": "Un seul element",
+          "setup": "",
+          "call": "deuxiemePlusGrand([42])",
+          "assert": "result === null"
+        },
+        {
+          "type": "exec",
+          "description": "Tableau vide",
+          "setup": "",
+          "call": "deuxiemePlusGrand([])",
+          "assert": "result === null"
+        }
+      ]
+    },
+    {
+      "id": "spe_chaine_la_plus_longue_0s",
+      "label": "Spécialité C++ — Chaîne la plus longue",
+      "points": 10,
+      "lang": "cpp",
+      "hint": "Parcourez le tableau en gardant le mot le plus long vu jusqu'ici (comparez les longueurs).",
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Classique",
+          "setup": "",
+          "call": "chaineLaPlusLongue(['chat', 'éléphant', 'chien'])",
+          "assert": "result === 'éléphant'"
+        },
+        {
+          "type": "exec",
+          "description": "Egalite",
+          "setup": "",
+          "call": "chaineLaPlusLongue(['un', 'de'])",
+          "assert": "result === 'un'"
+        },
+        {
+          "type": "exec",
+          "description": "Un seul element",
+          "setup": "",
+          "call": "chaineLaPlusLongue(['seul'])",
+          "assert": "result === 'seul'"
+        }
+      ]
     },
     {
       "id": "algo_facile_1",

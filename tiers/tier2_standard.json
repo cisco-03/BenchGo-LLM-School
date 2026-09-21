@@ -6,7 +6,7 @@
     "STANDARD"
   ],
   "optional_for": [],
-  "prompt": "You are taking a TIER 2 technical evaluation for STANDARD models.\n\nSolve 5 JavaScript exercises inspired by a middle school curriculum (4ème).\n\nReturn your answers in Markdown using headers for the exercise IDs and code blocks for the JavaScript functions.\n\n[EXERCISE Math]\nWrite a JavaScript function \"pythagore(coteA, coteB)\" that computes the hypotenuse using the Pythagorean theorem (sqrt(A^2 + B^2)).\n\n[EXERCISE Francais]\nWrite a JavaScript function \"conjuguerJe(verbe)\" that takes a regular \"-er\" verb (like \"chanter\") and returns it conjugated with \"je \" in present tense (e.g. \"je chante\"). Just replace \"er\" with \"e\".\n\n[EXERCISE Chimie]\nWrite a JavaScript function \"melanger(couleur1, couleur2)\" that returns \"vert\" if the colors are \"bleu\" and \"jaune\" (in any order), and \"marron\" otherwise.\n\n[EXERCISE Geo]\nWrite a JavaScript function \"compterPays(tableau)\" that returns the length of the array.\n\n[EXERCISE React]\nWrite a JavaScript function \"SimpleComponent(props)\" that simulates a React component by returning a string like \"<div>{titre}</div>\" where {titre} is replaced by props.titre.\n\nExpected Markdown format:\n### tache_X\n```javascript\nfunction solution() { ... }\n```\n\n[ALGORITHMIC EXERCISES — code pur, sans culture générale]\nReturn each function using a Markdown header (### <exercise id>) followed by a ```javascript code block.\n\n[EXERCISE algo_facile_1]\nWrite a JavaScript function \"estPalindrome(s)\" that returns true if the string reads the same backward (case-sensitive).\n\n[EXERCISE algo_facile_2]\nWrite a JavaScript function \"pgcd(a, b)\" that returns the greatest common divisor of a and b (both > 0).\n\n[EXERCISE algo_moyen_1]\nWrite a JavaScript function \"nombreMots(s)\" that returns the number of words separated by whitespace. Ignore leading/trailing spaces.\n\n[EXERCISE algo_difficile_1]\nWrite a JavaScript function \"fusionTriee(a, b)\" that merges two already-sorted arrays into one sorted array.\n\n[EXERCISE algo_defi]\nWrite a JavaScript function \"sontAnagrammes(a, b)\" that returns true if a and b are anagrams (same letters rearranged, case-sensitive).",
+  "prompt": "You are taking a TIER 2 technical evaluation for STANDARD models.\n\nSolve 5 JavaScript exercises inspired by a middle school curriculum (4ème).\n\nReturn your answers in Markdown using headers for the exercise IDs and code blocks for the JavaScript functions.\n\n[EXERCISE Math]\nWrite a JavaScript function \"pythagore(coteA, coteB)\" that computes the hypotenuse using the Pythagorean theorem (sqrt(A^2 + B^2)).\n\n[EXERCISE Francais]\nWrite a JavaScript function \"conjuguerJe(verbe)\" that takes a regular \"-er\" verb (like \"chanter\") and returns it conjugated with \"je \" in present tense (e.g. \"je chante\"). Just replace \"er\" with \"e\".\n\n[EXERCISE Chimie]\nWrite a JavaScript function \"melanger(couleur1, couleur2)\" that returns \"vert\" if the colors are \"bleu\" and \"jaune\" (in any order), and \"marron\" otherwise.\n\n[EXERCISE Geo]\nWrite a JavaScript function \"compterPays(tableau)\" that returns the length of the array.\n\n[EXERCISE React]\nWrite a JavaScript function \"SimpleComponent(props)\" that simulates a React component by returning a string like \"<div>{titre}</div>\" where {titre} is replaced by props.titre.\n\nExpected Markdown format:\n### tache_X\n```javascript\nfunction solution() { ... }\n```\n\n[ALGORITHMIC EXERCISES — code pur, sans culture générale]\nReturn each function using a Markdown header (### <exercise id>) followed by a ```javascript code block.\n\n[EXERCISE algo_facile_1]\nWrite a JavaScript function \"estPalindrome(s)\" that returns true if the string reads the same backward (case-sensitive).\n\n[EXERCISE algo_facile_2]\nWrite a JavaScript function \"pgcd(a, b)\" that returns the greatest common divisor of a and b (both > 0).\n\n[EXERCISE algo_moyen_1]\nWrite a JavaScript function \"nombreMots(s)\" that returns the number of words separated by whitespace. Ignore leading/trailing spaces.\n\n[EXERCISE algo_difficile_1]\nWrite a JavaScript function \"fusionTriee(a, b)\" that merges two already-sorted arrays into one sorted array.\n\n[EXERCISE algo_defi]\nWrite a JavaScript function \"sontAnagrammes(a, b)\" that returns true if a and b are anagrams (same letters rearranged, case-sensitive).\n\n[EXERCISE spe_conversion_binaire_2s]\nWrite a JavaScript function \"enBinaire(n)\" that returns the BINARY representation of the non-negative integer n as a STRING (e.g. 10 -> \"1010\").\n\n[EXERCISE spe_groupage_parite_2s]\nWrite a JavaScript function \"grouperParPariteSpe(tab)\" that returns { pairs: [...even values], impairs: [...odd values] } in the original order.\n\n[EXERCISE spe_supprimer_doublons_consecutifs_2s]\nWrite a JavaScript function \"sansDoublonsConsecutifs(tab)\" that removes CONSECUTIVE duplicates only (non-consecutive duplicates stay: [1,1,2,2,1] -> [1,2,1]).\n\n[EXERCISE spe_compression_lzw_simple_2s]\nWrite a JavaScript function \"compresserRLE(s)\" that compresses the string with Run-Length Encoding: each run of identical characters becomes the character followed by its count (e.g. \"aaabbc\" -> \"a3b2c1\").\n\n[EXERCISE spe_aplatir_recursif_2s]\nWrite a JavaScript function \"aplatirRecursif(tab)\" that flattens an arbitrarily nested array into a flat array (ALL levels, e.g. [1,[2,[3,[4]]],5] -> [1,2,3,4,5]).\n\n[EXERCISE spe_nombre_mots_uniques_2s]\nWrite a JavaScript function \"compterMotsUniques(s)\" that returns the number of DISTINCT words (case-insensitive, whitespace-separated; empty string -> 0).\n\n[EXERCISE spe_pgcd_2s]\nWrite a JavaScript function \"pgcdEuclide(a, b)\" that returns the greatest common divisor using the Euclidean algorithm (loop while b !== 0, swap (a, b) = (b, a % b)).\n\n[EXERCISE spe_inverser_entier_2s]\nWrite a JavaScript function \"inverserEntier(n)\" that reverses the digits of an integer, keeping the sign (e.g. 123 -> 321, -12 -> -21, 100 -> 1).",
   "tasks": [
     {
       "id": "math",
@@ -84,6 +84,267 @@
         }
       ],
       "points": 8
+    },
+    {
+      "id": "spe_conversion_binaire_2s",
+      "label": "Spécialité Python — Conversion binaire",
+      "points": 10,
+      "lang": "python",
+      "hint": "Divisions successives par 2 en mémorisant les restes, lus du dernier au premier (ou toString(2)).",
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "10 -> 1010",
+          "setup": "",
+          "call": "enBinaire(10)",
+          "assert": "result === '1010'"
+        },
+        {
+          "type": "exec",
+          "description": "0 -> 0",
+          "setup": "",
+          "call": "enBinaire(0)",
+          "assert": "result === '0'"
+        },
+        {
+          "type": "exec",
+          "description": "255 -> 11111111",
+          "setup": "",
+          "call": "enBinaire(255)",
+          "assert": "result === '11111111'"
+        },
+        {
+          "type": "exec",
+          "description": "1 -> 1",
+          "setup": "",
+          "call": "enBinaire(1)",
+          "assert": "result === '1'"
+        }
+      ]
+    },
+    {
+      "id": "spe_groupage_parite_2s",
+      "label": "Spécialité JavaScript — Grouper par parité",
+      "points": 10,
+      "lang": "javascript",
+      "hint": "Filtrez chaque sous-liste : pairs = t.filter(x => x % 2 === 0), impairs = t.filter(x => x % 2 !== 0). Renvoyez { pairs: [...], impairs: [...] }.",
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Mixte",
+          "setup": "",
+          "call": "grouperParPariteSpe([1, 2, 3, 4])",
+          "assert": "JSON.stringify(result.pairs) === JSON.stringify([2, 4]) && JSON.stringify(result.impairs) === JSON.stringify([1, 3])"
+        },
+        {
+          "type": "exec",
+          "description": "Que des pairs",
+          "setup": "",
+          "call": "grouperParPariteSpe([2, 4])",
+          "assert": "result.impairs.length === 0 && result.pairs.length === 2"
+        },
+        {
+          "type": "exec",
+          "description": "Négatifs",
+          "setup": "",
+          "call": "grouperParPariteSpe([-2, -1])",
+          "assert": "JSON.stringify(result.pairs) === JSON.stringify([-2]) && JSON.stringify(result.impairs) === JSON.stringify([-1])"
+        }
+      ]
+    },
+    {
+      "id": "spe_supprimer_doublons_consecutifs_2s",
+      "label": "Spécialité SQL — Doublons consécutifs",
+      "points": 10,
+      "lang": "sql",
+      "hint": "Gardez un élément seulement s'il diffère du précédent dans le tableau d'origine (les doublons NON consécutifs restent).",
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Consecutifs",
+          "setup": "",
+          "call": "sansDoublonsConsecutifs([1, 1, 2, 2, 1])",
+          "assert": "JSON.stringify(result) === JSON.stringify([1, 2, 1])"
+        },
+        {
+          "type": "exec",
+          "description": "Sans doublon",
+          "setup": "",
+          "call": "sansDoublonsConsecutifs([1, 2, 3])",
+          "assert": "JSON.stringify(result) === JSON.stringify([1, 2, 3])"
+        },
+        {
+          "type": "exec",
+          "description": "Vide",
+          "setup": "",
+          "call": "sansDoublonsConsecutifs([])",
+          "assert": "JSON.stringify(result) === JSON.stringify([])"
+        },
+        {
+          "type": "exec",
+          "description": "Triple",
+          "setup": "",
+          "call": "sansDoublonsConsecutifs([5, 5, 5])",
+          "assert": "JSON.stringify(result) === JSON.stringify([5])"
+        }
+      ]
+    },
+    {
+      "id": "spe_compression_lzw_simple_2s",
+      "label": "Spécialité TypeScript — Compression RLE",
+      "points": 10,
+      "lang": "typescript",
+      "hint": "Comptez les suites de caractères identiques et encodez chaque suite par le caractère suivi du nombre ('aaab' -> 'a3b1').",
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Suites simples",
+          "setup": "",
+          "call": "compresserRLE('aaabbc')",
+          "assert": "result === 'a3b2c1'"
+        },
+        {
+          "type": "exec",
+          "description": "Un seul caractere",
+          "setup": "",
+          "call": "compresserRLE('z')",
+          "assert": "result === 'z1'"
+        },
+        {
+          "type": "exec",
+          "description": "Chaine vide",
+          "setup": "",
+          "call": "compresserRLE('')",
+          "assert": "result === ''"
+        }
+      ]
+    },
+    {
+      "id": "spe_aplatir_recursif_2s",
+      "label": "Spécialité React — Aplatir récursivement",
+      "points": 10,
+      "lang": "react",
+      "hint": "Parcourez le tableau : si l'élément est un tableau, récursez ; sinon poussez-le. Tous les niveaux sont aplatis.",
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Deux niveaux",
+          "setup": "",
+          "call": "aplatirRecursif([1, [2, [3, [4]]], 5])",
+          "assert": "JSON.stringify(result) === JSON.stringify([1, 2, 3, 4, 5])"
+        },
+        {
+          "type": "exec",
+          "description": "Deja plat",
+          "setup": "",
+          "call": "aplatirRecursif([1, 2])",
+          "assert": "JSON.stringify(result) === JSON.stringify([1, 2])"
+        },
+        {
+          "type": "exec",
+          "description": "Vide imbriqué",
+          "setup": "",
+          "call": "aplatirRecursif([[], [[]]])",
+          "assert": "JSON.stringify(result) === JSON.stringify([])"
+        }
+      ]
+    },
+    {
+      "id": "spe_nombre_mots_uniques_2s",
+      "label": "Spécialité Go — Mots uniques",
+      "points": 10,
+      "lang": "go",
+      "hint": "Comptez les mots distincts (insensible à la casse : tout en minuscules avant de compter, Set ou objet).",
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Casse differente",
+          "setup": "",
+          "call": "compterMotsUniques('le chat Le chien le')",
+          "assert": "result === 3"
+        },
+        {
+          "type": "exec",
+          "description": "Tous distincts",
+          "setup": "",
+          "call": "compterMotsUniques('a b c')",
+          "assert": "result === 3"
+        },
+        {
+          "type": "exec",
+          "description": "Vide",
+          "setup": "",
+          "call": "compterMotsUniques('')",
+          "assert": "result === 0"
+        }
+      ]
+    },
+    {
+      "id": "spe_pgcd_2s",
+      "label": "Spécialité Rust — PGCD (algorithme d'Euclide)",
+      "points": 10,
+      "lang": "rust",
+      "hint": "Tant que b !== 0, échangez (a, b) = (b, a % b). Le PGCD est la valeur finale de a.",
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "48 et 18 -> 6",
+          "setup": "",
+          "call": "pgcdEuclide(48, 18)",
+          "assert": "result === 6"
+        },
+        {
+          "type": "exec",
+          "description": "Premiers entre eux",
+          "setup": "",
+          "call": "pgcdEuclide(7, 3)",
+          "assert": "result === 1"
+        },
+        {
+          "type": "exec",
+          "description": "Multiple",
+          "setup": "",
+          "call": "pgcdEuclide(12, 36)",
+          "assert": "result === 12"
+        }
+      ]
+    },
+    {
+      "id": "spe_inverser_entier_2s",
+      "label": "Spécialité C++ — Inverser un entier",
+      "points": 10,
+      "lang": "cpp",
+      "hint": "Convertissez en chaîne, inversez les caractères, reconvertissez en nombre (signe géré : -12 -> -21).",
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Positif",
+          "setup": "",
+          "call": "inverserEntier(123)",
+          "assert": "result === 321"
+        },
+        {
+          "type": "exec",
+          "description": "Négatif",
+          "setup": "",
+          "call": "inverserEntier(-12)",
+          "assert": "result === -21"
+        },
+        {
+          "type": "exec",
+          "description": "Zéro final perdu",
+          "setup": "",
+          "call": "inverserEntier(100)",
+          "assert": "result === 1"
+        },
+        {
+          "type": "exec",
+          "description": "Un chiffre",
+          "setup": "",
+          "call": "inverserEntier(7)",
+          "assert": "result === 7"
+        }
+      ]
     },
     {
       "id": "algo_facile_1",

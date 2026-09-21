@@ -25,6 +25,27 @@ const CLOUD_PROVIDERS = {
   custom:     { url: null, /* override via --endpoint= */               envKey: null,                  openaiCompat: true,  requiresAuth: false },
 };
 
+// --- Garde-fous anti-boucle / anti-blocage du streaming cloud (2026-09-20) ---
+// Constat (logs benchgo_2026-09-20T21-49 / 22-00, deepseek-v4.1-flash via
+// Ollama cloud) : un modèle de raisonnement peut streamer sa délibération EN
+// BOUCLE sans fin (mêmes réflexions qui reviennent cycliquement) — 2h de stream
+// actif sans jamais produire de réponse exploitable. Le client local
+// (lm-studio-client.js) a un timer d'inactivité, le client cloud n'en avait
+// AUCUN : seul le timeout global (API_TIMEOUT_MS, 25 min) bornait chaque appel,
+// et un tier de rattrapage enchaîne plusieurs appels → des heures de « sans fin ».
+// Trois garde-fous :
+//   1. Inactivité : aucun chunk pendant CLOUD_STREAM_IDLE_TIMEOUT_MS → coupure.
+//      Valeur alignée sur les autres timeouts du projet (ping 90s, health check
+//      90s) : les modèles thinking lents produisent leur 1er chunk en 40-60s.
+//   2. Plafond de raisonnement : au-delà de CLOUD_REASONING_MAX_CHARS, c'est
+//      une boucle — coupure, contenu partiel conservé (l'évaluation échouera
+//      proprement, le run avance au lieu de geler).
+//   3. Plafond de réponse : idem pour un content qui ne finit jamais.
+// Le timeout global (25 min) reste le filet ultime pour tout le reste.
+const CLOUD_STREAM_IDLE_TIMEOUT_MS = 90000;
+const CLOUD_REASONING_MAX_CHARS = 60000;
+const CLOUD_CONTENT_MAX_CHARS = 120000;
+
 function getSystemPrompt(difficulty) {
   const welcome =
     "Vous etes un modele de langage candidat a un examen serieux organise par BenchGo V3. " +
@@ -42,7 +63,7 @@ function getSystemPrompt(difficulty) {
   return welcome + " Vous agissez en tant que developpeur competent. Repondez en Markdown de maniere structuree, avec des titres et des blocs de code.";
 }
 
-async function streamOpenAICompatResponse(response, spinner) {
+async function streamOpenAICompatResponse(response, spinner, controller = null) {
   const reader = response.body.getReader();
   const decoder = new TextDecoder('utf-8');
   let fullContent = '';
@@ -57,6 +78,48 @@ async function streamOpenAICompatResponse(response, spinner) {
   let streamErrors = [];
 
   let streamingStarted = false;
+  // Flag de coupure : les plafonds anti-boucle (raisonnement/réponse) doivent
+  // sortir de la boucle while EXTERNE — un simple break ne casse que le for
+  // interne (bug constaté au test de simulation : stream infini jamais coupé).
+  let stopStreaming = false;
+
+  // --- Timer d'inactivité (garde-fou anti-blocage) ---
+  // Un modèle thinking qui streame activement en boucle ne déclenche PAS le
+  // timeout global (il produit des chunks en continu). Le garde-fou ci-dessous
+  // ne cible que le silence : aucun chunk pendant CLOUD_STREAM_IDLE_TIMEOUT_MS
+  // → coupure + erreur d'inactivité (miroir de lm-studio-client.js côté local).
+  //
+  // IMPORTANT (testé 2026-09-20, Node 26/undici récent) : sur un flux
+  // silencieux, reader.cancel() ET controller.abort() ne rejettent PAS un
+  // reader.read() en attente — le process reste figé dans le await. La seule
+  // stratégie fiable est une COURSE : read() contre un timer. Si le timer
+  // gagne, on cancel le reader (nettoyage) et on lève l'erreur idle. La course
+  // est re-créée à chaque itération (reset du délai après chaque chunk reçu).
+  const makeIdleError = () => {
+    const e = new Error('Réponse vide — aucun chunk reçu pendant ' + (CLOUD_STREAM_IDLE_TIMEOUT_MS / 1000) + 's (inactivité du modèle cloud)');
+    e.isEmptyResponse = true;
+    e.isIdleTimeout = true;
+    return e;
+  };
+  const readWithIdleGuard = async () => {
+    let idleFired = false;
+    let idleTimer = null;
+    const idlePromise = new Promise((resolve) => {
+      idleTimer = setTimeout(() => { idleFired = true; resolve(null); }, CLOUD_STREAM_IDLE_TIMEOUT_MS);
+    });
+    try {
+      const chunk = await Promise.race([reader.read(), idlePromise]);
+      if (idleFired) {
+        // Inactivité : coupe le flux (nettoyage socket) et lève l'erreur idle.
+        try { reader.cancel(); } catch (_) {}
+        if (controller) { try { controller.abort(); } catch (_) {} }
+        throw makeIdleError();
+      }
+      return chunk;
+    } finally {
+      if (idleTimer) clearTimeout(idleTimer);
+    }
+  };
 
   // --- Gestion du bug undici Node.js 24.x ---
   // Pendant le streaming SSE, undici peut fermer la socket (idle timeout)
@@ -68,7 +131,8 @@ async function streamOpenAICompatResponse(response, spinner) {
   // incomplète (que le moteur peut évaluer) que de crasher le run entier.
   try {
     while (true) {
-      const { done, value } = await reader.read();
+      if (stopStreaming) break;
+      const { done, value } = await readWithIdleGuard();
       if (done) break;
 
     sseBuffer += decoder.decode(value, { stream: true });
@@ -124,6 +188,21 @@ async function streamOpenAICompatResponse(response, spinner) {
           tokenCount++;
           spinner.updateTokens(tokenCount, reasoningContent.length);
           spinner.appendStreamChunk(reasoning, 'reasoning');
+          // Plafond anti-boucle : un raisonnement qui dépasse le plafond est
+          // une délibération sans fin (boucle). On coupe le stream : le contenu
+          // partiel sera retourné (ou remplacera une réponse vide), l'évaluation
+          // échouera proprement et le run avancera au lieu de geler des heures.
+          if (reasoningContent.length > CLOUD_REASONING_MAX_CHARS) {
+            logger.warn('Cloud streaming : plafond de raisonnement atteint (' + reasoningContent.length + ' chars > ' + CLOUD_REASONING_MAX_CHARS + ') — boucle de délibération probable, coupure du stream.');
+            stopStreaming = true;
+            break;
+          }
+        }
+        // Plafond de réponse : un content qui ne finit jamais (répétitions).
+        if (fullContent.length > CLOUD_CONTENT_MAX_CHARS) {
+          logger.warn('Cloud streaming : plafond de réponse atteint (' + fullContent.length + ' chars > ' + CLOUD_CONTENT_MAX_CHARS + ') — coupure du stream.');
+          stopStreaming = true;
+          break;
         }
       } catch (_) {}
     }
@@ -133,6 +212,9 @@ async function streamOpenAICompatResponse(response, spinner) {
     // read only property 'name'". On a déjà intercepté l'uncaughtException
     // au niveau global (runner.js), mais le reader.read() rejette aussi.
     // On garde le contenu PARTIEL déjà reçu (mieux que rien pour l'évaluation).
+    // Inactivité : readWithIdleGuard lève NOTRE erreur (flags
+    // isIdleTimeout/isEmptyResponse) — on la propage telle quelle.
+    if (streamErr && streamErr.isIdleTimeout) throw streamErr;
     if (fullContent.trim() || reasoningContent.trim()) {
       logger.warn('Cloud streaming : déconnexion socket interceptée (bug undici 24.x) — contenu partiel conservé (' + (fullContent.length + reasoningContent.length) + ' chars).');
     } else {
@@ -154,6 +236,10 @@ async function streamOpenAICompatResponse(response, spinner) {
   // réponse comme un succès (statut=OK, 0 tokens) et continue → toutes les
   // tâches bypassées, rapport 0/0.
   if (!fullContent.trim() && !reasoningContent.trim()) {
+    // Cas inactivité : la course a détecté le silence sans aucun contenu.
+    if (rawChunkCount === 0) {
+      throw makeIdleError();
+    }
     if (streamErrors.length > 0) {
       // Erreur SSE explicite dans le stream (rate limit, modèle indisponible...)
       const msg = streamErrors.join(' | ');
@@ -178,7 +264,7 @@ async function streamOpenAICompatResponse(response, spinner) {
   return { content: fullContent, tokenCount };
 }
 
-async function streamAnthropicResponse(response, spinner) {
+async function streamAnthropicResponse(response, spinner, controller = null) {
   const reader = response.body.getReader();
   const decoder = new TextDecoder('utf-8');
   let fullContent = '';
@@ -188,9 +274,38 @@ async function streamAnthropicResponse(response, spinner) {
 
   let streamingStarted = false;
 
+  // Timer d'inactivité (garde-fou anti-blocage, cf. streamOpenAICompatResponse
+  // et readWithIdleGuard : stratégie COURSE — reader.cancel() ET
+  // controller.abort() ne rejettent PAS un read() en attente sur undici).
+  const readWithIdleGuard = async () => {
+    let idleFired = false;
+    let idleTimer = null;
+    const idlePromise = new Promise((resolve) => {
+      idleTimer = setTimeout(() => { idleFired = true; resolve(null); }, CLOUD_STREAM_IDLE_TIMEOUT_MS);
+    });
+    try {
+      const chunk = await Promise.race([reader.read(), idlePromise]);
+      if (idleFired) {
+        try { reader.cancel(); } catch (_) {}
+        if (controller) { try { controller.abort(); } catch (_) {} }
+        const e = new Error('Réponse vide — aucun chunk reçu pendant ' + (CLOUD_STREAM_IDLE_TIMEOUT_MS / 1000) + 's (inactivité du modèle cloud)');
+        e.isEmptyResponse = true;
+        e.isIdleTimeout = true;
+        throw e;
+      }
+      return chunk;
+    } finally {
+      if (idleTimer) clearTimeout(idleTimer);
+    }
+  };
+  // Flag de coupure anti-boucle (cf. streamOpenAICompatResponse : un break
+  // simple ne casse que le for interne, pas le while externe).
+  let stopStreaming = false;
+
   try {
     while (true) {
-      const { done, value } = await reader.read();
+      if (stopStreaming) break;
+      const { done, value } = await readWithIdleGuard();
       if (done) break;
 
       sseBuffer += decoder.decode(value, { stream: true });
@@ -221,12 +336,20 @@ async function streamAnthropicResponse(response, spinner) {
             tokenCount++;
             spinner.updateTokens(tokenCount, fullContent.length);
             spinner.appendStreamChunk(text, 'content');
+            // Plafond de réponse (anti-boucle, cf. streamOpenAICompatResponse).
+            if (fullContent.length > CLOUD_CONTENT_MAX_CHARS) {
+              logger.warn('Cloud streaming (Anthropic) : plafond de réponse atteint (' + fullContent.length + ' chars) — coupure du stream.');
+              stopStreaming = true;
+              break;
+            }
           }
         } catch (_) {}
       }
     }
   } catch (streamErr) {
     // Bug undici Node.js 24.x (cf. streamOpenAICompatResponse).
+    // Inactivité : propage notre erreur (flags isIdleTimeout/isEmptyResponse).
+    if (streamErr && streamErr.isIdleTimeout) throw streamErr;
     if (fullContent.trim() || reasoningContent.trim()) {
       logger.warn('Cloud streaming (Anthropic) : déconnexion socket interceptée (bug undici 24.x) — contenu partiel conservé (' + (fullContent.length + reasoningContent.length) + ' chars).');
     } else {
@@ -410,8 +533,8 @@ async function queryLLM(prompt, difficulty, tierId, isMandatory, spinner, option
     }
 
     const streamResult = provSpec.openaiCompat
-      ? await streamOpenAICompatResponse(response, spinner)
-      : await streamAnthropicResponse(response, spinner);
+      ? await streamOpenAICompatResponse(response, spinner, controller)
+      : await streamAnthropicResponse(response, spinner, controller);
 
     clearTimeout(timeoutId);
     const duration = Date.now() - startTime;
@@ -504,11 +627,14 @@ async function queryLLM(prompt, difficulty, tierId, isMandatory, spinner, option
       const code = error.isFatalSlugError
         ? (error.code || 'E400_INVALID_MODEL_ID')
         : isLoadFailure ? 'E507_LM_LOAD_FAILED'
+        : error.isIdleTimeout ? 'E508_LM_IDLE_TIMEOUT'
         : isTimeout ? 'E502_LM_TIMEOUT'
         : /ECONNRESET|ECONNREFUSED|ENOTFOUND|EHOSTUNREACH/.test(error.code || reason) ? 'E503_LM_UNREACHABLE'
         : 'E504_LM_HTTP_ERROR';
       const friendlyReason = code === 'E507_LM_LOAD_FAILED'
         ? `Le modèle ne peut pas être chargé par LM Studio : architecture GGUF non supportée par le runtime llama.cpp actuel (modèle trop récent pour le runtime installé). Mettez LM Studio à jour (runtimes), ou testez un autre GGUF. Ce modèle est inutilisable en l'état : vous pouvez le supprimer de LM Studio (UI → poubelle) pour libérer de l'espace disque. Détail : ${reason}`
+        : code === 'E508_LM_IDLE_TIMEOUT'
+        ? `Le modèle cloud n'a envoyé AUCUN chunk pendant ${CLOUD_STREAM_IDLE_TIMEOUT_MS / 1000}s (inactivité totale). Le serveur est probablement surchargé ou le modèle indisponible — réessayez plus tard ou changez de modèle. Détail : ${reason}`
         : `Cloud Tier ${tierId} — ${reason}`;
       throw new BenchgoError(code, friendlyReason);
     } else {

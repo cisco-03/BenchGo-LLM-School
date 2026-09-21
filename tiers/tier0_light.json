@@ -6,7 +6,7 @@
     "LIGHT"
   ],
   "optional_for": [],
-  "prompt": "You are taking a TIER 0 technical evaluation — the simplest level.\n\nSolve 5 basic JavaScript exercises (no TypeScript, no frameworks). Write each requested function.\n\nReturn your answers in Markdown using headers for the exercise IDs and code blocks for the JavaScript functions.\n\n[EXERCISE 0-A: Return text]\nWrite a JavaScript function \"direBonjour()\" that takes no parameters and returns the string \"Bonjour\".\n\n[EXERCISE 0-B: Return boolean]\nWrite a JavaScript function \"retournerVrai()\" that takes no parameters and returns the boolean true.\n\n[EXERCISE 0-C: Return number]\nWrite a JavaScript function \"retourner42()\" that takes no parameters and returns the number 42.\n\n[EXERCISE 0-D: Addition]\nWrite a JavaScript function \"additionner(a, b)\" that takes two numbers and returns their sum.\n\n[EXERCISE 0-E: Identity function]\nWrite a JavaScript function \"identite(x)\" that takes one parameter and returns it exactly as it is.\n\nExpected Markdown format:\n### tache_X\n```javascript\nfunction solution() { ... }\n```\n\n[ALGORITHMIC EXERCISES — code pur, sans culture générale]\nReturn each function using a Markdown header (### <exercise id>) followed by a ```javascript code block.\n\n[EXERCISE algo_facile_1]\nWrite a JavaScript function \"estPair(n)\" that returns true if n is even, false otherwise.\n\n[EXERCISE algo_facile_2]\nWrite a JavaScript function \"carre(n)\" that returns n multiplied by itself.\n\n[EXERCISE algo_moyen_1]\nWrite a JavaScript function \"somme1aN(n)\" that returns the sum of all integers from 1 to n (n >= 1).\n\n[EXERCISE algo_difficile_1]\nWrite a JavaScript function \"inverserChaine(s)\" that returns the string reversed (e.g. \"abc\" -> \"cba\").\n\n[EXERCISE algo_defi]\nWrite a JavaScript function \"valeurMax(tab)\" that returns the largest number in a non-empty array.\n\n[EXERCISE contrainte_negative_0]\nWrite a JavaScript function \"sansLettreE(c)\" that returns true if the string c does NOT contain the letter 'e' (case-insensitive: both 'e' and 'E' count), and false if it does. An empty string returns true.",
+  "prompt": "You are taking a TIER 0 technical evaluation — the simplest level.\n\nSolve 5 basic JavaScript exercises (no TypeScript, no frameworks). Write each requested function.\n\nReturn your answers in Markdown using headers for the exercise IDs and code blocks for the JavaScript functions.\n\n[EXERCISE 0-A: Return text]\nWrite a JavaScript function \"direBonjour()\" that takes no parameters and returns the string \"Bonjour\".\n\n[EXERCISE 0-B: Return boolean]\nWrite a JavaScript function \"retournerVrai()\" that takes no parameters and returns the boolean true.\n\n[EXERCISE 0-C: Return number]\nWrite a JavaScript function \"retourner42()\" that takes no parameters and returns the number 42.\n\n[EXERCISE 0-D: Addition]\nWrite a JavaScript function \"additionner(a, b)\" that takes two numbers and returns their sum.\n\n[EXERCISE 0-E: Identity function]\nWrite a JavaScript function \"identite(x)\" that takes one parameter and returns it exactly as it is.\n\nExpected Markdown format:\n### tache_X\n```javascript\nfunction solution() { ... }\n```\n\n[ALGORITHMIC EXERCISES — code pur, sans culture générale]\nReturn each function using a Markdown header (### <exercise id>) followed by a ```javascript code block.\n\n[EXERCISE algo_facile_1]\nWrite a JavaScript function \"estPair(n)\" that returns true if n is even, false otherwise.\n\n[EXERCISE algo_facile_2]\nWrite a JavaScript function \"carre(n)\" that returns n multiplied by itself.\n\n[EXERCISE algo_moyen_1]\nWrite a JavaScript function \"somme1aN(n)\" that returns the sum of all integers from 1 to n (n >= 1).\n\n[EXERCISE algo_difficile_1]\nWrite a JavaScript function \"inverserChaine(s)\" that returns the string reversed (e.g. \"abc\" -> \"cba\").\n\n[EXERCISE algo_defi]\nWrite a JavaScript function \"valeurMax(tab)\" that returns the largest number in a non-empty array.\n\n[EXERCISE contrainte_negative_0]\nWrite a JavaScript function \"sansLettreE(c)\" that returns true if the string c does NOT contain the letter 'e' (case-insensitive: both 'e' and 'E' count), and false if it does. An empty string returns true.\n\n[SPECIALTY EXERCISES — exercices de spécialité (tirés du tremplin RunCode)]\nThese are verified classics from public reference pages. Solve them in JavaScript as requested.\n\n[EXERCISE spe_fizzbuzz_0]\nWrite a JavaScript function \"fizzBuzz(n)\" that returns \"FizzBuzz\" if n is divisible by 3 AND 5, \"Fizz\" if n is divisible by 3 only, \"Buzz\" if n is divisible by 5 only, and n itself (the number) otherwise. (Classic FizzBuzz game.)\n\n[EXERCISE spe_voyelles_0]\nWrite a JavaScript function \"compterVoyelles(s)\" that returns the number of vowels (a, e, i, o, u — case-insensitive, 'y' NOT counted) in the string s.\n\n[EXERCISE spe_palindrome_0]\nWrite a JavaScript function \"estPalindromeSimple(c)\" that returns true if the string c is a palindrome (case-insensitive, no space stripping), false otherwise.\n\n[EXERCISE spe_factorielle_0]\nWrite a JavaScript function \"factorielle(n)\" that returns n! with 0! = 1 and 1! = 1 (iterative computation is fine).\n\n[EXERCISE spe_anagramme_0]\nWrite a JavaScript function \"sontAnagrammesSimple(a, b)\" that returns true if a and b are anagrams (same letters, case-sensitive, same length), false otherwise.\n\n[EXERCISE spe_premier_0]\nWrite a JavaScript function \"estPremier(n)\" that returns true if n is a prime number (n >= 2 with no divisor other than 1 and itself), false otherwise (0 and 1 are NOT prime, 2 is prime).\n\n[EXERCISE spe_fibonacci_0]\nWrite a JavaScript function \"fibonacciIteratif(n)\" that returns the n-th Fibonacci number with fibonacciIteratif(0) = 0 and fibonacciIteratif(1) = 1 (iterative computation is fine).\n\n[EXERCISE spe_fusion_tri_0]\nWrite a JavaScript function \"fusionnerTries(a, b)\" that merges two already-sorted numeric arrays a and b into one sorted array (duplicates kept).",
   "tasks": [
     {
       "id": "tache_0a",
@@ -146,6 +146,330 @@
           "setup": "",
           "call": "sansLettreE('')",
           "assert": "result === true"
+        }
+      ]
+    },
+    {
+      "id": "spe_fizzbuzz_0",
+      "label": "Spécialité Python — FizzBuzz (divisibilité)",
+      "points": 10,
+      "lang": "python",
+      "hint": "Un nombre divisible par 3 ET 5 (donc par 15) donne \"FizzBuzz\". Testez d'abord n % 15 === 0, puis n % 3 === 0, puis n % 5 === 0.",
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Multiple de 3 seulement",
+          "setup": "",
+          "call": "fizzBuzz(9)",
+          "assert": "result === 'Fizz'"
+        },
+        {
+          "type": "exec",
+          "description": "Multiple de 5 seulement",
+          "setup": "",
+          "call": "fizzBuzz(10)",
+          "assert": "result === 'Buzz'"
+        },
+        {
+          "type": "exec",
+          "description": "Multiple de 3 et 5",
+          "setup": "",
+          "call": "fizzBuzz(15)",
+          "assert": "result === 'FizzBuzz'"
+        },
+        {
+          "type": "exec",
+          "description": "Multiple de ni l'un ni l'autre",
+          "setup": "",
+          "call": "fizzBuzz(7)",
+          "assert": "result === 7"
+        },
+        {
+          "type": "exec",
+          "description": "Multiple de 15 (30)",
+          "setup": "",
+          "call": "fizzBuzz(30)",
+          "assert": "result === 'FizzBuzz'"
+        }
+      ]
+    },
+    {
+      "id": "spe_voyelles_0",
+      "label": "Spécialité JavaScript — Compter les voyelles",
+      "points": 10,
+      "lang": "javascript",
+      "hint": "Majuscules converties en minuscules (c.toLowerCase()), puis comparez chaque caractère aux voyelles a, e, i, o, u.",
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "hello world",
+          "setup": "",
+          "call": "compterVoyelles('hello world')",
+          "assert": "result === 3"
+        },
+        {
+          "type": "exec",
+          "description": "Majuscules",
+          "setup": "",
+          "call": "compterVoyelles('AEIOU')",
+          "assert": "result === 5"
+        },
+        {
+          "type": "exec",
+          "description": "Sans voyelles",
+          "setup": "",
+          "call": "compterVoyelles('xyz')",
+          "assert": "result === 0"
+        },
+        {
+          "type": "exec",
+          "description": "Chaîne vide",
+          "setup": "",
+          "call": "compterVoyelles('')",
+          "assert": "result === 0"
+        },
+        {
+          "type": "exec",
+          "description": "Toutes les voyelles",
+          "setup": "",
+          "call": "compterVoyelles('aeiouy')",
+          "assert": "result === 5"
+        }
+      ]
+    },
+    {
+      "id": "spe_palindrome_0",
+      "label": "Spécialité SQL — Palindrome (insensible à la casse)",
+      "points": 10,
+      "lang": "sql",
+      "hint": "Comparez la chaîne mise en minuscules avec son inverse : c.toLowerCase() === c.toLowerCase().split(\"\").reverse().join(\"\").",
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Palindrome classique",
+          "setup": "",
+          "call": "estPalindromeSimple('RaceCar')",
+          "assert": "result === true"
+        },
+        {
+          "type": "exec",
+          "description": "Non palindrome",
+          "setup": "",
+          "call": "estPalindromeSimple('bonjour')",
+          "assert": "result === false"
+        },
+        {
+          "type": "exec",
+          "description": "Un seul caractère",
+          "setup": "",
+          "call": "estPalindromeSimple('a')",
+          "assert": "result === true"
+        },
+        {
+          "type": "exec",
+          "description": "Casse inversée",
+          "setup": "",
+          "call": "estPalindromeSimple('Kayak')",
+          "assert": "result === true"
+        },
+        {
+          "type": "exec",
+          "description": "Deux lettres différentes",
+          "setup": "",
+          "call": "estPalindromeSimple('ab')",
+          "assert": "result === false"
+        }
+      ]
+    },
+    {
+      "id": "spe_factorielle_0",
+      "label": "Spécialité TypeScript — Factorielle (itérative)",
+      "points": 10,
+      "lang": "typescript",
+      "hint": "0! = 1 et 1! = 1. Accumulez le produit de 2 jusqu'à n (resultat *= i).",
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "5! vaut 120",
+          "setup": "",
+          "call": "factorielle(5)",
+          "assert": "result === 120"
+        },
+        {
+          "type": "exec",
+          "description": "Cas de base 0",
+          "setup": "",
+          "call": "factorielle(0)",
+          "assert": "result === 1"
+        },
+        {
+          "type": "exec",
+          "description": "Cas de base 1",
+          "setup": "",
+          "call": "factorielle(1)",
+          "assert": "result === 1"
+        },
+        {
+          "type": "exec",
+          "description": "7! = 5040",
+          "setup": "",
+          "call": "factorielle(7)",
+          "assert": "result === 5040"
+        }
+      ]
+    },
+    {
+      "id": "spe_anagramme_0",
+      "label": "Spécialité React — Anagrammes",
+      "points": 10,
+      "lang": "react",
+      "hint": "Deux chaînes sont anagrammes si elles ont la même longueur et les mêmes lettres triées : a.split(\"\").sort().join(\"\") === b.split(\"\").sort().join(\"\").",
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Anagrammes",
+          "setup": "",
+          "call": "sontAnagrammesSimple('listen', 'silent')",
+          "assert": "result === true"
+        },
+        {
+          "type": "exec",
+          "description": "Longueurs différentes",
+          "setup": "",
+          "call": "sontAnagrammesSimple('listen', 'silents')",
+          "assert": "result === false"
+        },
+        {
+          "type": "exec",
+          "description": "Mêmes lettres désordonnées",
+          "setup": "",
+          "call": "sontAnagrammesSimple('abcde', 'edcba')",
+          "assert": "result === true"
+        },
+        {
+          "type": "exec",
+          "description": "Lettres différentes",
+          "setup": "",
+          "call": "sontAnagrammesSimple('abc', 'abd')",
+          "assert": "result === false"
+        }
+      ]
+    },
+    {
+      "id": "spe_premier_0",
+      "label": "Spécialité Go — Nombre premier",
+      "points": 10,
+      "lang": "go",
+      "hint": "Les nombres < 2 ne sont pas premiers. Testez les diviseurs de 2 à n-1 : si n % i === 0, n n'est pas premier. 2 est premier.",
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "2 est premier",
+          "setup": "",
+          "call": "estPremier(2)",
+          "assert": "result === true"
+        },
+        {
+          "type": "exec",
+          "description": "1 n'est pas premier",
+          "setup": "",
+          "call": "estPremier(1)",
+          "assert": "result === false"
+        },
+        {
+          "type": "exec",
+          "description": "0 n'est pas premier",
+          "setup": "",
+          "call": "estPremier(0)",
+          "assert": "result === false"
+        },
+        {
+          "type": "exec",
+          "description": "9 = 3x3 n'est pas premier",
+          "setup": "",
+          "call": "estPremier(9)",
+          "assert": "result === false"
+        },
+        {
+          "type": "exec",
+          "description": "13 est premier",
+          "setup": "",
+          "call": "estPremier(13)",
+          "assert": "result === true"
+        }
+      ]
+    },
+    {
+      "id": "spe_fibonacci_0",
+      "label": "Spécialité Rust — Fibonacci (itératif)",
+      "points": 10,
+      "lang": "rust",
+      "hint": "Deux variables a=0 et b=1 : répétez n fois l'échange [a, b] = [b, a + b], puis retournez a.",
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "fib(0) = 0",
+          "setup": "",
+          "call": "fibonacciIteratif(0)",
+          "assert": "result === 0"
+        },
+        {
+          "type": "exec",
+          "description": "fib(1) = 1",
+          "setup": "",
+          "call": "fibonacciIteratif(1)",
+          "assert": "result === 1"
+        },
+        {
+          "type": "exec",
+          "description": "fib(10) = 55",
+          "setup": "",
+          "call": "fibonacciIteratif(10)",
+          "assert": "result === 55"
+        },
+        {
+          "type": "exec",
+          "description": "fib(2) = 1",
+          "setup": "",
+          "call": "fibonacciIteratif(2)",
+          "assert": "result === 1"
+        }
+      ]
+    },
+    {
+      "id": "spe_fusion_tri_0",
+      "label": "Spécialité C++ — Fusion de tableaux triés",
+      "points": 10,
+      "lang": "cpp",
+      "hint": "Deux index i et j partent de 0 : comparez a[i] et b[j], poussez le plus petit, avancez. Concaténez ensuite les restes.",
+      "evaluations": [
+        {
+          "type": "exec",
+          "description": "Fusion simple",
+          "setup": "",
+          "call": "fusionnerTries([1, 3, 5], [2, 4, 6])",
+          "assert": "JSON.stringify(result) === JSON.stringify([1, 2, 3, 4, 5, 6])"
+        },
+        {
+          "type": "exec",
+          "description": "Premier tableau vide",
+          "setup": "",
+          "call": "fusionnerTries([], [1, 2])",
+          "assert": "JSON.stringify(result) === JSON.stringify([1, 2])"
+        },
+        {
+          "type": "exec",
+          "description": "Second tableau vide",
+          "setup": "",
+          "call": "fusionnerTries([2, 4], [])",
+          "assert": "JSON.stringify(result) === JSON.stringify([2, 4])"
+        },
+        {
+          "type": "exec",
+          "description": "Doublons conservés",
+          "setup": "",
+          "call": "fusionnerTries([1, 2, 2], [2, 3])",
+          "assert": "JSON.stringify(result) === JSON.stringify([1, 2, 2, 2, 3])"
         }
       ]
     },

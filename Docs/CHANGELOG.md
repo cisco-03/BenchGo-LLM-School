@@ -1,5 +1,91 @@
 # CHANGELOG - Carnet de Notes BenchGo
 
+## 2026-09-20c — fix(cloud) : garde-fous anti-boucle du streaming (inactivité 90s + plafonds)
+
+### Contexte & problème rencontré
+Deux runs cloud FRONTIER (`deepseek-v4.1-flash` via Ollama cloud, logs `benchgo_2026-09-20T21-49` et `22-00`) ont gelé sans fin : après un échec d'exercice, la question d'aide reçoit `AIDE_OUI` (ou le 2e échec demande l'explication pédagogique), le runner relance l'appel de rattrapage… et le modèle de raisonnement streame sa délibération EN BOUCLE (mêmes réflexions cycliques) pendant 2h sans jamais produire de réponse exploitable. Le client local (`lm-studio-client.js`) a un timer d'inactivité, mais le client cloud (`cloud-client.js`) n'en avait AUCUN : seul le timeout global (`API_TIMEOUT_MS`, 25 min) bornait chaque appel, et un tier de rattrapage enchaîne plusieurs appels (question d'aide + tentative + explication + correction professeur) → des heures de « sans fin ». Dernière ligne des deux logs = le `cloud_request` de rattrapage sans jamais de `cloud_response` (logger synchrone = fiable).
+
+### Corrections
+- `cloud-client.js` — trois garde-fous dans les DEUX fonctions de streaming (`streamOpenAICompatResponse` + `streamAnthropicResponse`) :
+  1. **Inactivité 90s** (`CLOUD_STREAM_IDLE_TIMEOUT_MS`) : aucun chunk pendant 90 s → coupure + erreur flaggée `isEmptyResponse` + `isIdleTimeout`. Valeur alignée sur les autres timeouts du projet (ping 90s, health check 90s — les modèles thinking lents produisent leur 1er chunk en 40-60s).
+  2. **Plafond de raisonnement** (`CLOUD_REASONING_MAX_CHARS`, 60000 chars) : un raisonnement qui dépasse le plafond est une boucle — coupure, contenu partiel conservé (l'évaluation échouera proprement, le run avance).
+  3. **Plafond de réponse** (`CLOUD_CONTENT_MAX_CHARS`, 120000 chars) : idem pour un content qui répète sans finir.
+- **Stratégie COURSE (`Promise.race`)** : sur Node 26/undici récent, `reader.cancel()` ET `controller.abort()` ne rejettent PAS un `reader.read()` en attente sur un flux silencieux (process figé dans le `await` — testé). La seule méthode fiable : chaque `read()` est mis en course avec un timer de 90s recréé à chaque itération ; si le timer gagne → `reader.cancel()` + `controller.abort()` + erreur idle.
+- **Flag anti-boucle `stopStreaming`** : les plafonds doivent sortir de la boucle `while` EXTERNE — un simple `break` ne casse que le `for` interne (bug constaté au test de simulation : stream infini jamais coupé).
+- **Code E508_LM_IDLE_TIMEOUT** : nouveau diagnostic explicite pour les tiers obligatoires (« Le modèle cloud n'a envoyé AUCUN chunk pendant 90s (inactivité totale). Le serveur est probablement surchargé ou le modèle indisponible — réessayez plus tard ou changez de modèle »).
+- Le timeout global 25 min reste le filet ultime pour tout le reste.
+
+### Pour modifier
+1. **Changer le délai d'inactivité** : `CLOUD_STREAM_IDLE_TIMEOUT_MS` (cloud-client.js, 90000 par défaut). Sous 60s, risque de couper des modèles thinking très lents (40-60s avant le 1er chunk).
+2. **Changer les plafonds** : `CLOUD_REASONING_MAX_CHARS` (60000) / `CLOUD_CONTENT_MAX_CHARS` (120000) — un raisonnement honnête très long peut atteindre 40-60k chars ; au-delà c'est quasi sûr une boucle.
+3. **Désactiver les garde-fous** : mettre `CLOUD_STREAM_IDLE_TIMEOUT_MS = 0` + plafonds à `Infinity` (comportement historique, déconseillé).
+4. **Revenir au timer simple (défaillant)** : remplacer `readWithIdleGuard()` par `reader.read()` + timer/abort — ne fonctionne PAS sur undici récent (read() jamais rejeté sur flux silencieux).
+
+### Pièges
+- `reader.cancel()` et `controller.abort()` seuls ne suffisent pas sur un flux silencieux (undici Node 26) : testé 3 approches, seule la course `Promise.race` marche. Ne pas « simplifier » vers un timer externe.
+- Le test de simulation du cas silencieux exige que le serveur de test flush les headers (`res.write('\n')` après `writeHead`) : sans octet écrit, les headers ne partent jamais et le `fetch` lui-même ne se résout pas (deadlock TCP de test, pas du monde réel).
+- Un modèle qui streame activement en boucle (chunks en continu) n'est coupé QUE par les plafonds de longueur, pas par l'inactivité — les deux garde-fous sont complémentaires.
+- L'erreur idle sur tier optionnel est propagée avec `isEmptyResponse` → comptée par le compteur de réponses vides consécutives du runner (arrêt après 3, `MAX_EMPTY_RESPONSES`) — comportement voulu, pas de double mécanisme.
+- Le plafond de boucle conserve le contenu partiel : l'évaluation de l'exercice échoue proprement (code incomplet) et le run AVANCE au lieu de geler.
+
+## 2026-09-20b — feat(Collège-Lycée) : 24 exercices de spécialité (6eme, 5eme, 4eme) + fix champ lang
+
+### Contexte & problème rencontré
+Suite directe de la tâche 2026-09-20 (Primaire). Question utilisateur (« où tu t'es arrêté exactement ? ») : seul le Tier 0 de la Primaire était doté d'exercices de spécialité — le Collège-Lycée (profil STANDARD) ne l'était pas. Demande implicite : étendre la même mécanique aux classes du Collège. Correction au passage : `spe_factorielle_0` (Primaire) portait le label « Spécialité TypeScript » mais le champ `lang: python` à tort (exercice jamais ciblable comme TypeScript en FLASH).
+
+### Corrections
+- `tiers/tier0_standard.json` (6eme) — 8 exercices `spe_*_0s` : `spe_somme_chiffres_0s` (python), `spe_capitaliser_0s` (javascript), `spe_puissance_sans_op_0s` (sql), `spe_annees_bissextiles_0s` (typescript), `spe_frequence_mots_0s` (react), `spe_inverse_mots_0s` (go), `spe_deuxieme_plus_grand_0s` (rust), `spe_chaine_la_plus_longue_0s` (cpp). 10 → 18 tâches.
+- `tiers/tier1_standard.json` (5eme) — 8 exercices `spe_*_1s` : `spe_somme_chiffres_repete_1s` (python, racine numérique), `spe_inverser_sans_reverse_1s` (javascript), `spe_jointure_simplifiee_1s` (sql), `spe_sans_boucle_moyenne_1s` (typescript), `spe_tri_mots_1s` (react), `spe_filtrer_valeurs_nulles_1s` (go), `spe_deux_sommes_1s` (rust), `spe_tri_selec_1s` (cpp). 10 → 18 tâches.
+- `tiers/tier2_standard.json` (4eme) — 8 exercices `spe_*_2s` : `spe_conversion_binaire_2s` (python), `spe_groupage_parite_2s` (javascript), `spe_supprimer_doublons_consecutifs_2s` (sql), `spe_compression_lzw_simple_2s` (typescript, RLE), `spe_aplatir_recursif_2s` (react), `spe_nombre_mots_uniques_2s` (go), `spe_pgcd_2s` (rust, Euclide), `spe_inverser_entier_2s` (cpp). 10 → 18 tâches.
+- `.teacher-vault/vault_polyglot.json` — sections `grandeEcole.Primaire.tier0_standard_6eme`, `.tier1_standard_5eme`, `.tier2_standard_4eme` : réponse canonique + variantes + indice professeur + source officielle web pour les 24 exercices (réservé professeur).
+- `verify_tiers.js` — 24 solutions canoniques ajoutées. Bilan : 486 exec OK / 506 testés, 0 problème (404 avant).
+- `tiers/tier0_light.json` — champ `lang` de `spe_factorielle_0` corrigé (`python` → `typescript`).
+- `Docs/Manuel-utilisateur/06-reference-tiers.md` — liste des 32 exercices de spécialité (4 classes) par titre public, sans corrigé.
+
+### Pour modifier
+1. **Ajouter une classe du Collège-Lycée** : le mécanisme est répétable à l'identique sur `tier3_standard.json` (3eme), `tier4_standard.json` (2nde)... — tâche `spe_<nom>_<tier>s`, énoncé dans le suffixe du prompt, évaluations `exec`, solutions dans `verify_tiers.js`, coffre section `grandeEcole`.
+2. **Choisir les langages ciblés** : le champ `lang` doit matcher un langage des `languageStats` RunCode (`python`, `javascript`, `sql`, `typescript`, `react`, `go`, `rust`, `cpp`...). Chaque tier couvre 8 langages (1 exercice chacun) — un langage sans exercice dans un tier retombe sur le tirage orienté pour cette classe.
+3. **Compter les exercices FLASH** : en FLASH + spécialité détectée, la sélection prend TOUS les `spe_*` du langage + compléments jusqu'à `FLASH_TAILLE_EXAMEN` (10). Un tier standard avec 1 seul spe du langage → 1 spe + 9 compléments ; avec 2 → 2 + 8.
+
+### Pièges
+- Les évaluations historiques (`math`, `francais`, `info`...) des tiers standard « MANQUANT » au scan ne sont PAS des bugs : énoncés extraits par NOM DE FONCTION dans le prompt (`additionner`, `majuscule`, `bonjour`, `pythagore`...), vérifié pour les 3 tiers.
+- `spe_aplatir_recursif_2s` : l'assertion initiale oubliait le 5 final (`[1,[2,[3,[4]]],5]` aplatit en `[1,2,3,4,5]`) — corrigé en cours de tâche.
+- La convention de nommage : suffixe `<tierNum>` + `s` (`0s` = tier 0 standard). Évite les collisions avec les algo_* partagés entre profils.
+- `spe_tri_mots_1s` et `spe_filtrer_valeurs_nulles_1s` : les évaluations vérifient la NON-mutation de l'entrée (les solutions canoniques copient avant de trier/filtrer).
+
+## 2026-09-20 — feat(Primaire) : 8 exercices de spécialité au Tier 0 + ciblage FLASH par langage RunCode
+
+### Contexte & problème rencontré
+Demande utilisateur (`Memories-BenchGo/Tasks.md`, 2026-09-20) : « dans la grande école, il faudrait des exercices supplémentaires pour chaque catégorie de langage de code. Il faut que tu commences par la plus petite école (la Primaire). Grâce au RunCode, le professeur pourra détecter dans quelle spécialité le modèle est bon et lui donner les exercices en conséquence (ex : spécialité TypeScript → exercices de TypeScript). Attention : il faut aller chercher les exercices sur le web, ce sont des exercices déjà testés et vérifiés — on ne peut pas les inventer de toutes pièces. Les réponses, seul le professeur les connaît. Toujours avec la méthode de l'indice. » Précision du même message (22:32) : « quand un modèle a passé le RunCode, la grande école lui propose TOUS les exercices dans cette spécialité — s'il y a 10 exercices par école et qu'il est bon en TypeScript, il faut lui donner 10 exercices TypeScript. » Et : « mets à jour la doc de l'application — pas pour dévoiler les exercices, juste pour annoncer l'idée. »
+
+### Corrections
+- `tiers/tier0_light.json` — 8 nouveaux exercices `spe_*_0` (section `SPECIALTY EXERCISES` du prompt) : `spe_fizzbuzz_0` (python), `spe_voyelles_0` (javascript), `spe_palindrome_0` (sql), `spe_factorielle_0` (typescript), `spe_anagramme_0` (react), `spe_premier_0` (go), `spe_fibonacci_0` (rust), `spe_fusion_tri_0` (cpp). Chacun porte un champ `lang` = langage RunCode associé (le pont tremplin → grande école), 38 assertions `exec` au total, sources web officielles notées dans le coffre. Le tier passe de 11 à 19 tâches.
+- `runner.js` (`buildFlashTaskSelection`) — **examen de spécialité** : quand `flashStats.specialite` est connue et que le tier contient des exercices `spe_*` de ce langage, la sélection devient TOUS les exercices de spécialité + compléments classiques jusqu'à `FLASH_TAILLE_EXAMEN` (10, const en haut de runner.js). Ex : spécialité sql → 1 spe + 9 compléments ; spécialité python → 2 spe + 8 compléments. Sans spécialité exploitable → repli historique (1 exercice orienté compétences). Logs et bannière `⚡` mis à jour (« examen de spécialité (10 exercices max par classe) »).
+- `.teacher-vault/vault_polyglot.json` — nouvelle section `grandeEcole.Primaire.tier0` : pour chaque `spe_*` la réponse canonique, les variantes acceptées, l'indice professeur et la source officielle web (réponses JAMAIS envoyées au modèle — le coffre est `.gitignore`, réservé professeur). Section additive : le `catalog` du tremplin n'est pas touché.
+- `verify_tiers.js` — 8 solutions canoniques ajoutées (`spe_*_0`), le bilan passe de 368 à 404 exec OK / 424 testés, 0 problème.
+- `Docs/Manuel-utilisateur/03-fonctionnement-benchmark.md` — nouvelle section « Exercices de spécialité (grande école) » : l'idée (exercices publics vérifiés classés par langage, corrigés réservés au professeur, méthode de l'indice, examen de spécialité en mode FLASH). AUCUN corrigé ni indice dévoilé (demande explicite).
+- `Docs/Manuel-utilisateur/06-reference-tiers.md` — nouvelle section en tête : liste des 8 exercices de spécialité du Tier 0 (titres publics seulement), renvoi vers le fonctionnement.
+- `Docs/Manuel-utilisateur/README.md` — bloc « Exercices de spécialité (grande école) » ajouté après le tremplin RunCode, avec liens.
+
+### Pour modifier
+1. **Changer le nombre d'exercices par classe en FLASH** : éditer `FLASH_TAILLE_EXAMEN` (const en haut de runner.js, défaut 10). La demande était « si un modèle est bon en TypeScript, il faut lui donner 10 exercices TypeScript » — le tier 0 offre 8 `spe_*` : 8 de spécialité + 2 compléments classiques = 10.
+2. **Revenir au FLASH 1 exercice** : dans `buildFlashTaskSelection()`, retirer le bloc `if (specialite) { ... }` — retour au tirage orienté compétences historique (log + bannière à réajuster).
+3. **Ajouter des exercices de spécialité au tier suivant (Tier 1, Collège-Lycée...)** : dupliquer le modèle du tier0 — tâche `spe_<nom>_<tier>` avec champ `lang`, énoncé `[EXERCISE spe_*]` dans le `prompt` APRÈS le bloc algo (suffixe préservé par `updateTiers()`), évaluations `exec`, solutions canoniques dans `verify_tiers.js`, réponse + source dans le coffre (section `grandeEcole`).
+4. **Changer la pondération du repli** : la spécialité pèse +5 dans `langScore()` (runner.js ~ligne 2480) — même formule que le FLASH historique. Éditer cette fonction pour repondérer.
+5. **Tester** : `node verify_tiers.js` (404 exec OK attendus), `node tests/run-tests.js`, `node runner.js all --flash --profile=LIGHT --dry-run`, puis un vrai run FLASH : le log « Mode FLASH : classe ... — N exercice(s) sélectionné(s) ... (spécialité <LANG> ...) » doit apparaître pour chaque classe.
+
+### Pièges
+- `updateTiers()` (auto-updater.js) préserve le suffixe APRÈS le dernier exercice algo de la banque : les énoncés `spe_*` placés APRÈS `contrainte_negative_0` survivent (vérifié par un `updateTiers()` réel sur le working tree). Ne JAMAIS placer un énoncé custom AVANT le bloc algo.
+- Les 5 tâches `tache_0a`-`0e` « MANQUANT » du scan historique ne sont PAS des bugs : leurs énoncés utilisent les IDs `[EXERCISE 0-A]`-`[EXERCISE 0-E]` (extraction par nom de fonction, cf. AGENTS.md). Les `spe_*` sont, eux, vérifiés par le scan.
+- Le champ `lang` des tâches est ignoré partout ailleurs (rapports, carnet, leaderboard) : seul `buildFlashTaskSelection` le consomme. En école complète (sans `--flash`), un `spe_*` ne compte jamais plus que les autres.
+- `spe_anagramme_0` : « hello »/« ohell » SONT anagrammes (mêmes lettres) — le cas de test « longueurs différentes » doit être `listen`/`silents` (corrigé en cours de tâche).
+- FizzBuzz : le test `% 15` doit passer AVANT `% 3` et `% 5` seuls, sinon `fizzBuzz(15)` retourne « Fizz » (l'indice professeur du coffre le rappelle).
+- Le champ `lang` doit correspondre EXACTEMENT à un langage des `languageStats` du carnet RunCode (`s.language`) — un langage sans stats au carnet pèse 0 (repli : spécialité sans exercice `spe_*` dans le tier → tirage orienté historique, log `Mode FLASH : aucun exercice de spécialité <LANG> ...`).
+- Les réponses du coffre sont en JavaScript (évaluateurs `exec` JS/VM sandbox) : le champ `langage` du coffre désigne la SPÉCIALITÉ RunCode visée, pas le langage d'implémentation du corrigé.
+- Le score FLASH reste exclu du classement général (école `Flash-*`) : l'examen de spécialité n'est pas comparable à l'école complète — voulu, ne pas « corriger ».
+
+## 2026-09-18b — fix(classement) : modèle soumis invisible dans le classement communautaire local, clouds 0/0 masqués du consolidé
+
 ## 2026-09-18b — fix(classement) : modèle soumis invisible dans le classement communautaire local, clouds 0/0 masqués du consolidé
 
 ### Contexte & problème rencontré

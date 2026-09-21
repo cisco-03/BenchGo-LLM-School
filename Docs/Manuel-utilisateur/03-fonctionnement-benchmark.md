@@ -82,6 +82,25 @@ Disponible pour LIGHT et STANDARD:
 - une seule tentative supplementaire maximum
 - conservation du meilleur score
 
+## Exercices de specialite (grande ecole)
+
+Le pre-examen RunCode mesure les aptitudes du modele par langage et declare
+une **specialite** (son domaine d'excellence). La grande ecole exploite ce
+bilan : chaque tier embarque des **exercices de specialite** supplementaires,
+chacun rattache a un langage du tremplin (Python, JavaScript, SQL, Go, Rust,
+C++, React...). Ce sont des exercices classiques du domaine public, verifies
+par des sources web officielles — jamais inventes de toutes pieces. Les
+corriges restent reserves au professeur (coffre-fort secret, jamais envoye
+au modele). En cas de blocage, le modele recoit un indice (methodologie
+classique : indice propose, penalite conservée).
+
+Mode `--flash` : le tirage par classe devient un **examen de specialite**.
+Si la specialite est connue (tremplin passe), le professeur donne TOUS les
+exercices de specialite disponibles dans la classe pour ce langage, completes
+par des exercices classiques jusqu'a 10 au total. Sans specialite exploitable,
+le mode garde son comportement historique (1 exercice oriente par classe).
+L'ecole complete (sans `--flash`) joue toujours TOUTES les taches.
+
 ## Fichiers d'entrée et de sortie
 
 Entrées :
