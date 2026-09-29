@@ -48,7 +48,7 @@ const { printEntryHelp, wantsHelp } = require('./cli-help');
 // pas des vectoriseurs/détecteurs. On évite ainsi le bug où un modèle
 // d'embeddings obtenait "TOP DU TOP" à 0/0 (toutes tâches bypassées).
 const { NON_LLM_PATTERNS } = require('./night-batch');
-const { resolveOpenRouterSlug, resolveKiloSlug } = require('./model-resolver');
+const { resolveOpenRouterSlug, resolveKiloSlug, resolveOllamaCloudSlug } = require('./model-resolver');
 
 function isNonLlmCloudModel(slug) {
   if (!slug) return false;
@@ -382,7 +382,8 @@ function promptEndpoint(provider, cliEndpoint) {
     if (PROVIDERS_NEEDING_ENDPOINT.has(provider)) {
       console.log(`\n  ${C.bold}${C.cyan}=== BASE URL ${provider.toUpperCase()} ===${C.reset}`);
       console.log(`  ${C.gray}Ce provider ne possede pas d'URL par defaut.${C.reset}`);
-      console.log(`  ${C.gray}Saisissez la base URL du serveur (ex: https://api.exemple.com/v1/chat/completions).${C.reset}`);
+      console.log(`  ${C.gray}Saisissez l'URL complète du chat (ex: https://api.exemple.com/v1/chat/completions).${C.reset}`);
+      console.log(`  ${C.gray}Une base URL simple (https://host/v1) est aussi acceptée : /chat/completions est ajouté automatiquement.${C.reset}`);
       const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
       rl.question(`  ${C.cyan}Endpoint :${C.reset} `, answer => {
         rl.close();
@@ -398,7 +399,13 @@ function promptEndpoint(provider, cliEndpoint) {
     if (PROVIDERS_OPTIONAL_ENDPOINT.has(provider)) {
       console.log(`\n  ${C.bold}${C.cyan}=== BASE URL ${provider.toUpperCase()} ===${C.reset}`);
       console.log(`  ${C.gray}Par defaut : serveur local (localhost).${C.reset}`);
-      console.log(`  ${C.gray}Pour utiliser ${provider} en mode cloud payant, saisissez la base URL fournie.${C.reset}`);
+      console.log(`  ${C.gray}Pour utiliser ${provider} en mode cloud payant, saisissez l'URL fournie par le service.${C.reset}`);
+      if (provider === 'ollama') {
+        console.log(`  ${C.gray}Ollama CLOUD (ollama.com) : https://ollama.com/v1${C.reset}`);
+      } else {
+        console.log(`  ${C.gray}Exemple : http://<host>:<port>/v1${C.reset}`);
+      }
+      console.log(`  ${C.gray}La fin /chat/completions est ajoutée automatiquement si absente.${C.reset}`);
       const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
       rl.question(`  ${C.cyan}Endpoint (vide = local par defaut) :${C.reset} `, answer => {
         rl.close();
@@ -612,6 +619,24 @@ async function main() {
   const models = await selectModelsInteractive(opts.models);
   const profile = await selectProfileInteractive(opts.profile, models);
 
+  // Garde-fou endpoint vs clé (tâche 2026-09-29) : une clé mémorisée pour
+  // ollama/lmstudio SANS endpoint explicite retombe sur localhost — en mode
+  // cloud payant c'est une config incomplète qui échoue en ECONNREFUSED ou
+  // 401/405 au ping. On alerte AVANT de lancer la file (le run des modèles
+  // suivants ne doit pas tourner à vide toute la nuit).
+  if (!endpoint && apiKey && (provider === 'ollama' || provider === 'lmstudio') && !opts.yes && process.stdin.isTTY && process.stdout.isTTY) {
+    console.log(`\n  ${C.yellow}⚠ ATTENTION : une clé API ${provider.toUpperCase()} est fournie mais AUCUN endpoint.${C.reset}`);
+    console.log(`  ${C.yellow}Sans --endpoint=, le benchmark appelle le serveur LOCAL (localhost) — la clé cloud ne servira à rien.${C.reset}`);
+    const localConfirm = await askYesNoLocal(`  C'est bien le mode LOCAL voulu (clé ignorée) ?`, false);
+    if (!localConfirm) {
+      console.log(`  ${C.gray}Relancez avec : --endpoint=<URL cloud>${C.reset}`);
+      process.exit(1);
+    }
+  }
+  if (endpoint) {
+    console.log(`  ${C.gray}Endpoint : ${endpoint}${C.reset}`);
+  }
+
   // --- Résolution tolérante des slugs (OpenRouter + Kilo Gateway) ---
   // L'utilisateur peut saisir un nom familier ("gpt-4o", "nemotron 3.5 lightning")
   // au lieu du slug exact ("openai/gpt-4o", "nvidia/nemotron-3.5-lightning:free").
@@ -620,8 +645,15 @@ async function main() {
   // On résout chaque slug avant de lancer le batch : exact → alias → préfixe →
   // sous-chaîne. Si ambigu ou introuvable, on propose des suggestions.
   // OpenRouter et Kilo Gateway partagent le même format de slug (provider/model).
-  if (provider === 'openrouter' || provider === 'kilo') {
-    const resolver = provider === 'openrouter' ? resolveOpenRouterSlug : resolveKiloSlug;
+  // Ollama CLOUD (endpoint explicite) : ids SANS préfixe provider et AVEC
+  // suffixe de taille (nemotron-3-nano:30b). Résolu via /v1/models public
+  // (tâche 2026-09-29 : "nemotron-3-nano" → 404, slug réel "nemotron-3-nano:30b").
+  // En LOCAL (pas d'endpoint), les noms de GGUF ne résolvent PAS — comportement
+  // historique inchangé.
+  const ollamaCloudResolvable = provider === 'ollama' && Boolean(endpoint);
+  if (provider === 'openrouter' || provider === 'kilo' || ollamaCloudResolvable) {
+    const resolver = provider === 'openrouter' ? resolveOpenRouterSlug
+      : (provider === 'kilo' ? resolveKiloSlug : resolveOllamaCloudSlug);
     const resolvedModels = [];
     const nonInteractive = opts.yes || !process.stdin.isTTY || !process.stdout.isTTY;
     for (let i = 0; i < models.length; i++) {

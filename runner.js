@@ -60,7 +60,7 @@ const scoringUtils = require('./scoring-utils');
 const { isRattrapageEligibleProfile, shouldReplaceBestResult, explainTechnicalError, getClassName } = scoringUtils;
 const hybridMode = require('./hybrid-mode');
 const { exportCsv: exportRunsCsv, detectUnstableModels } = scoreLedger;
-const { resolveOpenRouterSlug, resolveKiloSlug } = require('./model-resolver');
+const { resolveOpenRouterSlug, resolveKiloSlug, resolveOllamaCloudSlug } = require('./model-resolver');
 const archWarning = require('./arch-warning');
 const { runSubmitAction } = require('./submit-action');
 const runcodeQueue = require('./runcode-queue');
@@ -1986,27 +1986,37 @@ async function main() {
     // (alias, préfixe, sous-chaîne) pour éviter un HTTP 400 sur tous les appels.
     // Non bloquant si offline (on garde le slug tel quel).
     // OpenRouter et Kilo Gateway partagent le même format de slug (provider/model).
-    if (resolvedProvider === 'openrouter' || resolvedProvider === 'kilo') {
-      const resolver = resolvedProvider === 'openrouter' ? resolveOpenRouterSlug : resolveKiloSlug;
+    // Ollama CLOUD (endpoint explicite) : ids sans préfixe + suffixe de taille
+    // (nemotron-3-nano:30b) — résolu via /v1/models public (tâche 2026-09-29).
+    const ollamaCloudResolvable = resolvedProvider === 'ollama' && Boolean(resolvedEndpoint);
+    if (resolvedProvider === 'openrouter' || resolvedProvider === 'kilo' || ollamaCloudResolvable) {
+      const resolver = resolvedProvider === 'openrouter' ? resolveOpenRouterSlug
+        : (resolvedProvider === 'kilo' ? resolveKiloSlug : resolveOllamaCloudSlug);
+      const resolverLabel = resolvedProvider === 'openrouter' ? 'openrouter'
+        : (resolvedProvider === 'kilo' ? 'kilo' : 'ollama cloud');
       try {
         const r = await resolver(resolvedCloudModel);
         if (r.offline) {
-          logger.info(`Résolution slug ${resolvedProvider} : offline, slug gardé tel quel (${resolvedCloudModel}).`);
+          logger.info(`Résolution slug ${resolverLabel} : offline, slug gardé tel quel (${resolvedCloudModel}).`);
         } else if (r.resolved && r.slug !== resolvedCloudModel) {
-          logger.info(`Résolution slug ${resolvedProvider} : "${resolvedCloudModel}" -> "${r.slug}" (${r.matchedBy}).`);
-          console.log(`  \x1b[90mRésolution slug  : "${resolvedCloudModel}" -> "${r.slug}" (${r.matchedBy})\x1b[0m`);
+          logger.info(`Résolution slug ${resolverLabel} : "${resolvedCloudModel}" -> "${r.slug}" (${r.matchedBy}).`);
+          console.log(`  \x1b[90mRésolution slug  : "${resolvedCloudModel}" -> "${r.slug}" (${r.matchedBy} via ${resolverLabel})\x1b[0m`);
           resolvedCloudModel = r.slug;
+          // Synchronise le providerConfig DÉJÀ construit (const ligne ~1636,
+          // capturait l'ancien slug) — sinon le pre-flight (PING) appelle le
+          // slug NON résolu et meurt en HTTP 404 (bug 2026-09-29).
+          if (providerConfig) providerConfig.model = r.slug;
         } else if (!r.resolved) {
           // Slug non reconnu ET non résolu : on avertit mais on laisse passer
           // (l'erreur HTTP 400 fatale arrêtera net le run au 1er appel).
-          console.log(`  \x1b[33m⚠ Slug ${resolvedProvider} non reconnu : "${resolvedCloudModel}".\x1b[0m`);
+          console.log(`  \x1b[33m⚠ Slug ${resolverLabel} non reconnu : "${resolvedCloudModel}".\x1b[0m`);
           if (r.suggestions && r.suggestions.length > 0) {
             console.log(`  \x1b[90mSuggestions proches : ${r.suggestions.slice(0, 5).join(', ')}\x1b[0m`);
           }
           console.log(`  \x1b[90mLe run va démarrer mais s'arrêtera si le slug est invalide (HTTP 400).\x1b[0m`);
         }
       } catch (resolveErr) {
-        logger.warn(`Résolution slug ${resolvedProvider} échouée : ${resolveErr.message}. Slug gardé tel quel.`);
+        logger.warn(`Résolution slug ${resolverLabel} échouée : ${resolveErr.message}. Slug gardé tel quel.`);
       }
     }
     // --- Normalisation des modèles :batch asynchrones ---
@@ -2022,6 +2032,11 @@ async function main() {
     console.log(`  Mode              : \x1b[1;35mCLOUD\x1b[0m`);
     console.log(`  Fournisseur       : \x1b[1;35m${resolvedProvider.toUpperCase()}\x1b[0m`);
     console.log(`  Modèle            : \x1b[1;35m${resolvedCloudModel}\x1b[0m`);
+    if (resolvedEndpoint) {
+      // Transparence endpoint (tâche 2026-09-29) : un 405/401 au ping est
+      // indissociable de l'URL appelée — l'afficher dès la bannière.
+      console.log(`  Endpoint          : ${resolvedEndpoint}`);
+    }
     if (resolvedApiKey) {
       // Affichage masqué systématique — plus jamais la clé en clair dans le CLI.
       const source = secrets.isCliProvided(resolvedProvider) ? 'argument CLI' : 'session / .api-keys.json';
@@ -2260,6 +2275,8 @@ async function main() {
     let batchModelError = false;
     let loadFailure = false;
     let loadFailureDetail = null;
+    let methodNotAllowedError = false;
+    let methodNotAllowedDetail = null;
     const MAX_PING_ATTEMPTS = 3;
     // 90s par tentative (demande utilisateur 2026-09-18) : les 30s historiques
     // coupaient des modèles lents qui répondaient correctement en 40-60s
@@ -2315,6 +2332,15 @@ async function main() {
           loadFailureDetail = pingErr.message;
           break;
         }
+        // E405 "Method Not Allowed" (tâche 2026-09-29) : l'endpoint ne
+        // reconnaît pas le POST /chat/completions — base URL mal formée ou
+        // mauvais chemin. Définitif — un endpoint n'accepte jamais le POST
+        // « par hasard ». Arrêt immédiat avec diagnostic dédié.
+        if (pingErr.isMethodNotAllowedError || pingErr.code === 'E405_ENDPOINT_NOT_CHAT' || /HTTP_405/.test(pingErr.message || '')) {
+          methodNotAllowedError = true;
+          methodNotAllowedDetail = pingErr.message;
+          break;
+        }
       }
       if (!pingOk && !batchModelError && pingAttempts < MAX_PING_ATTEMPTS) {
         console.log(`  \x1b[33mTentative ${pingAttempts} échouée — nouvelle tentative dans 3s...\x1b[0m`);
@@ -2323,9 +2349,18 @@ async function main() {
     }
 
     if (!pingOk) {
-      pingSpinner.fail(`Vérification : ${batchModelError ? 'modèle réservé à l\'API Batch asynchrone' : (loadFailure ? 'modèle non chargeable par LM Studio' : `${MAX_PING_ATTEMPTS} tentatives échouées — le modèle ne répond pas`)}`);
-      console.log(`\n  \x1b[31m━━━ ARRÊT : le modèle "${resolvedCloudModel}" ne répond pas (${batchModelError ? 'modèle Batch asynchrone' : (loadFailure ? 'échec de chargement' : `${MAX_PING_ATTEMPTS} tentatives`)}).\x1b[0m`);
-      if (batchModelError) {
+      pingSpinner.fail(`Vérification : ${batchModelError ? 'modèle réservé à l\'API Batch asynchrone' : (loadFailure ? 'modèle non chargeable par LM Studio' : (methodNotAllowedError ? 'endpoint invalide (POST refusé)' : `${MAX_PING_ATTEMPTS} tentatives échouées — le modèle ne répond pas`))}`);
+      console.log(`\n  \x1b[31m━━━ ARRÊT : le modèle "${resolvedCloudModel}" ne répond pas (${batchModelError ? 'modèle Batch asynchrone' : (loadFailure ? 'échec de chargement' : (methodNotAllowedError ? 'endpoint invalide' : `${MAX_PING_ATTEMPTS} tentatives`))}).\x1b[0m`);
+      if (methodNotAllowedError) {
+        const pingEndpoint = providerConfig && providerConfig.endpoint;
+        console.log(`  \x1b[33mDiagnostic : ENDPOINT INVALIDE (HTTP 405 « Method Not Allowed »).\x1b[0m`);
+        console.log(`  \x1b[90m  • Le POST /chat/completions est REFUSÉ par ${pingEndpoint || "l'URL par défaut du provider"}.\x1b[0m`);
+        console.log(`  \x1b[90m  • Cause typique : base URL incomplète (ex: "https://ollama.com/v1" au lieu de "https://ollama.com/v1/chat/completions"),\x1b[0m`);
+        console.log(`  \x1b[90m    ou endpoint qui n'est pas un serveur OpenAI-compatible.\x1b[0m`);
+        console.log(`  \x1b[90m  • Solution : relancez avec --endpoint=<URL complète, finissant par /chat/completions>.\x1b[0m`);
+        console.log(`  \x1b[90m  • Ollama CLOUD (clé mémorisée) : --provider=ollama --endpoint=https://ollama.com/v1 --api-key=<clé>.\x1b[0m`);
+        console.log(`  \x1b[90m  • Ollama LOCAL : vérifiez que le serveur tourne (ollama serve / app Ollama ouverte, port 11434).\x1b[0m`);
+      } else if (batchModelError) {
         console.log(`  \x1b[33mDiagnostic : MODÈLE BATCH ASYNCHRONE DÉTECTÉ (HTTP 404 « Batch-Only Endpoints »).\x1b[0m`);
         console.log(`  \x1b[90m  • Le modèle "${resolvedCloudModel}" est réservé à l'API asynchrone OpenRouter (/api/beta/batches).\x1b[0m`);
         console.log(`  \x1b[90m  • BenchGo fonctionne en temps réel (/v1/chat/completions) et ne peut pas interroger cet endpoint.\x1b[0m`);
@@ -2361,16 +2396,18 @@ async function main() {
         console.log(`  \x1b[90m  • Quota gratuit épuisé / clé API invalide\x1b[0m`);
         console.log(`  \x1b[90mAstuce : réessayez plus tard, utilisez un autre modèle, ou ajoutez votre propre clé provider (BYOK).\x1b[0m\n`);
       }
-      if (keyLimitExceeded || batchModelError || loadFailure) console.log('');
-      logger.error(`Pre-flight check : arrêt — modèle indisponible${batchModelError ? ' (modèle Batch asynchrone)' : (keyLimitExceeded ? ' (limite de clé OpenRouter atteinte — modèle payant)' : (loadFailure ? ' (échec de chargement LM Studio)' : ''))}.`);
-      const errCode = batchModelError ? 'E404_BATCH_ONLY_MODEL' : (keyLimitExceeded ? 'E506_KEY_LIMIT_EXCEEDED' : (loadFailure ? 'E507_LM_LOAD_FAILED' : 'E505_MODEL_UNRESPONSIVE'));
+      if (keyLimitExceeded || batchModelError || loadFailure || methodNotAllowedError) console.log('');
+      logger.error(`Pre-flight check : arrêt — modèle indisponible${batchModelError ? ' (modèle Batch asynchrone)' : (keyLimitExceeded ? ' (limite de clé OpenRouter atteinte — modèle payant)' : (loadFailure ? ' (échec de chargement LM Studio)' : (methodNotAllowedError ? ' (endpoint invalide — POST refusé, HTTP 405)' : '')))}.`);
+      const errCode = batchModelError ? 'E404_BATCH_ONLY_MODEL' : (keyLimitExceeded ? 'E506_KEY_LIMIT_EXCEEDED' : (loadFailure ? 'E507_LM_LOAD_FAILED' : (methodNotAllowedError ? 'E405_ENDPOINT_NOT_CHAT' : 'E505_MODEL_UNRESPONSIVE')));
       const errDetail = batchModelError
         ? `Le modèle "${resolvedCloudModel}" est réservé à l'API Batch asynchrone OpenRouter — utilisez la version temps réel sans ":batch" (${resolvedCloudModel.replace(/:batch$/i, '')})`
         : (keyLimitExceeded
           ? `Le modèle "${resolvedCloudModel}" ne répond pas — limite de dépense de la clé OpenRouter atteinte (modèle payant, clé limitée à 0$)`
           : (loadFailure
             ? `Le modèle "${resolvedCloudModel}" ne peut pas être chargé par LM Studio (architecture GGUF non supportée par le runtime llama.cpp actuel)${loadFailureDetail ? ' — ' + loadFailureDetail : ''}`
-            : `Le modèle "${resolvedCloudModel}" ne répond pas (${MAX_PING_ATTEMPTS} tentatives) — probablement rate-limité upstream ou indisponible`));
+            : (methodNotAllowedError
+              ? `L'endpoint (HTTP 405 « Method Not Allowed ») refuse le POST /chat/completions${methodNotAllowedDetail ? ' — ' + methodNotAllowedDetail : ''} — vérifiez --endpoint=<URL complète finissant par /chat/completions>, ou démarrez le serveur local (ollama serve / LM Studio server).`
+              : `Le modèle "${resolvedCloudModel}" ne répond pas (${MAX_PING_ATTEMPTS} tentatives) — probablement rate-limité upstream ou indisponible`)));
       throw new BenchgoError(errCode, errDetail);
     }
     console.log('');

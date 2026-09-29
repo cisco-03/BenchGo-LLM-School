@@ -1,5 +1,48 @@
 # CHANGELOG - Carnet de Notes BenchGo
 
+## 2026-09-29 — fix(cloud) : endpoint ollama cloud 405 + résolution slugs ollama + diagnostics pre-flight
+
+### Contexte & problème rencontré
+Deux runs FRONTIER (`nemotron-3-nano`, `deepseek-v4.1-flash` via provider=ollama, logs `benchgo_2026-09-29T13-00` / `13-02`) s'arrêtaient au pre-flight avec le faux diagnostic « E505 rate-limité upstream » alors que les 3 pings recevaient **HTTP 405 « Method Not Allowed »** en ~140 ms. Cascade de cause racine :
+1. **Endpoint non normalisé** : `frontier-batch.js` demande une « base URL » pour ollama cloud (l'utilisateur colle `https://ollama.com/v1`, format des docs Ollama Cloud), mais `cloud-client.js` POSTait l'URL verbatim → POST sur `/v1` → 405 (le serveur refuse le POST hors du chemin chat). Même mécanique : `.../v1/chat` (fin sans `/completions`) aurait donné le même 405.
+2. **Clé cloud + endpoint local par défaut** : `.api-keys.json` contient une clé **Ollama Cloud** mémorisée pour le provider `ollama`, mais sans `--endpoint=` la config retombe silencieusement sur `http://localhost:11434` (serveur local). Contradiction cloud/local jamais signalée.
+3. **Slug ollama non résolu** : les ids ollama cloud portent un suffixe de taille (`nemotron-3-nano:30b`) — la saisie courte renvoyait **HTTP 404 « model not found »** après le fix 405 (vérifié en live sur `https://ollama.com/v1/models`). La résolution de slug ne couvrait que openrouter/kilo.
+4. **providerConfig figé** : `providerConfig` (const, runner.js) capturait le slug AVANT la résolution → le ping appelait le slug non résolu même après résolution réussie (constaté au run 13:18 : résolution loggée mais ping en 404 sur `nemotron-3-nano`).
+5. **Diagnostics noyés** : le pre-flight (runner.js) avalait l'erreur réelle (405/401/ECONNREFUSED) derrière un générique E505 « probablement rate-limité upstream » — l'utilisateur ne pouvait pas voir que c'était un problème d'ENDPOINT.
+
+### Corrections
+- `cloud-client.js` :
+  - **`normalizeCompletionsUrl()`** (nouvelle, exportée) : complète l'URL — `https://host/v1` → `.../v1/chat/completions`, `.../v1/chat` → complété sans doublon, slashs finaux tronqués. Les URL déjà complètes (`/chat/completions`, Anthropic `/messages`) restent INCHANGÉES. Testée unitairement (`tests/test-cloud-client-endpoint.js`, 8 cas).
+  - **HTTP 405 fatal** (`isMethodNotAllowedError`, code `E405_ENDPOINT_NOT_CHAT`) : un endpoint qui refuse POST ne le fera jamais autrement — arrêt immédiat du pre-flight (break, pas de retry inutile), diagnostic dédié.
+  - **Avertissement clé-cloud-sans-endpoint** : provider ollama/lmstudio + clé API + URL par défaut locale → WARN au premier appel (clé cloud inutile sur localhost).
+- `runner.js` (pre-flight) :
+  - Détection 405 → break immédiat + diagnostic complet (cause typique = base URL incomplète ; exemples pour Ollama cloud `https://ollama.com/v1` et local `ollama serve`). Code `E405_ENDPOINT_NOT_CHAT` au lieu du faux E505.
+  - **Résolution slug appliquée AUSSI à Ollama CLOUD** (`--endpoint=` explicite) via le nouveau `resolveOllamaCloudSlug`. Le providerConfig déjà construit est resynchronisé (`providerConfig.model = r.slug`) — le PING appelle le slug résolu.
+  - **Affichage Endpoint** dans la bannière CONFIG (`Endpoint : https://...`) : un 405 est indissociable de l'URL appelée.
+- `model-resolver.js` :
+  - **`resolveOllamaCloudSlug()`** + `getOllamaModelIds()` : endpoint public `https://ollama.com/v1/models` (format OpenAI `{ data: [...] }`), cache disque `.ollama-models-cache.json` (TTL 24h, indépendant d'OpenRouter/Kilo). Réutilise `_matchSlug` (exact → préfixe → sous-chaîne ; ex vérifié : `nemotron-3-nano` → `nemotron-3-nano:30b` par préfixe).
+- `frontier-batch.js` :
+  - **Aide endpoint ollama** affiche l'exemple correct (`https://ollama.com/v1`) + précise la complétion automatique de `/chat/completions`.
+  - **Garde-fou interactif** : clé mémorisée ollama/lmstudio SANS endpoint → confirmation « c'est bien le mode LOCAL ? » (évitait des nuits entières de runs locaux ratés avec une clé cloud).
+  - **Résolution slugs activée pour ollama cloud** (endpoint détecté uniquement — le mode LOCAL reste hors résolution).
+- Vérifications passées : `node --check` (runner.js, cloud-client.js, frontier-batch.js, model-resolver.js), `node tests/run-tests.js` (55/55), dry-run FRONTIER valide, ping réel `nemotron-3-nano:30b` OK via `https://ollama.com/v1/chat/completions` (réponse « OK »), run complet réel FRONTIER `nemotron-3-nano` : pre-flight OK, capacité OK, Tier 0 réussi (41/41 points), enchaînement Tier 1+.
+
+### Pour modifier
+1. **Ajouter un provider à la normalisation d'URL** : la complétion s'applique à TOUT endpoint sans `/chat/completions|messages` final (`normalizeCompletionsUrl` cloud-client.js). Pour UN endpoint qui NE doit PAS être complété (ex: route custom non-OpenAI), saisir l'URL complète finissant par `/chat/completions`.
+2. **Ajouter un resolver cloud** : dupliquer le bloc Ollama Cloud de `model-resolver.js` (URL publique + cache disque séparé + wrapper `resolveXxxSlug`), puis le brancher dans frontier-batch.js (condition + resolver ternaire) et runner.js (idem) — ne JAMAIS résoudre les providers LOCAUX (noms de GGUF).
+3. **Désactiver le garde-fou clé-sans-endpoint** : retirer le bloc `if (!endpoint && apiKey && ...)` dans frontier-batch.js (main).
+4. **Changer le diagnostic 405** : bloc `methodNotAllowedError` dans le pre-flight (runner.js ~l.2330) + `E405_ENDPOINT_NOT_CHAT` dans cloud-client.js.
+5. **Tester** : `node runner.js all --force --provider=ollama --model=nemotron-3-nano --profile=FRONTIER --endpoint=https://ollama.com/v1 --dry-run` (bannière + Endpoint affiché), puis sans `--dry-run` (ping réel). Diagnostic 405 : retirer `--endpoint` avec un serveur local éteint → ECONNREFUSED ; avec un endpoint non-chat → E405_ENDPOINT_NOT_CHAT.
+
+### Pièges
+- **HTTP 405 ≠ rate-limit** : un 405 systématique en <1s = endpoint mal formé (base URL sans `/chat/completions`) ou serveur qui reflete POST sur ce chemin. Aucun retry ne le guérit.
+- La complétion d'URL s'applique AUSSI aux URLs déjà correctes : elle est idempotente (une URL complète est renvoyée telle quelle).
+- Ollama Cloud exige le suffixe de taille sur CERTAINS modèles (`:30b`, `:675b`...) mais pas tous (`deepseek-v4.1-flash`, `kimi-k2.6` n'en ont pas) : toujours passer par la résolution, ne jamais construire le suffixe à la main.
+- `providerConfig` est une `const` construite AVANT la résolution : TOUTE future mutation de `resolvedCloudModel` doit être doublée d'un `providerConfig.model = ...` sinon les prochains appels gardent l'ancien slug (bug 13:18 : résolution loggée, ping en 404 quand même).
+- Le SSE d'ollama.com met le raisonnement dans `delta.reasoning` (comme OpenRouter) : déjà collecté par `streamOpenAICompatResponse` — un budget max_tokens trop petit (64) peut néanmoins être consommé intégralement par la délibération (réponse vide) ; le pre-flight utilise 512 (suffisant, vérifié).
+- `classement_snapshot.json` dans `.carnet/` : carnets utilitaires sans champ `ecoles` — ne pas les prendre comme carnets de modèles lors d'un scan.
+- La clé ollama cloud mémorisée dans `.api-keys.json` rend l'avertissement « clé cloud sans endpoint » CRUCIAL : sans lui, un run nocturne local (localhost:11434) part avec une clé cloud (ECONNREFUSED si le daemon est éteint, 401/405 sinon).
+
 ## 2026-09-20c — fix(cloud) : garde-fous anti-boucle du streaming (inactivité 90s + plafonds)
 
 ### Contexte & problème rencontré

@@ -698,6 +698,35 @@ Si modèle > 3B paramètres, le runner peut enchaîner LIGHT puis STANDARD dans 
 - Le cache disque Kilo (`.kilo-pricing-cache.json`, `.kilo-models-cache.json`) est distinct du cache OpenRouter (`.pricing-cache.json`) pour ne pas mélanger les listes/prix.
 - Kilo Gateway propose des modèles `kilo-auto/*` (frontier, efficient, free, small) qui routent automatiquement vers un modèle sous-jacent — le modèle résolu peut changer côté serveur sans préavis.
 
+### Endpoint ollama cloud HTTP 405 + résolution slugs ollama + diagnostics pre-flight (tâche 2026-09-29)
+
+**Fichiers touchés :** `cloud-client.js`, `runner.js`, `frontier-batch.js`, `model-resolver.js`, `tests/test-cloud-client-endpoint.js` (nouveau), `Docs/CHANGELOG.md`, `AGENTS.md`.
+
+**Principe :** Deux runs FRONTIER via `provider=ollama` (`nemotron-3-nano`, `deepseek-v4.1-flash`, logs 2026-09-29T13-00/13-02) échouaient au pre-flight avec le faux diagnostic E505 « rate-limité upstream » alors que les pings recevaient **HTTP 405 « Method Not Allowed »** en ~140 ms. Cinq causes cumulées corrigées : (1) base URL collée verbatim sans `/chat/completions` → POST sur `/v1` → 405 ; (2) clé Ollama **Cloud** mémorisée + endpoint **local** par défaut (contradiction jamais signalée) ; (3) slugs ollama cloud non résolus (suffixe de taille `:30b` requis, ex `nemotron-3-nano:30b`) ; (4) `providerConfig` construit AVANT la résolution → le ping appelait le slug non résolu ; (5) diagnostics 405/401 avalés derrière le générique E505.
+
+**Fonctions :**
+- `normalizeCompletionsUrl(rawUrl)` (dans `cloud-client.js`, exportée) → complète l'URL : `https://host/v1` → `.../v1/chat/completions`, `.../v1/chat` → complété sans doublon, slashs tronqués. Idempotente : `/chat/completions` et Anthropic `/messages` restent inchangés.
+- `resolveOllamaCloudSlug(input)` / `getOllamaModelIds()` / `fetchOllamaModels()` (dans `model-resolver.js`) → endpoint public `https://ollama.com/v1/models`, cache disque `.ollama-models-cache.json` (TTL 24h). Réutilise `_matchSlug`.
+- Diagnostic `E405_ENDPOINT_NOT_CHAT` (flag `isMethodNotAllowedError` cloud-client.js) → break immédiat au pre-flight (runner.js) + diagnostic dédié au lieu du faux E505.
+- Resynchronisation `providerConfig.model = r.slug` après résolution (runner.js) — le PING appelle le slug résolu.
+- Affichage `Endpoint : ...` dans la bannière CONFIG du runner.
+- Garde-fou interactive frontier-batch : clé ollama/lmstudio mémorisée sans endpoint → confirmation « mode LOCAL voulu ? ».
+
+**Pour modifier :**
+1. **Ajouter un resolver cloud** : dupliquer le bloc Ollama Cloud dans `model-resolver.js` (URL publique + cache séparé + wrapper), le brancher dans frontier-batch.js (condition + ternaire resolver) et runner.js (idem). Ne JAMAIS résoudre les providers LOCAUX.
+2. **Désactiver la normalisation d'URL** : remplacer `normalizeCompletionsUrl(rawEndpoint)` par `rawEndpoint` tel quel (retour au 405 — déconseillé).
+3. **Changer le diagnostic 405** : bloc `methodNotAllowedError` du pre-flight (runner.js) + throw `E405_ENDPOINT_NOT_CHAT` (cloud-client.js).
+4. **Désactiver le garde-fou clé-sans-endpoint** : retirer le bloc `if (!endpoint && apiKey && ...)` de `main()` dans frontier-batch.js.
+5. **Tester** : `node runner.js all --force --provider=ollama --model=nemotron-3-nano --profile=FRONTIER --endpoint=https://ollama.com/v1 --dry-run` (Endpoint affiché), puis `node tests/run-tests.js` (8 cas endpoint).
+
+**Pièges :**
+- HTTP 405 systématique <1s = endpoint mal formé ou serveur refusant POST sur ce chemin — AUCUN retry ne le guérit (le 405 est fatal, break sans retry).
+- Ollama Cloud : certains slugs exigent un suffixe de taille (`:30b`, `:675b`), pas tous (`deepseek-v4.1-flash`, `kimi-k2.6` n'en ont pas). Toujours passer par la résolution, jamais construire le suffixe à la main.
+- `providerConfig` (const dans runner.js) est capturé AVANT la résolution : TOUTE future mutation de `resolvedCloudModel` doit être doublée d'un `providerConfig.model = ...` sinon le ping garde l'ancien slug (bug : résolution loggée, ping en 404 quand même au run 13:18).
+- Le SSE ollama.com expose le raisonnement dans `delta.reasoning` (comme OpenRouter) : un `max_tokens` trop petit (64) peut être consommé ENTIEREMENT par la délibération → réponse vide. Le pre-flight utilise 512 (vérifié suffisant).
+- La clé ollama cloud dans `.api-keys.json` + le défaut local `localhost:11434` = configuration contradictoire : le garde-fou avant la file est indispensable pour ne pas perdre une nuit entière.
+- La liste publique ollama.com `/v1/models` répond sans auth ; le POST `/v1/chat/completions` exige la clé.
+
 ### Test de capacité OUI/NON en remplacement de l'auto-profilage (tâche 2026-08-26)
 
 **Fichiers touchés :** `capability-check.js` (nouveau), `runner.js`, `Docs/CHANGELOG.md`, `AGENTS.md`.

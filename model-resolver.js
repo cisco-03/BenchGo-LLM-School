@@ -527,12 +527,123 @@ async function resolveKiloSlug(input) {
   return _matchSlug(raw, ids, _kiloCache);
 }
 
+// === Ollama Cloud (ollama.com) ===
+// Endpoint public /v1/models (format OpenAI : { data: [...] }, champ id).
+// Les slugs ollama cloud portent parfois un suffixe de TAILLE (ex:
+// "nemotron-3-nano:30b", "gpt-oss:20b", "mistral-large-3:675b") — la saisie
+// courte ("nemotron-3-nano") doit résoudre vers le slug réel, sinon le ping
+// renvoie HTTP 404 "model not found" (constaté en live 2026-09-29).
+// Pas de / dans les ids ollama : _matchSlug marche tel quel, mais le matching
+// par SUFFIXE (sans /) est ici la stratégie principale. Un matching ambigu
+// (ex: "k2" matchant plusieurs tailles) renvoie des suggestions.
+const OLLAMA_CLOUD_MODELS_URL = 'https://ollama.com/v1/models';
+const OLLAMA_CACHE_FILE = path.join(__dirname, '.ollama-models-cache.json');
+
+let _ollamaCache = null;    // Set des ids (lowercase)
+let _ollamaList = null;     // Tableau [{ id }]
+let _ollamaLoadedAt = 0;
+
+function loadOllamaDiskCache() {
+  try {
+    if (!fs.existsSync(OLLAMA_CACHE_FILE)) return null;
+    const raw = fs.readFileSync(OLLAMA_CACHE_FILE, 'utf8');
+    const arr = JSON.parse(raw);
+    if (Array.isArray(arr)) return arr;
+    if (arr && Array.isArray(arr.ids)) return arr.ids;
+  } catch (_) { /* cache corrompu */ }
+  return null;
+}
+
+async function fetchOllamaModels() {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 15000);
+  try {
+    const res = await fetch(OLLAMA_CLOUD_MODELS_URL, {
+      method: 'GET',
+      headers: { 'Content-Type': 'application/json' },
+      signal: controller.signal
+    });
+    clearTimeout(timeoutId);
+    if (!res.ok) {
+      logger.warn('model-resolver: Ollama Cloud /models HTTP_' + res.status);
+      return null;
+    }
+    const data = await res.json();
+    const all = Array.isArray(data?.data) ? data.data : [];
+    const ids = [];
+    for (const m of all) {
+      if (m && m.id) ids.push(m.id);
+    }
+    try {
+      const cachePayload = { savedAt: Date.now(), ids };
+      fs.writeFileSync(OLLAMA_CACHE_FILE, JSON.stringify(cachePayload, null, 2) + '\n', 'utf8');
+    } catch (_) { /* disque non inscriptible */ }
+    logger.info('model-resolver: ' + ids.length + ' modèles chargés depuis Ollama Cloud.');
+    return ids;
+  } catch (e) {
+    clearTimeout(timeoutId);
+    logger.warn('model-resolver: impossible de contacter Ollama Cloud — ' + e.message);
+    return null;
+  }
+}
+
+async function getOllamaModelIds() {
+  if (_ollamaCache && (Date.now() - _ollamaLoadedAt) < CACHE_TTL_MS) {
+    return _ollamaList.slice();
+  }
+  const diskIds = loadOllamaDiskCache();
+  if (diskIds && diskIds.length > 0) {
+    _ollamaList = diskIds;
+    _ollamaCache = new Set(diskIds.map(id => id.toLowerCase()));
+    _ollamaLoadedAt = Date.now();
+    try {
+      const stat = fs.statSync(OLLAMA_CACHE_FILE);
+      if (Date.now() - stat.mtimeMs >= CACHE_TTL_MS) {
+        fetchOllamaModels().then(fresh => {
+          if (fresh && fresh.length > 0) {
+            _ollamaList = fresh;
+            _ollamaCache = new Set(fresh.map(id => id.toLowerCase()));
+            _ollamaLoadedAt = Date.now();
+          }
+        }).catch(() => {});
+      }
+    } catch (_) {}
+    return _ollamaList.slice();
+  }
+  const fresh = await fetchOllamaModels();
+  if (fresh && fresh.length > 0) {
+    _ollamaList = fresh;
+    _ollamaCache = new Set(fresh.map(id => id.toLowerCase()));
+    _ollamaLoadedAt = Date.now();
+    return fresh.slice();
+  }
+  return [];
+}
+
+// Résout un slug saisi vers un slug canonique Ollama Cloud (ollama.com).
+// Pour NE PAS casser le mode LOCAL ollama (noms de GGUF locaux, sans endpoint
+// cloud), la résolution n'est appelée QUE par frontier-batch/runner quand un
+// ENDPOINT CLOUD explicite est configuré.
+async function resolveOllamaCloudSlug(input) {
+  if (!input || !String(input).trim()) {
+    return { resolved: false, slug: null, suggestions: [], matchedBy: 'empty' };
+  }
+  const raw = String(input).trim();
+  const ids = await getOllamaModelIds();
+  if (ids.length === 0) {
+    return { offline: true, slug: raw, suggestions: [], matchedBy: 'offline' };
+  }
+  return _matchSlug(raw, ids, _ollamaCache);
+}
+
 module.exports = {
   resolveOpenRouterSlug,
   resolveKiloSlug,
+  resolveOllamaCloudSlug,
   isOpenRouterExactSlug,
   getOpenRouterModelIds,
   getKiloModelIds,
+  getOllamaModelIds,
   normalizeSlug,
   COMMON_ALIASES,
   _matchSlug

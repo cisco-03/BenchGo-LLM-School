@@ -46,6 +46,24 @@ const CLOUD_STREAM_IDLE_TIMEOUT_MS = 90000;
 const CLOUD_REASONING_MAX_CHARS = 60000;
 const CLOUD_CONTENT_MAX_CHARS = 120000;
 
+// Normalisation d'endpoint (tâche 2026-09-29). Retourne une URL complète de
+// chat/completions :
+//   http(s)://host/v1                      → http(s)://host/v1/chat/completions
+//   http(s)://host/v1/chat                 → http(s)://host/v1/chat/completions
+//   http(s)://host/api/gateway             → .../api/gateway/chat/completions (Kilo)
+//   toute URL finissant par /chat/completions ou /messages → inchangée
+// Cas déclencheur : base URL "https://ollama.com/v1" collée verbatim depuis la
+// doc Ollama Cloud → POST sur /v1 → HTTP 405 "Method Not Allowed" (logs
+// benchgo_2026-09-29T13-00 / 13-02). La détection repose sur l'ABSENCE de
+// segment "chat/completions" ou "messages" en fin de chemin.
+function normalizeCompletionsUrl(rawUrl) {
+  if (typeof rawUrl !== 'string' || !rawUrl.trim()) return rawUrl;
+  const url = rawUrl.trim().replace(/\/+$/, '');
+  if (/\/(chat\/completions|messages)$/i.test(url)) return url;
+  if (/\/chat$/i.test(url)) return `${url}/completions`;
+  return `${url}/chat/completions`;
+}
+
 function getSystemPrompt(difficulty) {
   const welcome =
     "Vous etes un modele de langage candidat a un examen serieux organise par BenchGo V3. " +
@@ -398,11 +416,31 @@ async function queryLLM(prompt, difficulty, tierId, isMandatory, spinner, option
 
   // URL : providerConfig.endpoint (flag --endpoint=) en priorité, sinon options.endpoint
   // (compatibilité), sinon l'URL par défaut du provider.
-  const resolvedUrl = endpoint || options.endpoint || provSpec.url;
-  if (!resolvedUrl) {
+  const rawEndpoint = endpoint || options.endpoint || provSpec.url;
+  if (!rawEndpoint) {
     throw new Error(
       `Fournisseur '${provider}' nécessite --endpoint=<url>.\n  Exemple : --endpoint=http://localhost:8080/v1/chat/completions`
     );
+  }
+  // Normalisation de l'endpoint (tâche 2026-09-29) : les fournisseurs de "base
+  // URL" (Ollama Cloud https://ollama.com/v1, OpenAI SDK style, passerelles
+  // vLLM...) documentent une URL SANS /chat/completions. L'utilisateur la colle
+  // telle quelle → BenchGo POSTait la racine verbatim → HTTP 405 "Method Not
+  // Allowed" (logs 2026-09-29T13-00 / 13-02) : le serveur refuse POST / ou
+  // POST /v1. On complète l'URL : /v1 → /v1/chat/completions, .../v1/chat →
+  // .../v1/chat/completions. Une URL déjà en /chat/completions (ou /messages
+  // Anthropic, /api/gateway/chat/completions Kilo) reste INCHANGÉE.
+  const resolvedUrl = normalizeCompletionsUrl(rawEndpoint);
+  // Signal d'incohérence provider local vs mode cloud (tâche 2026-09-29) :
+  // une clé API mémorisée + endpoint par défaut LOCAL = config cloud incomplète
+  // (l'utilisateur a mémorisé une clé Ollama/LM Studio cloud mais a oublié
+  // --endpoint=). Le ping échouerait en ECONNREFUSED ou en 401/405 sur un
+  // serveur local erroné. On avertit AVANT le premier appel.
+  if (provKey === 'ollama' || provKey === 'lmstudio') {
+    const isLocalUrl = /^http:\/\/(localhost|127\.0\.0\.1|(\[::1\]))(:|$)/i.test(resolvedUrl);
+    if (!isLocalUrl && rawEndpoint === provSpec.url && apiKey) {
+      logger.warn(`${provider} : clé API fournie mais endpoint PAR DÉFAUT local (${resolvedUrl}). Si la clé est une clé CLOUD (${provKey === 'ollama' ? 'ollama.com' : 'LM Studio distant'}), ajoutez --endpoint=<base URL>.`);
+    }
   }
 
   // Clé API : optionnelle pour les serveurs locaux (ollama, lmstudio, custom).
@@ -522,11 +560,21 @@ async function queryLLM(prompt, difficulty, tierId, isMandatory, spinner, option
       const isInvalidModelId = status === 400 && /not a valid model/i.test(errorBody);
       const isInvalidModel = status === 404 && /model.*not found|does not exist|no such model/i.test(errorBody);
       const isBatchOnlyModel = status === 404 && /only available through the Batch API|Filter Batch-Only Endpoints/i.test(errorBody);
-      if (isInvalidModelId || isInvalidModel || isBatchOnlyModel) {
+      // HTTP 405 "Method Not Allowed" (tâche 2026-09-29) : le POST touche une
+      // URL qui n'accepte pas POST → endpoint mal formé (base URL collée
+      // verbatim sans /chat/completions, ou mauvais chemin). Définitif : un
+      // endpoint n'accepte JAMAIS le POST par hasard. On marque l'erreur pour
+      // que le pre-flight (runner.js) arrête net avec un diagnostic dédié au
+      // lieu du générique E505 « rate-limité upstream ».
+      const isMethodNotAllowed = status === 405;
+      if (isInvalidModelId || isInvalidModel || isBatchOnlyModel || isMethodNotAllowed) {
         const err = new Error(msg);
         err.isFatalSlugError = true;
         err.isBatchOnlyError = isBatchOnlyModel;
-        err.code = isInvalidModelId ? 'E400_INVALID_MODEL_ID' : (isBatchOnlyModel ? 'E404_BATCH_ONLY_MODEL' : 'E404_MODEL_NOT_FOUND');
+        err.isMethodNotAllowedError = isMethodNotAllowed;
+        err.code = isInvalidModelId ? 'E400_INVALID_MODEL_ID'
+          : (isBatchOnlyModel ? 'E404_BATCH_ONLY_MODEL'
+          : (isMethodNotAllowed ? 'E405_ENDPOINT_NOT_CHAT' : 'E404_MODEL_NOT_FOUND'));
         throw err;
       }
       throw new Error(msg);
@@ -652,4 +700,4 @@ async function queryLLM(prompt, difficulty, tierId, isMandatory, spinner, option
   }
 }
 
-module.exports = { queryLLM, CLOUD_PROVIDERS };
+module.exports = { queryLLM, CLOUD_PROVIDERS, normalizeCompletionsUrl };
