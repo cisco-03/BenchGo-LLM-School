@@ -1,5 +1,49 @@
 # CHANGELOG - Carnet de Notes BenchGo
 
+## 2026-10-06 — fix(leaderboard) : recherche non-filtrante — liste intégrale, surlignage et rang réel conservés
+
+### Contexte & besoin
+Demande utilisateur (`Admin/Tasks.md`) : dans le classement web local, dès qu'on tapait une recherche, la liste se réduisait aux seuls modèles correspondants — le modèle cherché se retrouvait TOUJOURS affiché « premier » (rang 1 + médaille 🥇), ce qui masquait sa vraie position au classement général et rendait la lecture des scores/contexte impossible. Comportement voulu : « la liste bouge et va chercher le modèle sans l'isoler » — classement intégral conservé, correspondance surlignée d'une couleur spéciale bien visible, rang exact affiché.
+
+### Cause racine
+La requête `q` du champ `#search` était appliquée comme un FILTRE à 3 endroits du `renderCards()` (premier passage `_preFiltered`, contexte `_originCtx`, compteurs `_originCounts`) dans les deux classements web. Une correspondance unique rendait donc une vue d'1 carte = rang « 1 » artificiel + médaille d'or fantôme.
+
+### Corrections
+- `leaderboard.js` (classement local) + `consolidate-leaderboard.js` (miroir communautaire, JS inline dupliqué) :
+  - **Recherche NON-FILTRANTE** : `q` ne retire plus aucun modèle des trois passages ci-dessus — la liste reste INTÉGRALE, les rangs affichés (et les médailles) restent ceux du classement général.
+  - **Nouveau helper `highlightName(name, q)`** : surlignage des tronçons correspondants dans le nom via `<mark class="search-mark">` (insensible à la casse, échappement esc() par fragment — anti-injection).
+  - **Carte correspondante `.search-hit`** : bordure + liseré + halo violets (`--purple`), badge `🎯 <rang>` affichant le rang RÉEL du classement affiché.
+  - **Cartes non correspondantes `.search-dim`** : atténuées (saturate/brightness via `filter`, PAS `opacity` — qui entrerait en conflit avec l'animation d'entrée `.card.visible`), réopalescence au survol.
+  - **Défilement automatique** : `scrollIntoView({behavior:'smooth', block:'center'})` vers la 1re correspondance + flash pulsant unique `.flash-once` (reflow forcé pour relancer l'animation ; désactivé sous `prefers-reduced-motion` ; classe `.visible` posée immédiatement sur la carte ciblée pour ne pas la noyer dans le fondu d'entrée).
+  - **Compteur `#resultCount`** : pendant une recherche il affiche `N résultats sur TOTAL` au lieu de `visibles/total` (qui faisait croire à un classement de N éléments) ; hors recherche, inchangé (`x/y`).
+  - **Bandeau `#emptyMsg`** : ne s'allume plus pour une recherche sans correspondance (la liste reste affichée, le compteur annonce « 0 résultat sur N ») — il reste réservé aux FILTRES (sélecteurs) ne laissant aucun modèle.
+  - **Boutons Copier/CSV/MD** : la recherche ne filtre plus non plus les exports — `copyLeaderboard()` ignore désormais `q` (le rang copié reste le classement général ; cohérence avec la demande « position exacte du classement »).
+- **Vérifications fonctionnelles** (simulation VM hors navigateur) : 45 cartes rendues pour 45 modèles (liste intégrale), 3 `.search-hit`, 42 `.search-dim`, compteur « 3 résultats sur 45 », cible `kimi-k2.7-code` trouvée à son rang réel 2 (jamais « premier » artificiel).
+
+### Fichiers touchés
+`leaderboard.js`, `consolidate-leaderboard.js`, `Logseq-BenchGo/pages/Architecture BenchGo V3.md`, `AGENTS.md`, `Memories-BenchGo/Tasks2.md`, ce CHANGELOG.
+
+### Pièges
+- Le JS inline est DUPLIQUÉ dans les deux classements : toute modification de la recherche doit être jouée deux fois (`leaderboard.js` + `consolidate-leaderboard.js`).
+- Ne PAS utiliser `opacity` pour l'atténuation `.search-dim` : `.card`/`.card.visible` gèrent l'animation d'entrée (opacity 0→1) et la surclasseraient selon l'ordre des règles.
+- La fonction imbriquée `_matchesSearch` est appelée UNIQUEMENT dans la boucle de rendu (les correspondances alimentent `_searchHits` pour le compteur et le scroll) — elle est déclarée dans `renderCards` et fermée dessus (closure `q`).
+- Le badge `🎯` et le surlignage dépendent du `q` RECHERCHE minuscule (`trim().toLowerCase()`), identique au champ filtrant historique — même vocabulaire multi-champs (model, displayName, shortName, quantization).
+- Sur le classement communautaire, les exports CSV/MD n'utilisaient déjà pas `q` — seul `copyLeaderboard()` y a été aligné.
+
+## 2026-10-06 — docs(logseq) : rédaction complète de l'architecture fonctionnelle BenchGo V3 + mémoire format Logseq outline
+
+### Contexte & besoin
+Documentation exhaustive des fonctionnalités de BenchGo V3 sous Logseq (`Logseq-BenchGo/pages/Architecture BenchGo V3.md`) selon une stratégie de diagnostic direct : l'utilisateur étant les « yeux et oreilles » de l'agent, chaque surface visible à l'écran (CLI, bannière, table, modale localhost, site GitHub Pages, RunCode Turbo, Night Batch) est reliée aux fichiers sources responsables afin de localiser immédiatement les modifications nécessaires en cas de bug.
+
+### Réalisations
+- **`Logseq-BenchGo/pages/Architecture BenchGo V3.md`** :
+  - Conservation stricte des deux tags obligatoires en première ligne (`- #Fonctions-Apps, #[[BenchGo LLM School]]`).
+  - Structure Markdown outline native de Logseq (titres clairs en `#` et `##` sans mise en gras, sous-blocs imbriqués par tabulations).
+  - Couverture exhaustive de toutes les composantes : CLI Runner, Examen RunCode Turbo, Classement Localhost (détail exhaustif des 5 sélecteurs `#catSelect`, `#sizeSelect`, `#healthSelect`, `#ecoleSelect`, `#originSelect`, du moteur de recherche `#search`, du bouton `#btnRecentSort`, et des 6 boutons d'export et d'action `#btnCopyAll`, `#btnSubmitCommunity`, `#btnCommunityRanking`, `#btnExportPdf`, `#btnExportCsv`, `#btnExportMd`), Classement Communautaire GitHub Pages, Night Batch, Frontier Batch, Mode FLASH / Examen de Spécialité, Moteur d'évaluation & Sandbox VM, Professeur IA & Coffre-fort, Test de capacité, Tarification cloud, Mode Hybride & Soumission.
+  - Guide d'aiguillage diagnostic express « Si vous observez à l'écran... ➔ Inspectez et modifiez ces fichiers ».
+- **`Memories-BenchGo/INSTRUCTIONS.md`** :
+  - Consignation permanente de la règle de formatage Logseq outline (structure outline titres + puces imbriquées par tabulations, emojis explicites, interdiction formelle du gras sur les gros titres, conservation des tags de tête).
+
 ## 2026-09-29 — fix(cloud) : endpoint ollama cloud 405 + résolution slugs ollama + diagnostics pre-flight
 
 ### Contexte & problème rencontré

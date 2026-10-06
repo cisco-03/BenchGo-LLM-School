@@ -964,6 +964,36 @@ function buildConsolidatedHTML(entries) {
   .card.silver { border-color: rgba(201,209,212,0.3); }
   .card.bronze { border-color: rgba(227,179,65,0.35); }
 
+  /* --- Recherche non-filtrante (2026-10-06) --- */
+  /* Correspondance de recherche : surlignage violet distinct, liste conservée */
+  .card.search-hit {
+    border-color: rgba(188,140,255,0.55);
+    box-shadow: 0 0 0 1px rgba(188,140,255,0.35), 0 0 26px rgba(188,140,255,0.22), var(--shadow-card);
+    background: linear-gradient(180deg, rgba(188,140,255,0.10), var(--bg-1));
+    z-index: 3;
+  }
+  .card.search-hit::before { background: linear-gradient(180deg, var(--purple), transparent); width: 4px; }
+  /* Non-correspondances : atténuées mais visibles (le rang global reste lisible).
+     Filtre plutôt qu'opacité pour ne pas entrer en conflit avec l'animation
+     d'entrée (.card.visible règle opacity:1 et la surpasse sinon). */
+  .card.search-dim { filter: saturate(0.35) brightness(0.6); }
+  .card.search-dim:hover { filter: none; }
+  /* Tronçon de nom correspondant à la recherche */
+  .search-mark {
+    background: rgba(188,140,255,0.35); color: inherit;
+    border-radius: 3px; padding: 0 2px; font-weight: 800;
+  }
+  .badge.search-hit-badge {
+    color: #bc8cff; border-color: rgba(188,140,255,0.45); background: rgba(188,140,255,0.14);
+  }
+  /* Flash de localisation : pulsation unique au scroll vers la correspondance */
+  @keyframes searchFlash {
+    0%   { box-shadow: 0 0 0 3px rgba(188,140,255,0.65); }
+    100% { box-shadow: 0 0 0 1px rgba(188,140,255,0.35), 0 0 26px rgba(188,140,255,0.22), var(--shadow-card); }
+  }
+  .card.flash-once { animation: searchFlash 1.2s ease-out 1; }
+  @media (prefers-reduced-motion: reduce) { .card.flash-once { animation: none; } }
+
   .card {
     opacity: 0;
     transform: translateY(16px);
@@ -1569,6 +1599,27 @@ function _getCategory(pct, rank, max) {
   return { key: 'catastrophe', icon: '\u{1F4A5}', label: 'Echec total' };
 }
 
+// Surligne les occurrences de la recherche dans le nom affiché (recherche
+// non-filtrante). Retourne du HTML échappé avec <mark> autour des tronçons.
+// Insensible à la casse ; échappe chaque fragment INDIVIDUELLEMENT pour ne
+// jamais casser esc() sur le nom complet (anti-injection).
+function highlightName(name, q) {
+  var safe = String(name == null ? '' : name);
+  if (!q) return esc(safe);
+  var ql = q.toLowerCase();
+  var sl = safe.toLowerCase();
+  var out = '';
+  var i = 0;
+  while (i < safe.length) {
+    var hit = sl.indexOf(ql, i);
+    if (hit === -1) { out += esc(safe.slice(i)); break; }
+    if (hit > i) out += esc(safe.slice(i, hit));
+    out += '<mark class="search-mark">' + esc(safe.slice(hit, hit + q.length)) + '</mark>';
+    i = hit + q.length;
+  }
+  return out;
+}
+
 function renderCards() {
   var catSel = document.getElementById('catSelect');
   var sizeSel = document.getElementById('sizeSelect');
@@ -1593,7 +1644,17 @@ function renderCards() {
   // modele restant, puis on en deduit sa categorie dynamique. Cela permet
   // a Top du top de designer les 3 premiers du filtre actif (ex: 3 premiers
   // cloud) et non les 3 premiers du classement global.
+  // Recherche (q) NON-FILTRANTE (2026-10-06) : la saisie n retire aucun
+  // modele — elle surligne (.search-hit), attenue (.search-dim) et fait
+  // defiler la liste jusqu a la 1re correspondance. Les rangs affiches
+  // restent ceux du classement general integral (jamais « premier artificiel »).
   var _preFiltered = [];
+  // Recherche : detecte si un modele correpond a la saisie (multi-champs).
+  function _matchesSearch(mm) {
+    if (!q) return false;
+    return mm.model.toLowerCase().indexOf(q) !== -1 || (mm.displayName || '').toLowerCase().indexOf(q) !== -1 || mm.shortName.toLowerCase().indexOf(q) !== -1;
+  }
+  var _searchHits = [];
   for (var pi = 0; pi < MODELS.length; pi++) {
     var pm = MODELS[pi];
     var pSizeKey = (pm.paramSize && pm.paramSize.key) ? pm.paramSize.key : '';
@@ -1611,7 +1672,6 @@ function renderCards() {
       if (activeOrigin === 'cloud' && !pm.isCloud) continue;
       if (activeOrigin === 'local' && pm.isCloud) continue;
     }
-    if (q && pm.model.toLowerCase().indexOf(q) === -1 && (pm.displayName || '').toLowerCase().indexOf(q) === -1 && pm.shortName.toLowerCase().indexOf(q) === -1) continue;
     _preFiltered.push(pm);
   }
 
@@ -1641,7 +1701,6 @@ function renderCards() {
       if (activeOrigin === 'cloud' && !om.isCloud) continue;
       if (activeOrigin === 'local' && om.isCloud) continue;
     }
-    if (q && om.model.toLowerCase().indexOf(q) === -1 && (om.displayName || '').toLowerCase().indexOf(q) === -1 && om.shortName.toLowerCase().indexOf(q) === -1) continue;
     _originCtx.push(om);
   }
 
@@ -1660,12 +1719,10 @@ function renderCards() {
     }
   }
 
-  // Compteurs Origine : calculés sur l ensemble complet (filtré par recherche
-  // uniquement) pour montrer le total local vs cloud disponibles.
+  // Compteurs Origine : calculés sur l ensemble complet (aucun filtre).
   var _originCounts = { local: 0, cloud: 0 };
   for (var ri = 0; ri < MODELS.length; ri++) {
     var rm = MODELS[ri];
-    if (q && rm.model.toLowerCase().indexOf(q) === -1 && (rm.displayName || '').toLowerCase().indexOf(q) === -1 && rm.shortName.toLowerCase().indexOf(q) === -1) continue;
     if (rm.isCloud) _originCounts.cloud++; else _originCounts.local++;
   }
 
@@ -1775,6 +1832,8 @@ function renderCards() {
     // Médailles et numéros suivent la vue FILTRÉE (séquence 1,2,3... continue).
     // Avant : médailles liées à la position globale → filtre Local, la 1re carte
     // portait une médaille de rang global puis « 2 », « 3 » — séquence cassée.
+    var isHit = _matchesSearch(m);
+    if (isHit) _searchHits.push({ m: m, rank: shown });
     var cardClass = shown === 1 ? 'gold' : shown === 2 ? 'silver' : shown === 3 ? 'bronze' : '';
     var rankDisp = shown <= 3
       ? '<span class="medal">' + (shown === 1 ? '🥇' : shown === 2 ? '🥈' : '🥉') + '</span>'
@@ -1817,13 +1876,21 @@ function renderCards() {
       rcBadge = ' <span class="badge runcode" title="' + esc(rcTip) + '" style="color:' + rcCol + ';border-color:' + rcCol + '55;background:' + rcCol + '18">⚡ RunCode · Turbo</span>';
     }
     var posArrow = positionArrow(m.positionDelta);
+    // Recherche non-filtrante : correspondance surlignée (.search-hit), non
+    // correspondances atténuées (.search-dim) — la liste reste INTÉGRALE.
+    // Badge 🎯 : rang du CLASSEMENT AFFICHÉ (la liste ne rétrécit jamais).
+    var cardClassSearch = isHit ? ' search-hit' : (q ? ' search-dim' : '');
+    var shownNameC = m.displayName || m.model;
+    var hitBadgeC = isHit
+      ? ' <span class="badge search-hit-badge" title="Correspondance recherche — rang ' + shown + ' du classement affiché">🎯 ' + shown + '</span>'
+      : '';
 
-    var html = '<div class="card ' + cardClass + '" onclick="openModal(' + i + ')">' +
+    var html = '<div class="card ' + cardClass + cardClassSearch + '" data-card-idx="' + i + '" onclick="openModal(' + i + ')">' +
       '<div class="card-row">' +
         '<div class="rank">' + rankDisp + '</div>' +
         '<div class="model-name">' +
-          '<div class="name-line"><span class="cat-icon">' + dynCat.icon + '</span>' + esc(m.displayName || m.model) + posArrow + '</div>' +
-          '<div class="badges">' + szBadge + ' ' + originBadge + ' ' + rcBadge + ' ' + quantBadge + ' ' + noteBadge + ' ' + contribBadge + ' ' + pseudoBadge + '</div>' +
+          '<div class="name-line"><span class="cat-icon">' + dynCat.icon + '</span>' + (isHit ? highlightName(shownNameC, q) : esc(shownNameC)) + posArrow + '</div>' +
+          '<div class="badges">' + szBadge + ' ' + originBadge + ' ' + rcBadge + ' ' + quantBadge + ' ' + noteBadge + ' ' + contribBadge + ' ' + pseudoBadge + hitBadgeC + '</div>' +
         '</div>' +
         '<div class="mini-stats">' +
           '<div class="mini-stat"><span class="lbl">%</span><span class="val" style="color:' + pc + '">' + dispPct(m.pct) + '%</span><div class="pct-bar-wrap"><div class="pct-bar-fill" style="width:' + Math.max(2,dispPct(m.pct)) + '%;background:' + pc + '"></div></div></div>' +
@@ -1847,8 +1914,25 @@ function renderCards() {
     '</div>';
     container.insertAdjacentHTML('beforeend', html);
   }
-  document.getElementById('resultCount').textContent = shown + '/' + MODELS.length;
-  document.getElementById('emptyMsg').style.display = shown === 0 ? 'block' : 'none';
+  document.getElementById('resultCount').textContent = q
+    ? (_searchHits.length + ' résultat' + (_searchHits.length > 1 ? 's' : '') + ' sur ' + MODELS.length)
+    : (shown + '/' + MODELS.length);
+  // Recherche non-filtrante : emptyMsg ne s'allume plus pour une recherche sans
+  // correspondance (la liste reste affichée, le compteur annonce 0 résultat).
+  // Il reste pour les FILTRES (selects) qui ne laissent aucun modèle.
+  var filtersActiveC = activeCat !== 'all' || activeSize !== 'all' || activeHealth !== 'all' || activeEcole !== 'all' || activeOrigin !== 'all';
+  document.getElementById('emptyMsg').style.display = (shown === 0 && (filtersActiveC || !q)) ? 'block' : 'none';
+  // --- Surlignage + défilement vers la 1re correspondance ---
+  if (q && _searchHits.length) {
+    var firstCard = container.querySelector('.card.search-hit');
+    if (firstCard) {
+      firstCard.classList.add('visible'); // pas de fondu d'entrée : flash immédiat
+      firstCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      firstCard.classList.remove('flash-once');
+      void firstCard.offsetWidth; // reflow pour relancer l'animation CSS
+      firstCard.classList.add('flash-once');
+    }
+  }
   attachScrollAnimations();
 }
 
@@ -2429,11 +2513,10 @@ function copyLeaderboard() {
   var activeHealth = document.getElementById('healthSelect') ? document.getElementById('healthSelect').value : 'all';
   var activeEcole = document.getElementById('ecoleSelect') ? document.getElementById('ecoleSelect').value : 'all';
   var activeOrigin = document.getElementById('originSelect') ? document.getElementById('originSelect').value : 'all';
-  var q = document.getElementById('search').value.trim().toLowerCase();
 
   var lines = [];
   lines.push('🌐 Classement Communautaire BenchGo V3 — ' + new Date().toLocaleString('fr-FR'));
-  lines.push('Filtre catégorie : ' + (activeCat === 'all' ? 'tous' : activeCat) + ' | Taille : ' + (activeSize === 'all' ? 'toutes' : activeSize) + ' | Santé : ' + (activeHealth === 'all' ? 'toutes' : activeHealth) + ' | École : ' + (activeEcole === 'all' ? 'toutes' : activeEcole) + ' | Origine : ' + (activeOrigin === 'all' ? 'toutes' : activeOrigin) + (q ? ' | Recherche : ' + q : ''));
+  lines.push('Filtre catégorie : ' + (activeCat === 'all' ? 'tous' : activeCat) + ' | Taille : ' + (activeSize === 'all' ? 'toutes' : activeSize) + ' | Santé : ' + (activeHealth === 'all' ? 'toutes' : activeHealth) + ' | École : ' + (activeEcole === 'all' ? 'toutes' : activeEcole) + ' | Origine : ' + (activeOrigin === 'all' ? 'toutes' : activeOrigin));
   lines.push('');
   lines.push('Rang | Modèle | Quantif. | Points | % | Note | Oblig. | Santé | Écoles | Temps | Vitesse | Verdict');
   lines.push('---|---|---|---|---|---|---|---|---|---|---|---');
@@ -2456,7 +2539,6 @@ function copyLeaderboard() {
       if (activeOrigin === 'cloud' && !pm.isCloud) continue;
       if (activeOrigin === 'local' && pm.isCloud) continue;
     }
-    if (q && pm.model.toLowerCase().indexOf(q) === -1 && (pm.displayName || '').toLowerCase().indexOf(q) === -1 && pm.shortName.toLowerCase().indexOf(q) === -1) continue;
     _preF.push(pm);
   }
   var _mc = {};
@@ -2483,7 +2565,6 @@ function copyLeaderboard() {
       if (activeOrigin === 'cloud' && !m.isCloud) continue;
       if (activeOrigin === 'local' && m.isCloud) continue;
     }
-    if (q && m.model.toLowerCase().indexOf(q) === -1 && (m.displayName || '').toLowerCase().indexOf(q) === -1 && m.shortName.toLowerCase().indexOf(q) === -1) continue;
     var rank = copied < 3 ? ['🥇','🥈','🥉'][copied] : ('' + (copied + 1));
     var temps = m.elapsedMs > 0 ? fmtDurJS(m.elapsedMs) : '—';
     var vit = m.tokensPerSecond > 0 ? (m.tokensPerSecond + ' t/s') : '—';

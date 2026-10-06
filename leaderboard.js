@@ -1214,6 +1214,36 @@ function buildLeaderboardHTML(entries) {
   .card.silver { border-color: rgba(201,209,212,0.3); }
   .card.bronze { border-color: rgba(227,179,65,0.35); }
 
+  /* --- Recherche non-filtrante (2026-10-06) --- */
+  /* Correspondance de recherche : surlignage violet distinct, liste conservée */
+  .card.search-hit {
+    border-color: rgba(188,140,255,0.55);
+    box-shadow: 0 0 0 1px rgba(188,140,255,0.35), 0 0 26px rgba(188,140,255,0.22), var(--shadow-card);
+    background: linear-gradient(180deg, rgba(188,140,255,0.10), var(--bg-1));
+    z-index: 3;
+  }
+  .card.search-hit::before { background: linear-gradient(180deg, var(--purple), transparent); width: 4px; }
+  /* Non-correspondances : atténuées mais visibles (le rang global reste lisible).
+     Filtre plutôt qu'opacité pour ne pas entrer en conflit avec l'animation
+     d'entrée (.card.visible règle opacity:1 et la surpasse sinon). */
+  .card.search-dim { filter: saturate(0.35) brightness(0.6); }
+  .card.search-dim:hover { filter: none; }
+  /* Tronçon de nom correspondant à la recherche */
+  .search-mark {
+    background: rgba(188,140,255,0.35); color: inherit;
+    border-radius: 3px; padding: 0 2px; font-weight: 800;
+  }
+  .badge.search-hit-badge {
+    color: #bc8cff; border-color: rgba(188,140,255,0.45); background: rgba(188,140,255,0.14);
+  }
+  /* Flash de localisation : pulsation unique au scroll vers la correspondance */
+  @keyframes searchFlash {
+    0%   { box-shadow: 0 0 0 3px rgba(188,140,255,0.65); }
+    100% { box-shadow: 0 0 0 1px rgba(188,140,255,0.35), 0 0 26px rgba(188,140,255,0.22), var(--shadow-card); }
+  }
+  .card.flash-once { animation: searchFlash 1.2s ease-out 1; }
+  @media (prefers-reduced-motion: reduce) { .card.flash-once { animation: none; } }
+
   .card-row { display: flex; align-items: center; gap: var(--space-m); padding: var(--space-s) var(--space-m); cursor: pointer; }
 
   .rank {
@@ -2413,6 +2443,27 @@ function markExported(shortName) {
   } catch (e) { /* localStorage indisponible (mode privé) : on ignore */ }
 }
 
+// Surligne les occurrences de la recherche dans le nom affiché (recherche
+// non-filtrante). Retourne du HTML échappé avec <mark> autour des tronçons.
+// Insensible à la casse ; échappe chaque fragment INDIVIDUELLEMENT pour ne
+// jamais casser esc() sur le nom complet (anti-injection).
+function highlightName(name, q) {
+  var safe = String(name == null ? '' : name);
+  if (!q) return esc(safe);
+  var ql = q.toLowerCase();
+  var sl = safe.toLowerCase();
+  var out = '';
+  var i = 0;
+  while (i < safe.length) {
+    var hit = sl.indexOf(ql, i);
+    if (hit === -1) { out += esc(safe.slice(i)); break; }
+    if (hit > i) out += esc(safe.slice(i, hit));
+    out += '<mark class="search-mark">' + esc(safe.slice(hit, hit + q.length)) + '</mark>';
+    i = hit + q.length;
+  }
+  return out;
+}
+
 function renderCards() {
   console.log('[renderCards] début — MODELS.length=' + (typeof MODELS !== 'undefined' ? MODELS.length : 'UNDEFINED'));
   var catSel = document.getElementById('catSelect');
@@ -2433,14 +2484,24 @@ function renderCards() {
   if (!container) { console.error('[renderCards] ERREUR : conteneur #cards introuvable.'); return; }
   container.innerHTML = '';
   var shown = 0;
-  var skippedCat = 0, skippedSize = 0, skippedSearch = 0, skippedHealth = 0, skippedEcole = 0;
+  var skippedCat = 0, skippedSize = 0, skippedHealth = 0, skippedEcole = 0;
 
   // Premier passage : on filtre par TOUS les filtres SAUF la categorie.
   // On calcule le rang filtred (position dans l ensemble affiche) pour chaque
   // modele restant, puis on en deduit sa categorie dynamique. Cela permet
   // a "Top du top" de designer les 3 premiers du filtre actif (ex: 3 premiers
   // cloud) et non les 3 premiers du classement global.
+  // Recherche (q) NON-FILTRANTE (2026-10-06) : la saisie n retire aucun
+  // modele — elle surligne (.search-hit), attenue (.search-dim) et fait
+  // defiler la liste jusqu a la 1re correspondance. Les rangs affiches
+  // restent ceux du classement general integral (jamais « premier artificiel »).
   var _preFiltered = [];
+  // Recherche : detecte si un modele correpond a la saisie (multi-champs).
+  function _matchesSearch(mm) {
+    if (!q) return false;
+    return mm.model.toLowerCase().indexOf(q) !== -1 || (mm.displayName || '').toLowerCase().indexOf(q) !== -1 || mm.shortName.toLowerCase().indexOf(q) !== -1 || (mm.quantization || '').toLowerCase().indexOf(q) !== -1;
+  }
+  var _searchHits = [];
   for (var pi = 0; pi < MODELS.length; pi++) {
     var pm = MODELS[pi];
     var pSizeKey = (pm.paramSize && pm.paramSize.key) ? pm.paramSize.key : '';
@@ -2458,7 +2519,6 @@ function renderCards() {
       if (activeOrigin === 'cloud' && !pm.isCloud) continue;
       if (activeOrigin === 'local' && pm.isCloud) continue;
     }
-    if (q && pm.model.toLowerCase().indexOf(q) === -1 && (pm.displayName || '').toLowerCase().indexOf(q) === -1 && pm.shortName.toLowerCase().indexOf(q) === -1 && (pm.quantization || '').toLowerCase().indexOf(q) === -1) continue;
     _preFiltered.push(pm);
   }
 
@@ -2508,7 +2568,6 @@ function renderCards() {
       if (activeOrigin === 'cloud' && !om.isCloud) continue;
       if (activeOrigin === 'local' && om.isCloud) continue;
     }
-    if (q && om.model.toLowerCase().indexOf(q) === -1 && (om.displayName || '').toLowerCase().indexOf(q) === -1 && om.shortName.toLowerCase().indexOf(q) === -1 && (om.quantization || '').toLowerCase().indexOf(q) === -1) continue;
     _originCtx.push(om);
   }
 
@@ -2527,12 +2586,10 @@ function renderCards() {
     }
   }
 
-  // Compteurs Origine : calculés sur l ensemble complet (filtré par recherche
-  // uniquement) pour montrer le total local vs cloud disponibles.
+  // Compteurs Origine : calculés sur l ensemble complet (aucun filtre).
   var _originCounts = { local: 0, cloud: 0 };
   for (var ri = 0; ri < MODELS.length; ri++) {
     var rm = MODELS[ri];
-    if (q && rm.model.toLowerCase().indexOf(q) === -1 && (rm.displayName || '').toLowerCase().indexOf(q) === -1 && rm.shortName.toLowerCase().indexOf(q) === -1 && (rm.quantization || '').toLowerCase().indexOf(q) === -1) continue;
     if (rm.isCloud) _originCounts.cloud++; else _originCounts.local++;
   }
 
@@ -2623,10 +2680,12 @@ function renderCards() {
     // avec le filtre Local, la 1re carte portait 🥉 (rang global 3) puis « 2 »,
     // « 3 » — séquence visuelle incohérente. La modale (mRank) affiche désormais
     // ce même rang visible (m.viewRank) pour rester cohérente avec la carte.
+    var isHit = _matchesSearch(m);
     var cardClass = shown === 1 ? 'gold' : shown === 2 ? 'silver' : shown === 3 ? 'bronze' : '';
     var rankDisp = shown <= 3
       ? '<span class="medal">' + (shown === 1 ? '🥇' : shown === 2 ? '🥈' : '🥉') + '</span>'
       : shown;
+    if (isHit) _searchHits.push({ m: m, rank: shown });
     var posArrow = positionArrow(m.positionDelta);
     var pc = pctColor(m.pct);
     var sc = m.globalLifeScore < 0 ? '#f85149' : '#3fb950';
@@ -2686,6 +2745,12 @@ function renderCards() {
     var dateBadge = fullDate
       ? ' <span class="date-badge" title="Dernier test : ' + esc(fullDate) + '">🕒 ' + esc(relDate) + '</span>'
       : '';
+    // Badge 🎯 : le modèle correspond à la recherche en cours. Affiche son rang
+    // du CLASSEMENT GÉNÉRAL (pas sa position dans un sous-ensemble) — la liste
+    // reste intégrale pendant la recherche (comportement non-filtrant).
+    var hitBadge = isHit
+      ? ' <span class="badge search-hit-badge" title="Correspondance recherche — rang ' + shown + ' du classement affiché">🎯 ' + shown + '</span>'
+      : '';
     // l'historique des re-tests du carnet. Ne s'affiche que si au moins 2 tentatives.
     var trendBadge = '';
     if (m.trend) {
@@ -2707,12 +2772,16 @@ function renderCards() {
     // l utilisateur de corriger le titre quand LM Studio ne donne que le nom
     // de base, pour distinguer les quantifications/paramètres différents.
     var shownName = m.displayName || m.model;
-    var html = '<div class="card ' + cardClass + '" onclick="openModal(' + i + ')">' +
+    // Recherche non-filtrante : correspondance surlignée (.search-hit), non
+    // correspondances atténuées (.search-dim) — la liste reste INTÉGRALE.
+    var cardClassSearch = isHit ? ' search-hit' : (q ? ' search-dim' : '');
+    var highlightedName = isHit ? highlightName(shownName, q) : esc(shownName);
+    var html = '<div class="card ' + cardClass + cardClassSearch + '" data-card-idx="' + i + '" onclick="openModal(' + i + ')">' +
       '<div class="card-row">' +
         '<div class="rank">' + rankDisp + '</div>' +
         '<div class="model-name">' +
-          '<div class="name-line"><span class="cat-icon">' + dynCat.icon + '</span>' + esc(shownName) + posArrow + '</div>' +
-          '<div class="badges">' + szBadge + originBadge + ' ' + rcBadge + ' ' + quantBadge + ' ' + noteBadge + ' ' + trendBadge + exportedBadge + dateBadge + '</div>' +
+          '<div class="name-line"><span class="cat-icon">' + dynCat.icon + '</span>' + highlightedName + posArrow + '</div>' +
+          '<div class="badges">' + szBadge + originBadge + ' ' + rcBadge + ' ' + quantBadge + ' ' + noteBadge + ' ' + trendBadge + exportedBadge + dateBadge + hitBadge + '</div>' +
         '</div>' +
         '<div class="mini-stats">' +
           '<div class="mini-stat"><span class="lbl">%</span><span class="val" style="color:' + pc + '">' + dispPct(m.pct) + '%</span><div class="pct-bar-wrap"><div class="pct-bar-fill" style="width:' + Math.max(2,dispPct(m.pct)) + '%;background:' + pc + '"></div></div></div>' +
@@ -2738,9 +2807,29 @@ function renderCards() {
     '</div>';
     container.insertAdjacentHTML('beforeend', html);
   }
-  console.log('[renderCards] fini — affichés=' + shown + '/' + MODELS.length + ' | skip cat=' + skippedCat + ' skip size=' + skippedSize + ' skip health=' + skippedHealth + ' skip ecole=' + skippedEcole + ' skip search=' + skippedSearch);
-  document.getElementById('resultCount').textContent = shown + '/' + MODELS.length;
-  document.getElementById('emptyMsg').style.display = shown === 0 ? 'block' : 'none';
+  console.log('[renderCards] fini — affichés=' + shown + '/' + MODELS.length + ' | skip cat=' + skippedCat + ' skip size=' + skippedSize + ' skip health=' + skippedHealth + ' skip ecole=' + skippedEcole + ' hits recherche=' + _searchHits.length);
+  document.getElementById('resultCount').textContent = q
+    ? (_searchHits.length + ' résultat' + (_searchHits.length > 1 ? 's' : '') + ' sur ' + MODELS.length)
+    : (shown + '/' + MODELS.length);
+  // Recherche non-filtrante : le bandeau emptyMsg ne sert plus pour la recherche
+  // (la liste reste affichée). Il ne s'allume que si les FILTRES (selects) ne
+  // laissent aucun modèle — une recherche sans correspondance surligne simplement
+  // rien et le compteur le dit (0 résultat sur N).
+  var filtersActive = activeCat !== 'all' || activeSize !== 'all' || activeHealth !== 'all' || activeEcole !== 'all' || activeOrigin !== 'all';
+  document.getElementById('emptyMsg').style.display = (shown === 0 && (filtersActive || !q)) ? 'block' : 'none';
+  // --- Surlignage + défilement vers la 1re correspondance (recherche non-filtrante) ---
+  // La liste bouge et va chercher le modèle demandé sans jamais réduire le
+  // classement : le rang affiché reste celui du classement général.
+  if (q && _searchHits.length) {
+    var firstCard = container.querySelector('.card.search-hit');
+    if (firstCard) {
+      firstCard.classList.add('visible'); // pas de fondu d'entrée : flash immédiat
+      firstCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      firstCard.classList.remove('flash-once');
+      void firstCard.offsetWidth; // reflow pour relancer l'animation CSS
+      firstCard.classList.add('flash-once');
+    }
+  }
   // --- Animations d'entrée au scroll (§3 UI/Ludisme) ---
   // Attache un IntersectionObserver aux cartes fraîchement rendues pour déclencher
   // le fondu + translation quand elles entrent dans le viewport. Recréé à chaque
@@ -4347,11 +4436,10 @@ function copyLeaderboard() {
   var btn = document.getElementById('btnCopyAll');
   var activeCat = document.getElementById('catSelect').value;
   var activeSize = document.getElementById('sizeSelect').value;
-  var q = document.getElementById('search').value.trim().toLowerCase();
 
   var lines = [];
   lines.push('🏇 Classement BenchGo V3 — ' + new Date().toLocaleString('fr-FR'));
-  lines.push('Filtre catégorie : ' + (activeCat === 'all' ? 'tous' : activeCat) + ' | Taille : ' + (activeSize === 'all' ? 'toutes' : activeSize) + (q ? ' | Recherche : ' + q : ''));
+  lines.push('Filtre catégorie : ' + (activeCat === 'all' ? 'tous' : activeCat) + ' | Taille : ' + (activeSize === 'all' ? 'toutes' : activeSize));
   lines.push('');
   lines.push('Rang | Modèle | Quantif. | Points | % | Note | Mvt | Oblig. | Santé | Écoles | Temps | Vitesse | Verdict');
   lines.push('---|---|---|---|---|---|---|---|---|---|---|---|---');
@@ -4360,7 +4448,6 @@ function copyLeaderboard() {
     var m = MODELS[i];
     if (activeCat !== 'all' && m.cat.key !== activeCat) continue;
     if (activeSize !== 'all' && m.paramSize.key !== activeSize) continue;
-    if (q && m.model.toLowerCase().indexOf(q) === -1 && (m.displayName || '').toLowerCase().indexOf(q) === -1 && m.shortName.toLowerCase().indexOf(q) === -1 && (m.quantization || '').toLowerCase().indexOf(q) === -1) continue;
     var rank = copied < 3 ? ['🥇','🥈','🥉'][copied] : ('' + (copied + 1));
     var temps = m.elapsedMs > 0 ? fmtDurJS(m.elapsedMs) : '—';
     var vit = m.tokensPerSecond > 0 ? (m.tokensPerSecond + ' t/s') : '—';
