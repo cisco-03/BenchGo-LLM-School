@@ -404,14 +404,6 @@ async function queryLLM(prompt, difficulty, tierId, isMandatory, spinner, option
   const { providerConfig = {} } = options;
   const { provider, model, apiKey, endpoint } = providerConfig;
 
-  // Prévention 2026-10-06 : les providers LOCAUX (lmstudio, ollama, custom sur
-  // un hôte local) passent par le daemon LM Studio pour le chargement du GGUF —
-  // un dossier interne « temp » absent fait échouer TOUS les chargements
-  // (ENOENT mkdtemp) et exclut à tort un modèle sain. Recréation silencieuse
-  // (une fois par session ; re-force après un échec temp-fs détecté).
-  if (provKey === 'lmstudio' || provKey === 'custom') {
-    archWarning.ensureLmStudioTempDir();
-  }
   if (!provider) throw new Error('cloud-client: providerConfig.provider manquant.');
   if (!model)    throw new Error('cloud-client: providerConfig.model manquant.');
 
@@ -421,6 +413,18 @@ async function queryLLM(prompt, difficulty, tierId, isMandatory, spinner, option
     throw new Error(
       `Fournisseur cloud inconnu : '${provider}'.\n  Valeurs valides : ${Object.keys(CLOUD_PROVIDERS).join(', ')}`
     );
+  }
+
+  // Prévention 2026-10-06 : les providers LOCAUX (lmstudio, ollama, custom sur
+  // un hôte local) passent par le daemon LM Studio pour le chargement du GGUF —
+  // un dossier interne « temp » absent fait échouer TOUS les chargements
+  // (ENOENT mkdtemp) et exclut à tort un modèle sain. Recréation silencieuse
+  // (une fois par session ; re-force après un échec temp-fs détecté).
+  // NB : le hook DOIT être APRÈS la résolution de provKey (bug constaté 2026-10-06 :
+  // référencer provKey avant sa déclaration const → « Cannot access 'provKey'
+  // before initialization » sur CHAQUE appel, tous modèles confondus).
+  if (provKey === 'lmstudio' || provKey === 'custom') {
+    archWarning.ensureLmStudioTempDir();
   }
 
   // URL : providerConfig.endpoint (flag --endpoint=) en priorité, sinon options.endpoint
