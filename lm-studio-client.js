@@ -3,6 +3,7 @@ const logger = require('./logger');
 const { LM_STUDIO_API_URL, API_TIMEOUT_MS } = require('./config');
 const { BenchgoError } = require('./cli-help');
 const benchMetrics = require('./benchmark-metrics');
+const archWarning = require('./arch-warning');
 
 // Agent dédié NON keepAlive : chaque requête obtient sa propre socket, qui est
 // libérée à la fin. On évite ainsi la réutilisation de socket poolée par
@@ -10,6 +11,32 @@ const benchMetrics = require('./benchmark-metrics');
 // EventEmitter (MaxListeners) et des crashes sur Node v24.12.0 quand plusieurs
 // requêtes SSE se succèdent (tiers + aide + rattrapage).
 const HTTP_AGENT = new http.Agent({ keepAlive: false, maxSockets: 1 });
+
+// --- Auto-réparation du dossier interne temp de LM Studio (2026-10-06) ---
+// Quand le dossier '~/.lmstudio/.internal/temp' a été supprimé (nettoyage de
+// disque), LM Studio échoue à CHAQUE chargement avec ENOENT mkdtemp
+// 'lmstudio-chat-template-XXXXXX' → BenchGo croyait le modèle incompatible.
+// ensureLmStudioTempDir() recrée le dossier s'il manque (silencieux ; jamais
+// bloquant — si la création échoue on laisse LM Studio renvoyer son erreur
+// habituelle). Appelée une seule fois par session (flag) AVANT les échecs,
+// et lors d'un diagnostic temp-fs pour la suite de la session.
+let _lmTempDirEnsured = false;
+function ensureLmStudioTempDir() {
+  if (_lmTempDirEnsured) return true;
+  try {
+    const p = path.join(require('os').homedir(), '.lmstudio', '.internal', 'temp');
+    if (!fs.existsSync(p)) {
+      fs.mkdirSync(p, { recursive: true });
+      logger.info(`Dossier interne LM Studio recréé : ${p} (ENOENT mkdtemp évité).`);
+      console.log(`  \x1b[36m↻ Dossier interne LM Studio manquant — recréé automatiquement : ${p}\x1b[0m`);
+    }
+    _lmTempDirEnsured = true;
+    return true;
+  } catch (e) {
+    logger.warn(`Recréation du dossier interne LM Studio impossible : ${e.message}`);
+    return false;
+  }
+}
 
 // --- IMPORTANT : pourquoi node:http au lieu de fetch (undici) ---
 // BenchGo streamait les réponses SSE de LM Studio via `fetch` (undici, intégré à
@@ -60,6 +87,10 @@ function parseApiUrl(url) {
 
 async function queryLLM(prompt, difficulty, tierId, isMandatory, spinner, options = {}) {
   const startTime = Date.now();
+  // Prévention 2026-10-06 : dossier interne temp absent = TOUS les chargements
+  // échouent (ENOENT mkdtemp) et un modèle sain sort en « incompatible ».
+  // Recréation silencieuse (une fois par session ; re-force après échec temp-fs).
+  archWarning.ensureLmStudioTempDir();
   const timeoutMs = Number.isInteger(options.timeoutMs) && options.timeoutMs > 0
     ? options.timeoutMs
     : API_TIMEOUT_MS;
@@ -278,9 +309,21 @@ async function queryLLM(prompt, difficulty, tierId, isMandatory, spinner, option
     // supportée par llama.cpp à la date du GGUF). Erreur définitive du modèle,
     // pas un problème réseau ni de config BenchGo : message dédié au lieu du
     // JSON brut illisible (tâche 2026-09-11).
-    const isLoadFailure = isHttpErr && /failed to load model/i.test(error.message || '');
+    // EXCEPTION (demande utilisateur 2026-10-06) : le même HTTP_400 masque une
+    // erreur TEMPORAIRE de fichiers internes de LM Studio (ENOENT mkdtemp
+    // '.internal\temp\lmstudio-chat-template-XXXXXX' — dossier temp supprimé).
+    // Le GGUF est SAIN (déjà testé au carnet) : on NE doit PAS le traiter en
+    // E507 définitif ni l'isoler. Code dédié E509_LM_TEMP_FS, réessayable.
+    const isTempFs = archWarning.isTempFsError(error.message || '');
+    if (isTempFs) {
+      // Retente la recréation du dossier (si l'échec vient d'une suppression
+      // en cours de session) : le prochain appel repartira proprement.
+      archWarning.ensureLmStudioTempDir(true);
+    }
+    const isLoadFailure = !isTempFs && isHttpErr && /failed to load model/i.test(error.message || '');
     const code = isTimeout ? 'E502_LM_TIMEOUT'
       : isUnreachable ? 'E503_LM_UNREACHABLE'
+      : isTempFs ? 'E509_LM_TEMP_FS'
       : isLoadFailure ? 'E507_LM_LOAD_FAILED'
       : isHttpErr ? 'E504_LM_HTTP_ERROR'
       : 'E504_LM_HTTP_ERROR';
@@ -314,6 +357,8 @@ async function queryLLM(prompt, difficulty, tierId, isMandatory, spinner, option
       // pas).
       const friendlyReason = code === 'E507_LM_LOAD_FAILED'
         ? `Le modèle ne peut pas être chargé par LM Studio : architecture GGUF non supportée par le runtime llama.cpp actuel (souvent : modèle trop récent pour le runtime installé). Mettez LM Studio à jour (runtimes llama.cpp), ou testez un autre GGUF du même modèle. Ce modèle est inutilisable en l'état : vous pouvez le supprimer de LM Studio (UI → poubelle) pour libérer de l'espace disque. Détail : ${reason}`
+        : code === 'E509_LM_TEMP_FS'
+        ? `Erreur TEMPORAIRE de fichiers internes LM Studio (dossier temporaire manquant) — le modèle n'est PAS en cause et reste testable. Relancez le même run (un re-test est voulu) ; si ça persiste, redémarrez LM Studio (il recrée son dossier .internal\\temp au démarrage). Ne supprimez pas le GGUF. Détail : ${reason}`
         : `Tier ${tierId} (obligatoire) — ${reason}`;
       throw new BenchgoError(code, friendlyReason);
     } else {

@@ -1926,7 +1926,17 @@ async function selectSchoolsManualPerModel(selectedModels) {
   return plan;
 }
 
+// Erreurs temp-fs (dossier temporaire interne LM Studio manquant — demande
+// utilisateur 2026-10-06) relevées par loadModel() : modelKey → true. Le
+// traitement de la file lit ce relevé pour NE PAS blacklister ni marquer
+// load_failed un modèle SAIN victime d'un souci de dossier temp.
+const loadErrTempFsByModel = new Map();
+
 function loadModel(modelKey, mtpModelKey) {
+  // Prévention 2026-10-06 : dossier interne temp absent = TOUS les chargements
+  // échouent (ENOENT mkdtemp « lmstudio-chat-template ») et un modèle sain
+  // sort en « incompatible ». Recréation silencieuse au 1er chargement.
+  archWarning.ensureLmStudioTempDir();
   // -y (--yes) : approuve automatiquement les prompts de lms load. Sans ce
   // flag, lms peut afficher un sélecteur interactif (« ? Select a model to
   // load ») qui bloque le batch en mode non-TTY (spawnSync hérite du stdin du
@@ -1941,6 +1951,21 @@ function loadModel(modelKey, mtpModelKey) {
   if (r.status !== 0) {
     const loadErrText = r.stderr || r.stdout || 'erreur inconnue';
     console.log(`  ${C.red}lms load echoue : ${loadErrText}${C.reset}`);
+    // EXCEPTION (demande utilisateur 2026-10-06) : erreur TEMPORAIRE de
+    // fichiers internes LM Studio (ENOENT mkdtemp '.internal\temp\...') — le
+    // même échec « Failed to load model » masque un souci de dossier temp :
+    // le GGUF est SAIN (souvent déjà testé au carnet). Ni registre des
+    // incompatibles, ni avertissement d'arch ; message dédié « retenter ».
+    // Le motif est relevé dans loadErrTempFsByModel pour que l'appelant
+    // n'enregistre NI load_failed NI blacklist.
+    if (archWarning.isTempFsError(loadErrText)) {
+      loadErrTempFsByModel.set(modelKey, true);
+      // Retente la recréation du dossier : le modèle suivant repartira
+      // proprement sans intervention (suppression en cours de session).
+      archWarning.ensureLmStudioTempDir(true);
+      console.log(archWarning.tempFsWarningText(modelKey, { reason: loadErrText }));
+      return false;
+    }
     // Architecture GGUF inconnue du runtime llama.cpp (ex: k2-horizon) :
     // avertissement complet « modèle non compatible » + enregistrement dans
     // le registre .benchgo-incompatible.json (tâche 2026-09-15). Le modèle est
@@ -2605,6 +2630,10 @@ async function main() {
   }
 
   let serverHandle = { startedByUs: false };
+  // Prévention 2026-10-06 : dossier interne « temp » de LM Studio absent = TOUS
+  // les chargements échouent (ENOENT mkdtemp) et un modèle sain sort en
+  // « incompatible ». Recréation silencieuse dès le démarrage du batch.
+  archWarning.ensureLmStudioTempDir();
   if (await isServerUp()) {
     console.log(`  ${C.green}Serveur HTTP LM Studio deja actif sur ${LMSTUDIO_HOST}.${C.reset}`);
   } else {
@@ -3044,9 +3073,19 @@ async function main() {
     }
     if (!loadModel(m.modelKey, m.mtpModelKey)) {
       console.log(`  ${C.yellow}Modele ${m.modelKey} non chargeable - ignore.${C.reset}`);
-      recordRun(m.modelKey, 'load_failed', null);
-      autoBlacklist(m.modelKey, 'lms load échoué (GGUF corrompu ou incompatible)');
-      results.push({ model: m, ok: false, reason: 'load_failed', durationMs: 0 });
+      // EXCEPTION (demande utilisateur 2026-10-06) : erreur TEMPORAIRE de
+      // fichiers internes LM Studio (ENOENT mkdtemp '.internal\temp\...') —
+      // le GGUF est SAIN : PAS de load_failed à l'historique, PAS de
+      // blacklist. Le modèle reste testable au prochain passage (re-test voulu).
+      // Le motif est relevé par loadModel() dans loadErrTempFsByModel.
+      if (loadErrTempFsByModel.get(m.modelKey)) {
+        results.push({ model: m, ok: false, reason: 'temp_fs', durationMs: 0 });
+        console.log(`  ${C.gray}Aucun blacklist ni load_failed : erreur temporaire de dossier interne LM Studio — le modèle reste testable.${C.reset}`);
+      } else {
+        recordRun(m.modelKey, 'load_failed', null);
+        autoBlacklist(m.modelKey, 'lms load échoué (GGUF corrompu ou incompatible)');
+        results.push({ model: m, ok: false, reason: 'load_failed', durationMs: 0 });
+      }
       continue;
     }
     console.log(`  ${C.green}Modele charge.${C.reset}`);
@@ -3059,6 +3098,17 @@ async function main() {
     const health = await healthCheck(m.modelKey);
     if (!health.ok) {
       console.log(`  ${C.red}Health check ÉCHEC : ${health.reason}${C.reset}`);
+      // EXCEPTION (demande utilisateur 2026-10-06) : erreur TEMPORAIRE de
+      // fichiers internes LM Studio (ENOENT mkdtemp '.internal\temp\...') :
+      // le GGUF est SAIN — déchargement + passage au suivant SANS
+      // auto-blacklist (le modèle doit rester testable au prochain passage).
+      if (archWarning.isTempFsError(health.reason)) {
+        console.log(archWarning.tempFsWarningText(m.modelKey, { reason: health.reason }));
+        console.log(`  ${C.gray}Déchargement et passage au modèle suivant (PAS de blacklist — erreur temporaire).${C.reset}`);
+        unloadAll();
+        results.push({ model: m, ok: false, reason: 'temp_fs', durationMs: 0 });
+        continue;
+      }
       // Architecture GGUF inconnue du runtime (HTTP 400 « Failed to load
       // model » au health check) : registre + avertissement complet
       // (tâche 2026-09-15).
@@ -3239,7 +3289,7 @@ async function main() {
   for (const r of results) {
     const mins = (r.durationMs / 60000).toFixed(1);
     const icon = r.ok ? `${C.green}OK${C.reset}` : `${C.red}KO${C.reset}`;
-    const reasonMap = { 'load_failed': 'chargement échoué', 'health_failed': 'health check échoué', 'run_ko': 'run KO', 'skipped': 'passé avec --skip' };
+    const reasonMap = { 'load_failed': 'chargement échoué', 'health_failed': 'health check échoué', 'run_ko': 'run KO', 'skipped': 'passé avec --skip', 'temp_fs': 'erreur temporaire dossier interne LM Studio — modèle sain, à retenter' };
     const reason = r.reason ? ` ${C.gray}(${reasonMap[r.reason] || r.reason})${C.reset}` : '';
     const schoolTag = r.school ? ` ${C.gray}[${r.school}]${C.reset}` : '';
     // Quantification affichée si disponible (ex: Q5_K_L). Indispensable quand

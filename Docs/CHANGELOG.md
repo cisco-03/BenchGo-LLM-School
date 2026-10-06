@@ -1,5 +1,48 @@
 # CHANGELOG - Carnet de Notes BenchGo
 
+## 2026-10-06b — fix(E509) : erreur temporaire du dossier interne LM Studio ne doit plus exclure un modèle sain
+
+### Contexte & besoin
+Demande utilisateur (2 messages) : le RunCode de `ornith-1.5-9b@q6_k` (modèle déjà testé — 97% Primaire + 100% College-Lycee au carnet `ornith-1.5-9b_q6_k.json`) a été REFUSÉ avec le bloc rouge « ⚠⚠⚠ MODÈLE NON COMPATIBLE — ARCHITECTURE GGUF NON SUPPORTÉE », et le modèle a été inscrit à tort dans `.benchgo-incompatible.json`. L'utilisateur signale d'autres refus similaires sur d'autres modèles et exige : (1) une EXCEPTION — une absence de dossier temporaire ne doit JAMAIS faire refuser un modèle, (2) le re-test des modèles déjà passés doit rester POSSIBLE (suivi des mises à jour / changements du modèle).
+
+### Cause racine
+LM Studio renvoie `HTTP_400 {"message": "Failed to load model \"ornith-1.5-9b@q6_k\". Error: ENOENT: no such file or directory, mkdtemp 'C:\\Users\\...\\.lmstudio\\.internal\\temp\\lmstudio-chat-template-XXXXXX'"}` : le dossier temporaire interne `.lmstudio\.internal\temp` de LM Studio était ABSENT (vérifié sur la machine, jamais recréé par l'app). Ce même HTTP_400 « Failed to load model » sert aussi aux vraies incompatibilités d'architecture (k2-horizon) → `isArchitectureError()` (regex `/failed to load model/i && /HTTP_400/`) classait le modèle SAIN comme incompatible, l'inscrivait au registre et affichait le bloc « non compatible » (le message extrayait l'arch `qwen35` via `lms ls` — fausse piste). Le modèle était donc écarté alors qu'il est parfaitement chargeable : erreur de l'hôte (LM Studio), pas du GGUF ni de BenchGo.
+
+### Corrections
+- **Diagnostics du dossier temp (2e message utilisateur)** : le dossier en cause est `C:\Users\<user>\.lmstudio\.internal\temp` — un dossier INTERNE de LM Studio (pas de BenchGo). LM Studio y matérialise le chat template du GGUF (`lmstudio-chat-template-XXXXXX` via mkdtemp) à CHAQUE chargement de modèle. Supprimé (nettoyage de disque) → TOUS les chargements échouent en `ENOENT mkdtemp`, et BenchGo classait chaque victime « incompatible ».
+- **Auto-réparation `ensureLmStudioTempDir()`** (arch-warning.js, exportée) : recrée le dossier s'il manque + message console dédié (« ni BenchGo ni vos GGUF sont en cause »). Une fois par process ; re-force après chaque échec temp-fs détecté. Jamais bloquante.
+- **Branchement (4 sites)** : `runner.js main()` (démarrage de session), `night-batch.js` (démarrage du batch + `loadModel()`), `lm-studio-client.js queryLLM` (1er appel + re-force sur diagnostic temp-fs), `cloud-client.js queryLLM` (providers locaux lmstudio/custom + re-force).
+- `arch-warning.js` :
+  - Nouveau `isTempFsError(message)` : détecte les erreurs TEMPORAIRES de système de fichiers de LM Studio — ENOENT/mkdtemp (dossier `.internal\temp` manquant), ENOSPC (disque plein), EACCES/EPERM sur `.internal` — y compris avec antislashs Windows OU slashs unix (le JSON d'erreur double les antislashs).
+  - `isArchitectureError()` : renvoie désormais `false` quand `isTempFsError` détecte un cas temp-fs (l'incompatibilité d'architecture ne peut pas être conclue sur une erreur de dossier temp).
+  - Nouveau `tempFsWarningText(modelKey, opts)` : message dédié « ↻ ERREUR TEMPORAIRE LM STUDIO — FICHIERS INTERNES MANQUANTS (le modèle est SAIN) » → relancer le même run (re-test VOULU) ; si ça persiste, redémarrer LM Studio (il recrée son dossier `.internal\temp` au démarrage). NE PAS supprimer le GGUF, ne PAS isoler.
+  - `isTempFsError` + `tempFsWarningText` exportés.
+- `lm-studio-client.js` : dans `queryLLM`, `isTempFsError()` est testé AVANT `isLoadFailure` → code `E509_LM_TEMP_FS` (réessayable) au lieu d'un `E507_LM_LOAD_FAILED` définitif ; `friendlyReason` dédié (le modèle n'est PAS en cause, relancer le run, redémarrer LM Studio si ça persiste, ne pas supprimer le GGUF). Le client local n'importait pas `arch-warning` : import ajouté.
+- `cloud-client.js` (providers locaux via `--provider=lmstudio`, chemin exact du bug constaté) : idem — `isTempFs = archWarning.isTempFsError(reason)` AVANT la détection `isLoadFailure`, code `E509_LM_TEMP_FS` + `friendlyReason` dédié. Import `arch-warning` ajouté.
+- `runner.js` (3 sites) :
+  - **Catch RunCode** (site exact du refus constaté dans `Admin/Tasks.md`) : `E509_LM_TEMP_FS` OU `isTempFsError(err.message)` → `archWarning.tempFsWarningText(...)` et AUCUNE inscription au registre ; le bloc « non compatible » ne s'affiche que pour les vraies archs.
+  - **Pre-flight check** : nouvelle variable `loadFailureTempFs` ; un ping en erreur temp-fs break immédiat (comme E507, pas de triple retry) MAIS avec code `E509_LM_TEMP_FS`, diagnostic dédié (« le GGUF est SAIN → relancez le même run, re-test VOULU ») et AUCUN `recordIncompatible`.
+  - **`main().catch`** : `E509_LM_TEMP_FS` → message `tempFsWarningText` + aucun registre (avant : c'est ce site qui a écrit l'entrée à tort `ornith-1.5-9b@q6_k` avec l'arch `qwen35` lue via `lms ls`).
+- `night-batch.js` (3 sites) :
+  - `loadModel()` : erreur temp-fs → message `tempFsWarningText`, retour `false` sans toucher au registre ; le motif est relevé dans `loadErrTempFsByModel` (Map module-level) pour l'appelant.
+  - Boucle principale (`!loadModel(...)` → auto-blacklist + `recordRun('load_failed')`) : si `loadErrTempFsByModel.get(modelKey)` → raison `temp_fs`, NI `recordRun` NI `autoBlacklist` (le modèle reste testable au prochain passage — le re-test est voulu) + ligne explicative.
+  - **Health check** : échec temp-fs → `tempFsWarningText`, déchargement, raison `temp_fs`, PAS d'auto-blacklist (avant : `autoBlacklist` systématique).
+  - Bilan : `reasonMap` complète avec `temp_fs` (« erreur temporaire dossier interne LM Studio — modèle sain, à retenter ») ; la raison `temp_fs` ne déclenche ni le tag `[auto-blacklisté]` ni le rappel des incompatibles.
+- Données réparées sur disque : l'entrée à tort `ornith-1.5-9b@q6_k` (arch `qwen35` fausse) RETIRÉE de `.benchgo-incompatible.json` (registre désormais vide). Le modèle réapparaît « COMPLET 99% » dans `night-batch.js --list-only`. **Deuxième victime confirmée et réparée (2e message)** : `kai-os_grug-12b@q6_k_l` — `lms load` échouait avec le MÊME `ENOENT mkdtemp` (jamais une arch) ; chargement réel re-testé APRÈS recréation du dossier : `Model loaded successfully in 17.26s` (arch `gemma4`, parfaitement supportée) ; blacklist/registre non pollués pour lui ; entrée `load_failed` (2026-09-07) retirée de `.benchgo-run-history.json` → statut liste « Tiers testés, carnet absent » (PARTIEL honnête : tiers passés sans consolidation). Aucune autre donnée à réparer : les autres `lastStatus: load_failed` de l'historique datent d'août/septembre (échecs précédents indépendants, pas ce bug) — on n'y touche pas.
+- Nouveau fichier de tests `tests/test-arch-warning.js` (10 cas) : isArchitectureError (k2-horizon → true, HTTP_400 sans ENOENT → true, mkdtemp antislashs/slashs → false), isTempFsError (erreur réelle du log → true, ENOSPC → true, timeout/ECONNREFUSED → false), ensureLmStudioTempDir (recréation du dossier supprimé + no-op s'il existe).
+
+### Fichiers touchés
+`arch-warning.js`, `lm-studio-client.js`, `cloud-client.js`, `runner.js`, `night-batch.js`, `tests/test-arch-warning.js` (nouveau), `.benchgo-incompatible.json` + `.benchgo-run-history.json` (données réparées), ce CHANGELOG.
+
+### Pièges
+- Le dossier en cause est `C:\Users\<user>\.lmstudio\.internal\temp` : un dossier INTERNE de LM Studio (pas BenchGo). LM Studio y matérialise le chat template du GGUF (`mkdtemp` + `lmstudio-chat-template-XXXXXX`) à CHAQUE chargement de modèle — un fichier temporaire jetable, jamais un composant du modèle.
+- L'erreur `ENOENT mkdtemp ...\.lmstudio\.internal\temp\lmstudio-chat-template-XXXXXX` arrive quand le dossier temporaire interne de LM Studio a été supprimé (nettoyage de disque, script de nettoyage des %TEMP%). LM Studio le recrée au démarrage : **redémarrer LM Studio** suffit la plupart du temps.
+- Le même HTTP_400 sert aux DEUX causes (arch inconnue ET dossier temp manquant) : TOUS les chemins d'affichage qui testent « Failed to load model » doivent tester `isTempFsError` D'ABORD — sinon un modèle sain repart au Registre des incompatibles. Sites couverts et à préserver : pre-flight, catch RunCode, main().catch, loadModel night-batch, health check night-batch.
+- `isArchitectureError(false→false)` : si `isTempFsError` est retiré du calcul d'`isArchitectureError`, l'exception tombe (le registre re-remplit à tort) — les deux fonctions sont volontairement couplées.
+- La raison `temp_fs` dans `results` de night-batch est volontairement EXCLUE de `allFailed` (auto-blacklist run_ko systémique) : un modèle écourté par un dossier temp manquant n'est PAS défaillant (même philosophie que `skipped`).
+- Les `lms ls` retournent l'arch du GGUF même quand le chargement échoue pour une autre raison : ne JAMAIS croire `archFromLmsLs` sur une erreur temp-fs (c'est le mécanisme exact qui avait produit la fausse arch `qwen35` sur ornith).
+- `loadErrTempFsByModel` est une Map module-level rempli par `loadModel()` : elle relie l'erreur temp-fs au blacklisting sans changer la signature de `loadModel` (5 sites d'appel inchangés).
+
 ## 2026-10-06 — fix(leaderboard) : recherche non-filtrante — liste intégrale, surlignage et rang réel conservés
 
 ### Contexte & besoin

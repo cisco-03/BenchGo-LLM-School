@@ -1168,6 +1168,13 @@ async function proposeCommunitySubmission(shortName, options) {
 async function main() {
   console.clear();
 
+  // Prévention 2026-10-06 : dossier interne « temp » de LM Studio absent = TOUS
+  // les chargements échouent (ENOENT mkdtemp « lmstudio-chat-template ») et un
+  // modèle sain sort en « incompatible ». Recréation silencieuse dès le
+  // démarrage de la session (une fois par process ; le client local re-force
+  // après un échec temp-fs détecté).
+  archWarning.ensureLmStudioTempDir();
+
   // --- Actions uniques (help, status, version) — traitées AVANT la bannière ---
   // Ces commandes ne lancent pas le benchmark : on les intercepte immédiatement
   // pour garder une sortie propre (sans en-tête BenchGo). Journalisées dans
@@ -1940,7 +1947,16 @@ async function main() {
       // avertissement complet « modèle non compatible » + registre des
       // incompatibles. Le catch du RunCode n'atteint JAMAIS main().catch
       // (l'erreur est avalée ici) — d'où la gestion dédiée (tâche 2026-09-15).
-      if (err && (err.code === 'E507_LM_LOAD_FAILED' || /Failed to load model/i.test(err.message || ''))) {
+      // EXCEPTION (demande utilisateur 2026-10-06) : erreur TEMPORAIRE de
+      // fichiers internes LM Studio (ENOENT mkdtemp '.internal\temp\...') —
+      // le même message « Failed to load model » masque un souci de dossier
+      // temp : le GGUF est SAIN (souvent déjà testé au carnet). AUCUNE
+      // inscription au registre, message dédié « relancer le run » (le re-test
+      // des modèles déjà passés est voulu — suivi des mises à jour).
+      const isTempFsErr = err && (err.code === 'E509_LM_TEMP_FS' || archWarning.isTempFsError(err.message || ''));
+      if (isTempFsErr) {
+        console.log(archWarning.tempFsWarningText(examModelName || 'modele-inconnu', { reason: err.message || '' }));
+      } else if (err && (err.code === 'E507_LM_LOAD_FAILED' || /Failed to load model/i.test(err.message || ''))) {
         const incompatModel = examModelName || 'modele-inconnu';
         archWarning.recordIncompatible(incompatModel, {
           reason: err.message || 'Failed to load model',
@@ -2274,6 +2290,7 @@ async function main() {
     let keyLimitExceeded = false;
     let batchModelError = false;
     let loadFailure = false;
+    let loadFailureTempFs = false;
     let loadFailureDetail = null;
     let methodNotAllowedError = false;
     let methodNotAllowedDetail = null;
@@ -2327,8 +2344,20 @@ async function main() {
         // E507 "Failed to load model" (HTTP 400) : le runtime llama.cpp de LM
         // Studio ne peut PAS charger ce GGUF (architecture inconnue, ex:
         // k2-horizon). Définitif — inutile de retenter 3 fois (tâche 2026-09-11).
-        if (pingErr.code === 'E507_LM_LOAD_FAILED' || /Failed to load model/i.test(pingErr.message || '')) {
+        // EXCEPTION (demande utilisateur 2026-10-06) : erreur TEMPORAIRE de
+        // fichiers internes LM Studio (ENOENT mkdtemp '.internal\temp\...') —
+        // le même HTTP_400 masque un souci de dossier temp, le GGUF est SAIN.
+        // On break aussi (pas de retry 3x) mais avec le code E509 et sans
+        // enregistrer le modèle comme incompatible.
+        const isTempFsPing = archWarning.isTempFsError(pingErr.message || '');
+        if (!isTempFsPing && (pingErr.code === 'E507_LM_LOAD_FAILED' || /Failed to load model/i.test(pingErr.message || ''))) {
           loadFailure = true;
+          loadFailureDetail = pingErr.message;
+          break;
+        }
+        if (isTempFsPing) {
+          loadFailure = true;
+          loadFailureTempFs = true;
           loadFailureDetail = pingErr.message;
           break;
         }
@@ -2349,8 +2378,8 @@ async function main() {
     }
 
     if (!pingOk) {
-      pingSpinner.fail(`Vérification : ${batchModelError ? 'modèle réservé à l\'API Batch asynchrone' : (loadFailure ? 'modèle non chargeable par LM Studio' : (methodNotAllowedError ? 'endpoint invalide (POST refusé)' : `${MAX_PING_ATTEMPTS} tentatives échouées — le modèle ne répond pas`))}`);
-      console.log(`\n  \x1b[31m━━━ ARRÊT : le modèle "${resolvedCloudModel}" ne répond pas (${batchModelError ? 'modèle Batch asynchrone' : (loadFailure ? 'échec de chargement' : (methodNotAllowedError ? 'endpoint invalide' : `${MAX_PING_ATTEMPTS} tentatives`))}).\x1b[0m`);
+      pingSpinner.fail(`Vérification : ${batchModelError ? 'modèle réservé à l\'API Batch asynchrone' : (loadFailure ? (loadFailureTempFs ? 'erreur temporaire LM Studio (dossier temp manquant — modèle sain)' : 'modèle non chargeable par LM Studio') : (methodNotAllowedError ? 'endpoint invalide (POST refusé)' : `${MAX_PING_ATTEMPTS} tentatives échouées — le modèle ne répond pas`))}`);
+      console.log(`\n  \x1b[31m━━━ ARRÊT : le modèle "${resolvedCloudModel}" ne répond pas (${batchModelError ? 'modèle Batch asynchrone' : (loadFailure ? (loadFailureTempFs ? 'erreur temporaire LM Studio' : 'échec de chargement') : (methodNotAllowedError ? 'endpoint invalide' : `${MAX_PING_ATTEMPTS} tentatives`))}).\x1b[0m`);
       if (methodNotAllowedError) {
         const pingEndpoint = providerConfig && providerConfig.endpoint;
         console.log(`  \x1b[33mDiagnostic : ENDPOINT INVALIDE (HTTP 405 « Method Not Allowed »).\x1b[0m`);
@@ -2372,7 +2401,7 @@ async function main() {
         console.log(`  \x1b[90m  • Ta clé OpenRouter a une limite de dépense (0$) : OpenRouter refuse de le servir.\x1b[0m`);
         console.log(`  \x1b[90m  • Les modèles :free NE consomment RIEN et passent ce contrôle — teste-les avec le suffixe :free.\x1b[0m`);
         console.log(`  \x1b[90m  • NE PAS déverrouiller la limite : elle protège ton porte-monnaie. Les :free coûtent 0$.\x1b[0m`);
-      } else if (loadFailure) {
+      } else if (loadFailure && !loadFailureTempFs) {
         console.log(`  \x1b[33mDiagnostic : ÉCHEC DE CHARGEMENT DU MODÈLE (HTTP 400 « Failed to load model »).\x1b[0m`);
         console.log(`  \x1b[90m  • L'architecture GGUF du modèle n'est PAS supportée par le runtime llama.cpp installé dans LM Studio.\x1b[0m`);
         console.log(`  \x1b[90m  • C'est un modèle trop récent pour le runtime (ex: k2-horizon — support llama.cpp en cours, issue #28361).\x1b[0m`);
@@ -2389,6 +2418,17 @@ async function main() {
           publisher: resolvedProvider || null
         });
         console.log(archWarning.incompatibleWarningText(preflightModel, { reason: loadFailureDetail || 'Failed to load model' }));
+      } else if (loadFailure && loadFailureTempFs) {
+        // Erreur TEMPORAIRE de fichiers internes LM Studio (demande
+        // utilisateur 2026-10-06) : le modèle est SAIN — AUCUN registre,
+        // AUCUNE isolation. Message dédié : relancer le run (le re-test des
+        // modèles déjà passés est voulu, pour suivre mises à jour/changes).
+        console.log(`  \x1b[33mDiagnostic : ERREUR TEMPORAIRE de fichiers internes LM Studio (dossier temporaire manquant).\x1b[0m`);
+        console.log(`  \x1b[90m  • Le même HTTP_400 « Failed to load model » masque ici un ENOENT mkdtemp sur .lmstudio\\.internal\\temp.\x1b[0m`);
+        console.log(`  \x1b[90m  • Le GGUF est SAIN : ce n'est NI une architecture incompatible NI un modèle défectueux.\x1b[0m`);
+        console.log(`  \x1b[33m  → Relancez le même run : un re-test est VOULU (suivi des mises à jour du modèle/runtime).\x1b[0m`);
+        console.log(`  \x1b[90m  • Si ça persiste : redémarrez LM Studio (il recrée son dossier temp au démarrage) puis relancez.\x1b[0m`);
+        console.log(`  \x1b[90m  • Ne PAS supprimer le GGUF, ne PAS isoler : rien n'a été enregistré contre ce modèle.\x1b[0m`);
       } else {
         console.log(`  \x1b[33mCauses possibles :\x1b[0m`);
         console.log(`  \x1b[90m  • Modèle free rate-limité upstream sur OpenRouter (HTTP 200, 0 contenu)\x1b[0m`);
@@ -2397,17 +2437,19 @@ async function main() {
         console.log(`  \x1b[90mAstuce : réessayez plus tard, utilisez un autre modèle, ou ajoutez votre propre clé provider (BYOK).\x1b[0m\n`);
       }
       if (keyLimitExceeded || batchModelError || loadFailure || methodNotAllowedError) console.log('');
-      logger.error(`Pre-flight check : arrêt — modèle indisponible${batchModelError ? ' (modèle Batch asynchrone)' : (keyLimitExceeded ? ' (limite de clé OpenRouter atteinte — modèle payant)' : (loadFailure ? ' (échec de chargement LM Studio)' : (methodNotAllowedError ? ' (endpoint invalide — POST refusé, HTTP 405)' : '')))}.`);
-      const errCode = batchModelError ? 'E404_BATCH_ONLY_MODEL' : (keyLimitExceeded ? 'E506_KEY_LIMIT_EXCEEDED' : (loadFailure ? 'E507_LM_LOAD_FAILED' : (methodNotAllowedError ? 'E405_ENDPOINT_NOT_CHAT' : 'E505_MODEL_UNRESPONSIVE')));
+      logger.error(`Pre-flight check : arrêt — modèle indisponible${batchModelError ? ' (modèle Batch asynchrone)' : (keyLimitExceeded ? ' (limite de clé OpenRouter atteinte — modèle payant)' : (loadFailure ? (loadFailureTempFs ? ' (erreur temporaire fichiers internes LM Studio — modèle sain, à relancer)' : ' (échec de chargement LM Studio)') : (methodNotAllowedError ? ' (endpoint invalide — POST refusé, HTTP 405)' : '')))}.`);
+      const errCode = batchModelError ? 'E404_BATCH_ONLY_MODEL' : (keyLimitExceeded ? 'E506_KEY_LIMIT_EXCEEDED' : (loadFailure ? (loadFailureTempFs ? 'E509_LM_TEMP_FS' : 'E507_LM_LOAD_FAILED') : (methodNotAllowedError ? 'E405_ENDPOINT_NOT_CHAT' : 'E505_MODEL_UNRESPONSIVE')));
       const errDetail = batchModelError
         ? `Le modèle "${resolvedCloudModel}" est réservé à l'API Batch asynchrone OpenRouter — utilisez la version temps réel sans ":batch" (${resolvedCloudModel.replace(/:batch$/i, '')})`
         : (keyLimitExceeded
           ? `Le modèle "${resolvedCloudModel}" ne répond pas — limite de dépense de la clé OpenRouter atteinte (modèle payant, clé limitée à 0$)`
-          : (loadFailure
+          : (loadFailure && !loadFailureTempFs
             ? `Le modèle "${resolvedCloudModel}" ne peut pas être chargé par LM Studio (architecture GGUF non supportée par le runtime llama.cpp actuel)${loadFailureDetail ? ' — ' + loadFailureDetail : ''}`
-            : (methodNotAllowedError
+            : (loadFailure && loadFailureTempFs
+              ? `Erreur TEMPORAIRE de fichiers internes LM Studio (dossier temporaire manquant) — le modèle "${resolvedCloudModel}" n'est PAS en cause et reste testable. Relancez le même run ; si ça persiste, redémarrez LM Studio.${loadFailureDetail ? ' — ' + loadFailureDetail : ''}`
+              : (methodNotAllowedError
               ? `L'endpoint (HTTP 405 « Method Not Allowed ») refuse le POST /chat/completions${methodNotAllowedDetail ? ' — ' + methodNotAllowedDetail : ''} — vérifiez --endpoint=<URL complète finissant par /chat/completions>, ou démarrez le serveur local (ollama serve / LM Studio server).`
-              : `Le modèle "${resolvedCloudModel}" ne répond pas (${MAX_PING_ATTEMPTS} tentatives) — probablement rate-limité upstream ou indisponible`)));
+              : `Le modèle "${resolvedCloudModel}" ne répond pas (${MAX_PING_ATTEMPTS} tentatives) — probablement rate-limité upstream ou indisponible`))));
       throw new BenchgoError(errCode, errDetail);
     }
     console.log('');
@@ -3692,7 +3734,14 @@ main().catch(e => {
     // E507 (arch GGUF inconnue du runtime llama.cpp) : avertissement dédié
     // « modèle non compatible » + enregistrement dans le registre des
     // incompatibles (tâche 2026-09-15) — s'applique aussi au RunCode.
-    if (e.code === 'E507_LM_LOAD_FAILED') {
+    // EXCEPTION (demande utilisateur 2026-10-06) : E509_LM_TEMP_FS (erreur
+    // TEMPORAIRE de fichiers internes LM Studio, ENOENT mkdtemp '.internal\temp')
+    // — le modèle est SAIN, souvent déjà testé au carnet : AUCUN registre,
+    // message dédié « relancer le run » (re-test voulu pour suivre les màj).
+    if (e.code === 'E509_LM_TEMP_FS') {
+      const mk = preKnownModelName || (isCloudMode ? resolvedCloudModel : null) || 'modele-inconnu';
+      console.log(archWarning.tempFsWarningText(mk, { reason: e.detail || e.message }));
+    } else if (e.code === 'E507_LM_LOAD_FAILED') {
       const mk = preKnownModelName || (isCloudMode ? resolvedCloudModel : null) || 'modele-inconnu';
       const isNew = archWarning.recordIncompatible(mk, {
         reason: e.detail || e.message,

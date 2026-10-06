@@ -2,6 +2,7 @@ const logger = require('./logger');
 const { API_TIMEOUT_MS } = require('./config');
 const { BenchgoError } = require('./cli-help');
 const benchMetrics = require('./benchmark-metrics');
+const archWarning = require('./arch-warning');
 
 // Fournisseurs cloud supportés
 // openaiCompat: true  → format OpenAI /v1/chat/completions avec streaming SSE standard
@@ -403,6 +404,14 @@ async function queryLLM(prompt, difficulty, tierId, isMandatory, spinner, option
   const { providerConfig = {} } = options;
   const { provider, model, apiKey, endpoint } = providerConfig;
 
+  // Prévention 2026-10-06 : les providers LOCAUX (lmstudio, ollama, custom sur
+  // un hôte local) passent par le daemon LM Studio pour le chargement du GGUF —
+  // un dossier interne « temp » absent fait échouer TOUS les chargements
+  // (ENOENT mkdtemp) et exclut à tort un modèle sain. Recréation silencieuse
+  // (une fois par session ; re-force après un échec temp-fs détecté).
+  if (provKey === 'lmstudio' || provKey === 'custom') {
+    archWarning.ensureLmStudioTempDir();
+  }
   if (!provider) throw new Error('cloud-client: providerConfig.provider manquant.');
   if (!model)    throw new Error('cloud-client: providerConfig.model manquant.');
 
@@ -671,9 +680,20 @@ async function queryLLM(prompt, difficulty, tierId, isMandatory, spinner, option
       // en RunCode) : arch GGUF inconnue du runtime llama.cpp de LM Studio
       // (ex: k2-horizon). Code E507 + message explicite au lieu du JSON brut
       // (tâche 2026-09-11).
-      const isLoadFailure = /HTTP_400/.test(reason) && /failed to load model/i.test(reason);
+      // EXCEPTION (demande utilisateur 2026-10-06) : le même HTTP_400 masque
+      // une erreur TEMPORAIRE de fichiers internes de LM Studio (ENOENT
+      // mkdtemp '.internal\temp\...' — dossier temp supprimé). Le GGUF est
+      // SAIN (déjà testé au carnet) : code E509_LM_TEMP_FS réessayable, au lieu
+      // d'un E507 définitif qui enregistrait le modèle comme incompatible.
+      const isTempFs = archWarning.isTempFsError(reason);
+      if (isTempFs) {
+        // Retente la recréation du dossier (suppression en cours de session).
+        archWarning.ensureLmStudioTempDir(true);
+      }
+      const isLoadFailure = !isTempFs && /HTTP_400/.test(reason) && /failed to load model/i.test(reason);
       const code = error.isFatalSlugError
         ? (error.code || 'E400_INVALID_MODEL_ID')
+        : isTempFs ? 'E509_LM_TEMP_FS'
         : isLoadFailure ? 'E507_LM_LOAD_FAILED'
         : error.isIdleTimeout ? 'E508_LM_IDLE_TIMEOUT'
         : isTimeout ? 'E502_LM_TIMEOUT'
@@ -681,6 +701,8 @@ async function queryLLM(prompt, difficulty, tierId, isMandatory, spinner, option
         : 'E504_LM_HTTP_ERROR';
       const friendlyReason = code === 'E507_LM_LOAD_FAILED'
         ? `Le modèle ne peut pas être chargé par LM Studio : architecture GGUF non supportée par le runtime llama.cpp actuel (modèle trop récent pour le runtime installé). Mettez LM Studio à jour (runtimes), ou testez un autre GGUF. Ce modèle est inutilisable en l'état : vous pouvez le supprimer de LM Studio (UI → poubelle) pour libérer de l'espace disque. Détail : ${reason}`
+        : code === 'E509_LM_TEMP_FS'
+        ? `Erreur TEMPORAIRE de fichiers internes LM Studio (dossier temporaire manquant) — le modèle n'est PAS en cause et reste testable. Relancez le même run (un re-test est voulu) ; si ça persiste, redémarrez LM Studio (il recrée son dossier .internal\\temp au démarrage). Ne supprimez pas le GGUF, ne l'isolez pas. Détail : ${reason}`
         : code === 'E508_LM_IDLE_TIMEOUT'
         ? `Le modèle cloud n'a envoyé AUCUN chunk pendant ${CLOUD_STREAM_IDLE_TIMEOUT_MS / 1000}s (inactivité totale). Le serveur est probablement surchargé ou le modèle indisponible — réessayez plus tard ou changez de modèle. Détail : ${reason}`
         : `Cloud Tier ${tierId} — ${reason}`;
