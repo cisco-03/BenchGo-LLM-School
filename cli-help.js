@@ -77,6 +77,13 @@ const HELP_TEXT = `
   \x1b[1m--parcours=\x1b[0m           RunCode : parcours scolaire Primaire | College-Lycee | Universite
                           (défaut : déduit du profil/du nom du modèle).
                           Ex: node runner.js --provider=groq --model=llama-3.3-70b-versatile --exam-code
+  \x1b[1m--eclair\x1b[0m             RunCode accéléré : scan de spécialité — 1 exercice de la CLASSE LA
+                          PLUS SIMPLE par langage (20 langages au coffre, ~20 appels courts,
+                          ~20-45 min sur un modèle lent) au lieu du parcours complet. Entretien
+                          de vérité, verdict du professeur et carnet identiques (mode 'eclair').
+                          Un échec n'est PAS éliminatoire en Éclair (information de spécialité) ;
+                          arrêt net « trop faible » si 8 échecs parmi les 10 premiers exercices.
+                          Émis automatiquement par night-batch.js au tremplin des modèles locaux.
   \x1b[1m--flash\x1b[0m              Mode FLASH : grande école ACCÉLÉRÉE — 1 exercice par classe
                           (au lieu de 10-15), tiré en priorité parmi les compétences
                           découvertes au tremplin RunCode. Pensé pour les machines à

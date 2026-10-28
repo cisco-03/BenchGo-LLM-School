@@ -520,6 +520,26 @@ function computeLedgerMetrics(ledger) {
   };
 }
 
+// --- Filtre anti-plomb (demande 2026-10-28) ---
+// Les modèles lents (< TPS_FILTER_DEFAULT tokens/s) mettent 1h30-2h par école :
+// cinq de ces plombs immobilisent une nuit entière (et le matin, c'est encore
+// là). Ils sont ÉLIMINÉS de la sélection (historique: tokensPerSecond du
+// dernier carnet; tremplin: mesure fraîche). Sur le --list-only, ils restent
+// affichés avec la mention « Trop lent » pour le diagnostic. Réglages :
+// --tps-min=<n> (seuil personnalisé) ou --tps-min=0 (filtre désactivé).
+const TPS_FILTER_DEFAULT = 5;
+
+// Dernière vitesse mesurée d'un modèle (tok/s), ou null si jamais testé.
+function modelTps(m) {
+  return m && m.metrics && m.metrics.tokensPerSecond > 0 ? m.metrics.tokensPerSecond : null;
+}
+
+function isModelTooSlow(m, threshold) {
+  if (!threshold || threshold <= 0) return false;
+  const t = modelTps(m);
+  return t != null && t < threshold;
+}
+
 // Detecte si un modele est un fichier MTP (Multi-Token Prediction). Les fichiers
 // MTP sont des modules complementaires destines a etre charges AVEC un modele
 // principal (via --speculative-draft-mtp) pour accelerer l'inference. Ils ne
@@ -1118,6 +1138,14 @@ function listLlmModels() {
         // Absentes si le modele n'a jamais ete teste (kind === 'never').
         metrics: computeLedgerMetrics(ledger)
       };
+    }).map(entryObj => {
+      // Filtre anti-plomb : modèle mesuré < TPS_FILTER_DEFAULT t/s au dernier
+      // carnet → signalé dans l'affichage (colonne Écoles manquantes) et éliminé
+      // de la sélection par main() (--tps-min=0 pour désactiver le filtre).
+      const tps = modelTps(entryObj);
+      entryObj.tooSlow = tps != null && tps < TPS_FILTER_DEFAULT;
+      entryObj.tooSlowText = entryObj.tooSlow ? `Trop lent (< ${TPS_FILTER_DEFAULT} t/s)` : null;
+      return entryObj;
     });
     // Tri : modeles deja testes du plus fort au plus faible (pct, puis score,
     // puis sante), puis les modeles en echec (tentés mais KO), puis les modeles
@@ -1347,7 +1375,8 @@ function printModelsList(models, { interactive = true } = {}) {
     console.log(`  ${C.gray}Isoler un modele non-LLM : !<num> (ex: !7) — le marque NON APPLICABLE et l'exclut.${C.reset}`);
     console.log(`  ${C.gray}Désisoler : !!<num> — retire un modele de la liste noire manuelle.${C.reset}`);
     console.log(`  ${C.gray}Tri par tokens (verbeux en haut) : tape "tok" puis Entrée — repère les modèles qui écrivent trop.${C.reset}`);
-    console.log(`  ${C.gray}Forcer la détection (modèles manquants) : tape "detect" — réindexe les GGUF orphelins via lms import.${C.reset}\n`);
+    console.log(`  ${C.gray}Forcer la détection (modèles manquants) : tape "detect" — réindexe les GGUF orphelins via lms import.${C.reset}`);
+    console.log(`  ${C.gray}Filtre anti-plomb : tout modèle < ${TPS_FILTER_DEFAULT} t/s (colonne Vit.) est éliminé APRES la sélection (--tps-min=N pour ajuster, --tps-min=0 pour désactiver).${C.reset}\n`);
   } else {
     console.log(`  ${C.gray}Mode --list-only : affichage seul (aucun test lancé).${C.reset}`);
     console.log(`  ${C.gray}Ordre : modeles testes du plus fort au plus faible, puis jamais testes, puis non-LLM a la fin.${C.reset}\n`);
@@ -1411,9 +1440,13 @@ function printModelsList(models, { interactive = true } = {}) {
     const mt = m.metrics;
     return mt && mt.elapsedMs > 0 ? fmtDuration(mt.elapsedMs).length : 0;
   }));
-  const missW = Math.max(22, ...models.map(m => (m.status.reason && (m.status.noCarnet || m.status.kind === 'runcode'))
-    ? m.status.reason.length
-    : (missingSchoolsLabel(m.status) || '').length));
+  // Label « Écoles manquantes » le plus parlant : raison spécifique (runcode /
+  // partiel sans carnet), mention Trop lent (filtre anti-plomb), sinon la liste
+  // des écoles manquantes.
+  const missLabelFor = m => (m.status.reason && (m.status.noCarnet || m.status.kind === 'runcode'))
+    ? m.status.reason
+    : (m.tooSlowText || (missingSchoolsLabel(m.status) || ''));
+  const missW = Math.max(22, ...models.map(m => missLabelFor(m).length));
 
   // Séparateurs visuels entre groupes de colonnes. '│' delimite les groupes
   // logiques : Identité | Statut | Performance | Reste à faire.
@@ -1461,10 +1494,11 @@ function printModelsList(models, { interactive = true } = {}) {
     // Idem pour les modèles « RUNCODE » (tremplin passé, grande école à venir) :
     // la raison (parcours · pct · spécialité) est plus informative que la liste
     // brute des écoles manquantes.
-    const missStr = missing && !m.status.noCarnet && m.status.kind !== 'runcode'
+    const missLabel = missLabelFor(m);
+    const missStr = missing && !m.status.noCarnet && m.status.kind !== 'runcode' && !m.tooSlowText
       ? `${C.gray}${missing.padEnd(missW)}${C.reset}`
-      : m.status.reason
-        ? `${C.gray}${m.status.reason.slice(0, missW).padEnd(missW)}${C.reset}`
+      : missLabel
+        ? `${C.gray}${missLabel.slice(0, missW).padEnd(missW)}${C.reset}`
         : ' '.repeat(missW);
     const mtpTag = m.mtpModelKey ? `${C.cyan}[MTP]${C.reset} ` : '';
     const namePad = nameW - (mtpTag ? 6 : 0);
@@ -2096,16 +2130,22 @@ function runCodeBestOf(ledger) {
 }
 
 // Métadonnées tremplin d'un modèle depuis son carnet :
-// { done, pct, specialite, diplome, parcours } ou { done: false }.
+// { done, pct, specialite, diplome, parcours, mode, tokensPerSecond } ou { done: false }.
+// tokensPerSecond : vitesse mesurée de la MEILLEURE tentative RunCode
+// (token/secondes de génération, calculée par runner.js dans examResult) —
+// sert au filtre anti-plomb juste après le tremplin.
 function runCodeGateInfo(ledger) {
   const best = runCodeBestOf(ledger);
   if (!best) return { done: false };
+  const tps = best.tokensPerSecond;
   return {
     done: true,
     pct: best.pct != null ? best.pct : (best.max > 0 ? Math.round((best.score / best.max) * 100) : null),
     specialite: best.specialite || null,
     diplome: best.diplome || null,
-    parcours: best.parcours || null
+    parcours: best.parcours || null,
+    mode: best.mode || null,
+    tokensPerSecond: (tps != null && tps > 0) ? tps : null
   };
 }
 
@@ -2116,6 +2156,7 @@ function runCodeGateInfo(ledger) {
 function runCodeStatusReason(rcInfo) {
   const parts = [];
   if (rcInfo.parcours) parts.push(`RunCode ${rcInfo.parcours}`);
+  if (rcInfo.mode === 'eclair') parts.push('éclair');
   if (rcInfo.pct != null) parts.push(`${rcInfo.pct}%`);
   if (rcInfo.specialite) parts.push(String(rcInfo.specialite).toUpperCase());
   return parts.length > 0 ? parts.join(' · ') : 'RunCode passé';
@@ -2124,12 +2165,20 @@ function runCodeStatusReason(rcInfo) {
 // Lance l'examen RunCode (node runner.js --exam-code) pour un modèle local.
 // Le parcours suit la même scolarité que l'école cible (un modèle STANDARD
 // passe College-Lycee) : le pre-examen mesure les aptitudes au bon niveau.
+// Mode ÉCLAIR par défaut (demande 2026-10-28) : scan de spécialité accéléré
+// (1 exercice de la classe la plus simple par langage — 20 appels courts,
+// ~20-45 min sur un modèle lent) au lieu du Turbo complet (1-2 h). Les
+// modèles locaux sont les premiers concernés (tremplin night-batch) ; les
+// cloud rapides qui lancent le runner à la main restent en Turbo par défaut.
+// opts.eclair=false (--tremplin-full) : retrouve le parcours complet.
 // Retourne { ok, durationMs, skipped } — jamais bloquant pour la file.
-async function runRunCodeExam(modelKey, extraArgs, parcours, timeoutMs) {
+async function runRunCodeExam(modelKey, extraArgs, parcours, timeoutMs, opts = {}) {
+  const eclair = opts.eclair !== false;
   const args = ['runner.js', '--force', '--provider=lmstudio', `--model=${modelKey}`, '--exam-code'];
+  if (eclair) args.push('--eclair');
   if (parcours) args.push(`--parcours=${parcours}`);
   for (const a of extraArgs) args.push(a);
-  console.log(`\n  ${C.magenta}⚡ TREMPLIN RUNCODE : ${args.join(' ')}${C.reset}`);
+  console.log(`\n  ${C.magenta}⚡ TREMPLIN RUNCODE (${eclair ? 'ÉCLAIR — scan spécialité' : 'TURBO — parcours complet'}) : ${args.join(' ')}${C.reset}`);
   const bench = await runBenchmark(modelKey, null, [], {
     examCodeArgs: args.slice(1),
     timeoutMs: timeoutMs || (TIER_TIMEOUT_MS * 2)
@@ -2495,6 +2544,14 @@ function parseArgs() {
   // désisoler un modèle sans session interactive TTY — utile depuis un rapport
   // --lmstudio qui affiche les numéros.
   const isolateArg = flagValue('--isoler=');
+  // --tps-min= : seuil du filtre anti-plomb (t/s). Défaut TPS_FILTER_DEFAULT
+  // (5). 0 = filtre désactivé (tous les modèles peuvent passer, même lents).
+  const tpsMinArg = flagValue('--tps-min=');
+  // --tremplin-full : tremplin RunCode en mode TURBO complet (parcours entier)
+  // au lieu de l'Éclair (1 exercice/langage, classe la plus simple) — l'Éclair
+  // est le défaut du tremplin night-batch depuis 2026-10-28 (modèles locaux
+  // lents : mesure de spécialité en ~20 min au lieu de ~1-2 h).
+  const tremplinFull = raw.includes('--tremplin-full');
 
   // Récupère les flags avalés par la virgule dans --models=. Quand l'utilisateur
   // écrit --models=Nanbeige4.2 3B,--schools=LIGHT sans guillemets, le shell
@@ -2526,7 +2583,7 @@ function parseArgs() {
   if (teacherModelArg) extraRunnerArgs.push(`--teacher-model=${teacherModelArg}`);
   if (teacherApiKeyArg) extraRunnerArgs.push(`--teacher-api-key=${teacherApiKeyArg}`);
   if (teacherEndpointArg) extraRunnerArgs.push(`--teacher-endpoint=${teacherEndpointArg}`);
-  return { modelsArg, schoolsArg, tiersArg, noTeacher, listOnly, incompatibleList, hybridFlag, forceDetect, classByClass, isolateArg, skipFlag, resumeFlag, teacherProviderArg, teacherModelArg, extraRunnerArgs };
+  return { modelsArg, schoolsArg, tiersArg, noTeacher, listOnly, incompatibleList, hybridFlag, forceDetect, classByClass, isolateArg, skipFlag, resumeFlag, teacherProviderArg, teacherModelArg, tpsMinArg, tremplinFull, extraRunnerArgs };
 }
 
 function resolveSchoolsFromArg(schoolsArg) {
@@ -2556,6 +2613,8 @@ async function main() {
       { cmd: 'node night-batch.js --class-by-class', desc: 'Mode classe-par-classe : chaque tier dans un process séparé avec timeout (robustesse anti-hang).' },
       { cmd: 'node night-batch.js --class-by-class --tiers=0', desc: 'Filtre rapide : ne teste que le 1er exercice (tier 0) de chaque école. Virer les modèles qui échouent.' },
       { cmd: 'node night-batch.js --resume', desc: 'Reprise : ignore les écoles déjà au carnet et, en classe-par-classe, les tiers déjà passés (reprend où la session s\'était arrêtée).' },
+      { cmd: 'node night-batch.js --tps-min=5', desc: 'Filtre anti-plomb : les modèles mesurés < N tokens/s sont éliminés de la sélection (défaut 5 ; 0 = désactivé). Après tremplin Éclair aussi.' },
+      { cmd: 'node night-batch.js --tremplin-full', desc: 'Tremplin RunCode en TURBO complet (parcours entier) au lieu de l\'Éclair accéléré (1 exercice/langage, défaut).' },
       { cmd: 'node night-batch.js --skip', desc: 'Pendant un batch EN COURS (autre terminal) : interrompt le modèle en cours (≤3s) et passe au suivant. Ne quitte PAS le batch.' },
       { cmd: 'Pendant la sélection : !<num>  /  !!<num>', desc: 'Isoler (!) ou désisoler (!!) un modèle de la liste noire.' },
       { cmd: 'Pendant la sélection : detect  /  force-detect', desc: 'Force la détection des modèles manquants (scan + lms import).' },
@@ -2572,6 +2631,8 @@ async function main() {
       'Ctrl+C reste l\'arrêt COMPLET (décharge + serveur). Pour ÉCOURTER un modèle sans tout arrêter : node night-batch.js --skip dans un second terminal.',
       '--skip est consommé par le batch (≤3s) : le run en cours est killé, le modèle est consigné « passé avec --skip » (ni échec ni blacklist), et la file continue.',
       'Liste d\'attente RunCode : les modèles « mis en réserve » après node runner.js --exam-code passent en tête de file. Retirez-les avec : node -e "require(\'./runcode-queue\').dequeue(\'<modelKey>\')"',
+      '--tps-min=<n> : seuil du filtre anti-plomb (tokens/s, défaut 5, 0 = désactivé). Les modèles lents < seuil sont éliminés après la sélection ET après le tremplin Éclair (mesure fraîche). Aucune blacklist — les lents restent visibles en --list-only avec la mention « Trop lent ».',
+      'Tremplin RunCode : mode ÉCLAIR par défaut pour les modèles locaux (scan de spécialité : 1 exercice de la classe la plus simple par langage, ~20 appels courts). --tremplin-full retrouve le parcours complet.',
       '--resume se combine avec --models/--schools/--class-by-class : les tiers déjà passés sont mémorisés dans .benchgo-progress.json et sautés.'
     ]);
     process.exit(0);
@@ -2582,7 +2643,12 @@ async function main() {
   console.log(`${C.bold}${C.cyan}   File d'attente automatique de modeles LM Studio   ${C.reset}`);
   console.log(`${C.bold}${C.cyan}==================================================${C.reset}\n`);
 
-  const { modelsArg, schoolsArg, tiersArg, listOnly, incompatibleList, hybridFlag, forceDetect, isolateArg, classByClass: cbcFromCli, skipFlag, resumeFlag, extraRunnerArgs } = parseArgs();
+  const { modelsArg, schoolsArg, tiersArg, listOnly, incompatibleList, hybridFlag, forceDetect, isolateArg, classByClass: cbcFromCli, skipFlag, resumeFlag, extraRunnerArgs, tremplinFull, tpsMinArg } = parseArgs();
+  // Seuil du filtre anti-plomb : --tps-min=<n> (0 = désactivé), sinon défaut 5.
+  const _tpsParsed = parseFloat(tpsMinArg);
+  const tpsMin = tpsMinArg
+    ? (Number.isFinite(_tpsParsed) && _tpsParsed > 0 ? _tpsParsed : (tpsMinArg.trim() === '0' ? 0 : TPS_FILTER_DEFAULT))
+    : TPS_FILTER_DEFAULT;
   let classByClass = cbcFromCli;
   let tierFilter = null;
   // Mode 8 Manuel : stoppe la file au premier tier obligatoire échoué.
@@ -2799,6 +2865,31 @@ async function main() {
     }
   }
 
+  // --- Filtre anti-plomb (demande 2026-10-28) ---
+  // Élimine les modèles dont la vitesse mesurée est < tpsMin t/s (historique
+  // au carnet : tokensPerSecond). Cinq plombs de < 5 t/s immobilisent une
+  // nuit entière — plus moyen de finir la file. Les lents passent leur
+  // tremplin Éclair (20 mini-exercices) et sont écartés AVANT l'école
+  // complète. Override : --tps-min=<n> (seuil) ou --tps-min=0 (désactivé).
+  // Les modèles éliminés sont TOUJOURS annoncés (jamais écartés en silence).
+  if (tpsMin > 0) {
+    const eliminated = selected.filter(m => isModelTooSlow(m, tpsMin));
+    if (eliminated.length > 0) {
+      selected = selected.filter(m => !isModelTooSlow(m, tpsMin));
+      console.log(`\n  ${C.yellow}⛔ Filtre anti-plomb : ${eliminated.length} modèle(s) éliminé(s) (< ${tpsMin} t/s mesurés au dernier carnet) :${C.reset}`);
+      for (const m of eliminated) {
+        console.log(`  ${C.gray}  • ${m.displayName} [${m.modelKey}] — ${modelTps(m)} t/s. Forcez avec --tps-min=0.${C.reset}`);
+      }
+    } else {
+      console.log(`  ${C.gray}Filtre anti-plomb (< ${tpsMin} t/s) : aucun modèle éliminé.${C.reset}`);
+    }
+    if (selected.length === 0) {
+      console.log(`  ${C.red}Tous les modèle(s) sélectionné(s) sont sous le seuil ${tpsMin} t/s — rien à tester. Relancez avec --tps-min=0 pour forcer.${C.reset}`);
+      if (serverHandle.startedByUs) stopServer();
+      process.exit(0);
+    }
+  }
+
   // --- Liste d'attente RunCode (tâche 2026-09-16) ---
   // Les modèles « mis en réserve » après leur tremplin RunCode (depuis le
   // runner : proposition après l'examen ou flag --queue-runcode) passent en
@@ -2980,7 +3071,8 @@ async function main() {
     if (!info.done) runcodePending++;
   }
   if (runcodePending > 0) {
-    console.log(`  ${C.magenta}⚡ Tremplin RunCode ACTIVÉ : ${runcodePending} modèle(s) sans pré-examen passeront RunCode AVANT la grande école (seuil souple ${runcodeGate}%, jamais éliminatoire).${C.reset}`);
+    console.log(`  ${C.magenta}⚡ Tremplin RunCode ACTIVÉ (${tremplinFull ? 'TURBO complet' : 'ÉCLAIR accéléré — 1 exo/langage'} : ${runcodePending} modèle(s) sans pré-examen passeront RunCode AVANT la grande école, seuil souple ${runcodeGate}%).${C.reset}`);
+    console.log(`  ${C.gray}Filtre anti-plomb APRES tremplin : vitesse mesurée < ${tpsMin} t/s → grande école annulée pour le modèle (file plus rapide).${C.reset}`);
     // Ordre de la file : RunCode déjà fait (meilleurs d'abord) → sans RunCode
     // (triés par score d'école si connu, sinon par nom) — les modèles qui ont
     // déjà prouvé leur niveau ouvrent la nuit.
@@ -3146,8 +3238,12 @@ async function main() {
       const firstSchoolKey = (modelSchools[0] && modelSchools[0].key) || 'auto';
       const PARCOURS_BY_SCHOOL = { LIGHT: 'Primaire', STANDARD: 'College-Lycee', EXPERT: 'Universite', DOCTORAT: 'Universite' };
       const parcours = PARCOURS_BY_SCHOOL[firstSchoolKey] || 'Primaire';
-      console.log(`\n  ${C.magenta}⚡ Pré-examen RunCode (${parcours}) — le tremplin mesure les aptitudes avant la grande école.${C.reset}`);
-      const rcBench = await runRunCodeExam(m.modelKey, modelExtraArgs, parcours, TIER_TIMEOUT_MS * 2);
+      const eclairMode = !tremplinFull;
+      // Timeout protégé : l'Éclair (20 mini-exercices courts) doit tenir dans
+      // TIER_TIMEOUT_MS (45 min) ; le Turbo complet garde son double.
+      const tremplinTimeout = eclairMode ? TIER_TIMEOUT_MS : (TIER_TIMEOUT_MS * 2);
+      console.log(`\n  ${C.magenta}⚡ Pré-examen RunCode ${eclairMode ? 'ÉCLAIR' : 'TURBO'} (${parcours}) — ${eclairMode ? 'mesure de spécialité rapide (1 exercice/langage)' : 'mesure des aptitudes avant la grande école'}.${C.reset}`);
+      const rcBench = await runRunCodeExam(m.modelKey, modelExtraArgs, parcours, tremplinTimeout, { eclair: eclairMode });
       const rcMins = (rcBench.durationMs / 60000).toFixed(1);
       if (rcBench.skipped) {
         console.log(`  ${C.yellow}[--skip] Tremplin écourté — passage au modèle suivant.${C.reset}`);
@@ -3159,6 +3255,29 @@ async function main() {
       const rcLedger = matchLedger(m.modelKey, loadAllLedgers());
       const rcInfo = runCodeGateInfo(rcLedger);
       runcodeGateInfoByModel.set(m.modelKey, rcInfo);
+      // --- Contrôle anti-plomb post-tremplin (demande 2026-10-28) ---
+      // Le tremplin Éclair offre une mesure de vitesse À JOUR (tokensPerSecond
+      // écrit dans le carnet par runner.js). Sous le seuil → grande école
+      // ANNULÉE ici même : un plomb de < 5 t/s fait 1h30-2h par école, cinq de
+      // ces plombs immobilisent la nuit entière. PAS de blacklist (un modèle
+      // lent n'est pas défaillant) : au prochain batch, son carnet déclenchera
+      // le filtre historique (colonne Vit. / --tps-min).
+      if (rcInfo.done && rcInfo.tokensPerSecond != null && rcInfo.tokensPerSecond < tpsMin) {
+        console.log(`  ${C.yellow}⛔ Mesuré ${rcInfo.tokensPerSecond} t/s < ${tpsMin} t/s (filtre anti-plomb) — grande école ANNULÉE, passage au modèle suivant.${C.reset}`);
+        unloadAll();
+        results.push({ model: m, school: 'runcode', ok: false, reason: 'trop_lent', durationMs: rcBench.durationMs });
+        continue;
+      }
+      // Éclair TIMEOUT (20 mini-exercices non finis en 45 min) : le modèle est
+      // démonstrativement trop lent pour la grande école — annulée aussi.
+      // En Turbo (--tremplin-full), un timeout reste non-éliminatoire
+      // (comportement historique souple).
+      if (eclairMode && rcBench.timedOut) {
+        console.log(`  ${C.yellow}⛔ Scan Éclair interrompu par le timeout après ${rcMins} min — modèle trop lent (20 mini-exercices !), grande école ANNULÉE.${C.reset}`);
+        unloadAll();
+        results.push({ model: m, school: 'runcode', ok: false, reason: 'trop_lent', durationMs: rcBench.durationMs });
+        continue;
+      }
       if (rcInfo.done && rcInfo.pct != null) {
         const under = rcInfo.pct < runcodeGate;
         console.log(`  ${under ? C.yellow : C.green}[${nowClock()}] Tremplin terminé en ${rcMins} min — pré-examen ${rcInfo.pct}%${rcInfo.specialite ? ` (spécialité ${rcInfo.specialite.toUpperCase()})` : ''}.${C.reset}`);
@@ -3167,7 +3286,7 @@ async function main() {
           console.log(`  ${C.yellow}Pré-examen sous le seuil ${runcodeGate}% : la grande école reste ouverte, mais ce modèle n'est pas recommandé pour un run complet.${C.reset}`);
         }
       } else {
-        console.log(`  ${C.yellow}[${nowClock()}] Tremplin interrompu après ${rcMins} min (carnet RunCode absent) — la grande école continue normalement.${C.reset}`);
+        console.log(`  ${C.yellow}[${nowClock()}] Tremplin interrompu après ${rcMins} min (carnet RunCode absent${eclairMode ? ' — crash, pas un signe de lenteur' : ''}) — la grande école continue normalement.${C.reset}`);
       }
     } else if (gateInfo.pct != null && gateInfo.pct < runcodeGate) {
       // Modèle déjà testé au tremplin avec un pct sous le seuil : avertissement

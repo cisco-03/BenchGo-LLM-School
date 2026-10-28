@@ -1,5 +1,39 @@
 # CHANGELOG - Carnet de Notes BenchGo
 
+## 2026-10-28 — feat(RunCode Éclair + filtre anti-plomb) : spécialité mesurée en ~20 min et modèles < 5 t/s éliminés du mode nuit
+
+### Contexte & besoin
+Deux demandes utilisateur conjointes. (1) Les modèles LOCAUX lents mettent **1h30-2h par école** de la grande école : cinq de ces plombs immobilisent une nuit entière (« je me lève, c'est toujours pas fini »). Il faut un système ACCÉLÉRÉ et DÉTERMINISTE qui mesure précisément dans quels langages un modèle local se défend le mieux — le tremplin RunCode Turbo existant (2 exos/classe × 6 classes, parcours entier) reste trop long pour eux. Les modèles frontier cloud, eux, vont trop vite pour être un problème. (2) Les modèles mesurés à **moins de 5 tokens/s** doivent être ÉLIMINÉS du mode nuit : on ne peut jamais les finir.
+
+### Cause
+Le tremplin Turbo fait tourner tout le parcours (jusqu'à 15 exercices de classe en classe) et un modèle lent paie chaque question au prix fort. Et rien n'exploitait la vitesse mesurée (`tokensPerSecond`, calculée par runner.js dans chaque tentative de carnet) pour écarter les modèles infréquentables du batch.
+
+### Corrections
+- **RunCode Éclair** (`adaptive-exam.js`) : nouveau mode d'examen `runEclairScan()` — scan de spécialité ACCÉLÉRÉ. Principe : **1 exercice PAR LANGAGE** (20 langages du coffre), toujours l'exercice de la **CLASSE LA PLUS SIMPLE disponible** de ce langage (CP majoritaire) — prompts/réponses les plus courts du coffre (max_tokens 25-50) → temps minimal même sur un modèle lent. Ordre front-loaded (`ECLAIR_LANG_ORDER`) : python, javascript, typescript, sql, react d'abord (signal cœur en 5 min), langages déclarés majeure/mineure en tête absolue. Un échec n'est PAS éliminatoire en Éclair (information de spécialité : un mauvais langage prouve où le modèle n'est pas fort) ; seule la déclaration mensongère « expert » garde le carton rouge (échec de l'exo le plus simple du langage, CP/CE1/CE2). Arrêt net « trop faible » (`reportCard.tooWeak`) si ≥ 8 échecs (ECLAIR_STOP_WEAK_FAILS) parmi les 10 premiers exercices joués (ECLAIR_STOP_WEAK_PLAYED). Verdict final identique au Turbo : `computeSpecialtyStats()` + verdict du professeur (`determineSpecialty`) + `languageStats` (réussites + `avgLatencyMs`). Sélection dans `eclairSelection(vault)` — fonction PURE testable.
+- **Refactor du Turbo (`runAdaptiveSchoolExam`)** : extraction de 5 helpers partagés sans changement de comportement — `buildExamTeacher`, `createExamLogger` (journal `exam_*.log` commun), `resolveParcours` (résolution parcours), `runTruthInterview` (entretien de vérité), `playExercise` (un exercice : tentatives 1+2 budget étendu thinking, regex, latence). Les deux modes partagent exactement la même exécution d'exercice.
+- **Bonus correctif latent** : `resolveParcours` répare le bug potentiel de l'ancien code qui, quand `parcoursRunCode` désignait un PROFIL ('LIGHT'), renvoyait `'LIGHT'` comme parcours → `classesToRun = undefined` → TypeError. Désormais le profil est converti via `PARCOURS_PROFILE` (LIGHT→Primaire, STANDARD→College-Lycee, EXPERT→Universite).
+- **Flag `--eclair`** (runner.js, bloc `--exam-code`) : `node runner.js --exam-code --eclair` lance l'Éclair. Bannière + bilan affichent le mode (⚡ ÉCLAIR / TURBO). Le carnet s'écrit EXACTEMENT comme en Turbo (école `RunCode-<parcours>`, spécialité, `languageStats`) avec un champ `mode: 'eclair'` dans la tentative (les carnets anciens restent sans mode = turbo).
+- **Filtre anti-plomb night-batch** (`night-batch.js`) :
+  - **Élimination historique** : après la sélection (--models= ou interactive), tout modèle dont le dernier carnet donne `tokensPerSecond < tpsMin` est RETIRÉ de la file, annoncé nominativement (nom + vitesse + `--tps-min=0` pour forcer). Pas d'écart silencieux.
+  - **Contrôle post-tremplin** : le tremplin Éclair écrit une vitesse À JOUR dans le carnet ; si la mesure fraîche est < seuil → grande école ANNULÉE pour le modèle (déchargement, raison `trop_lent`, passage au suivant, PAS de blacklist — un lent n'est pas défaillant). Pareil si le scan Éclair est TUÉ PAR LE TIMEOUT (45 min pour 20 mini-exercices = plomb démontré, raison `trop_lent`). Crash du runner (E507 etc.) pendant l'Éclair ≠ lenteur → comportement historique conservé (la grande école continue ; elle échouera au health check si le GGUF est réellement cassé).
+  - **Affichage** : `--list-only` marque les cibles du filtre dans la colonne « Écoles manquantes » (`Trop lent (< 5 t/s)`), largeur de colonne recalculée dynamiquement.
+  - Réglage : `--tps-min=<n>` (défaut `TPS_FILTER_DEFAULT` = 5) ou `--tps-min=0` (filtre désactivé, comportement historique).
+  - `runCodeGateInfo()` transporte désormais `mode` et `tokensPerSecond` de la meilleure tentative ; la raison RunCode du tableau affiche `éclair` quand le tremplin passé était un scan (ex: `RunCode Primaire · éclair · 90% · PYTHON`).
+- **Tremplin night-batch en Éclair par défaut** : `runRunCodeExam()` pousse `--eclair` pour les modèles locaux (toujours le cas en night-batch, provider lmstudio), timeout ramené à `TIER_TIMEOUT_MS` (45 min) au lieu de 90 ; `--tremplin-full` retrouve le Turbo complet (timeout 90 min).
+- **Aides CLI** : `cli-help.js` (rubrique runner, entrée `--eclair`), aide night-batch (2 nouvelles commandes + 2 lignes de notes).
+- **Tests** : nouveau `tests/test-runcode-eclair.js` (7 cas) — sélection pure sur un mini-coffre synthétique (1 exo/lang, classe la plus simple indépendante de l'ordre JSON, premier exercice = déterministe, langage vide/regex invalide/coffre absent jamais fatals) + intégrité des constantes (ordre scolaire complet, front-load en tête).
+
+### Fichiers touchés
+`adaptive-exam.js` (helpers + runEclairScan + eclairSelection), `runner.js` (import + flag + bannière + bilan + carnet mode), `night-batch.js` (const/helpeurs tps, listLlmModels, printModelsList, parseArgs, main : filtre + tremplin + help), `cli-help.js`, `tests/test-runcode-eclair.js` (nouveau), ce CHANGELOG, `AGENTS.md`, `README.md`.
+
+### Pièges
+- **Les échos `eclairSelection` ne dépendent PAS de l'ordre des clés du coffre** : le choix de la classe la plus simple suit `ECLAIR_CLASS_ORDER` (CP→CE1→CE2→CM1→CM2→6eme→...), jamais l'ordre JSON. Si un jour le coffre ajoute des langages (ex: 'zig'), `ECLAIR_LANG_ORDER` ne les contient pas → ils sont quand même testés (repli : append en fin de liste).
+- **La vitesse mesurée au tremplin Éclair (CP) reste représentative** : c'est la même mesure (tokens générés / temps de génération cumulé) que pour les écoles classiques ; c'est la vitesse d'inférence qui compte, pas la difficulté.
+- **ComputeLedgerMetrics compte les écoles RunCode-\*** (incluant Éclair) dans tok/s et pct : un modèle ne peut donc échapper au filtre qu'en étant JAMAIS testé — couvert par le contrôle post-tremplin.
+- Le `pct` d'un Éclair (exos de niveau CP) paraît flatteur : il ne sert qu'au TRI de la file (tremplin sous le seuil → avertissement souple) et à l'affichage ; le diplôme Éclair ne reflète pas un parcours complet. Pour un bilan sérieux, le modèle passerait ensuite une école (complète ou FLASH).
+- `playExercise` est partagé : toute modification des tentatives 1+2 valable pour le Turbo l'est aussi pour l'Éclair (et inversement). Le spinnerLabel de la tentative 2 est dérivé du label passé (suffixe « — nouvelle tentative ») ; ne pas passer de label vide.
+- Le red carton Éclair exige les 3 classes les plus simples GLOBALES (CP/CE1/CE2) — un expert rust rateant CM2 (plus simple classe du coffre rust) ne prend PAS de carton, contrairement au Turbo (3 premières classes du parcours).
+
 ## 2026-10-06b — fix(E509) : erreur temporaire du dossier interne LM Studio ne doit plus exclure un modèle sain
 
 ### Contexte & besoin

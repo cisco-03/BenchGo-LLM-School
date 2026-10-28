@@ -42,6 +42,13 @@ pour le classement général (badge `⚡ RunCode · Turbo`). Commandes dans
 **Tremplin automatique (mode nuit)** : tout modèle sans examen RunCode au carnet
 passe d'abord le pré-examen RunCode, puis la grande école (voir
 [07-mode-nuit.md](07-mode-nuit.md#-tremplin-runcode-turbo-pré-examen-automatique)).
+Le tremplin tourne en **mode ÉCLAIR** (accéléré) : 1 exercice de la classe la plus
+simple par langage (~20 appels courts, spécialité mesurée en ~20-45 min sur un
+modèle lent) au lieu du parcours Turbo complet ; `--tremplin-full` pour le retrouver.
+Résultat : le carnet du tremplin stocke la **vitesse mesurée** et le **filtre
+anti-plomb** night-batch (`--tps-min=`, défaut 5 tokens/s) élimine de la file les
+modèles trop lents (une école de 1h30-2h × cinq modèles > une nuit) — toujours
+annoncés nominativement, jamais blacklistés.
 
 **Exercices de spécialité (grande école)** : la grande école réutilise le bilan
 RunCode — chaque tier embarque des exercices supplémentaires classés par langage

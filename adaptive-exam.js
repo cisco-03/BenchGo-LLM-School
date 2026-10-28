@@ -100,6 +100,171 @@ function looksLikeReasoningTrace(text) {
 // besoin de centaines de tokens de délibération avant la ligne de code finale.
 const EXTENDED_THINKING_BUDGET = 512;
 
+// --- Mode ÉCLAIR (demande 2026-10-28) : scan accéléré de spécialité ---
+// Les modèles locaux lents mettent 1h30-2h par école ; il faut un système
+// COURT qui détermine précisément dans quels langages ils se défendent.
+// L'Éclair pose 1 exercice PAR LANGAGE (20 langages au coffre), toujours la
+// CLASSE LA PLUS SIMPLE disponible de ce langage (CP en général — prompts et
+// réponses les plus courts, budget 25-50 tokens du coffre). Un échec n'est
+// PAS éliminatoire ici : c'est une information de spécialité (un mauvais
+// langage prouve où le modèle n'est PAS fort). Seule la déclaration
+// mensongère « expert » conserve le carton rouge (échec d'un exo de base).
+// Arrêt net si le modèle coule (trop d'échecs parmi les N premiers) : le scan
+// ne va pas jusqu'au bout pour un modèle manifestement trop faible.
+const ECLAIR_CLASS_ORDER = [
+  'CP', 'CE1', 'CE2', 'CM1', 'CM2',
+  '6eme', '5eme', '4eme', '3eme', '2nde', '1ere', 'Terminale',
+  'Licence1', 'Licence2', 'Licence3', 'Master1', 'Master2', 'Doctorat'
+];
+// Ordre front-loaded : signal cœur (python/js/ts/sql/react) dès les
+// premières minutes, puis les langages plus rares.
+const ECLAIR_LANG_ORDER = [
+  'python', 'javascript', 'typescript', 'sql', 'react', 'go', 'java', 'php',
+  'css', 'bash', 'csharp', 'html', 'kotlin', 'swift', 'htmx', 'ruby',
+  'c', 'cpp', 'perl', 'rust'
+];
+const ECLAIR_STOP_WEAK_PLAYED = 10;
+const ECLAIR_STOP_WEAK_FAILS = 8;
+
+async function buildExamTeacher(options = {}) {
+  return new TeacherClient({
+    provider: options.teacherProvider || 'groq',
+    model: options.teacherModel || 'llama-3.3-70b-versatile',
+    apiKey: options.teacherApiKey
+  });
+}
+
+// Journal détaillé : tout ce qui s'affiche à l'écran est aussi tracé dans
+// Export-Rapports/exam_<modele>_<ts>.log (la réponse complète incluse).
+// Partagé par le Turbo et l'Éclair (même convention de nommage).
+function createExamLogger(studentModelName) {
+  const logDir = path.join(__dirname, 'Export-Rapports');
+  if (!fs.existsSync(logDir)) fs.mkdirSync(logDir, { recursive: true });
+  const logFile = path.join(logDir, `exam_${String(studentModelName).replace(/[^a-z0-9]/gi, '_')}_${Date.now()}.log`);
+  const log = (msg) => {
+    console.log(msg);
+    fs.appendFileSync(logFile, msg + '\n');
+  };
+  const logFileOnly = (msg) => {
+    fs.appendFileSync(logFile, msg + '\n');
+  };
+  return { log, logFileOnly, logFile };
+}
+
+// Résolution du parcours RunCode (options.parcoursRunCode explicite, sinon
+// profil BenchGo → parcours équivalent, sinon Primaire). La branche
+// PARCOURS_PROFILE est corrigée ici : l'ancien code renvoyait le nom du
+// PROFIL ('LIGHT') comme parcours, ce qui donnait classesToRun = undefined
+// (TypeError latent si un appelant passait un profil au lieu d'un parcours).
+function resolveParcours(vault, options = {}) {
+  const parcours = vault.parcours || DEFAULT_PARCOURS;
+  let parcoursName = null;
+  if (options.parcoursRunCode) {
+    if (parcours[options.parcoursRunCode]) parcoursName = options.parcoursRunCode;
+    else if (PARCOURS_PROFILE[options.parcoursRunCode] && parcours[PARCOURS_PROFILE[options.parcoursRunCode]]) {
+      parcoursName = PARCOURS_PROFILE[options.parcoursRunCode];
+    }
+  }
+  const PROFILE_TO_PARCOURS = { LIGHT: 'Primaire', STANDARD: 'College-Lycee', EXPERT: 'Universite' };
+  const guessed = options.profileBenchgo
+    && PROFILE_TO_PARCOURS[options.profileBenchgo]
+    && parcours[PROFILE_TO_PARCOURS[options.profileBenchgo]]
+    ? PROFILE_TO_PARCOURS[options.profileBenchgo] : null;
+  const parcoursLabel = parcoursName || guessed || 'Primaire';
+  return { parcoursLabel, classesToRun: parcours[parcoursLabel] || DEFAULT_PARCOURS['Primaire'] };
+}
+
+// Entretien de vérité : déclaration sur l'honneur des 2 langages que l'élève
+// maîtrise le mieux + niveau. La liste des langages est construite depuis le
+// coffre (langages réellement jouables) : la déclaration ne peut citer que
+// des langages jouables. Partagé par le Turbo et l'Éclair.
+async function runTruthInterview(studentModelName, studentClient, vault, log, logFileOnly) {
+  const vaultTechs = Object.keys(vault.catalog || {}).sort();
+  const declaredTechs = Array.from(new Set(vaultTechs.concat(['typescript', 'react', 'htmx']))).sort();
+  const techListStr = declaredTechs.join(', ');
+
+  const interviewPrompt = `[LE PROFESSEUR - DÉCLARATION SUR L'HONNEUR]
+Tu es un modèle en évaluation technique.
+RÈGLE D'OR : Dis STRICTEMENT la vérité sur tes compétences. Zéro mensonge, zéro exagération.
+Indique simplement les 2 langages que tu maîtrises le mieux parmi cette liste :
+[${techListStr}]
+Et précise si ton niveau est 'standard' ou 'expert'.
+Réponds simplement sur une seule ligne (ex: "python, react, expert").`;
+
+  log("📋 [PROFESSEUR] Entretien de vérité : « Indique les 2 langages que tu maîtrises le mieux, et ton niveau. »");
+  const rawAnswer = await studentClient.generate(studentModelName, interviewPrompt, {
+    max_tokens: 512,
+    temperature: 0.0,
+    spinnerLabel: "Entretien : l'élève rédige sa déclaration sur l'honneur..."
+  });
+  logFileOnly(`[déclaration brute] ${String(rawAnswer || '').trim()}`);
+  return parseStudentDeclaration(rawAnswer, declaredTechs);
+}
+
+// Joue UN exercice de débugging : affiche la question + le code, tente 1 avec
+// le budget court du coffre, retente 2 (budget de réflexion étendu) si la
+// réponse ressemble à une délibération tronquée (modèles thinking), valide la
+// regex, mesure la latence. Partagé par le Turbo et l'Éclair — l'exécution
+// doit rester IDENTIQUE dans les deux modes (tentative 2 comprise, sinon faux
+// échec des modèles thinking, cf. tâche 2026-09-07b).
+async function playExercise(studentModelName, studentClient, exercise, helpers) {
+  const { log, logFileOnly, logSection, spinnerLabel } = helpers;
+  log(`📝 [PROFESSEUR] « ${exercise.prompt} »`);
+  log('   Code à corriger :');
+  for (const line of String(exercise.code_snippet).split('\n')) {
+    log(`     ${line}`);
+  }
+
+  const examPrompt = `[EXAMEN DÉBUGGING - CODE NATIF STRICT]
+Langage concerné : ${exercise.language.toUpperCase()}
+Consigne : Ne renvoie QUE la ligne ou l'expression corrigée en syntaxe ${exercise.language.toUpperCase()}.
+Aucun commentaire, aucune explication, aucun formatage externe (pas de JSON).
+
+Code à corriger :
+${exercise.code_snippet}
+
+Question :
+${exercise.prompt}`;
+
+  const startTime = Date.now();
+  const validator = new RegExp(exercise.expected_regex, 'i');
+
+  // --- Tentative 1 : budget court du coffre-fort (réponse attendue immédiate). ---
+  let raw = await studentClient.generate(studentModelName, examPrompt, {
+    max_tokens: exercise.max_tokens,
+    temperature: 0.0,
+    spinnerLabel
+  });
+  let clean = String(raw || '').replace(/```[a-z]*|```/gi, '').trim();
+  let isSuccess = validator.test(clean);
+  let attempts = 1;
+
+  // --- Tentative 2 (uniquement si la réponse ressemble à une délibération
+  // tronquée) : budget de réflexion étendu pour les modèles "thinking". ---
+  if (!isSuccess && looksLikeReasoningTrace(raw)) {
+    log('   ⚠ Réponse tronquée ou non résolue (modèle "thinking" ?) — nouvelle tentative avec budget de réflexion étendu...');
+    raw = await studentClient.generate(
+      studentModelName,
+      examPrompt + '\n\nSi tu as besoin de réfléchir, fais-le, mais TERMINE ABSOLUMENT par la ligne corrigée, seule, sur la dernière ligne.',
+      {
+        max_tokens: Math.max(EXTENDED_THINKING_BUDGET, exercise.max_tokens),
+        temperature: 0.0,
+        spinnerLabel: `${spinnerLabel.replace(/\.\.\.$/, '')} — nouvelle tentative (budget de réflexion étendu)...`
+      }
+    );
+    clean = String(raw || '').replace(/```[a-z]*|```/gi, '').trim();
+    isSuccess = validator.test(clean);
+    attempts = 2;
+  }
+  const latency = Date.now() - startTime;
+
+  const shortAnswer = clean.length > 200 ? clean.substring(0, 200) + '…' : clean;
+  log(`   ✍️ Réponse élève : "${shortAnswer}"`);
+  logFileOnly(`[réponse complète ${logSection}] ${clean}`);
+  log(`   ⚖️ Verdict : ${isSuccess ? '✅ ADMIS' : '❌ RECALÉ'}${attempts > 1 ? ` (tentative ${attempts}/2)` : ''} (${(latency / 1000).toFixed(1)}s)`);
+  return { clean, isSuccess, attempts, latency };
+}
+
 // --- Mode DIAGNOSTIC (tâche 2026-09-11c, tremplin) ---
 // L'examen RunCode est le PRÉ-EXAMEN qui mesure les aptitudes du modèle avant
 // la grande école. Pour une mesure fiable de la spécialité, 1 exercice par
@@ -243,45 +408,13 @@ Pas de tableau, pas de code, pas de préambule. 3 phrases maximum.`;
 }
 
 async function runAdaptiveSchoolExam(studentModelName, studentClient, options = {}) {
-  const teacher = new TeacherClient({
-    provider: options.teacherProvider || 'groq',
-    model: options.teacherModel || 'llama-3.3-70b-versatile',
-    apiKey: options.teacherApiKey
-  });
-
-  // Journal détaillé : tout ce qui s'affiche à l'écran est aussi tracé dans
-  // Export-Rapports/exam_<modele>_<ts>.log (la réponse complète incluse).
-  const logDir = path.join(__dirname, 'Export-Rapports');
-  if (!fs.existsSync(logDir)) fs.mkdirSync(logDir, { recursive: true });
-  const logFile = path.join(logDir, `exam_${String(studentModelName).replace(/[^a-z0-9]/gi, '_')}_${Date.now()}.log`);
-  const log = (msg) => {
-    console.log(msg);
-    fs.appendFileSync(logFile, msg + '\n');
-  };
-  const logFileOnly = (msg) => {
-    fs.appendFileSync(logFile, msg + '\n');
-  };
+  const teacher = await buildExamTeacher(options);
+  const { log, logFileOnly, logFile } = createExamLogger(studentModelName);
 
   const vault = loadSecretVault();
   // Parcours choisi : option parcoursRunCode (runSchool), sinon détection depuis
   // le profil BenchGo du modèle, sinon le parcours Primaire par défaut.
-  const parcours = vault.parcours || DEFAULT_PARCOURS;
-  const parcoursName = options.parcoursRunCode && parcours[options.parcoursRunCode]
-    ? options.parcoursRunCode
-    : (PARCOURS_PROFILE[options.parcoursRunCode] ? options.parcoursRunCode : null);
-  let classesToRun;
-  let parcoursLabel;
-  if (parcoursName) {
-    parcoursLabel = parcoursName;
-    classesToRun = parcours[parcoursName];
-  } else {
-    // Détection auto : profil BenchGo -> parcours équivalent.
-    const profile = options.profileBenchgo || null;
-    const profileToParcours = { LIGHT: 'Primaire', STANDARD: 'College-Lycee', EXPERT: 'Universite' };
-    const guessed = profile && (parcours[profile] ? profile : null);
-    parcoursLabel = guessed || 'Primaire';
-    classesToRun = parcours[parcoursLabel] || DEFAULT_PARCOURS['Primaire'];
-  }
+  const { parcoursLabel, classesToRun } = resolveParcours(vault, options);
 
   log('');
   log('================================================================');
@@ -312,32 +445,9 @@ async function runAdaptiveSchoolExam(studentModelName, studentClient, options = 
   // --- Entretien de vérité : déclaration sur l'honneur ---
   // La liste des langages est construite depuis le coffre (langages réellement
   // dotés d'exercices) : la déclaration ne peut citer que des langages jouables.
-  const vaultTechs = Object.keys(vault.catalog || {}).sort();
-  const declaredTechs = Array.from(new Set(vaultTechs.concat(['typescript', 'react', 'htmx']))).sort();
-  const techListStr = declaredTechs.join(', ');
-
-  const interviewPrompt = `[LE PROFESSEUR - DÉCLARATION SUR L'HONNEUR]
-Tu es un modèle en évaluation technique.
-RÈGLE D'OR : Dis STRICTEMENT la vérité sur tes compétences. Zéro mensonge, zéro exagération.
-Indique simplement les 2 langages que tu maîtrises le mieux parmi cette liste :
-[${techListStr}]
-Et précise si ton niveau est 'standard' ou 'expert'.
-Réponds simplement sur une seule ligne (ex: "python, react, expert").`;
-
-  log("📋 [PROFESSEUR] Entretien de vérité : « Indique les 2 langages que tu maîtrises le mieux, et ton niveau. »");
-  const rawAnswer = await studentClient.generate(studentModelName, interviewPrompt, {
-    max_tokens: 512,
-    temperature: 0.0,
-    spinnerLabel: "Entretien : l'élève rédige sa déclaration sur l'honneur..."
-  });
-  logFileOnly(`[déclaration brute] ${String(rawAnswer || '').trim()}`);
-
-  const studentProfile = parseStudentDeclaration(rawAnswer, declaredTechs);
+  const studentProfile = await runTruthInterview(studentModelName, studentClient, vault, log, logFileOnly);
   reportCard.profile = studentProfile;
   log(`📋 [DÉCLARATION ÉLÈVE] Majeure: ${studentProfile.majeure.toUpperCase()} | Mineure: ${studentProfile.mineure ? studentProfile.mineure.toUpperCase() : 'Aucune'} | Niveau: ${studentProfile.niveau.toUpperCase()}`);
-
-  const eligibleTechs = [studentProfile.majeure];
-  if (studentProfile.mineure) eligibleTechs.push(studentProfile.mineure);
 
   // --- Examens : mode DIAGNOSTIC (tremplin), K exercices par classe ---
   // Ancien mode (1 exercice aléatoire par classe, arrêt au 1er échec) :
@@ -384,59 +494,13 @@ Réponds simplement sur une seule ligne (ex: "python, react, expert").`;
     log('');
     log(`📚 [CLASSE ${gradeClass}] (${classIdx}/${examClasses.length}) Défi : ${exercise.title} (${exercise.language.toUpperCase()})`);
     log(`🔗 Référence : ${exercise.official_source}`);
-    log(`📝 [PROFESSEUR] « ${exercise.prompt} »`);
-    log('   Code à corriger :');
-    for (const line of String(exercise.code_snippet).split('\n')) {
-      log(`     ${line}`);
-    }
 
-    const examPrompt = `[EXAMEN DÉBUGGING - CODE NATIF STRICT]
-Langage concerné : ${exercise.language.toUpperCase()}
-Consigne : Ne renvoie QUE la ligne ou l'expression corrigée en syntaxe ${exercise.language.toUpperCase()}.
-Aucun commentaire, aucune explication, aucun formatage externe (pas de JSON).
-
-Code à corriger :
-${exercise.code_snippet}
-
-Question :
-${exercise.prompt}`;
-
-    const startTime = Date.now();
-    const validator = new RegExp(exercise.expected_regex, 'i');
-
-    // --- Tentative 1 : budget court du coffre-fort (réponse attendue immédiate). ---
-    let raw = await studentClient.generate(studentModelName, examPrompt, {
-      max_tokens: exercise.max_tokens,
-      temperature: 0.0,
+    const { isSuccess, attempts, latency } = await playExercise(studentModelName, studentClient, exercise, {
+      log,
+      logFileOnly,
+      logSection: `classe ${gradeClass}`,
       spinnerLabel: `Classe ${gradeClass} — l'élève corrige le bug (${exercise.title})...`
     });
-    let clean = String(raw || '').replace(/```[a-z]*|```/gi, '').trim();
-    let isSuccess = validator.test(clean);
-    let attempts = 1;
-
-    // --- Tentative 2 (uniquement si la réponse ressemble à une délibération
-    // tronquée) : budget de réflexion étendu pour les modèles "thinking". ---
-    if (!isSuccess && looksLikeReasoningTrace(raw)) {
-      log('   ⚠ Réponse tronquée ou non résolue (modèle "thinking" ?) — nouvelle tentative avec budget de réflexion étendu...');
-      raw = await studentClient.generate(
-        studentModelName,
-        examPrompt + '\n\nSi tu as besoin de réfléchir, fais-le, mais TERMINE ABSOLUMENT par la ligne corrigée, seule, sur la dernière ligne.',
-        {
-          max_tokens: Math.max(EXTENDED_THINKING_BUDGET, exercise.max_tokens),
-          temperature: 0.0,
-          spinnerLabel: `Classe ${gradeClass} — nouvelle tentative (budget de réflexion étendu)...`
-        }
-      );
-      clean = String(raw || '').replace(/```[a-z]*|```/gi, '').trim();
-      isSuccess = validator.test(clean);
-      attempts = 2;
-    }
-    const latency = Date.now() - startTime;
-
-    const shortAnswer = clean.length > 200 ? clean.substring(0, 200) + '…' : clean;
-    log(`   ✍️ Réponse élève : "${shortAnswer}"`);
-    logFileOnly(`[réponse complète classe ${gradeClass}] ${clean}`);
-    log(`   ⚖️ Verdict : ${isSuccess ? '✅ ADMIS' : '❌ RECALÉ'}${attempts > 1 ? ` (tentative ${attempts}/2)` : ''} (${(latency / 1000).toFixed(1)}s)`);
 
     reportCard.details.push({
       class: gradeClass,
@@ -508,11 +572,201 @@ ${exercise.prompt}`;
   return reportCard;
 }
 
+// Sélection Éclair (fonction PURE, testable sans coffre réel) : 1 exercice par
+// langage, toujours la CLASSE LA PLUS SIMPLE disponible de ce langage (classe
+// minimale selon ECLAIR_CLASS_ORDER). Les exercices du coffre sont joués dans
+// l'ordre de leur banque (le premier de la classe = déterministe, scan
+// rejouable). Un langage sans exercice jouable est ignoré, une regex
+// invalide fait sauter l'exercice (sécurité : une regex pétée ne doit jamais
+// tuer un scan entier).
+function eclairSelection(vault) {
+  const catalog = vault && vault.catalog ? vault.catalog : {};
+  const picks = [];
+  for (const lang of ECLAIR_LANG_ORDER) {
+    const byClass = catalog[lang];
+    if (!byClass || typeof byClass !== 'object') continue;
+    let bestClass = null;
+    for (const cls of ECLAIR_CLASS_ORDER) {
+      if (Array.isArray(byClass[cls]) && byClass[cls].length > 0) { bestClass = cls; break; }
+    }
+    if (!bestClass) continue;
+    const exo = byClass[bestClass][0];
+    if (!exo || !exo.id || !exo.prompt || typeof exo.expected_regex !== 'string') continue;
+    try { new RegExp(exo.expected_regex, 'i'); } catch (e) { continue; }
+    picks.push({ ...exo, language: lang, class: bestClass });
+  }
+  return picks;
+}
+
+// --- SCAN ÉCLAIR : mesure RAPIDE et précise de la spécialité d'un modèle ---
+// (demande 2026-10-28). Contexte : les modèles locaux lents mettent 1h30-2h
+// par école de la grande école ; il faut savoir EN PRINCIPE COURS dans quels
+// langages ils se défendent le mieux. Principe :
+//   1. Entretien de vérité (déclaration), identique au Turbo.
+//   2. 1 exercice PAR LANGAGE (20), dans l'ordre front-loaded (python/js/ts/
+//      sql/react d'abord — signal cœur acquis en 5 min), la classe LA PLUS
+//      SIMPLE disponible de chacun → réponses très courtes, temps minimal.
+//   3. Un échec n'est PAS éliminatoire (information de spécialité). Seule la
+//      déclaration mensongère 'expert' déclenche le carton rouge.
+//   4. Arrêt net « trop faible » si ≥ ECLAIR_STOP_WEAK_FAILS échecs parmi les
+//      ECLAIR_STOP_WEAK_PLAYED premiers exercices joués.
+//   5. Verdict final IDENTIQUE au Turbo : computeSpecialtyStats + verdict du
+//      professeur (determineSpecialty) + languageStats (réussites + latence
+//      moyenne par langage) → le carnet et le FLASH les consomment tels quels.
+// Le carnet est écrit comme en Turbo (même forme de reportCard) : école
+// RunCode-<parcours>, pct, spécialité — mode 'eclair' dans la tentative.
+async function runEclairScan(studentModelName, studentClient, options = {}) {
+  const teacher = await buildExamTeacher(options);
+  const { log, logFileOnly, logFile } = createExamLogger(studentModelName);
+  const vault = loadSecretVault();
+  const { parcoursLabel, classesToRun } = resolveParcours(vault, options);
+
+  log('');
+  log('================================================================');
+  log(`👨‍🏫 [LE PROFESSEUR (${String(teacher.provider).toUpperCase()})] SCAN ÉCLAIR de : "${studentModelName}"`);
+  log(`⚡ MODE ÉCLAIR : 1 exercice de la classe la plus simple PAR LANGAGE (20 langages) — mesure de spécialité, pas de parcours complet.`);
+  log(`🏫 PARCOURS DE RÉFÉRENCE : ${parcoursLabel.toUpperCase()} (${classesToRun.length} classes — label du carnet uniquement)`);
+  log('================================================================');
+  log('');
+
+  const reportCard = {
+    student: studentModelName,
+    teacherProvider: teacher.provider,
+    mode: 'eclair',
+    parcours: parcoursLabel,
+    parcoursProfile: PARCOURS_PROFILE[parcoursLabel] || null,
+    classes: [],
+    disqualified: false,
+    disqualificationReason: null,
+    profile: null,
+    highestClassPassed: 'Non diplômé',
+    passedClasses: [],
+    details: [],
+    score: 0,
+    max: 0,
+    languageStats: [],
+    specialty: null,
+    tooWeak: false
+  };
+
+  const studentProfile = await runTruthInterview(studentModelName, studentClient, vault, log, logFileOnly);
+  reportCard.profile = studentProfile;
+  log(`📋 [DÉCLARATION ÉLÈVE] Majeure: ${studentProfile.majeure.toUpperCase()} | Mineure: ${studentProfile.mineure ? studentProfile.mineure.toUpperCase() : 'Aucune'} | Niveau: ${studentProfile.niveau.toUpperCase()}`);
+
+  const picks = eclairSelection(vault);
+  logFileOnly(`[inventaire éclair] vault_version=${vault.vault_version || '?'} | ${picks.length} langage(s) : ${picks.map(p => p.language + '/' + p.class).join(', ')}`);
+  if (picks.length === 0) {
+    log('🛑 [ÉCLAIR] Aucun exercice jouable dans le coffre — scan impossible (vérifier vault_polyglot.json).');
+    reportCard.examLogFile = path.relative(__dirname, logFile).split(path.sep).join('/');
+    return reportCard;
+  }
+
+  // Ordre front-loaded : langages DÉCLARÉS d'abord (majeure, mineure), puis
+  // l'ordre ECLAIR_LANG_ORDER, puis tout langage d'exercice absent de l'ordre
+  // (futurs ajouts du coffre) en fin de liste.
+  const declares = [studentProfile.majeure, studentProfile.mineure].filter(Boolean);
+  const ordered = [];
+  for (const lang of declares.concat(ECLAIR_LANG_ORDER)) {
+    const p = picks.find(x => x.language === lang);
+    if (p && !ordered.includes(p)) ordered.push(p);
+  }
+  for (const p of picks) {
+    if (!ordered.includes(p)) ordered.push(p);
+  }
+  logFileOnly(`[ordre éclair] ${ordered.map(p => p.language).join(' → ')}`);
+
+  let played = 0;
+  let failed = 0;
+  for (const exercise of ordered) {
+    if (reportCard.disqualified) break;
+    const pickIdx = ordered.indexOf(exercise) + 1;
+    log('');
+    log(`📚 [ÉCLAIR ${exercise.class}] (${pickIdx}/${ordered.length}) Défi : ${exercise.title} (${exercise.language.toUpperCase()})`);
+    log(`🔗 Référence : ${exercise.official_source}`);
+
+    const { isSuccess, attempts, latency } = await playExercise(studentModelName, studentClient, exercise, {
+      log,
+      logFileOnly,
+      logSection: `éclair ${exercise.class} ${exercise.language}`,
+      spinnerLabel: `Éclair ${exercise.language.toUpperCase()} (${exercise.class}) — l'élève corrige le bug (${exercise.title})...`
+    });
+
+    reportCard.details.push({
+      class: exercise.class,
+      exerciseId: exercise.id,
+      language: exercise.language,
+      passed: isSuccess,
+      attempts,
+      latency
+    });
+    reportCard.max += 1;
+    played += 1;
+    if (isSuccess) {
+      reportCard.score += 1;
+      if (!reportCard.passedClasses.includes(exercise.class)) reportCard.passedClasses.push(exercise.class);
+      reportCard.highestClassPassed = reportCard.passedClasses[reportCard.passedClasses.length - 1];
+    } else {
+      failed += 1;
+      // Carton rouge (identique au Turbo, adapté à l'Éclair) : un modèle qui
+      // se déclare 'expert' dans un langage et rate l'exercice LE PLUS SIMPLE
+      // de ce langage (CP/CE1/CE2) ment sur ses capacités.
+      if (ECLAIR_CLASS_ORDER.slice(0, 3).includes(exercise.class)
+        && exercise.language === studentProfile.majeure
+        && studentProfile.niveau === 'expert') {
+        log(`🚨 [CARTON ROUGE - EXPULSION] L'élève s'est déclaré 'expert' en ${exercise.language} mais échoue à l'exercice le plus simple (niveau ${exercise.class}) !`);
+        reportCard.disqualified = true;
+        reportCard.disqualificationReason = `Mensonge avéré sur ses capacités : déclaré 'expert' en ${exercise.language}, mais incapable de résoudre un bug de base de niveau ${exercise.class}.`;
+        break;
+      }
+      log(`ℹ️ [LE PROFESSEUR] Échec en ${exercise.language.toUpperCase()} — information de spécialité (pas une élimination).`);
+    }
+    // Arrêt net : un modèle qui coule sur la presque totalité des 10 premiers
+    // exercices est manifestement trop faible — pas de spécialité fiable à
+    // en tirer, inutile de brûler 10 exercices de plus.
+    if (played >= ECLAIR_STOP_WEAK_PLAYED && failed >= ECLAIR_STOP_WEAK_FAILS) {
+      log(`🛑 [ÉCLAIR] ${failed}/${played} échecs — modèle trop faible pour un scan de spécialité fiable. Scan arrêté.`);
+      reportCard.tooWeak = true;
+      break;
+    }
+  }
+
+  reportCard.classes = Array.from(new Set(reportCard.details.map(d => d.class)));
+
+  if (reportCard.tooWeak) {
+    log('ℹ️ [ÉCLAIR] Trop faible : aucune spécialité déclarée (un scan fiable exige des exercices vraiment joués).');
+  } else {
+    const specialtyStats = computeSpecialtyStats(reportCard.details);
+    if (specialtyStats.stats.length > 0) {
+      log('');
+      log('🧪 [ANALYSE] Bilan par langage :');
+      for (const s of specialtyStats.stats) {
+        const ratePct = Math.round(s.rate * 100);
+        log(`   ${s.language.toUpperCase().padEnd(12)} ${s.passed}/${s.total} (${ratePct}%) — classes : ${s.classes.join(', ')}`);
+      }
+      if (specialtyStats.specialty) {
+        const sp = await determineSpecialty(teacher, studentModelName, specialtyStats, reportCard, logFileOnly, log);
+        if (!sp) log('   ℹ️ Aucun verdict de spécialité possible (professeur indisponible).');
+      } else {
+        log('   ℹ️ Pas encore assez d\'exercices par langage pour déclarer une spécialité fiable.');
+      }
+    }
+  }
+
+  reportCard.examLogFile = path.relative(__dirname, logFile).split(path.sep).join('/');
+  return reportCard;
+}
+
 module.exports = {
   runAdaptiveSchoolExam,
+  runEclairScan,
+  eclairSelection,
   parseStudentDeclaration,
   looksLikeReasoningTrace,
   computeSpecialtyStats,
   DEFAULT_PARCOURS,
-  PARCOURS_PROFILE
+  PARCOURS_PROFILE,
+  ECLAIR_CLASS_ORDER,
+  ECLAIR_LANG_ORDER,
+  ECLAIR_STOP_WEAK_PLAYED,
+  ECLAIR_STOP_WEAK_FAILS
 };

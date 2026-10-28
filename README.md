@@ -20,13 +20,13 @@ le tout dans un bac à sable VM isolé.
 - 🆘 **Aide du professeur & rattrapage** : un indice peut être proposé au modèle en rattrapage ; un seul réessai par exercice (`MAX_TASK_RETRIES = 1`).
   - 🎓 **Professeur IA correcteur (Free Router)** : après un échec définitif, l'élève (le modèle testé) s'auto-analyse, puis un **professeur IA indépendant** (modèle cloud via OpenRouter) relit cette analyse, dit si elle est juste/fausse et **démontre** la vraie cause racine. Rotate automatique sur les modèles gratuits d'OpenRouter (`:free`). Repli sur l'auto-analyse si aucun compte OpenRouter n'est configuré.
   - 🏛️ **RunCode** : mode d'évaluation « turbo » complémentaire au benchmark standard — parcours scolaire complet (Primaire → Collège/Lycée → Université) en débugging de code natif multi-langage (16 langages, 68 exercices), 1 exercice aléatoire par classe tiré parmi tous les langages, **verdict de spécialité** (le domaine d'excellence du modèle déterminé par le professeur), carton rouge si mensonge expert, carnet comptant pour le classement général avec badge `⚡ RunCode · Turbo`.
-  - ⚡ **Tremplin RunCode Turbo (mode nuit)** : tout modèle sans examen RunCode au carnet passe **d'abord le pré-examen RunCode** (mesure des aptitudes par langage), puis la grande école. La file d'attente du mode nuit est réordonnée : les meilleurs du tremplin passent en premier. **Jamais éliminatoire** : sous le seuil souple de 40 %, simple avertissement — la grande école reste ouverte. Option « obli » dans le choix des exercices : ne joue que les classes obligatoires (~60-70 % du temps, carnet écrit quand même).
+  - ⚡ **Tremplin RunCode Turbo (mode nuit)** : tout modèle sans examen RunCode au carnet passe **d'abord le pré-examen RunCode** (mesure des aptitudes par langage), puis la grande école. En night-batch le tremplin tourne en **mode ÉCLAIR** (1 exercice de la classe la plus simple par langage — ~20 appels courts, spécialité mesurée en ~20-45 min sur un modèle lent). La file d'attente du mode nuit est réordonnée : les meilleurs du tremplin passent en premier. **Jamais éliminatoire** : sous le seuil souple de 40 %, simple avertissement — la grande école reste ouverte. Option « obli » dans le choix des exercices : ne joue que les classes obligatoires (~60-70 % du temps, carnet écrit quand même).
   - 📊 **Classement global interactif** : HTML condensé avec modale de détail, filtres par catégorie de performance et par taille de modèle, recherche texte, **badge de quantification** (Q4_K_M, Q5_K_S, Q8_0...) pour chaque modèle, et **bouton « Copier le classement »** pour partager l'ensemble du classement en texte brut.
 - 📈 **Dashboard de progression** : visualisez l'évolution des modèles dans le temps (progression par date de test), l'historique par école et la comparaison vitesse/score. Accessible via `node leaderboard.js --serve` → http://localhost:3939/dashboard.
 - 🧩 **Quantification des modèles** : récupérée automatiquement via l'endpoint `/api/v0/models` de LM Studio (ou saisie manuelle / flag `--quantization=`) et affichée dans le classement. Indispensable pour distinguer deux runs du même modèle avec des quantifications différentes.
 - 🏫 **Écoles séquentielles** : si le modèle fait plus de 3B paramètres, BenchGo propose d'évaluer Primaire (LIGHT) puis Collège-Lycée (STANDARD) à la suite dans le même run — même clé, même auto-profilage, état de santé réinitialisé entre écoles.
 - 📝 **Exports** : rapport Markdown par run, classement HTML/Markdown global, export raisonnement consolidé (destiné à NotebookLM via Gemini).
-- 🌙 **Mode nuit (batch automatique)** : testez plusieurs modèles automatiquement pendant la nuit — sélection des modèles et des écoles, puis le script enchaîne `lms load` / `runner.js` / `lms unload` sans intervention. Détection automatique des fichiers MTP (Multi-Token Prediction) : les modèles avec un fichier MTP associé sont chargés avec `--speculative-draft-mtp` pour accélérer l'inférence. Rapports et classement prêts le matin. Pré-test de santé + auto-blacklist des modèles défectueux, `--skip` pour écourter un modèle (second terminal), `--resume` pour reprendre une session interrompue à l'exercice près. 👉 [Documentation du mode nuit](./Docs/Manuel-utilisateur/07-mode-nuit.md)
+- 🌙 **Mode nuit (batch automatique)** : testez plusieurs modèles automatiquement pendant la nuit — sélection des modèles et des écoles, puis le script enchaîne `lms load` / `runner.js` / `lms unload` sans intervention. Détection automatique des fichiers MTP (Multi-Token Prediction) : les modèles avec un fichier MTP associé sont chargés avec `--speculative-draft-mtp` pour accélérer l'inférence. Rapports et classement prêts le matin. Pré-test de santé + auto-blacklist des modèles défectueux, **filtre anti-plomb** (`--tps-min=5` : les modèles mesurés < 5 tokens/s sont éliminés de la file — une nuit entière ne suffit pas à tester cinq plombs d'1h30-2h/école), `--skip` pour écourter un modèle (second terminal), `--resume` pour reprendre une session interrompue à l'exercice près. 👉 [Documentation du mode nuit](./Docs/Manuel-utilisateur/07-mode-nuit.md)
 - ⚠️ **Registre des incompatibles** : un GGUF trop récent pour le runtime llama.cpp de LM Studio (architecture inconnue, ex : k2-horizon) ne charge pas — BenchGo affiche un **avertissement clair « modèle non compatible »** (problème de structure, pas un bug), met le modèle de côté et tient la liste à jour : `node night-batch.js --incompatible-list` rappelle QUI retélécharger sur Hugging Face quand le support llama.cpp arrivera.
 - ☁️ **Mode cloud** : 6 fournisseurs supportés (OpenAI, Anthropic, Groq, Together, OpenRouter, Mistral).
 - 🧪 **Évaluateurs custom asynchrones** : Promise.allSettled, retry/backoff, concurrence limitée, middleware Cloudflare, etc.
@@ -189,7 +189,20 @@ node runner.js --provider=<provider> --model=<slug> --exam-code
 # Professeur custom pour RunCode (défaut : groq/llama-3.3-70b-versatile) :
 node runner.js --provider=openrouter --model=<slug:free> --exam-code \
   --teacher-provider=groq --teacher-model=llama-3.3-70b-versatile --teacher-api-key=<clé>
+
+# Scan ÉCLAIR — spécialité en ~20 min (pour les modèles locaux lents) :
+node runner.js --exam-code --eclair
 ```
+
+**Mode ÉCLAIR (`--eclair`) — scan de spécialité accéléré** : au lieu du parcours complet,
+1 exercice de la **classe la plus simple** de CHAQUE langage (20 langages au coffre :
+python/js/go/java/php/ruby/css → CP, ts/bash/html/swift → CE1, sql/htmx/kotlin/perl → CE2,
+c/rust → CM2, cpp/react → CM1). Une vingtaine d'appels courts (~20-45 min sur un modèle
+lent) au lieu de 1-2 h. Entretien de vérité, verdict du professeur, carnet et badge
+identiques (champ `mode: 'eclair'`). Un échec n'est **pas** éliminatoire en Éclair (une
+information de spécialité) ; le scan s'arrête seulement si le modèle coule (8 échecs sur
+les 10 premiers). C'est le mode que **night-batch.js active d'office au tremplin** des
+modèles locaux — `--tremplin-full` pour reprendre le parcours complet.
 
 > ℹ️ RunCode **court-circuite** le benchmark standard (`process.exit(0)` après l'examen)
 > et génère son propre carnet (école `RunCode-*`) **comptant pour le classement général**.
@@ -430,6 +443,8 @@ benchmark-v3/
 | `--isoler=!N` / `--isoler=!!N` | 🌙 Mode nuit : isole (`!`) ou désisole (`!!`) le modèle n° N de la liste `--list-only`. Aucun batch lancé. |
 | `--skip` | 🌙 Mode nuit (second terminal, pendant un batch) : interrompt le modèle en cours (≤3s) et passe au suivant — le batch continue. |
 | `--resume` | 🌙 Mode nuit : ignore les écoles déjà au carnet et, en classe-par-classe, les exercices déjà passés (reprise à l'exercice près après interruption). |
+| `--tps-min=<N>` | 🌙 Mode nuit : **filtre anti-plomb** — les modèles mesurés < N tokens/s sont éliminés de la sélection (et après le tremplin Éclair, avec une mesure fraîche). Défaut 5 ; `--tps-min=0` pour désactiver. Jamais de blacklist : les lents restent visibles en `--list-only` avec la mention « Trop lent ». |
+| `--tremplin-full` | 🌙 Mode nuit : tremplin RunCode en TURBO complet (parcours entier) au lieu de l'**ÉCLAIR** (1 exercice de la classe la plus simple par langage, ~20 appels courts). |
 | `--quantization=<Q>` | Quantification du modèle (ex: `Q4_K_M`, `Q5_K_S`, `Q8_0`). Auto-détectée via LM Studio `/api/v0/models` si absente ; saisie manuelle demandée au questionnaire pour Ollama/custom. |
 | `--submit` | Force la soumission des résultats au classement communautaire GitHub en fin de run (sans confirmation interactive). |
 | `--no-telemetry` | Désactive le ping télémétrie anonyme (compteur d'utilisateurs). |

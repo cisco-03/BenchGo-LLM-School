@@ -22,7 +22,7 @@ process.on('uncaughtException', (err) => {
   process.exit(1);
 });
 
-const { runAdaptiveSchoolExam } = require('./adaptive-exam');
+const { runAdaptiveSchoolExam, runEclairScan } = require('./adaptive-exam');
 const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
@@ -1756,10 +1756,16 @@ async function main() {
       examParcours = (detected && PROFILE_TO_PARCOURS[detected]) || 'Primaire';
     }
     const PARCOURS_ECOLE = { Primaire: 'RunCode-Primaire', 'College-Lycee': 'RunCode-College-Lycee', Universite: 'RunCode-Universite' };
-    logger.info(`RunCode: parcours résolu = ${examParcours} (--parcours=${parcoursArg || 'aucun'}, profil auto = ${autoProfile || 'aucun'}, élève = ${examModelName})`);
+    // --eclair (demande 2026-10-28) : scan de spécialité accéléré — 1 exercice
+    // de la classe la plus simple PAR LANGAGE (20 appels courts) au lieu du
+    // parcours complet. Même entretien, même verdict, carnet identique (mode
+    // 'eclair' dans la tentative). Le tremplin night-batch l'utilise d'office
+    // pour les modèles locaux (lents au chargement comme à la génération).
+    const eclairExam = process.argv.slice(2).includes('--eclair');
+    logger.info(`RunCode: parcours résolu = ${examParcours} (--parcours=${parcoursArg || 'aucun'}, profil auto = ${autoProfile || 'aucun'}, élève = ${examModelName}, mode = ${eclairExam ? 'eclair' : 'turbo'})`);
     console.log('\n\x1b[1;36m━━━ 🏛️ RUNCODE — EXAMEN PUR CODE NATIF ━━━\x1b[0m');
     console.log(`  \x1b[90mÉlève     : ${examModelName}\x1b[0m`);
-    console.log(`  \x1b[90mParcours  : ${examParcours}\x1b[0m`);
+    console.log(`  \x1b[90mParcours  : ${examParcours}${eclairExam ? ' (référence carnet)' : ''} — mode : \x1b[1m${eclairExam ? '⚡ ÉCLAIR (scan spécialité accéléré)' : 'Turbo (parcours complet)'}\x1b[0m`);
     console.log(`  \x1b[90mProfesseur : ${teacherConfigResolved && teacherConfigResolved.enabled ? `${teacherConfigResolved.provider} (${teacherConfigResolved.model || 'auto'})` : 'désactivé'}\x1b[0m`);
     console.log("  \x1b[90mSuivi     : les questions du professeur et la réflexion de l'élève s'affichent EN DIRECT.\x1b[0m\n");
     const spinnerExam = new Spinner('Examen RunCode en cours...');
@@ -1799,7 +1805,8 @@ async function main() {
       }
     };
     try {
-      const result = await runAdaptiveSchoolExam(examModelName, studentClient, {
+      const examFn = eclairExam ? runEclairScan : runAdaptiveSchoolExam;
+      const result = await examFn(examModelName, studentClient, {
         teacherProvider: teacherConfigResolved && teacherConfigResolved.provider,
         teacherModel: teacherConfigResolved && teacherConfigResolved.model,
         teacherApiKey: teacherConfigResolved && teacherConfigResolved.apiKey,
@@ -1808,6 +1815,7 @@ async function main() {
       });
       console.log('\n================================================================');
       console.log(`🏆 BILAN FINAL : ${result.student}`);
+      console.log(`⚡ Mode : ${result.mode === 'eclair' ? 'ÉCLAIR (scan spécialité)' : 'TURBO (parcours complet)'}`);
       console.log(`🎓 Diplôme : ${result.highestClassPassed} (${result.parcours})`);
       if (result.disqualified) {
         console.log(`🚫 STATUT : EXPULSÉ`);
@@ -1851,6 +1859,8 @@ async function main() {
           profile: result.parcoursProfile || 'LIGHT',
           ecole: examEcole,
           runCode: true,
+          // mode 'eclair' = scan spécialité accéléré, 'turbo' = parcours complet.
+          mode: result.mode || 'turbo',
           parcours: result.parcours,
           diplome: result.highestClassPassed,
           specialite: result.specialty ? result.specialty.language : null,
@@ -1892,7 +1902,7 @@ async function main() {
           completionTokens: examTokens
         };
         scoreLedger.saveResult(examShort, examModelName, examResult, resolvedQuantization || null, null, isCloudMode ? resolvedProvider : 'local');
-        logger.info(`RunCode: carnet écrit (${examShort}.json, école ${examEcole}, score ${examScore}/${examMax}, spécialité=${examResult.specialite || 'aucune'}, parcours=${result.parcours})`);
+        logger.info(`RunCode: carnet écrit (${examShort}.json, école ${examEcole}, score ${examScore}/${examMax}, spécialité=${examResult.specialite || 'aucune'}, parcours=${result.parcours}, mode=${examResult.mode})`);
         console.log(`  \x1b[36m📓 Carnet RunCode mis à jour : ${examShort}.json (école ${examEcole}) — compte pour le classement général.\x1b[0m`);
         try {
           leaderboard.generateLeaderboard({ silent: true });

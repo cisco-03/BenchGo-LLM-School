@@ -1195,6 +1195,9 @@ Les modèles non-thinking (qui répondent en 1 ligne « OUI »/« Non. ») sont 
 # Interactif (questionnaire de démarrage : choisit provider + modèle) :
 node runner.js --exam-code
 
+# ÉCLAIR — scan de spécialité accéléré (pour les modèles locaux lents) :
+node runner.js --exam-code --eclair
+
 # CLI direct — modèle local LM Studio :
 node runner.js --provider=lmstudio --model=<modèle> --exam-code
 
@@ -1208,6 +1211,42 @@ node runner.js --exam-code --parcours=Universite   (Primaire | College-Lycee | U
 node runner.js --provider=openrouter --model=<slug:free> --exam-code \
   --teacher-provider=groq --teacher-model=llama-3.3-70b-versatile --teacher-api-key=<clé>
 ```
+
+### RunCode ÉCLAIR (scan spécialité accéléré) + filtre anti-plomb night-batch (tâche 2026-10-28)
+
+**Fichiers touchés :** `adaptive-exam.js`, `runner.js`, `night-batch.js`, `cli-help.js`, `tests/test-runcode-eclair.js` (nouveau), `Docs/CHANGELOG.md`, `README.md`, `Docs/Manuel-utilisateur/README.md`, `Memories-BenchGo/Tasks.md`.
+
+**Principe :** Demande utilisateur : les modèles locaux lents (1h30-2h par école, cinq d'entre eux = nuit entière gaspillée) doivent (1) avoir un moyen COURT de connaître leur spécialité — le tremplin Turbo (2 exos/classe × 6 classes) reste trop long — et (2) être ÉLIMINÉS du mode nuit quand ils sont mesurés < 5 tokens/s. Deux réponses : (1) **RunCode ÉCLAIR** (`--eclair`) : 1 exercice de la CLASSE LA PLUS SIMPLE par langage (20 langages au coffre, ~20 appels courts, ~20-45 min sur un modèle lent), même entretien/verdict/carnet que le Turbo ; (2) **filtre anti-plomb** night-batch (`--tps-min=`, défaut 5, 0 = désactivé) — les lents sont éliminés après la sélection (vitesse du dernier carnet) ET après le tremplin Éclair (mesure fraîche). Toujours annoncés, jamais blacklistés.
+
+**Fonctions :**
+- `runEclairScan(studentModelName, studentClient, options)` (adaptive-exam.js) → même forme de reportCard que le Turbo + `mode: 'eclair'` + `tooWeak: true` si arrêt net. Entretien, entête et verdict identiques.
+- `eclairSelection(vault)` (pure, exportée) → 1 exercice par langage, classe la plus simple selon `ECLAIR_CLASS_ORDER` (indépendante de l'ordre JSON du coffre), premier exercice de la classe = déterministe, langage sans exercice/regex invalide ignoré.
+- `ECLAIR_CLASS_ORDER` (18 classes CP→Doctorat), `ECLAIR_LANG_ORDER` (20 langages front-loaded : python, javascript, typescript, sql, react d'abord), `ECLAIR_STOP_WEAK_PLAYED = 10` / `ECLAIR_STOP_WEAK_FAILS = 8`.
+- Helpers partagés Turbo/Éclair (extraction sans changement de comportement) : `buildExamTeacher`, `createExamLogger` (journal `exam_*.log` commun), `resolveParcours` (bug latent réparé : parcoursRunCode=PROFIL 'LIGHT' donnait classesToRun=undefined ; conversion PARCOURS_PROFILE ajoutée), `runTruthInterview`, `playExercise` (tentatives 1+2 thinking incluses).
+- `TPS_FILTER_DEFAULT = 5` + `modelTps(m)` + `isModelTooSlow(m, threshold)` (night-batch.js) → filtre post-sélection (élimination annoncée nominativement, sortie propre si tous éliminés) + contrôle post-tremplin (`rcInfo.tokensPerSecond < seuil` → raison `trop_lent`, `continue` ; `rcBench.timedOut` en Éclair → `trop_lent` aussi ; crash runner ≠ lenteur → comportement historique).
+- `runRunCodeExam(..., opts.eclair)` : `--eclair` poussé par défaut (night-batch = modèles locaux lmstudio), timeout Éclair = TIER_TIMEOUT_MS (45 min) ; `--tremplin-full` → Turbo + timeout 90 min.
+- `runCodeGateInfo()` → `mode` + `tokensPerSecond` de la meilleure tentative ; `runCodeStatusReason()` affiche `éclair` (ex: `RunCode Primaire · éclair · 90% · PYTHON`).
+- `listLlmModels()` → champs `tooSlow` (bool) + `tooSlowText` (`Trop lent (< 5 t/s)`) affichés en colonne Écoles manquantes de `--list-only`.
+- `runner.js` bloc `--exam-code` : `eclairExam = process.argv.includes('--eclair')` (lecture argv brute, même famille que `--exam-code`/`--parcours=`), `examFn = eclairExam ? runEclairScan : runAdaptiveSchoolExam`, bannière/bilan affichent le mode, carnet avec `mode`.
+
+**Pour modifier :**
+1. **Changer la difficulté des exercices Éclair** : éditer `ECLAIR_CLASS_ORDER` (l'exercice retenu est toujours le plus simple) — mais la CLASSE jouée est dictée par le coffre : ajouter des exercices CP plus simples requiert le coffre (`vault_polyglot.json`).
+2. **Changer l'ordre d'interrogation** : `ECLAIR_LANG_ORDER` (les langages absents de la liste sont append en fin — les futurs ajouts du coffre restent testés).
+3. **Changer le seuil d'élimination** : `TPS_FILTER_DEFAULT` (night-batch.js) — le CLI `--tps-min=` peut surcharger à la volée ; `--tps-min=0` désactive tout (historique).
+4. **Changer l'arrêt « trop faible »** : `ECLAIR_STOP_WEAK_PLAYED` / `ECLAIR_STOP_WEAK_FAILS` (attention : garder `FAILS <= PLAYED`, sinon plus d'arrêt possible).
+5. **Repasser le tremplin night-batch en Turbo par défaut** : dans `main()` de night-batch.js, `const eclairMode = tremplinFull` au lieu de `!tremplinFull` (ou retirer le push `--eclair` de `runRunCodeExam`).
+6. **Revenir aux trois helpers dupliqués** (avant extraction) : réinclure le bloc tentatives 1+2 dans le `for (const exercise of picks)` du Turbo — l'Éclair garderait ses propres copies (à ne faire qu'en dernier recours).
+7. **Réactiver la supériorité du parcours** : si le red carton Éclair doit viser le parcours (et pas les 3 classes globales), remplacer `ECLAIR_CLASS_ORDER.slice(0, 3)` par `classesToRun.slice(0, 3)`.
+8. **Tester** : `node tests/run-tests.js` (7 cas eclairSelection), `node --check` sur les 3 modules, `node -e "const {eclairSelection}=require('./adaptive-exam'); const v=JSON.parse(require('fs').readFileSync('.teacher-vault/vault_polyglot.json','utf8')); console.log(eclairSelection(v).map(p=>p.language+'/'+p.class).join(' '))"` → 20 entrées dont python/CP, rust/CM2, react/CM1, cpp/CM1. Run réel : `node runner.js --exam-code --eclair` puis `node night-batch.js --list-only` (colonne « Trop lent »).
+
+**Pièges :**
+- Le carnet Éclair (école `RunCode-<parcours>`, pct sur exercices CP) PARAÎT flatteur : il sert au TRI de file (tremplin 40 %) et à l'affichage, pas à un bilan universitaire. Pour le diplôme sérieux, le modèle passe ensuite l'école (complète ou FLASH).
+- `computeLedgerMetrics()` compte les écoles RunCode (donc Éclair) dans tok/s/pct : un modèle ne peut échapper au filtre historique que s'il n'a JAMAIS de carnet — le contrôle post-tremplin couvre ce cas.
+- Un éclair interrompu (timeout 45 min) = modèle plomb démontré (il n'a pas fini 20 mini-exercices) — grande école annulée, raison `trop_lent`, PAS de blacklist. En `--tremplin-full`, le timeout reste non-éliminatoire (comportement souple conservé).
+- Crash du runner pendant l'Éclair (E507...) ≠ lenteur : « Tremplin interrompu (crash, pas un signe de lenteur) — la grande école continue normalement » (elle échouera au health check si le GGUF est cassé — ne PAS assimiler crash et trop lent).
+- `playExercise` est partagé : modifier les tentatives 1+2 change les DEUX modes en même temps. Le label de la tentative 2 est dérivé du `spinnerLabel` (suffixe `...` tronqué puis « — nouvelle tentative »).
+- Le red carton Éclair vise les 3 classes les plus simples GLOBALES (CP/CE1/CE2) et NON les 3 premières classes du parcours comme en Turbo : un expert rust rateant CM2 (sa classe la plus simple au coffre) ne prend PAS de carton en Éclair, contrairement au Turbo.
+- `_statusMapForModels` (startup-questionnaire.js) lit `listLlmModels()` : les nouveaux champs `tooSlow`/`tooSlowText` sont additifs (aucune casse), aucune modification requise.
 
 ---
 
@@ -1302,6 +1341,7 @@ node runner.js --provider=openrouter --model=<slug:free> --exam-code \
       - Règle simple : une ligne de titre commence TOUJOURS par son dièse (`###`), jamais par un astérisque ni par une puce suivie d'astérisques. Pour les sous-titres de tâches dans `Memories-BenchGo/Tasks.md`, la forme valide est `		### T1 — titre` (2 tabs + dièses, SANS tiret ni astérisques — cf. correction 2026-09-16).
    - **JAMAIS de tirets collés à un astérisque (demande utilisateur 2026-09-15, valable AUSSI dans les réponses du chat)** : la forme `-**` (tiret suivi immédiatement d'astérisques) n'est pas compatible Logseq. Ne JAMAIS écrire de ligne commençant par `-**` ni coller des astérisques juste après un tiret (dans `Memories-BenchGo/Tasks.md` comme dans toute réponse affichée au chat qui pourrait être copiée dans Logseq). Le tiret de puce et le gras sont toujours séparés : puce seule pour le corps (`- texte`), dièses seuls pour les titres (`### titre`), et si du gras est nécessaire dans le corps, il commence APRÈS un espace (`- **texte**`, jamais `- **texte` collé à la puce sans espace).
    - **Réponses du chat en TEXTE NORMAL compatible Logseq (demande utilisateur 2026-09-16)** : le résumé final de session s'écrit SANS markdown de structure (pas de `##`/`###` en titres, pas de tables, pas de blocs de code). Forme attendue : un texte plat — une phrase d'introduction courte, puis une puce par fait (`- ...`) avec **gras** pour les points importants et `code` pour les chemins/fonctions/commandes, une idée par puce, la dernière puce portant les vérifications passées. Exemple : « 4 corrections pour RunCode Turbo (demandes du Tasks.md) : » suivi de puces `- **Cause** : ...`. Jamais de tiret collé à du gras (`-**`), jamais de titres `#` dans le chat.
+   - **Émojis professionnels dans le chat et les rapports Logseq (demande utilisateur 2026-10-28)** : TOUTES les réponses au chat et les bilans Tâches (`Memories-BenchGo/Tasks*.md`) portent des émojis PROFESSIONNELS — jamais de guignols (pas de 😀🤡🎉). Vocabulaire réservé : `📎` = lien/fichier/référence, `🖊` ou `✍` = écriture/modification, `✅` = fait/validé, `⚠` = avertissement/piège, `📝` = rapport/documentation, `🔧` = correction technique, `🧪` = tests/vérifications, `🔎` = recherche/analyse, `📌` = consigne durable, `🎨` = visuel/CSS, `🐛` = bug, `⏱` = temps/performance, `💡` = conseil. Un émoji par puce en tête (`- ✅ T1 — ...`), jamais en rafale ni décoratif. Cette demande SURCLASSE la règle générale « pas d'emojis » : elle vient de l'utilisateur sur cet usage précis (chat + rapports Logseq uniquement — le code reste sans émojis).
 
 ## Outils de diagnostic (`scripts/`)
 
