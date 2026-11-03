@@ -2868,23 +2868,23 @@
       "provider": "lmstudio",
       "isCloud": false,
       "originManual": null,
-      "score": 6083,
-      "max": 6173,
+      "score": 6085,
+      "max": 6177,
       "pct": 99,
       "globalLifeScore": 6828,
       "optionalBonus": 745,
-      "mandatoryPassed": 2413,
-      "mandatoryTotal": 2413,
+      "mandatoryPassed": 2415,
+      "mandatoryTotal": 2417,
       "mandatoryPct": 100,
       "helpCount": 0,
       "retriedCount": 1,
-      "tokens": 36636,
-      "elapsedMs": 4795047,
-      "wallMs": 5274159,
-      "tokensPerSecond": 7.64,
+      "tokens": 38179,
+      "elapsedMs": 4909214,
+      "wallMs": 5388326,
+      "tokensPerSecond": 7.78,
       "promptTokens": 17476,
-      "completionTokens": 36636,
-      "ecoleCount": 2,
+      "completionTokens": 38179,
+      "ecoleCount": 3,
       "ecoles": [
         {
           "ecole": "Primaire",
@@ -4713,16 +4713,136 @@
             }
           ],
           "selfProfile": null
+        },
+        {
+          "ecole": "RunCode-Primaire",
+          "score": 2,
+          "max": 4,
+          "pct": 50,
+          "optionalBonus": 0,
+          "globalLifeScore": 0,
+          "helpCount": 0,
+          "retriedCount": 0,
+          "date": "2026-10-06",
+          "elapsedMs": 114167,
+          "tokens": 1543,
+          "tokensPerSecond": 13.52,
+          "promptTokens": 0,
+          "completionTokens": 1543,
+          "tiers": [
+            {
+              "tierNum": -1,
+              "runCode": true,
+              "language": "python",
+              "exerciseId": "py_cp_02_range_stop_boundary",
+              "passed": true,
+              "attempts": 2,
+              "tierTitle": "",
+              "className": "CP",
+              "isMandatory": false,
+              "rawResponse": null,
+              "evalResults": []
+            },
+            {
+              "tierNum": -1,
+              "runCode": true,
+              "language": "javascript",
+              "exerciseId": "js_cp_01_isnan_strict",
+              "passed": true,
+              "attempts": 2,
+              "tierTitle": "",
+              "className": "CP",
+              "isMandatory": false,
+              "rawResponse": null,
+              "evalResults": []
+            },
+            {
+              "tierNum": -1,
+              "runCode": true,
+              "language": "javascript",
+              "exerciseId": "js_ce1_01_array_copy",
+              "passed": false,
+              "attempts": 2,
+              "tierTitle": "",
+              "className": "CE1",
+              "isMandatory": false,
+              "rawResponse": null,
+              "evalResults": []
+            },
+            {
+              "tierNum": -1,
+              "runCode": true,
+              "language": "typescript",
+              "exerciseId": "ts_ce1_01_const_assertion",
+              "passed": false,
+              "attempts": 2,
+              "tierTitle": "",
+              "className": "CE1",
+              "isMandatory": false,
+              "rawResponse": null,
+              "evalResults": []
+            }
+          ],
+          "selfProfile": null
         }
       ],
       "ecoleNames": [
         "Primaire",
-        "College-Lycee"
+        "College-Lycee",
+        "RunCode-Primaire"
       ],
       "pseudo": "FlexoDiv",
-      "submittedAt": "2026-09-07T06:39:47.734Z",
+      "submittedAt": "2026-11-03T02:17:15.245Z",
       "cost": null,
-      "runCode": null,
+      "runCode": {
+        "ecoles": [
+          "RunCode-Primaire"
+        ],
+        "parcours": "Primaire",
+        "diplome": "CP",
+        "specialite": "javascript",
+        "specialiteVerdict": "Spécialité : JAVASCRIPT — réussi 1/2 exercice(s) (50%) dans ce langage au fil des classes.",
+        "languageStats": [
+          {
+            "language": "javascript",
+            "passed": 1,
+            "failed": 1,
+            "total": 2,
+            "rate": 50,
+            "classes": [
+              "CP",
+              "CE1"
+            ],
+            "avgLatencyMs": 41934
+          },
+          {
+            "language": "python",
+            "passed": 1,
+            "failed": 0,
+            "total": 1,
+            "rate": 100,
+            "classes": [
+              "CP"
+            ],
+            "avgLatencyMs": 11166
+          },
+          {
+            "language": "typescript",
+            "passed": 0,
+            "failed": 1,
+            "total": 1,
+            "rate": 0,
+            "classes": [
+              "CE1"
+            ],
+            "avgLatencyMs": 19134
+          }
+        ],
+        "pct": 50,
+        "score": 2,
+        "max": 4,
+        "date": "2026-10-06"
+      },
       "contributors": 1,
       "allPct": [
         99
@@ -98831,66 +98951,6 @@
       ]
     },
     {
-      "model": "nvidia/nemotron-nano-12b-2-vl:free",
-      "displayName": null,
-      "shortName": "nemotron-nano-12b-2-vl-free",
-      "quantization": null,
-      "modelUrl": "https://huggingface.co/nvidia/nemotron-nano-12b-2-vl:free",
-      "note": null,
-      "publisher": null,
-      "provider": "openrouter",
-      "isCloud": true,
-      "originManual": null,
-      "score": 0,
-      "max": 2653,
-      "pct": 0,
-      "globalLifeScore": 0,
-      "optionalBonus": 0,
-      "mandatoryPassed": 0,
-      "mandatoryTotal": 868,
-      "mandatoryPct": 0,
-      "helpCount": 0,
-      "retriedCount": 0,
-      "tokens": 0,
-      "elapsedMs": 0,
-      "wallMs": 9711,
-      "tokensPerSecond": 0,
-      "promptTokens": 0,
-      "completionTokens": 0,
-      "ecoleCount": 1,
-      "ecoles": [
-        {
-          "ecole": "Primaire",
-          "score": 0,
-          "max": 2653,
-          "pct": 0,
-          "optionalBonus": 0,
-          "globalLifeScore": 0,
-          "helpCount": 0,
-          "retriedCount": 0,
-          "date": "2026-08-03",
-          "elapsedMs": 0,
-          "tokens": 0,
-          "tokensPerSecond": 0,
-          "promptTokens": 0,
-          "completionTokens": 0,
-          "tiers": [],
-          "selfProfile": null
-        }
-      ],
-      "ecoleNames": [
-        "Primaire"
-      ],
-      "pseudo": "FlexoDiv",
-      "submittedAt": "2026-08-03T21:59:55.696Z",
-      "cost": null,
-      "runCode": null,
-      "contributors": 1,
-      "allPct": [
-        0
-      ]
-    },
-    {
       "model": "lfm2.5-vl-1.6b",
       "displayName": null,
       "shortName": "lfm2-5-vl-1-6b",
@@ -105162,6 +105222,6 @@
       ]
     }
   ],
-  "generatedAt": "2026-09-18T16:51:26.955Z",
+  "generatedAt": "2026-11-03T02:17:36.841Z",
   "totalSubmissions": 98
 }
