@@ -3,8 +3,8 @@
   "benchgoVersion": "V3",
   "userId": "2181628c20fe6a0e",
   "pseudo": "FlexoDiv",
-  "submittedAt": "2026-09-18T11:26:40.149Z",
-  "integrityHash": "73d12ea11014faaa",
+  "submittedAt": "2026-11-03T02:18:24.318Z",
+  "integrityHash": "cfd6cb1674bdccf1",
   "carnet": {
     "model": "bartowski/minicpm5-2b",
     "shortName": "bartowski_minicpm5-2b_q8_0",
@@ -3852,11 +3852,13 @@
         ]
       }
     },
-    "lastUpdated": "2026-09-18T11:23:36.498Z",
+    "lastUpdated": "2026-10-06T14:45:17.539Z",
     "provider": "lmstudio",
     "isCloud": false,
     "quantization": "Q8_0",
     "displayName": "bartowski_minicpm5-2b_q8_0",
-    "originManual": "local"
+    "originManual": "local",
+    "modelUrl": "https://huggingface.co/bartowski/MiniCPM5-2B-GGUF",
+    "paramSize": 3
   }
 }

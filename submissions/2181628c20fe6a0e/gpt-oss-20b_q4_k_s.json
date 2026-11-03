@@ -3,8 +3,8 @@
   "benchgoVersion": "V3",
   "userId": "2181628c20fe6a0e",
   "pseudo": "FlexoDiv",
-  "submittedAt": "2026-09-18T11:26:52.918Z",
-  "integrityHash": "72231fce5f7a1217",
+  "submittedAt": "2026-11-03T02:18:49.270Z",
+  "integrityHash": "228d528dde4eb5b0",
   "carnet": {
     "model": "gpt-oss-20b",
     "shortName": "gpt-oss-20b_q4_k_s",
@@ -11571,11 +11571,561 @@
             "timestampIso": "2026-09-18T08:11:01.773Z"
           }
         ]
+      },
+      "RunCode-College-Lycee": {
+        "best": {
+          "profile": "STANDARD",
+          "ecole": "RunCode-College-Lycee",
+          "runCode": true,
+          "parcours": "College-Lycee",
+          "diplome": "1ere",
+          "specialite": "cpp",
+          "specialiteVerdict": "Spécialité : CPP — réussi 2/2 exercice(s) (100%) dans ce langage au fil des classes.",
+          "languageStats": [
+            {
+              "language": "cpp",
+              "passed": 2,
+              "failed": 0,
+              "total": 2,
+              "rate": 100,
+              "classes": [
+                "6eme",
+                "1ere"
+              ],
+              "avgLatencyMs": 12657
+            },
+            {
+              "language": "csharp",
+              "passed": 2,
+              "failed": 0,
+              "total": 2,
+              "rate": 100,
+              "classes": [
+                "5eme",
+                "5eme"
+              ],
+              "avgLatencyMs": 16265
+            },
+            {
+              "language": "java",
+              "passed": 1,
+              "failed": 1,
+              "total": 2,
+              "rate": 50,
+              "classes": [
+                "3eme",
+                "3eme"
+              ],
+              "avgLatencyMs": 18389
+            },
+            {
+              "language": "rust",
+              "passed": 1,
+              "failed": 0,
+              "total": 1,
+              "rate": 100,
+              "classes": [
+                "6eme"
+              ],
+              "avgLatencyMs": 20186
+            },
+            {
+              "language": "typescript",
+              "passed": 1,
+              "failed": 0,
+              "total": 1,
+              "rate": 100,
+              "classes": [
+                "4eme"
+              ],
+              "avgLatencyMs": 22382
+            },
+            {
+              "language": "bash",
+              "passed": 1,
+              "failed": 0,
+              "total": 1,
+              "rate": 100,
+              "classes": [
+                "4eme"
+              ],
+              "avgLatencyMs": 12188
+            },
+            {
+              "language": "sql",
+              "passed": 1,
+              "failed": 0,
+              "total": 1,
+              "rate": 100,
+              "classes": [
+                "2nde"
+              ],
+              "avgLatencyMs": 9979
+            },
+            {
+              "language": "javascript",
+              "passed": 1,
+              "failed": 0,
+              "total": 1,
+              "rate": 100,
+              "classes": [
+                "2nde"
+              ],
+              "avgLatencyMs": 3794
+            },
+            {
+              "language": "ruby",
+              "passed": 0,
+              "failed": 1,
+              "total": 1,
+              "rate": 0,
+              "classes": [
+                "1ere"
+              ],
+              "avgLatencyMs": 10359
+            },
+            {
+              "language": "perl",
+              "passed": 0,
+              "failed": 1,
+              "total": 1,
+              "rate": 0,
+              "classes": [
+                "Terminale"
+              ],
+              "avgLatencyMs": 8864
+            }
+          ],
+          "declaration": {
+            "majeure": "python",
+            "mineure": "javascript",
+            "niveau": "expert"
+          },
+          "disqualified": false,
+          "score": 10,
+          "max": 13,
+          "pct": 77,
+          "mandatoryPassed": 10,
+          "mandatoryTotal": 13,
+          "globalLifeScore": 0,
+          "optionalBonus": 0,
+          "helpCount": 0,
+          "retriedCount": 0,
+          "date": "2026-09-19",
+          "time": "13-47-22",
+          "reportFile": "Export-Rapports/exam_gpt_oss_20b_1789818186775.log",
+          "selfProfile": null,
+          "tiers": [
+            {
+              "tierNum": -1,
+              "runCode": true,
+              "className": "6eme",
+              "language": "cpp",
+              "exerciseId": "cpp_col_01_iterator_invalidation",
+              "passed": true,
+              "attempts": 2
+            },
+            {
+              "tierNum": -1,
+              "runCode": true,
+              "className": "6eme",
+              "language": "rust",
+              "exerciseId": "rs_col_01_mutable_borrow",
+              "passed": true,
+              "attempts": 2
+            },
+            {
+              "tierNum": -1,
+              "runCode": true,
+              "className": "5eme",
+              "language": "csharp",
+              "exerciseId": "cs_5e_02_string_interp",
+              "passed": true,
+              "attempts": 2
+            },
+            {
+              "tierNum": -1,
+              "runCode": true,
+              "className": "5eme",
+              "language": "csharp",
+              "exerciseId": "cs_5e_01_async_task",
+              "passed": true,
+              "attempts": 2
+            },
+            {
+              "tierNum": -1,
+              "runCode": true,
+              "className": "4eme",
+              "language": "typescript",
+              "exerciseId": "ts_4e_01_enum",
+              "passed": true,
+              "attempts": 2
+            },
+            {
+              "tierNum": -1,
+              "runCode": true,
+              "className": "4eme",
+              "language": "bash",
+              "exerciseId": "sh_4e_01_exit_code",
+              "passed": true,
+              "attempts": 2
+            },
+            {
+              "tierNum": -1,
+              "runCode": true,
+              "className": "3eme",
+              "language": "java",
+              "exerciseId": "java_3e_02_string_equals",
+              "passed": true,
+              "attempts": 2
+            },
+            {
+              "tierNum": -1,
+              "runCode": true,
+              "className": "3eme",
+              "language": "java",
+              "exerciseId": "java_3e_01_list_generic",
+              "passed": false,
+              "attempts": 2
+            },
+            {
+              "tierNum": -1,
+              "runCode": true,
+              "className": "2nde",
+              "language": "sql",
+              "exerciseId": "sql_2e_01_join",
+              "passed": true,
+              "attempts": 2
+            },
+            {
+              "tierNum": -1,
+              "runCode": true,
+              "className": "2nde",
+              "language": "javascript",
+              "exerciseId": "js_2nde_01_destructuring",
+              "passed": true,
+              "attempts": 1
+            },
+            {
+              "tierNum": -1,
+              "runCode": true,
+              "className": "1ere",
+              "language": "cpp",
+              "exerciseId": "cpp_1e_01_const_ref_param",
+              "passed": true,
+              "attempts": 2
+            },
+            {
+              "tierNum": -1,
+              "runCode": true,
+              "className": "1ere",
+              "language": "ruby",
+              "exerciseId": "rb_1e_01_safe_nav",
+              "passed": false,
+              "attempts": 2
+            },
+            {
+              "tierNum": -1,
+              "runCode": true,
+              "className": "Terminale",
+              "language": "perl",
+              "exerciseId": "pl_term_01_hash_access",
+              "passed": false,
+              "attempts": 2
+            }
+          ],
+          "quantization": "Q4_K_S",
+          "elapsedMs": 182374,
+          "wallMs": 182374,
+          "tokens": 2543,
+          "tokensPerSecond": 13.94,
+          "promptTokens": 0,
+          "completionTokens": 2543,
+          "timestampMs": 1789818442217,
+          "timestampIso": "2026-09-19T11:47:22.217Z"
+        },
+        "attempts": [
+          {
+            "profile": "STANDARD",
+            "ecole": "RunCode-College-Lycee",
+            "runCode": true,
+            "parcours": "College-Lycee",
+            "diplome": "1ere",
+            "specialite": "cpp",
+            "specialiteVerdict": "Spécialité : CPP — réussi 2/2 exercice(s) (100%) dans ce langage au fil des classes.",
+            "languageStats": [
+              {
+                "language": "cpp",
+                "passed": 2,
+                "failed": 0,
+                "total": 2,
+                "rate": 100,
+                "classes": [
+                  "6eme",
+                  "1ere"
+                ],
+                "avgLatencyMs": 12657
+              },
+              {
+                "language": "csharp",
+                "passed": 2,
+                "failed": 0,
+                "total": 2,
+                "rate": 100,
+                "classes": [
+                  "5eme",
+                  "5eme"
+                ],
+                "avgLatencyMs": 16265
+              },
+              {
+                "language": "java",
+                "passed": 1,
+                "failed": 1,
+                "total": 2,
+                "rate": 50,
+                "classes": [
+                  "3eme",
+                  "3eme"
+                ],
+                "avgLatencyMs": 18389
+              },
+              {
+                "language": "rust",
+                "passed": 1,
+                "failed": 0,
+                "total": 1,
+                "rate": 100,
+                "classes": [
+                  "6eme"
+                ],
+                "avgLatencyMs": 20186
+              },
+              {
+                "language": "typescript",
+                "passed": 1,
+                "failed": 0,
+                "total": 1,
+                "rate": 100,
+                "classes": [
+                  "4eme"
+                ],
+                "avgLatencyMs": 22382
+              },
+              {
+                "language": "bash",
+                "passed": 1,
+                "failed": 0,
+                "total": 1,
+                "rate": 100,
+                "classes": [
+                  "4eme"
+                ],
+                "avgLatencyMs": 12188
+              },
+              {
+                "language": "sql",
+                "passed": 1,
+                "failed": 0,
+                "total": 1,
+                "rate": 100,
+                "classes": [
+                  "2nde"
+                ],
+                "avgLatencyMs": 9979
+              },
+              {
+                "language": "javascript",
+                "passed": 1,
+                "failed": 0,
+                "total": 1,
+                "rate": 100,
+                "classes": [
+                  "2nde"
+                ],
+                "avgLatencyMs": 3794
+              },
+              {
+                "language": "ruby",
+                "passed": 0,
+                "failed": 1,
+                "total": 1,
+                "rate": 0,
+                "classes": [
+                  "1ere"
+                ],
+                "avgLatencyMs": 10359
+              },
+              {
+                "language": "perl",
+                "passed": 0,
+                "failed": 1,
+                "total": 1,
+                "rate": 0,
+                "classes": [
+                  "Terminale"
+                ],
+                "avgLatencyMs": 8864
+              }
+            ],
+            "declaration": {
+              "majeure": "python",
+              "mineure": "javascript",
+              "niveau": "expert"
+            },
+            "disqualified": false,
+            "score": 10,
+            "max": 13,
+            "pct": 77,
+            "mandatoryPassed": 10,
+            "mandatoryTotal": 13,
+            "globalLifeScore": 0,
+            "optionalBonus": 0,
+            "helpCount": 0,
+            "retriedCount": 0,
+            "date": "2026-09-19",
+            "time": "13-47-22",
+            "reportFile": "Export-Rapports/exam_gpt_oss_20b_1789818186775.log",
+            "selfProfile": null,
+            "tiers": [
+              {
+                "tierNum": -1,
+                "runCode": true,
+                "className": "6eme",
+                "language": "cpp",
+                "exerciseId": "cpp_col_01_iterator_invalidation",
+                "passed": true,
+                "attempts": 2
+              },
+              {
+                "tierNum": -1,
+                "runCode": true,
+                "className": "6eme",
+                "language": "rust",
+                "exerciseId": "rs_col_01_mutable_borrow",
+                "passed": true,
+                "attempts": 2
+              },
+              {
+                "tierNum": -1,
+                "runCode": true,
+                "className": "5eme",
+                "language": "csharp",
+                "exerciseId": "cs_5e_02_string_interp",
+                "passed": true,
+                "attempts": 2
+              },
+              {
+                "tierNum": -1,
+                "runCode": true,
+                "className": "5eme",
+                "language": "csharp",
+                "exerciseId": "cs_5e_01_async_task",
+                "passed": true,
+                "attempts": 2
+              },
+              {
+                "tierNum": -1,
+                "runCode": true,
+                "className": "4eme",
+                "language": "typescript",
+                "exerciseId": "ts_4e_01_enum",
+                "passed": true,
+                "attempts": 2
+              },
+              {
+                "tierNum": -1,
+                "runCode": true,
+                "className": "4eme",
+                "language": "bash",
+                "exerciseId": "sh_4e_01_exit_code",
+                "passed": true,
+                "attempts": 2
+              },
+              {
+                "tierNum": -1,
+                "runCode": true,
+                "className": "3eme",
+                "language": "java",
+                "exerciseId": "java_3e_02_string_equals",
+                "passed": true,
+                "attempts": 2
+              },
+              {
+                "tierNum": -1,
+                "runCode": true,
+                "className": "3eme",
+                "language": "java",
+                "exerciseId": "java_3e_01_list_generic",
+                "passed": false,
+                "attempts": 2
+              },
+              {
+                "tierNum": -1,
+                "runCode": true,
+                "className": "2nde",
+                "language": "sql",
+                "exerciseId": "sql_2e_01_join",
+                "passed": true,
+                "attempts": 2
+              },
+              {
+                "tierNum": -1,
+                "runCode": true,
+                "className": "2nde",
+                "language": "javascript",
+                "exerciseId": "js_2nde_01_destructuring",
+                "passed": true,
+                "attempts": 1
+              },
+              {
+                "tierNum": -1,
+                "runCode": true,
+                "className": "1ere",
+                "language": "cpp",
+                "exerciseId": "cpp_1e_01_const_ref_param",
+                "passed": true,
+                "attempts": 2
+              },
+              {
+                "tierNum": -1,
+                "runCode": true,
+                "className": "1ere",
+                "language": "ruby",
+                "exerciseId": "rb_1e_01_safe_nav",
+                "passed": false,
+                "attempts": 2
+              },
+              {
+                "tierNum": -1,
+                "runCode": true,
+                "className": "Terminale",
+                "language": "perl",
+                "exerciseId": "pl_term_01_hash_access",
+                "passed": false,
+                "attempts": 2
+              }
+            ],
+            "quantization": "Q4_K_S",
+            "elapsedMs": 182374,
+            "wallMs": 182374,
+            "tokens": 2543,
+            "tokensPerSecond": 13.94,
+            "promptTokens": 0,
+            "completionTokens": 2543,
+            "timestampMs": 1789818442217,
+            "timestampIso": "2026-09-19T11:47:22.217Z"
+          }
+        ]
       }
     },
-    "lastUpdated": "2026-09-18T08:11:01.775Z",
+    "lastUpdated": "2026-10-06T14:43:37.869Z",
     "provider": "lmstudio",
     "isCloud": false,
-    "quantization": "Q4_K_S"
+    "quantization": "Q4_K_S",
+    "modelUrl": "https://huggingface.co/unsloth/gpt-oss-20b-GGUF",
+    "paramSize": 20,
+    "displayName": "gpt-oss-20b",
+    "originManual": "local"
   }
 }
