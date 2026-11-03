@@ -3,8 +3,8 @@
   "benchgoVersion": "V3",
   "userId": "2181628c20fe6a0e",
   "pseudo": "FlexoDiv",
-  "submittedAt": "2026-09-07T06:39:47.734Z",
-  "integrityHash": "35ad6263eb27ab49",
+  "submittedAt": "2026-11-03T02:17:15.245Z",
+  "integrityHash": "c3056f8a64b1fb0c",
   "carnet": {
     "model": "ornith-1.5-9b@q6_k",
     "shortName": "ornith-1.5-9b_q6_k",
@@ -7418,9 +7418,235 @@
             "timestampIso": "2026-09-03T01:51:34.179Z"
           }
         ]
+      },
+      "RunCode-Primaire": {
+        "best": {
+          "profile": "LIGHT",
+          "ecole": "RunCode-Primaire",
+          "runCode": true,
+          "parcours": "Primaire",
+          "diplome": "CP",
+          "specialite": "javascript",
+          "specialiteVerdict": "Spécialité : JAVASCRIPT — réussi 1/2 exercice(s) (50%) dans ce langage au fil des classes.",
+          "languageStats": [
+            {
+              "language": "javascript",
+              "passed": 1,
+              "failed": 1,
+              "total": 2,
+              "rate": 50,
+              "classes": [
+                "CP",
+                "CE1"
+              ],
+              "avgLatencyMs": 41934
+            },
+            {
+              "language": "python",
+              "passed": 1,
+              "failed": 0,
+              "total": 1,
+              "rate": 100,
+              "classes": [
+                "CP"
+              ],
+              "avgLatencyMs": 11166
+            },
+            {
+              "language": "typescript",
+              "passed": 0,
+              "failed": 1,
+              "total": 1,
+              "rate": 0,
+              "classes": [
+                "CE1"
+              ],
+              "avgLatencyMs": 19134
+            }
+          ],
+          "declaration": {
+            "majeure": "python",
+            "mineure": "javascript",
+            "niveau": "expert"
+          },
+          "disqualified": false,
+          "score": 2,
+          "max": 4,
+          "pct": 50,
+          "mandatoryPassed": 2,
+          "mandatoryTotal": 4,
+          "globalLifeScore": 0,
+          "optionalBonus": 0,
+          "helpCount": 0,
+          "retriedCount": 0,
+          "date": "2026-10-06",
+          "time": "17-33-22",
+          "reportFile": "Export-Rapports/exam_ornith_1_5_9b_q6_k_1791300645582.log",
+          "selfProfile": null,
+          "tiers": [
+            {
+              "tierNum": -1,
+              "runCode": true,
+              "className": "CP",
+              "language": "python",
+              "exerciseId": "py_cp_02_range_stop_boundary",
+              "passed": true,
+              "attempts": 2
+            },
+            {
+              "tierNum": -1,
+              "runCode": true,
+              "className": "CP",
+              "language": "javascript",
+              "exerciseId": "js_cp_01_isnan_strict",
+              "passed": true,
+              "attempts": 2
+            },
+            {
+              "tierNum": -1,
+              "runCode": true,
+              "className": "CE1",
+              "language": "javascript",
+              "exerciseId": "js_ce1_01_array_copy",
+              "passed": false,
+              "attempts": 2
+            },
+            {
+              "tierNum": -1,
+              "runCode": true,
+              "className": "CE1",
+              "language": "typescript",
+              "exerciseId": "ts_ce1_01_const_assertion",
+              "passed": false,
+              "attempts": 2
+            }
+          ],
+          "quantization": "Q6_K",
+          "elapsedMs": 114167,
+          "wallMs": 114167,
+          "tokens": 1543,
+          "tokensPerSecond": 13.52,
+          "promptTokens": 0,
+          "completionTokens": 1543,
+          "timestampMs": 1791300802316,
+          "timestampIso": "2026-10-06T15:33:22.316Z"
+        },
+        "attempts": [
+          {
+            "profile": "LIGHT",
+            "ecole": "RunCode-Primaire",
+            "runCode": true,
+            "parcours": "Primaire",
+            "diplome": "CP",
+            "specialite": "javascript",
+            "specialiteVerdict": "Spécialité : JAVASCRIPT — réussi 1/2 exercice(s) (50%) dans ce langage au fil des classes.",
+            "languageStats": [
+              {
+                "language": "javascript",
+                "passed": 1,
+                "failed": 1,
+                "total": 2,
+                "rate": 50,
+                "classes": [
+                  "CP",
+                  "CE1"
+                ],
+                "avgLatencyMs": 41934
+              },
+              {
+                "language": "python",
+                "passed": 1,
+                "failed": 0,
+                "total": 1,
+                "rate": 100,
+                "classes": [
+                  "CP"
+                ],
+                "avgLatencyMs": 11166
+              },
+              {
+                "language": "typescript",
+                "passed": 0,
+                "failed": 1,
+                "total": 1,
+                "rate": 0,
+                "classes": [
+                  "CE1"
+                ],
+                "avgLatencyMs": 19134
+              }
+            ],
+            "declaration": {
+              "majeure": "python",
+              "mineure": "javascript",
+              "niveau": "expert"
+            },
+            "disqualified": false,
+            "score": 2,
+            "max": 4,
+            "pct": 50,
+            "mandatoryPassed": 2,
+            "mandatoryTotal": 4,
+            "globalLifeScore": 0,
+            "optionalBonus": 0,
+            "helpCount": 0,
+            "retriedCount": 0,
+            "date": "2026-10-06",
+            "time": "17-33-22",
+            "reportFile": "Export-Rapports/exam_ornith_1_5_9b_q6_k_1791300645582.log",
+            "selfProfile": null,
+            "tiers": [
+              {
+                "tierNum": -1,
+                "runCode": true,
+                "className": "CP",
+                "language": "python",
+                "exerciseId": "py_cp_02_range_stop_boundary",
+                "passed": true,
+                "attempts": 2
+              },
+              {
+                "tierNum": -1,
+                "runCode": true,
+                "className": "CP",
+                "language": "javascript",
+                "exerciseId": "js_cp_01_isnan_strict",
+                "passed": true,
+                "attempts": 2
+              },
+              {
+                "tierNum": -1,
+                "runCode": true,
+                "className": "CE1",
+                "language": "javascript",
+                "exerciseId": "js_ce1_01_array_copy",
+                "passed": false,
+                "attempts": 2
+              },
+              {
+                "tierNum": -1,
+                "runCode": true,
+                "className": "CE1",
+                "language": "typescript",
+                "exerciseId": "ts_ce1_01_const_assertion",
+                "passed": false,
+                "attempts": 2
+              }
+            ],
+            "quantization": "Q6_K",
+            "elapsedMs": 114167,
+            "wallMs": 114167,
+            "tokens": 1543,
+            "tokensPerSecond": 13.52,
+            "promptTokens": 0,
+            "completionTokens": 1543,
+            "timestampMs": 1791300802316,
+            "timestampIso": "2026-10-06T15:33:22.316Z"
+          }
+        ]
       }
     },
-    "lastUpdated": "2026-09-05T09:21:49.892Z",
+    "lastUpdated": "2026-10-06T15:33:22.318Z",
     "provider": "lmstudio",
     "isCloud": false,
     "quantization": "Q6_K",
