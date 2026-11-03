@@ -3,8 +3,8 @@
   "benchgoVersion": "V3",
   "userId": "2181628c20fe6a0e",
   "pseudo": "FlexoDiv",
-  "submittedAt": "2026-09-11T07:42:50.654Z",
-  "integrityHash": "28200ea1ee4fa43e",
+  "submittedAt": "2026-11-03T02:18:56.642Z",
+  "integrityHash": "1eb7d9a8f9f0e43e",
   "carnet": {
     "model": "qwen3.8-9b-distill",
     "shortName": "qwen3.8-9b-distill_q5_k_m",
@@ -7520,9 +7520,13 @@
         ]
       }
     },
-    "lastUpdated": "2026-09-10T22:10:53.057Z",
+    "lastUpdated": "2026-10-06T14:53:26.300Z",
     "provider": "lmstudio",
     "isCloud": false,
-    "quantization": "Q5_K_M"
+    "quantization": "Q5_K_M",
+    "modelUrl": "https://huggingface.co/empero-ai/Qwen3.8-9B-Distill-GGUF",
+    "paramSize": 9,
+    "originManual": "local",
+    "displayName": "qwen3.8-9b-distill_Q5_K_M"
   }
 }
