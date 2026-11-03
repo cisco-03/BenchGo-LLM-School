@@ -27,6 +27,8 @@ OS : Windows, PowerShell 5.1. Projet Node.js 18+ **sans `package.json`** (module
 | Serveur classement (port custom) | `node leaderboard.js --serve --port=3940` |
 | Classement communautaire en ligne (GitHub Pages) | `gh workflow run consolidate.yml -R cisco-03/BenchGo-LLM-School` puis `gh run watch -R cisco-03/BenchGo-LLM-School` |
 | Classement communautaire local (test) | `node consolidate-leaderboard.js` (→ `gh-pages-output/`) |
+| Audit des origines (communautaire) | `node consolidate-leaderboard.js --audit-origins` (lecture seule, table Origine/Source/Signaux) |
+| Corriger l'origine d'un modèle (admin) | `node consolidate-leaderboard.js --fix-origin=<model>=<cloud\|local\|none>` (écrit `submissions/admin-overrides.json` + régénère) |
 | Aide CLI (runner) | `node runner.js --help` (ou `help` / `-h`) |
 | Aide CLI (leaderboard) | `node leaderboard.js --help` |
 | Aide CLI (night-batch) | `node night-batch.js --help` |
@@ -979,6 +981,38 @@ Le **pre-flight check** (détection rate-limit 200/400 vide, section ci-dessous)
 - Un modèle Ollama **local** testé en LIGHT/STANDARD (jamais FRONTIER) reste correctement classé local : le signal FRONTIER est absent.
 - Le fix est rétroactif : les carnets existants (avec ou sans `provider`) sont reclassés au prochain `node leaderboard.js`.
 - `LOCAL_PROVIDERS` (`local`, `lmstudio`, `ollama`, `custom`) sert à distinguer les serveurs OpenAI-compat locaux des API distantes — mais un provider local peut être utilisé en mode cloud (Ollama distant). Le signal FRONTIER est le seul discriminant fiable.
+
+### Origines Local/Cloud du classement communautaire + overrides admin (tâche 2026-11-03)
+
+**Fichiers touchés :** `consolidate-leaderboard.js`, `submissions/admin-overrides.json` (nouveau), `tests/test-consolidate-origines.js` (nouveau), `Docs/CHANGELOG.md`, `AGENTS.md`, `Memories-BenchGo/Tasks.md`.
+
+**Principe :** Demande utilisateur : dans le classement communautaire, le sélecteur Local/Cloud était « tout mélangé » — des modèles FRONTIER testés via Ollama distant s'affichaient avec le badge local. Cause : `aggregateCarnet()` avalait les signaux FRONTIER derrière le test provider (leaderboard.js ne le fait PAS — fix 2026-08-31e jamais porté au communautaire) et son « hybride » `cloudByName` exigeait `detectIsCloudFromCarnet && /-(cloud|free)$/` (regex hors famille `:free$`/`:cloud$`). Audit réel : 12 modèles sur 98 soumissions mal classés (`kimi-k2.7-code`, `glm-5.1`…`glm-5.3-flash`, `kimi-k2.6`, `kimi-k3`, `deepseek-v4-pro`, `minimax-m2.7`, `nemotron-3-super/ultra`, `qwen3.5` — tous `provider: 'ollama'` + Post-Doctorat). Ajout : corrections ADMIN versionnées — l'admin du dépôt force l'origine d'un modèle via `submissions/admin-overrides.json` (éditable directement sur GitHub), lue à chaque génération.
+
+**Fonctions :**
+- `resolveCarnetOrigin(carnet, adminOverrides)` (consolidate-leaderboard.js, pure, exportée) → `{ isCloud, originAdmin, source }`, priorité : ADMIN > originManual (testeur) > signaux FRONTIER (`carnetHasPostDoctorat` + `detectIsCloudFromCarnet`) > provider. `source` ∈ `admin|manuel|auto` (dérivé côté audit : `originAdmin` → ADMIN, `originManual` → MANUEL, sinon AUTO).
+- `carnetHasPostDoctorat(carnet)` → école Post-Doctorat par clé d'école OU `best.ecole` OU `attempts[].ecole`.
+- `carnetOriginSignals(carnet)` → tableau de labels (suffixes `:free`/`-cloud`/`:cloud`, école Post-Doctorat, tentative FRONTIER, provider cloud) ; alimente `--audit-origins`.
+- `loadAdminOverrides(path?)` → map normalisée `{ clé: { origin, note, createdAt } }` ou `null` (fichier absent/illisible → jamais un crash ; origins invalides filtrées, clés renormalisées à la lecture).
+- `lookupAdminOverride(overrides, carnet)` → match par `normalizeModelKey(model, shortName)` puis displayName en repli.
+- `refreshAdminOverrides()` → recharge le cache module avant chaque génération/audit (une édition GitHub entre deux lancements est toujours prise en compte).
+- CLI : `--audit-origins` (table Origine/Source/Modèle/Provider/Signaux, lecture seule) ; `--fix-origin=<model>=<cloud|local|none>` (écrit le fichier + régénère ; `none`/`reset`/`auto`/`supprimer` = retour à la détection auto ; `_doc` embarqué conservé aux réécritures).
+- `aggregateCarnet` expose `originAdmin` (JSON + `modelsJson` HTML) ; badge `title` « — corrigé par l'admin » + StatBox « (corrigé par l'admin) ».
+
+**Pour modifier :**
+1. **Changer la priorité d'origine** : éditer `resolveCarnetOrigin()` (consolidate-leaderboard.js). Toute divergence avec la chaîne isCloud de `aggregateLedger()` (leaderboard.js) fait échouer le test de PARITÉ (cas 2 de tests/test-consolidate-origines.js) — voulu.
+2. **Détecter un nouveau signal cloud** : l'ajouter dans `detectIsCloudFromLedger` (leaderboard.js) ET `detectIsCloudFromCarnet` + `carnetOriginSignals` (consolidate-leaderboard.js) — les deux doivent rester synchronisés.
+3. **Retirer les corrections admin** : supprimer le fichier `submissions/admin-overrides.json`, le bloc overrides-admin et les commandes CLI (`--audit-origins` / `--fix-origin`) dans consolidate-leaderboard.js ; retirer le cas « bug 2026-11-03 » ne suffit pas (les cas admin testent `resolveCarnetOrigin`).
+4. **Désactiver l'annotation visuelle** : retirer `originModTag` du badge + la mention dans la StatBox « Origine » du JS inline (échapper `\\'` pour l'apostrophe).
+5. **Tester** : `node consolidate-leaderboard.js --audit-origins` (12 fixes vérifiables), `node consolidate-leaderboard.js` + `node scripts/check-inline-js.js`, `node tests/run-tests.js` (22 cas origines).
+
+**Pièges :**
+- **La logique d'origine existe EN DEUX EXEMPLAIRES** (leaderboard.js / consolidate-leaderboard.js) : la priorité ADMIN > MANUEL > FRONTIER > provider est l'invariant documenté — le test de parité requiert les deux modules et échouera si l'un diverge (voulu).
+- `--fix-origin` régénère le classement LOCAL ; la mise en ligne exige commit + push + `gh workflow run consolidate.yml -R cisco-03/BenchGo-LLM-School`.
+- Les overrides sont stockés aux clés normalisées (`kimi-k2-7-code`) : la saisie accepte le nom affiché (publisher, points, `:free`) mais le fichier contient toujours la forme normalisée.
+- **Apostrophe dans le JS inline** : `l\'admin` écrit avec `\'` côté template literal crève à la génération (SyntaxError, « Aucun modèle ») — écrire `\\'` ; garde-fou `node scripts/check-inline-js.js`.
+- Dédoublonnage : si deux contributeurs posent des `originManual` divergents, celui de la soumission au meilleur pct survit ; l'override admin s'applique quel que soit le contributeur.
+- Requiring consolidate-leaderboard.js ne génère PLUS (main gaté derrière `require.main === module`) : les exports testables (8 fonctions) sont sûrs à importer ; `regenerate()` reste le point d'entrée pour submit-action.js/runner.js.
+- Un suffixe `:free` seul (sans Post-Doctorat) suffit à classer cloud (`minimax/minimax-m2.7:free`) ; un provider cloud hors LOCAL_PROVIDERS aussi — mais un provider local SANS signal fort reste local même si le carnet pollue `isCloud: true` (bug 2026-08-26).
 
 ### Suffixe -cloud (Ollama Cloud) + colonne Orig. dans le MD + message suppression E507 (tâche 2026-09-11b)
 

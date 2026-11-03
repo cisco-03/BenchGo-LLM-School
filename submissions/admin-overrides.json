@@ -1,0 +1,6 @@
+{
+  "version": 1,
+  "_doc": "Corrections manuelles de l'ADMIN pour l'origine (cloud vs local) des modèles du classement communautaire. overrides: { \"<model>\": { \"origin\": \"cloud\"|\"local\" } } — la clé accepte le nom de modèle tel qu'affiché sur la page (normalisée automatiquement). La correction admin PRIME sur le choix manuel du testeur et sur la détection auto. Éditer ce fichier (même directement sur GitHub puis push), puis relancer le workflow consolidate.yml pour déployer. En local : node consolidate-leaderboard.js --fix-origin=<model>=<cloud|local|none> et --audit-origins pour vérifier.",
+  "updatedAt": "2026-11-03T02:41:39.024Z",
+  "overrides": {}
+}

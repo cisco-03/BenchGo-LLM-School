@@ -1,5 +1,34 @@
 # CHANGELOG - Carnet de Notes BenchGo
 
+## 2026-11-03 — fix(origines classement communautaire) : sélecteur Local/Cloud étanche + corrections ADMIN versionnées
+
+### Contexte & besoin
+Demande utilisateur : dans le **classement communautaire** (consolidate-leaderboard.js, GitHub Pages), le sélecteur « Local / Cloud » était **tout mélangé** — en choisissant Local, des modèles FRONTIER (testés en Post-Doctorat via Ollama distant) s'affichaient avec le badge local. Demandes : (1) une grosse vérification + correction + tests pour que ça ne se reproduise plus, (2) un moyen pour l'ADMIN du dépôt de corriger manuellement l'origine d'un modèle du classement communautaire.
+
+### Cause racine
+`aggregateCarnet()` calculait `cloudByName = detectIsCloudFromCarnet(carnet) && /-(cloud|free)$/i.test(nom)` puis la chaîne `cloudByName || (provider ? !LOCAL_PROVIDERS : ...)`. Deux défauts : (a) le signal FRONTIER (école Post-Doctorat / tentatives `profile === 'FRONTIER'`) était **avalé derrière le test provider** — un modèle testé via Ollama distant (`provider: 'ollama'` ∈ LOCAL_PROVIDERS) tombait en local, alors que leaderboard.js applique ce signal en TÊTE de sa chaîne (tâche 2026-08-31e) ; (b) le regex `-(cloud|free)$` ne matchait pas la vraie famille des suffixes (`:free$`, `:cloud$`) — l'« hybride » cloudByName exigeait DEUX signaux au lieu d'en lister un seul. Audit réel : **12 modèles sur 98 soumissions** mal classés (kimi-k2.7-code, glm-5.1/5.2/5.3/5.3-flash, kimi-k2.6, kimi-k3, deepseek-v4-pro, minimax-m2.7, nemotron-3-super/ultra, qwen3.5 — tous provider `ollama` + Post-Doctorat).
+
+### Corrections
+- **Chaîne de décision réécrite et déportée** dans `resolveCarnetOrigin()` (consolidate-leaderboard.js, fonction PURE exportée) — priorité synchronisée avec leaderboard.js : **ADMIN > choix manuel du testeur (originManual) > signaux forts FRONTIER (école Post-Doctorat via `carnetHasPostDoctorat()` + `detectIsCloudFromCarnet`) > provider**. `carnetHasPostDoctorat()` teste la clé d'école, `best.ecole` ET `attempts[].ecole` (les carnets anciens placent l'école à des endroits différents) ; `detectIsCloudFromCarnet` est appelé une seule fois et SANS condition nom supplémentaire (parité exacte avec `detectIsCloudFromLedger`).
+- **Nouvelle branche « sans provider »** : `Boolean(carnet.isCloud === true)` strict (un `isCloud` pollué ≠ true est ignoré, bug 2026-08-26) — les deux classements testent exactement la même chose.
+- **Overrides ADMIN** (fichier versionné `submissions/admin-overrides.json`, lu à chaque génération en local ET en CI via le workflow consolidate.yml) : `overrides: { "<model>": { "origin": "cloud"|"local", "createdAt", "note" } }`. Clés **normalisées à la lecture** (l'admin colle le nom tel qu'affiché sur la page) ; matchmaking aussi par displayName en repli. Le champ `_doc` embarqué survit aux réécritures CLI. Éditable directement sur GitHub (web UI) puis `gh workflow run consolidate.yml -R cisco-03/BenchGo-LLM-School`.
+- **CLI** : `node consolidate-leaderboard.js --audit-origins` (la « grosse vérification » : table Origine/Source/Modèle/Provider/Signaux pour les 90+ modèles dédoublonnés, lecture seule) et `--fix-origin=<model>=<cloud|local|none>` (force/réinitialise l'origine puis régénère ; la réinitialisation `none`/`reset`/`auto`/`supprimer` remet la détection auto).
+- **Annotation visuelle** : `originAdmin` sérialisé dans les MODELS du HTML (badge `title` « — corrigé par l'admin ») et StatBox Origine de la modale (« (corrigé par l'admin) ») ; `originAdmin` aussi dans `community-leaderboard.json`. Le `originManual` conserve son annotation « origine forcée manuellement » / « (choix manuel) ».
+- **Module requirable sans effet de bord** : `main()` est dorénavant gaté derrière `if (require.main === module)` (plus de génération au simple `require()` — les tests unitaires l'importe proprement). Exports ajoutés : `detectIsCloudFromCarnet`, `carnetHasPostDoctorat`, `carnetOriginSignals`, `resolveCarnetOrigin`, `loadAdminOverrides`, `lookupAdminOverride`, `normalizeModelKey`, `aggregateCarnet` (+ `regenerate` inchangé).
+- **Aide CLI** élargie (nouvelles commandes + règles de priorité d'origine).
+- **Tests** : nouveau `tests/test-consolidate-origines.js` (22 cas) — le bug kimi-k2.7-code verrouillé, **PARITÉ RÉELLE** `aggregateLedger` (leaderboard.js) vs `aggregateCarnet` sur 3 scénarios identiques (Frontier ollama / local lmstudio / cloud openrouter), Post-Doctorat par clé/`best.ecole`/`attempts[].ecole`, suffixes `:free`/`-cloud`/`:cloud` (model et displayName), originManual testeur, overrides admin (autorité sur originManual ET sur slug :free, rematch clé normalisée + displayName, override inconnu), `loadAdminOverrides` (fichier absent/JSON malformé → null sans crash, origins invalides filtrées, clés normalisées), `carnetOriginSignals`, `normalizeModelKey`.
+
+### Fichiers touchés
+`consolidate-leaderboard.js`, `submissions/admin-overrides.json` (nouveau, versionné, overrides vides), `tests/test-consolidate-origines.js` (nouveau), ce CHANGELOG, `AGENTS.md`, `Memories-BenchGo/Tasks.md`.
+
+### Pièges
+- **La logique d'origine est DUPLIQUÉE dans les deux classements** (leaderboard.js / consolidate-leaderboard.js) : la priorité doit rester synchronisée. Le test de PARITÉ (cas 2) requiert les DEUX modules — si `aggregateLedger` change sa chaîne isCloud, le test échouera (voulu).
+- **Apostrophe dans le JS inline** : `corrigé par l\'admin` écrit `\'` côté source template literal → l'apostrophe CRÈVE dans le JS généré (SyntaxError, "Aucun modèle"). Utiliser `\\'` (comme les lignes hist-toggle existantes) ; `node scripts/check-inline-js.js` est le garde-fou.
+- `--fix-origin` écrit le fichier puis **régénère immédiatement** le classement local — mais la mise en ligne exige commit + push + `gh workflow run consolidate.yml -R cisco-03/BenchGo-LLM-School`.
+- `loadAdminOverrides()` filtre les entrées sans `origin` valide et **renormalise toutes les clés** : une édition manuelle mal formée sur GitHub ne casse jamais la génération (warning + repli).
+- Le dédoublonnage garde la soumission au meilleur pct : si DEUX contributeurs posent des `originManual` différents, c'est celui de la meilleure soumission qui survit — l'override admin, lui, s'applique quel que soit le contributeur.
+- Les overrides sont stockés aux clés normalisées (`kimi-k2-7-code`) : le nom affiché sur la page (avec points, publisher, `:free`) reste accepté en saisie mais le fichier contient toujours la forme normalisée.
+
 ## 2026-10-28 — feat(RunCode Éclair + filtre anti-plomb) : spécialité mesurée en ~20 min et modèles < 5 t/s éliminés du mode nuit
 
 ### Contexte & besoin

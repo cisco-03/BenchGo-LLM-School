@@ -130,6 +130,156 @@ function detectIsCloudFromCarnet(carnet) {
   return false;
 }
 
+// Liste des signaux d'origine détectés dans un carnet (pour l'audit CLI
+// --audit-origins et les tests). Renvoie un tableau de labels FR : chaque
+// signal est une preuve que le modèle est cloud. La présence du provider
+// cloud (hors LOCAL_PROVIDERS) et du champ isCloud stocké sont aussi listés
+// (indicatifs — non pris en compte dans la chaîne de décision à ce stade).
+function carnetOriginSignals(carnet) {
+  const signals = [];
+  const model = (carnet.model || '').trim();
+  const display = (carnet.displayName || '').trim();
+  if (/:free$/i.test(model)) signals.push('suffixe :free');
+  if (/-cloud$/i.test(model) || /-cloud$/i.test(display)) signals.push('suffixe -cloud');
+  if (/:cloud$/i.test(model) || /:cloud$/i.test(display)) signals.push('suffixe :cloud');
+  if (carnetHasPostDoctorat(carnet)) signals.push('école Post-Doctorat (FRONTIER)');
+  const ecoles = Object.values(carnet.ecoles || {});
+  for (const ec of ecoles) {
+    const attempts = (ec && ec.attempts) || [];
+    for (const a of attempts) {
+      if (a && a.profile === 'FRONTIER') { signals.push('tentative FRONTIER'); break; }
+    }
+  }
+  if (carnet.provider && !LOCAL_PROVIDERS.has(String(carnet.provider).toLowerCase())) {
+    signals.push('provider ' + carnet.provider);
+  }
+  return signals;
+}
+
+// Le signal école "Post-Doctorat" (profil FRONTIER, réservé au cloud) —
+// tâche 2026-08-31e : un modèle testé en FRONTIER est TOUJOURS cloud, quel
+// que soit son provider (ex: Ollama distant via frontier-batch, provider
+// stocké 'ollama' qui figure dans LOCAL_PROVIDERS). Le leaderboard LOCAL
+// (leaderboard.js) applique ce signal en TÊTE de sa chaîne de décision ;
+// ce fichier l'omettait → 12 modèles frontière s'affichaient badge local
+// dans le classement communautaire (bug rapporté le 2026-11-03).
+// On teste : la clé d'école ET best.ecole ET attempts[].ecole (selon
+// l'ancienneté du carnet, l'école peut être aux différents endroits).
+function carnetHasPostDoctorat(carnet) {
+  for (const [ecoleName, raw] of Object.entries(carnet.ecoles || {})) {
+    if (/post[-_ ]?doctorat/i.test(ecoleName || '')) return true;
+    const b = raw && raw.best;
+    if (b && /post[-_ ]?doctorat/i.test(b.ecole || '')) return true;
+    const attempts = (raw && raw.attempts) || [];
+    for (const a of attempts) {
+      if (a && /post[-_ ]?doctorat/i.test(a.ecole || '')) return true;
+    }
+  }
+  return false;
+}
+
+// --- Overrides ADMIN (tâche 2026-11-03) ---
+// L'admin du dépôt (cisco-03/BenchGo-LLM-School) peut forcer l'origine d'un
+// modèle du classement communautaire : fichier versionné
+// submissions/admin-overrides.json, lu à chaque génération (local ET CI).
+// Format :
+//   { "version": 1, "updatedAt": "<ISO>", "overrides": {
+//       "<model ou shortName>": { "origin": "cloud"|"local", "createdAt": "<ISO>", "note": "..." } } }
+// Les clés sont normalisées (normalizeModelKey) à la lecture — l'admin peut
+// donc coller le nom de modèle tel quel depuis la page (le fichier est
+// éditable directement sur GitHub, puis workflow consolidate.yml relancé).
+// La correction admin PRIME sur le choix manuel du contributeur (originManual)
+// ET sur toute heuristique — un seul fichier, autorité maximale.
+const ADMIN_OVERRIDES_FILE = 'admin-overrides.json';
+
+// Documentation embarquée dans le fichier JSON (pas de commentaires en JSON).
+// Réécrite identique par --fix-origin pour que le guide survive aux écritures.
+const ADMIN_OVERRIDES_DOC = "Corrections manuelles de l'ADMIN pour l'origine (cloud vs local) des modèles du classement communautaire. overrides: { \"<model>\": { \"origin\": \"cloud\"|\"local\" } } — la clé accepte le nom de modèle tel qu'affiché sur la page (normalisée automatiquement). La correction admin PRIME sur le choix manuel du testeur et sur la détection auto. Éditer ce fichier (même directement sur GitHub puis push), puis relancer le workflow consolidate.yml pour déployer. En local : node consolidate-leaderboard.js --fix-origin=<model>=<cloud|local|none> et --audit-origins pour vérifier.";
+
+// Structure standard du fichier (documentée une fois, persistée aux écritures).
+function emptyAdminOverridesFile(updatedAt) {
+  return { version: 1, _doc: ADMIN_OVERRIDES_DOC, updatedAt: updatedAt || new Date().toISOString(), overrides: {} };
+}
+
+// Charge et valide submissions/admin-overrides.json. Renvoie une map
+// { cléNormalisée: { origin, note, createdAt } } ou null (fichier absent ou
+// illisible → aucune correction admin, jamais un crash de génération).
+// `overridesPath` est injectable pour les tests.
+function loadAdminOverrides(overridesPath) {
+  const p = overridesPath || path.join(SUBMISSIONS_DIR, ADMIN_OVERRIDES_FILE);
+  try {
+    if (!fs.existsSync(p)) return null;
+    const raw = JSON.parse(fs.readFileSync(p, 'utf8'));
+    const source = raw && typeof raw.overrides === 'object' && raw.overrides ? raw.overrides : {};
+    const map = {};
+    for (const [k, v] of Object.entries(source)) {
+      const origin = v && String(v.origin || '').toLowerCase();
+      if (origin !== 'cloud' && origin !== 'local') continue;
+      map[normalizeModelKey(k, null)] = {
+        origin,
+        note: (v && v.note != null) ? String(v.note) : null,
+        createdAt: (v && v.createdAt) || null
+      };
+    }
+    return map;
+  } catch (e) {
+    console.warn('[admin-overrides] Fichier ignoré (illisible) : ' + e.message);
+    return null;
+  }
+}
+
+// Cherche la correction admin d'un carnet. Match par clé normalisée du nom de
+// modèle (et en repli du displayName — deux carnets du même modèle sous des
+// publishers différents partagent la même clé). Renvoie 'cloud' | 'local' | null.
+function lookupAdminOverride(overrides, carnet) {
+  if (!overrides || typeof overrides !== 'object') return null;
+  const keys = [normalizeModelKey(carnet.model, carnet.shortName)];
+  if (carnet.displayName) keys.push(normalizeModelKey(carnet.displayName, null));
+  for (const k of keys) {
+    const e = overrides[k];
+    if (e && (e.origin === 'cloud' || e.origin === 'local')) return e.origin;
+  }
+  return null;
+}
+
+// Décision d'origine d'un carnet — fonction PURE (testable). Ordre de
+// priorité (synchronisé avec leaderboard.js, tâches 2026-08-31e + 2026-09-17b) :
+//   1. CORRECTION ADMIN (originAdmin) — autorité maximale.
+//   2. CHOIX MANUEL du testeur (carnet.originManual, posé via la modale du
+//      leaderboard local puis soumis avec le carnet).
+//   3. Signaux forts FRONTIER : école Post-Doctorat OU detectIsCloudFromCarnet
+//      (slug :free, suffixe -cloud/:cloud, tentative FRONTIER) — ils PRIMENT
+//      sur le provider (un Ollama distant est cloud malgré provider 'ollama').
+//   4. Provider hors LOCAL_PROVIDERS → cloud ; provider local SANS signal
+//      fort → local (un ancien isCloud=true du carnet est ignoré — bug
+//      2026-08-26) ; sans provider du tout → isCloud stocké tel quel.
+// Renvoie { isCloud, originAdmin, source } avec source ∈ 'admin'|'manuel'|'auto'.
+function resolveCarnetOrigin(carnet, adminOverrides) {
+  const originAdmin = lookupAdminOverride(adminOverrides, carnet);
+  if (originAdmin === 'cloud') return { isCloud: true, originAdmin, source: 'admin' };
+  if (originAdmin === 'local') return { isCloud: false, originAdmin, source: 'admin' };
+  if (carnet.originManual === 'cloud') return { isCloud: true, originAdmin: null, source: 'manuel' };
+  if (carnet.originManual === 'local') return { isCloud: false, originAdmin: null, source: 'manuel' };
+  const isCloud = carnetHasPostDoctorat(carnet)
+    || detectIsCloudFromCarnet(carnet)
+    || (carnet.provider
+        ? !LOCAL_PROVIDERS.has(String(carnet.provider).toLowerCase())
+        : Boolean(carnet.isCloud === true));
+  return { isCloud, originAdmin: null, source: 'auto' };
+}
+
+// Cache module des overrides admin pour la génération en cours. Rafraîchi par
+// refreshAdminOverrides() au début de main(), de l'audit et après une
+// correction --fix-origin (l'édition du fichier entre deux lancements
+// — y compris une édition directe sur GitHub + workflow relancé — est
+// toujours prise en compte).
+let adminOverridesCache = null;
+
+function refreshAdminOverrides() {
+  adminOverridesCache = loadAdminOverrides();
+  return adminOverridesCache;
+}
+
 // Agrège un carnet en une entrée de classement (meilleure tentative par école).
 // MODE FLASH (tâche 2026-09-16c) : les écoles Flash-* (examen accéléré,
 // 1 exercice/classe) sont EXCLUES du classement communautaire — un score
@@ -252,26 +402,16 @@ function aggregateCarnet(carnet) {
     }
   }
 
-  // Détection de l'origine (cloud vs local) : priorité aux champs explicites du
-  // carnet (provider/isCloud). Pour les carnets soumis sans ces champs, on
-  // utilise l'heuristique (slug :free, suffixe -cloud, profil FRONTIER) pour
-  // départager.
-  // Les providers locaux (lmstudio, ollama, custom) sont traités comme locaux
-  // même si un ancien carnet porte isCloud=true (bug 2026-08-26) — MAIS un
-  // suffixe "-cloud"/":cloud" dans le nom (Ollama Cloud, ex: "gemma4:31b-cloud")
-  // fait du modèle un modèle DISTANT : il prime sur le provider (tâche 2026-09-11).
-  const cloudByName = detectIsCloudFromCarnet(carnet) && /-(cloud|free)$/i.test(carnet.displayName || carnet.model || '');
-  // originManual (tâche 2026-09-17b) : le choix MANUEL de l'utilisateur dans la
-  // modale ('cloud' | 'local') prime sur TOUTE heuristique de détection. Il est
-  // propagé dans le carnet soumis (ledger.originManual, écrit par la modale du
-  // leaderboard local via /api/model-origin).
-  const isCloud = carnet.originManual === 'cloud'
-    ? true
-    : carnet.originManual === 'local'
-      ? false
-      : (cloudByName || (carnet.provider
-          ? !LOCAL_PROVIDERS.has(String(carnet.provider).toLowerCase())
-          : Boolean(carnet.isCloud || detectIsCloudFromCarnet(carnet))));
+  // Détection de l'origine (cloud vs local) : déportée dans resolveCarnetOrigin
+  // (fonction pure, testée par tests/test-consolidate-origines.js). Priorité (parité
+  // avec leaderboard.js, tâches 2026-08-31e + 2026-09-17b + 2026-11-03) :
+  // correction ADMIN > choix manuel du testeur (originManual) > signaux forts
+  // FRONTIER (école Post-Doctorat, slug :free, suffixe -cloud/:cloud, tentative
+  // FRONTIER) > provider. AVANT le fix, les signaux FRONTIER étaient avalés par
+  // le test provider : 12 modèles frontière testés via Ollama distant
+  // (provider stocké 'ollama' ∈ LOCAL_PROVIDERS) s'affichaient badge local dans
+  // le classement communautaire (ex: kimi-k2.7-code, glm-5.1).
+  const origin = resolveCarnetOrigin(carnet, adminOverridesCache);
 
   const result = {
     model: carnet.model || carnet.shortName || 'Inconnu',
@@ -286,7 +426,8 @@ function aggregateCarnet(carnet) {
     note: carnet.note || null,
     publisher: carnet.publisher || null,
     provider: carnet.provider || null,
-    isCloud,
+    isCloud: origin.isCloud,
+    originAdmin: origin.originAdmin,
     originManual: carnet.originManual || null,
     score, max, pct, globalLifeScore, optionalBonus,
     mandatoryPassed, mandatoryTotal, mandatoryPct,
@@ -580,6 +721,7 @@ function buildConsolidatedHTML(entries) {
       note: e.note || null,
       provider: e.provider || null, isCloud: Boolean(e.isCloud),
       originManual: e.originManual || null,
+      originAdmin: e.originAdmin || null,
       provInfo,
       pct: e.pct, score: e.score, max: e.max,
       grade, globalLifeScore: e.globalLifeScore,
@@ -1855,11 +1997,15 @@ function renderCards() {
     // Badge d origine : départage local (LM Studio) vs cloud (frontière API).
     // Cohérent avec le sélecteur d origine (Local / Cloud uniquement) : le badge
     // affiche « Cloud » et non le provider spécifique pour éviter la redondance.
+    // Corrections d origine annotées : originManual (choix du testeur, posé
+    // dans sa modale locale) et originAdmin (correction de l admin via
+    // submissions/admin-overrides.json, tâche 2026-11-03).
     var originBadge = '';
+    var originModTag = (m.originAdmin ? ' — corrigé par l\\'admin' : (m.originManual ? ' — origine forcée manuellement' : ''));
     if (m.isCloud) {
-      originBadge = '<span class="badge provider" title="Modèle cloud (API)' + (m.originManual ? ' — origine forcée manuellement' : '') + '" style="color:#d29922;border-color:#d2992255;background:#d2992218">☁️ Cloud</span>';
+      originBadge = '<span class="badge provider" title="Modèle cloud (API)' + esc(originModTag) + '" style="color:#d29922;border-color:#d2992255;background:#d2992218">☁️ Cloud</span>';
     } else {
-      originBadge = '<span class="badge local" title="Modèle local (LM Studio)' + (m.originManual ? ' — origine forcée manuellement' : '') + '">🏠 Local</span>';
+      originBadge = '<span class="badge local" title="Modèle local (LM Studio)' + esc(originModTag) + '">🏠 Local</span>';
     }
     // Badge ⚡ RunCode · Turbo : le modèle a passé l'examen code natif (mode turbo).
     // Deux modes distincts : benchmark sandbox classique vs RunCode turbo.
@@ -1986,7 +2132,7 @@ function openModal(idx) {
   body += statBox('Rattrapage', m.retriedCount > 0 ? m.retriedCount + 'x' : '—');
   body += statBox('Écoles', m.ecoleCount);
     body += statBox('Quantif.', m.quantization ? '<span style="color:#bc8cff">' + esc(m.quantization) + '</span>' : '—');
-    body += statBox('Origine', '<span style="color:' + (m.isCloud ? '#d29922' : '#3fb950') + '">' + (m.isCloud ? '☁️ Cloud' : '🏠 Local') + (m.originManual ? ' (choix manuel)' : '') + '</span>');
+    body += statBox('Origine', '<span style="color:' + (m.isCloud ? '#d29922' : '#3fb950') + '">' + (m.isCloud ? '☁️ Cloud' : '🏠 Local') + (m.originAdmin ? ' (corrigé par l\\'admin)' : (m.originManual ? ' (choix manuel)' : '')) + '</span>');
   if (m.elapsedMs > 0 || m.tokens > 0) {
     body += statBox('Temps inf.', fmtDurJS(m.elapsedMs));
     body += statBox('Tokens', m.tokens > 0 ? m.tokens : '—');
@@ -2609,6 +2755,9 @@ renderCards();
 }
 
 function main() {
+  // Overrides admin : rechargés à chaque génération (le fichier peut être
+  // édité sur GitHub entre deux lancements du workflow).
+  refreshAdminOverrides();
   const submissions = loadAllSubmissions();
   if (submissions.length === 0) {
     console.log('Aucune soumission trouvée dans submissions/.');
@@ -2676,18 +2825,166 @@ function regenerate() {
 // --- CLI ---
 // consolidate-leaderboard.js est lancé en local (génération de gh-pages-output/)
 // ET en CI via le workflow consolidate.yml (déploiement GitHub Pages).
-if (wantsHelp(process.argv.slice(2))) {
+//
+// Corrections admin (tâche 2026-11-03) : le fichier submissions/admin-overrides.json
+// est versionné — l'admin peut l'éditer DIRECTEMENT sur GitHub (web UI), pousser,
+// puis relancer le workflow consolidate.yml. En local, deux commandes CLI :
+//   --audit-origins                       : vérification (aucune écriture)
+//   --fix-origin=<model>=<cloud|local|none> : force / réinitialise l'origine
+const rawCliArgs = process.argv.slice(2);
+let auditOnlyArg = false;
+let fixOriginArg = null;
+for (const a of rawCliArgs) {
+  const low = String(a).toLowerCase();
+  if (low === '--audit-origins' || low === '--audit') auditOnlyArg = true;
+  const mFix = String(a).match(/^--fix-origin=(.*)$/i);
+  if (mFix && !fixOriginArg) fixOriginArg = mFix[1];
+}
+
+if (wantsHelp(rawCliArgs)) {
   printEntryHelp('consolidate-leaderboard.js', 'Classement communautaire consolidé (GitHub Pages)', [
     { cmd: 'node consolidate-leaderboard.js', desc: 'Génère gh-pages-output/community-leaderboard.html + .json (lecture de submissions/).' },
+    { cmd: 'node consolidate-leaderboard.js --audit-origins', desc: 'Vérification des origines (cloud/local) : source de la décision + signaux FRONTIER. Aucune écriture.' },
+    { cmd: 'node consolidate-leaderboard.js --fix-origin=<modele>=<cloud|local|none>', desc: 'Force l\'origine d\'un modèle dans submissions/admin-overrides.json puis régénère. none = repasse en détection auto.' },
     { cmd: 'node consolidate-leaderboard.js --help  |  help  |  -h', desc: 'Affiche cette aide.' }
   ], [
     'DÉPLOIEMENT EN LIGNE : (1) git push sur origin/main, (2) gh workflow run consolidate.yml -R cisco-03/BenchGo-LLM-School, (3) gh run watch -R cisco-03/BenchGo-LLM-School.',
     'Le workflow commit sur la branche gh-pages et GitHub Pages déploie. Hard refresh (Ctrl+Shift+R) sur la page en ligne.',
-    'Lecture des soumissions : dossier submissions/<userId>/<shortName>.json (créé par node runner.js --submit).'
+    'Lecture des soumissions : dossier submissions/<userId>/<shortName>.json (créé par node runner.js --submit).',
+    'CORRECTIONS ADMIN : éditer submissions/admin-overrides.json (directement sur GitHub ou via --fix-origin), puis relancer la génération. La correction admin prime sur le choix manuel du testeur et sur la détection auto.',
+    'Priorité origine (parité avec leaderboard.js) : ADMIN > choix manuel testeur > signaux FRONTIER (Post-Doctorat, :free, -cloud/:cloud) > provider.'
   ]);
   process.exit(0);
 }
 
-module.exports = { regenerate };
+// Audit CLI des origines — la « grosse vérification ». Lecture seule : table
+// des modèles dédoublonnés avec origine retenue, source de la décision
+// (ADMIN / MANUEL / AUTO) et signaux FRONTIER détectés dans le carnet brut.
+function auditOrigins() {
+  refreshAdminOverrides();
+  const submissions = loadAllSubmissions();
+  if (submissions.length === 0) {
+    console.log('Aucune soumission trouvée dans submissions/.');
+    return;
+  }
+  const entries = [];
+  for (const sub of submissions) {
+    const agg = aggregateCarnet(sub.carnet);
+    if (agg) { agg.__carnetBrut = sub.carnet; entries.push(agg); }
+  }
+  const merged = deduplicateAndMerge(entries);
+  merged.sort((a, b) => (b.pct - a.pct));
 
-main();
+  const counts = { cloud: 0, local: 0, admin: 0, manuel: 0 };
+  const rows = [];
+  for (const e of merged) {
+    const source = e.originAdmin ? 'ADMIN' : (e.originManual ? 'MANUEL' : 'AUTO');
+    counts[source.toLowerCase()] = (counts[source.toLowerCase()] || 0) + 1;
+    if (e.isCloud) counts.cloud++; else counts.local++;
+    const signals = carnetOriginSignals(e.__carnetBrut || { model: e.model, displayName: e.displayName, provider: e.provider });
+    rows.push({ source, isCloud: e.isCloud, model: e.model, provider: e.provider || '—', signals });
+    delete e.__carnetBrut;
+  }
+
+  console.log('');
+  console.log('AUDIT DES ORIGINES — ' + merged.length + ' modèle(s) unique(s) sur ' + submissions.length + ' soumission(s)');
+  console.log('  CLOUD : ' + counts.cloud + '   LOCAL : ' + counts.local + '   (ADMIN : ' + counts.admin + '   MANUEL : ' + counts.manuel + ')');
+  console.log('');
+  console.log('  ' + 'Origine'.padEnd(7) + 'Source'.padEnd(8) + 'Modèle'.padEnd(38) + 'Provider'.padEnd(14) + 'Signaux');
+  console.log('  ' + '-'.repeat(7) + ' ' + '-'.repeat(7) + ' ' + '-'.repeat(38) + ' ' + '-'.repeat(14) + '-'.repeat(40));
+  for (const r of rows) {
+    console.log('  ' + (r.isCloud ? 'CLOUD ' : 'LOCAL ').padEnd(7) + r.source.padEnd(8) + String(r.model).slice(0, 38).padEnd(38) + String(r.provider).slice(0, 14).padEnd(14) + r.signals.join(', '));
+    // Corrections admin : rappeler la note stockée si présente.
+    if (r.source === 'ADMIN') {
+      const ov = adminOverridesCache ? adminOverridesCache[normalizeModelKey(r.model, null)] : null;
+      if (ov && ov.note) console.log('          note : ' + ov.note);
+    }
+  }
+  console.log('');
+  console.log('Source des décisions : ADMIN = submissions/admin-overrides.json, MANUEL = originManual du testeur, AUTO = détection (signaux FRONTIER > provider).');
+  console.log('Pour corriger un modèle : node consolidate-leaderboard.js --fix-origin=<modele>=<cloud|local|none>');
+}
+
+// Applique --fix-origin=<model>=<cloud|local|none> : met à jour
+// submissions/admin-overrides.json (versionné — à committer/pousser comme les
+// soumissions), puis régénère le classement. Les clés sont normalisées :
+// l'admin peut coller le nom de modèle tel qu'affiché sur la page.
+function applyFixOrigin(raw) {
+  const arg = String(raw || '');
+  const sepIdx = arg.lastIndexOf('=');
+  if (sepIdx === -1) {
+    console.error('Format attendu : --fix-origin=<model>=<cloud|local|none>');
+    process.exit(1);
+  }
+  const keyInput = arg.slice(0, sepIdx).trim();
+  const value = arg.slice(sepIdx + 1).trim().toLowerCase();
+  const normKey = normalizeModelKey(keyInput, null);
+  if (!normKey) {
+    console.error('Clé de modèle vide (ex: --fix-origin=kimi-k2.7-code=cloud)');
+    process.exit(1);
+  }
+  const isRemoval = value === 'none' || value === 'reset' || value === 'auto' || value === 'supprimer';
+  if (!isRemoval && value !== 'cloud' && value !== 'local') {
+    console.error('Valeur invalide : ' + value + ' — attendu cloud, local ou none.');
+    process.exit(1);
+  }
+
+  const filePath = path.join(SUBMISSIONS_DIR, ADMIN_OVERRIDES_FILE);
+  const map = loadAdminOverrides(filePath) || {};
+  const written = emptyAdminOverridesFile();
+  if (isRemoval) {
+    if (!map[normKey]) {
+      console.log('Aucun override à retirer pour ' + normKey + ' (détection auto déjà active).');
+      return;
+    }
+    delete map[normKey];
+  } else {
+    const existed = map[normKey];
+    map[normKey] = {
+      origin: value,
+      createdAt: (existed && existed.createdAt) || new Date().toISOString(),
+      note: (existed && existed.note) || null
+    };
+  }
+  written.overrides = map;
+  fs.mkdirSync(SUBMISSIONS_DIR, { recursive: true });
+  fs.writeFileSync(filePath, JSON.stringify(written, null, 2) + '\n', 'utf8');
+  if (isRemoval) {
+    console.log('Origine de ' + normKey + ' réinitialisée (retour à la détection auto).');
+  } else {
+    console.log('Origine de ' + normKey + ' forcée : ' + value.toUpperCase() + ' (corrigé par l\'admin).');
+  }
+  console.log('Fichier mis à jour : submissions/' + ADMIN_OVERRIDES_FILE + ' — à committer et pousser pour la mise en ligne.');
+  console.log('Régénération du classement…');
+  refreshAdminOverrides();
+  main();
+  console.log('Vérifier : node consolidate-leaderboard.js --audit-origins');
+}
+
+if (fixOriginArg) {
+  applyFixOrigin(fixOriginArg);
+  process.exit(0);
+}
+if (auditOnlyArg) {
+  auditOrigins();
+  process.exit(0);
+}
+
+module.exports = {
+  regenerate,
+  // Fonctions testables (tests/test-consolidate-origines.js) : détection
+  // d'origine + overrides admin + agrégation. Requiring ce module ne déclenche
+  // PAS main() (gated ci-dessous).
+  detectIsCloudFromCarnet,
+  carnetHasPostDoctorat,
+  carnetOriginSignals,
+  resolveCarnetOrigin,
+  loadAdminOverrides,
+  lookupAdminOverride,
+  normalizeModelKey,
+  aggregateCarnet
+};
+
+if (require.main === module) {
+  main();
+}

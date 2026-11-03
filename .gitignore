@@ -83,11 +83,15 @@ Docs/Screens/**
 # --- 7quater. Fichiers communautaires (consolidation classement participatif) ---
 # consolidate-leaderboard.js est déjà couvert par !*.js à la racine.
 # .community/ contient le fichier ping.txt (télémétrie) et submissions/ les carnets.
+# Exception : submissions/admin-overrides.json DOIT être versionné — corrections
+# d'origine lues par le workflow consolidate.yml (une édition GitHub entre deux
+# lancements est toujours prise en compte, tâche 2026-11-03).
 !/.community/
 .community/**
 !/.community/ping.txt
 !/submissions/
 submissions/**
+!/submissions/admin-overrides.json
 
 # --- 8. Coffre-fort pédagogique (Secret) ---
 .teacher-vault/
