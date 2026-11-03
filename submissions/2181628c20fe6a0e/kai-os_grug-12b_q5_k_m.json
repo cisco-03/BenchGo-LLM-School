@@ -3,8 +3,8 @@
   "benchgoVersion": "V3",
   "userId": "2181628c20fe6a0e",
   "pseudo": "FlexoDiv",
-  "submittedAt": "2026-09-18T11:26:33.817Z",
-  "integrityHash": "88eb32672f18738e",
+  "submittedAt": "2026-11-03T02:18:16.307Z",
+  "integrityHash": "e271d07495320752",
   "carnet": {
     "model": "kai-os_grug-12b@q5_k_m",
     "shortName": "kai-os_grug-12b_q5_k_m",
@@ -3947,9 +3947,13 @@
         ]
       }
     },
-    "lastUpdated": "2026-09-18T04:45:19.712Z",
+    "lastUpdated": "2026-10-06T14:49:03.868Z",
     "provider": "lmstudio",
     "isCloud": false,
-    "quantization": "Q5_K_M"
+    "quantization": "Q5_K_M",
+    "modelUrl": "https://huggingface.co/bartowski/kai-os_Grug-12B-GGUF",
+    "paramSize": 12,
+    "displayName": "kai-os_grug-12b@q5_k_m",
+    "originManual": "local"
   }
 }
