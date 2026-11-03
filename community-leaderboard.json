@@ -20606,7 +20606,7 @@
       "publisher": null,
       "provider": "lmstudio",
       "isCloud": false,
-      "originManual": null,
+      "originManual": "local",
       "score": 5805,
       "max": 6006,
       "pct": 97,
@@ -22459,7 +22459,7 @@
         "College-Lycee"
       ],
       "pseudo": "FlexoDiv",
-      "submittedAt": "2026-09-07T06:40:00.421Z",
+      "submittedAt": "2026-11-03T02:18:00.361Z",
       "cost": null,
       "runCode": null,
       "contributors": 1,
@@ -37130,7 +37130,7 @@
         "Primaire"
       ],
       "pseudo": "FlexoDiv",
-      "submittedAt": "2026-09-18T16:50:21.512Z",
+      "submittedAt": "2026-11-03T02:18:08.453Z",
       "cost": null,
       "runCode": {
         "ecoles": [
@@ -108922,6 +108922,6 @@
       ]
     }
   ],
-  "generatedAt": "2026-11-03T02:18:14.944Z",
+  "generatedAt": "2026-11-03T02:18:34.936Z",
   "totalSubmissions": 102
 }
