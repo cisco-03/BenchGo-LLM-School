@@ -1,5 +1,56 @@
 # CHANGELOG - Carnet de Notes BenchGo
 
+## 2026-11-11b — feat(classement CLI : colonne Méthode + --tri) et garde-fou slug professeur
+
+### Contexte & besoin
+Retours utilisateur sur `Admin/Tasks.md` : (1) le professeur RunCode était « injoignable » (`[LE PROFESSEUR - ERREUR openrouter] HTTP 400: llama-3.3-70b-versatile is not a valid model ID`) avec un doute sur la clé OpenRouter ; (2) la table CLI du classement ne permettait ni de trier par vitesse/temps, ni de savoir avec QUELLE méthode le score a été obtenu (RunCode Turbo/ÉCLAIR vs école traditionnelle).
+
+### Cause racine (professeur)
+**La clé n'était PAS en cause** (diagnostic LIVE : `GET /api/v1/key` → HTTP 200, clé validée ; alias défaut `openrouter/free` → HTTP 200 avec routage réel vers `cohere/north-mini-code:free`). Le vrai coupable : `--teacher-model=llama-3.3-70b-versatile` (nom GROQ natif, sans slash) passé alors que le provider professeur restait `openrouter` (défaut `TEACHER_CONFIG.provider`) — un ID OpenRouter contient TOUJOURS `editeur/modele` → HTTP 400 sur chaque appel, verdict en repli mécanique à l'infini.
+
+### Corrections
+- **Garde-fou slug professeur** (`runner.js`, `sanitizeTeacherModel`, appelé après TOUTES les sources de config : CLI, preset restauré, questionnaire) : sous `provider=openrouter`, un modèle sans slash est neutralisé vers `openrouter/free` (Free Router, appel réel validé) avec diagnostic lisible + remède (`--teacher-provider=groq` avec clé Groq, ou laisser `--teacher-model` vide). Les autres providers (groq, ollama...) gardent leurs noms natifs — 5 cas testés manuellement (groq inchangé, openrouter/free inchangé, slug `editeur/modele` valide inchangé, prof désactivé inchangé).
+- **Colonne « Méthode » dans les deux tables CLI** (`leaderboard.js`, `printLeaderboardSection` local + `printCloudLeaderboard` cloud) : `⚡ ÉCLAIR`, `⚡ TURBO` (RunCode — mode lu au carnet, repli turbo), `🎓 École` (benchmark sandbox), `🎓+⚡ TURBO/ÉCLAIR` (mixte). Nouveau champ `agg.method` calculé par `aggregateLedger` (pure fonction `methodLabelForEcoles`) — les écoles Flash restent exclues comme avant.
+- **Flag `--tri=vitesse|temps|pct|nom`** (leaderboard.js) : réordonne la TABLE CONSOLE par vitesse (t/s desc), temps (durée d'inférence cumulée asc), nom (alphabétique) ou pct (défaut). Ligne d'information affichée quand le tri n'est pas pct. Le tri est une COPIE : le HTML/MD et le snapshot des positions (deltas ▲/▼) restent triés par pct — aucune régression des exports.
+
+### Fichiers touchés
+`runner.js`, `leaderboard.js`, ce CHANGELOG, `Memories-BenchGo/Tasks.md`.
+
+### Pièges
+- Le garde-fou ne touche QUE le provider `openrouter` : un `--teacher-model` sans slash reste valide pour `groq` (`llama-3.3-70b-versatile`) comme pour les providers locaux. Ajouter un autre pattern un jour = éditer `sanitizeTeacherModel`.
+- `--tri=` est lu depuis l'argv BRUT (const module `CONSOLE_TRI`) : il change UNIQUEMENT l'ordre console du leaderboard — `night-batch --list-only` et le web ne sont pas concernés.
+- `agg.method` est additif (aucun consommateur existant cassé) ; le mode éclair n'existe que dans les carnets écrits depuis 2026-10-28 (les plus anciens tombent en TURBO, fidèle à leur contenu).
+- Clé OpenRouter de l'utilisateur : `is_free_tier=false`, `usage=19.36`, `limit=3` — les modèles gratuit (alias `openrouter/free`) marchent ; en cas d'attente de modèles payants, la limite de la clé est à gérer sur le dashboard OpenRouter (E506 côté BenchGo).
+
+## 2026-11-11 — feat(RunCode file d'élèves) : multi-modèles, mode auto, continue-sur-échec et menu RunCode dédié
+
+### Contexte & besoin
+Demande utilisateur : `node runner.js --exam-code` (RunCode Turbo) ne propose **aucune interactivité de batch** — la saisie `1,2,3,4,8,9,10` au choix du modèle avalait silencieusement tout sauf le PREMIER numéro (`parseInt('1,2,...')` = 1), un modèle défaillant ARRÊTAIT tout le run (obligé de repasser par le menu) et le menu ne proposait ni « mode automatique », ni la sélection de plusieurs modèles. Demandes : (1) proposer au menu si l'on veut le mode automatique (tous les modèles) ou en sélectionner plusieurs, (2) un modèle qui plante passe au SUIVANT sans jamais arrêter la file, (3) les modèles incompatibles soient visibles d'un coup d'œil dans la liste.
+
+### Cause racine
+Le questionnaire ne connaissait PAS le mode RunCode (`--exam-code` n'y était jamais passé) : il posait des étapes grande école inutiles (cible tier, FLASH) et le choix du modèle se parsait avec `parseInt` (comportement « premier numéro seulement »). Côté runner, le bloc `--exam-code` lançait UN élève unique avec un catch avalant l'erreur puis `process.exit(0)` — aucune boucle, aucun récapitulatif.
+
+### Corrections
+- **Questionnaire RunCode dédié** (`startup-questionnaire.js`, nouveau 2e paramètre `{ examCode }`) : au choix du modèle en provider local, nouvelle saisie **"auto"** (TOUS les modèles passables, dans l'ordre) ou **multi-sélection** `1,2,3,4-6` (virgules + plages, dédupliquée, ordre préservé) ; les étapes grande école (8 cible tier, 9 FLASH) cèdent la place à une étape réelle **« Mode de RunCode » : T = Turbo / E = ÉCLAIR**. En file (multi/ auto), l'étape 2b (quantification) est lue automatiquement dans les métadonnées de la liste et l'étape 5 (profil) est sautée — le parcours RunCode est déduit du nom de CHAQUE modèle (2.6b → Primaire, 12b → College-Lycee). En benchmark classique, le comportement historique est inchangé (une multi-saisie dégrade en single avec avertissement explicite).
+- **Badges incompatibles EN ROUGE dans la liste** : lecture directe du registre `archWarning.loadIncompatible()` (marche même sans daemon) + statut night-batch INCOMPATIBLE/non-LLM/isolé → `⚠ INCOMPATIBLE (ARCH K2-HORIZON)`, `⚠ NON-LLM`, `⚠ ISOLÉ` collés au nom. En mode auto, ces modèles sont ÉCARTÉS de la file (listés comme « écartés ») ; en multi, ils restent sélectionnables mais avec un avertissement (re-testable après mise à jour du runtime).
+- **File d'élèves dans le runner** (bloc `--exam-code` réécrit en boucle) : chaque élève reçoit SA copie de `providerConfig` (config mutable `currentExamCfg`), SON parcours (résolution par modèle), SA quantification (des métadonnées de la liste), SON cumul de tokens (reset par élève), puis carnet → déchargement VRAM → SUIVANT. **Un échec (E507 chargement KO, réseau, timeout, 0 exercice) est consigné et la file CONTINUE** — jamais d'arrêt sur un élève défaillant.
+- **Récapitulatif de fin de file** : table PASSÉ/EXPULSÉ/VIDE/ÉCHEC avec score, pct, spécialité + raison d'échec tronquée, et compte « N carnet(s) écrit(s) ».
+- **Plafonds anti-hang en file uniquement** : 45 min par élève (`EXAM_BATCH_MODEL_TIMEOUT_MS`, aligné TIER_TIMEOUT_MS du mode nuit) et 10 min par appel (`EXAM_BATCH_CALL_TIMEOUT_MS`) — un modèle plombé est débranché (deadline vérifiée à chaque appel + timeout de stream) sans congeler la file. Aucune régression en mono-modèle (plafonds désactivés).
+- **CLI `--models=a,b,c`** pour la file en batch non interactif (priorité > `--model=a,b,c` local > mono). `--queue-runcode` reste actif en file (inscription silencieuse, aucun prompt par élève) ; le prompt interactif de mise en réserve reste réservé au mono-modèle.
+- **Aide CLI élargie** (--exam-code décrit la file, nouveau --models=) + logs `RunCode: file ...` pour le suivi nuit.
+- **Tests** : nouveau `tests/test-runcode-batch-menu.js` (13 cas sur le parseur PUR `_parseMultiSelection` : défaut, single, auto/all/tous/tout, virgules ordre préservé, dédoublonnage, plages 1-3 et 3-1 croissantes, mélange plage+numéro+nom, casse, `unknown` en multi-partie (re-pose la question), fallback single historique, commande `list`).
+
+### Fichiers touchés
+`startup-questionnaire.js`, `runner.js`, `cli-help.js`, `tests/test-runcode-batch-menu.js` (nouveau), ce CHANGELOG, `AGENTS.md`, `Memories-BenchGo/Tasks.md`.
+
+### Pièges
+- `--models=` est lu sur l'argv BRUT (`parseArg('--models=')`) : il n'est PAS exposé par `parseCliArgs()` (aucune validation) — combiner `--models=` avec un provider via le QUESTIONNAIRE (TTY) fait passer le questionnaire en priorité (il exige --provider absent) ; la forme fiable non-interactive est `node runner.js --exam-code --provider=lmstudio --models=a,b,c`.
+- En file, la quantification vient des métadonnées du questionnaire ; via `--models=` elle est INCONNUE (shortName sans quant au carnet, sauf `--quantization=` global).
+- Le plafond 10 min/appel plafonne AUSSI le chargement JIT du modèle par LM Studio : un GGUF très gros à charger peut dépasser → élève marqué FAIL, file continue (re-testable).
+- `parseStudentDeclaration` etc. : l'entretien de vérité tourne PAR ÉLÈVE (l'adaptateur `studentClient` est partagé mais la config courante est mutée par la boucle) — ne jamais paralleriser cette boucle (spinner unique + config mutable).
+- La réponse « indéterminée » du parseur multi (`unknown`) re-pose la question SANS compter les tentatives ; en non-TTY, `_askModelSelection` renvoie le défaut (jamais de blocage batch).
+- En mono-modèle, tout le comportement 2026-09-15/2026-09-09 (avertissements incompatibles, E509 temp-fs, déchargement auto) est conservé à l'identique : le catch ne réenregistre pas E509 dans le registre (le modèle reste testable).
+
 ## 2026-11-03 — fix(origines classement communautaire) : sélecteur Local/Cloud étanche + corrections ADMIN versionnées
 
 ### Contexte & besoin

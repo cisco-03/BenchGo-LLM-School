@@ -26,6 +26,7 @@ const { PROFILES, fetchModelMetadataFromLMStudio, fetchAllModelsFromLMStudio } =
 const { CLOUD_PROVIDERS } = require('./cloud-client');
 const logger = require('./logger');
 const nightBatch = require('./night-batch');
+const archWarning = require('./arch-warning');
 
 // Constante couleur (reset ANSI) — évite la répétition des escapes.
 const C_RESET = '\x1b[0m';
@@ -109,6 +110,87 @@ function _askNumberedChoice(question, entries, defaultIndex = 0, opts = {}) {
       resolve(entries[defaultIndex].value);
     });
   });
+}
+
+// --- Sélection MULTI de modèles (demande 2026-11-11) ---
+// Parseur PUR (testable via tests/test-runcode-batch-menu.js) : transforme une
+// saisie du menu « Choix du modèle » en sélection structurée.
+//   ''        → { type: 'single', … } défaut (rétrocompat)
+//   auto/all  → { type: 'auto' } : TOUS les modèles candidats (les incompatibles,
+//               non-LLM et isolés sont écartés par l'APPELANT, pas ici)
+//   1,2,3     → { type: 'multi', indexes, values } — virgules, plages "1-4",
+//               noms exacts acceptés en mélange
+//   list      → { type: 'commands' } passthrough (commande interceptée par l'appelant)
+//   numéro/nom unique → { type: 'single' } (comportement historique)
+//   saisie inconnue multi-partie invalide → { type: 'unknown' } : l'appelant
+//               REPOSE la question (une typo ne doit jamais avaler une sélection).
+//               Une saisie inconnue à une seule partie retombe sur le défaut
+//               (habitude 2026-09-11b conservée : typo = modèle par défaut).
+function _parseMultiSelection(raw, entries, defaultIndex = 0, opts = {}) {
+  const commands = opts.commands || [];
+  const v = String(raw || '').trim().toLowerCase();
+  if (!v) {
+    return { type: 'single', indexes: [defaultIndex], values: [entries[defaultIndex] ? entries[defaultIndex].value : null] };
+  }
+  if (commands.includes(v)) return { type: 'commands', values: [v] };
+  if (['auto', 'all', 'tous', 'tout'].includes(v)) return { type: 'auto', values: [] };
+  const parts = v.split(',').map(p => p.trim()).filter(p => p.length > 0);
+  // Une PLAGE seule ("1-3", sans virgule) est aussi une sélection multiple.
+  const rangeOnly = parts.length === 1 && /^\d+\s*-\s*\d+$/.test(parts[0]);
+  if (parts.length > 1 || rangeOnly) {
+    const indexes = [];
+    for (const t of parts) {
+      const range = /^(\d+)\s*-\s*(\d+)$/.exec(t);
+      if (range) {
+        const a = parseInt(range[1], 10);
+        const b = parseInt(range[2], 10);
+        const lo = Math.min(a, b);
+        const hi = Math.max(a, b);
+        for (let i = lo; i <= hi; i++) {
+          if (i >= 1 && i <= entries.length && !indexes.includes(i - 1)) indexes.push(i - 1);
+        }
+        continue;
+      }
+      const n = parseInt(t, 10);
+      if (Number.isInteger(n) && String(n) === t && n >= 1 && n <= entries.length) {
+        if (!indexes.includes(n - 1)) indexes.push(n - 1);
+        continue;
+      }
+      const bi = entries.findIndex(e => String(e.value).toLowerCase() === t);
+      if (bi >= 0) {
+        if (!indexes.includes(bi)) indexes.push(bi);
+        continue;
+      }
+      return { type: 'unknown', values: [raw] };
+    }
+    if (indexes.length > 0) {
+      return { type: 'multi', indexes, values: indexes.map(i => entries[i].value) };
+    }
+    return { type: 'unknown', values: [raw] };
+  }
+  const n = parseInt(v, 10);
+  if (Number.isInteger(n) && String(n) === v && n >= 1 && n <= entries.length) {
+    return { type: 'single', indexes: [n - 1], values: [entries[n - 1].value] };
+  }
+  const found = entries.find(e => String(e.value).toLowerCase() === v);
+  if (found) {
+    const idx = entries.indexOf(found);
+    return { type: 'single', indexes: [idx], values: [found.value] };
+  }
+  return { type: 'single', indexes: [defaultIndex], values: [entries[defaultIndex] ? entries[defaultIndex].value : null] };
+}
+
+// Wrapper TTY : pose la question et renvoie la sélection parsée. Non-TTY →
+// défaut unique (le batch de nuit ne doit jamais bloquer sur la saisie).
+async function _askModelSelection(question, entries, defaultIndex = 0, opts = {}) {
+  if (!process.stdin.isTTY || !process.stdout.isTTY) {
+    return { type: 'single', indexes: [defaultIndex], values: [entries[defaultIndex] ? entries[defaultIndex].value : null] };
+  }
+  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+  const raw = await new Promise(resolve => {
+    rl.question(`${question} `, answer => { rl.close(); resolve(answer); });
+  });
+  return _parseMultiSelection(raw, entries, defaultIndex, opts);
 }
 
 // Liste les modèles Ollama via /api/tags (nom uniquement — pas d'état/quantif).
@@ -268,12 +350,16 @@ function _envKeyForProvider(providerName) {
 /**
  * Exécute le questionnaire interactif complet.
  * @param {object} cliArgs - arguments déjà parsés par config.parseCliArgs (fallback)
+ * @param {object} opts - { examCode: true } quand le run cible est RunCode
+ *   (--exam-code) : le menu modèle gagne la multi-sélection/auto et les étapes
+ *   grande école (8 cible, 9 FLASH) laissent place au mode Turbo/ÉCLAIR.
  * @returns {Promise<object>} config résolue {
  *   provider, model, apiKey, endpoint, profile, contextLimitTokens,
- *   teacherConfig, isInteractive
+ *   teacherConfig, isInteractive, models, eclair
  * }
  */
-async function runStartupQuestionnaire(cliArgs) {
+async function runStartupQuestionnaire(cliArgs, opts = {}) {
+  const examCode = Boolean(opts && opts.examCode);
   _printHeader();
 
   // --- 1. Fournisseur ---
@@ -312,6 +398,12 @@ async function runStartupQuestionnaire(cliArgs) {
   _printSection('2. Modèle à évaluer');
   let model = cliArgs.model;
   let modelMeta = null;
+  // Multi-sélection (demande 2026-11-11) : file d'élèves RunCode. Rempli quand
+  // l'utilisateur tape "auto" ou des numéros séparés par des virgules. Chaque
+  // entrée porte ses métadonnées (quantification/arch/éditeur/état) pour que le
+  // runner évite un re-fetch par modèle.
+  let multiModels = null;
+  const normKey = s => String(s || '').toLowerCase().replace(/\s+/g, ' ').replace(/\.gguf$/i, '').split('@')[0];
   if (!model) {
     if (isLocal) {
       const models = provider === 'lmstudio'
@@ -319,11 +411,31 @@ async function runStartupQuestionnaire(cliArgs) {
         : await _fetchOllamaModels();
       if (models.length > 0) {
         // Statut de test (compartiments night-batch) annoté sur chaque modèle :
-        // ✓ TESTÉ (pct) · ~ PARTIEL · ✘ ÉCHEC · · À TESTER · ⊘ ISOLÉ.
+        // ✓ TESTÉ (pct) · ⚡ RUNCODE · ~ PARTIEL · ✘ ÉCHEC · · À TESTER · ⊘ ISOLÉ.
         // Repli silencieux : si lms/carnets indisponibles, liste simple.
         const statusMap = provider === 'lmstudio' ? _statusMapForModels(models) : new Map();
         if (statusMap.size > 0) {
           console.log('  \x1b[90mStatuts : ✓ testé (score) · ⚡ RunCode (tremplin passé) · ~ partiel · ✘ échec · · à tester · ⊘ isolé. Tapez "list" pour le tableau détaillé.\x1b[0m');
+        }
+        // Registre des incompatibles (arch GGUF non supportée, ex: k2-horizon) :
+        // badge rouge immédiat pour repérer en un clin d'œil ce qui ne passera
+        // pas (demande 2026-11-11 : « on voit tout de suite les modèles pas
+        // compatibles »). Marche même sans daemon (lecture fichier plat).
+        const incompatRegistry = archWarning.loadIncompatible();
+        const incompatFor = m => {
+          const found = Object.entries(incompatRegistry).find(([k]) => normKey(k) === normKey(m.name));
+          return found ? found[1] : null;
+        };
+        const blockedReason = (m, st) => {
+          const rec = incompatFor(m);
+          if (rec) return 'incompatible (arch ' + (rec.architecture || '?') + ')';
+          if (st && st.badge && st.badge.label === 'INCOMPATIBLE') return 'incompatible';
+          if (st && st.kind === 'nonllm') return 'non-LLM (embedding/OCR/rerank)';
+          if (st && st.kind === 'isolated') return 'isolé manuellement';
+          return null;
+        };
+        if (statusMap.size > 0 || Object.keys(incompatRegistry).length > 0) {
+          console.log('  \x1b[90m⚠ INCOMPATIBLE = arch GGUF refusée par votre runtime LM Studio (mise à jour = re-testable).\x1b[0m');
         }
         console.log(`  \x1b[32m${models.length} modèle(s) ${provider === 'lmstudio' ? 'LM Studio' : 'Ollama'} détecté(s) :\x1b[0m`);
         models.forEach((m, i) => {
@@ -335,14 +447,17 @@ async function runStartupQuestionnaire(cliArgs) {
           const suffix = badges.length > 0 ? ` \x1b[90m(${badges.join(' · ')})\x1b[0m` : '';
           // Statut night-batch : glyphe coloré en tête de ligne (visible immédiatement).
           let statusTag = '';
-          if (statusMap.size > 0) {
-            const st = statusMap.get(String(m.name || '').toLowerCase().replace(/\s+/g, ' ').replace(/\.gguf$/i, '').split('@')[0]);
-            if (st) {
-              const g = STATUS_GLYPHS[st.kind] || STATUS_GLYPHS.never;
-              statusTag = `${g.color}${g.glyph}${C_RESET} `;
-            }
+          const st = statusMap.get(normKey(m.name)) || null;
+          if (st) {
+            const g = STATUS_GLYPHS[st.kind] || STATUS_GLYPHS.never;
+            statusTag = `${g.color}${g.glyph}${C_RESET} `;
           }
-          console.log(`    \x1b[1m${i + 1}.\x1b[0m ${statusTag}${m.name}${suffix}`);
+          // Badge incompatible / non-LLM en rouge : ce qui ne passe pas est
+          // lisible SANS lire les parenthèses grises.
+          let blockTag = '';
+          const reason = blockedReason(m, st);
+          if (reason) blockTag = ` \x1b[1;31m⚠ ${reason.toUpperCase()}${C_RESET}`;
+          console.log(`    \x1b[1m${i + 1}.\x1b[0m ${statusTag}${m.name}${suffix}${blockTag}`);
         });
         // Défaut : le premier modèle CHARGÉ (state === 'loaded'), sinon le 1er.
         const loadedIdx = models.findIndex(m => m.state === 'loaded');
@@ -352,17 +467,21 @@ async function runStartupQuestionnaire(cliArgs) {
         } else {
           console.log('  \x1b[90m(Aucun modèle chargé — Entrée = 1)\x1b[0m');
         }
+        if (examCode) {
+          console.log('  \x1b[1;35mFile d\'élèves RunCode : tapez "auto" (TOUS les modèles passables) ou des numéros séparés par des virgules\x1b[0m');
+          console.log('  \x1b[90m(ex: 1,2,3,4-6 · un modèle en échec ne bloque jamais la file — passage automatique au suivant).\x1b[0m');
+        }
         const entries = models.map(m => ({ value: m.name }));
         // commands : "list"/"liste" est une COMMANDE, pas un nom de modèle —
         // la saisie est renvoyée brute pour être interceptée par la boucle
         // while ci-dessous. Sans elle, la saisie tombait sur le défaut.
         const modelChoices = { commands: ['list', 'liste'] };
-        let picked = await _askNumberedChoice('  Choix du modèle (numéro ou nom, "list" = tableau détaillé) :', entries, defaultIdx, modelChoices);
+        let selection = await _askModelSelection('  Choix du modèle (numéro(s), "auto", nom, "list" = tableau détaillé) :', entries, defaultIdx, modelChoices);
         // Commande "list" : affiche le tableau complet night-batch (--list-only)
         // avec compartiments (testés triés par score, puis échecs, à tester,
         // isolés). Recharge la liste LM Studio (un GGUF ajouté entre-temps est
         // détecté) puis relance le choix. Boucle tant que l'utilisateur tape "list".
-        while (picked === 'list' || picked === 'liste') {
+        while (selection.type === 'commands') {
           const list = nightBatch.listLlmModels();
           if (list.ok && list.models.length > 0) {
             nightBatch.printModelsList(list.models, { interactive: false });
@@ -371,10 +490,66 @@ async function runStartupQuestionnaire(cliArgs) {
           } else {
             console.log(`  \x1b[33mlms indisponible (${(list && list.error) || 'daemon éteint ?'}) — tableau détaillé impossible.\x1b[0m`);
           }
-          picked = await _askNumberedChoice('  Choix du modèle (numéro ou nom, "list" = tableau détaillé) :', entries, defaultIdx, modelChoices);
+          selection = await _askModelSelection('  Choix du modèle (numéro(s), "auto", nom, "list" = tableau détaillé) :', entries, defaultIdx, modelChoices);
         }
-        model = picked;
-        modelMeta = models.find(m => m.name === model) || null;
+        while (selection.type === 'unknown') {
+          console.log('  \x1b[33mSaisie non reconnue dans la sélection multiple — re-choix.\x1b[0m');
+          selection = await _askModelSelection('  Choix du modèle (numéro(s), "auto", nom, "list" = tableau détaillé) :', entries, defaultIdx, modelChoices);
+        }
+        if (selection.type === 'auto') {
+          // MODE AUTOMATIQUE : tous les modèles passables, dans l'ordre de la
+          // liste. Les incompatibles / non-LLM / isolés sont écartés là, tout
+          // de suite — pas de run voué à l'échec (demande 2026-11-11).
+          multiModels = [];
+          const excluded = [];
+          for (const m of models) {
+            const st = statusMap.get(normKey(m.name)) || null;
+            const reason = blockedReason(m, st);
+            if (reason) excluded.push({ m, reason });
+            else multiModels.push({ name: m.name, quantization: m.quantization || null, arch: m.arch || null, publisher: m.publisher || null, state: m.state || null });
+          }
+          console.log(`  \x1b[1;35m→ Mode auto : ${multiModels.length} modèle(s) inscrit(s) dans la file.${C_RESET}`);
+          if (excluded.length > 0) {
+            for (const e of excluded) console.log(`  \x1b[90m   écarté : ${e.m.name} — ${e.reason}${C_RESET}`);
+          }
+          if (multiModels.length === 0) {
+            // Tous écartés (ex: que des incompatibles) : repli honnête sur le
+            // défaut plutôt qu'une file vide.
+            console.log('  \x1b[33mAucun modèle passable en auto — repli sur le modèle par défaut (sélection manuelle possible).\x1b[0m');
+            model = entries[defaultIdx] ? entries[defaultIdx].value : null;
+            modelMeta = model ? (models.find(m => m.name === model) || null) : null;
+            multiModels = null;
+          }
+        } else if (selection.type === 'multi') {
+          const pickedMeta = selection.indexes.map(i => models[i]).filter(Boolean);
+          for (const m of pickedMeta) {
+            const st = statusMap.get(normKey(m.name)) || null;
+            const reason = blockedReason(m, st);
+            if (reason) console.log(`  \x1b[33m⚠ ${m.name} : ${reason} — il reste dans la file mais l'échec est attendu (runtime à jour = re-testable).${C_RESET}`);
+          }
+          multiModels = pickedMeta.map(m => ({ name: m.name, quantization: m.quantization || null, arch: m.arch || null, publisher: m.publisher || null, state: m.state || null }));
+        }
+        // Sélection unique (historique) OU multi réduite à 1 : flux simple.
+        if (multiModels && multiModels.length === 1) {
+          model = multiModels[0].name;
+          modelMeta = models.find(m => m.name === model) || null;
+          multiModels = null;
+        } else if (!multiModels) {
+          model = selection.values[0];
+          modelMeta = models.find(m => m.name === model) || null;
+        }
+        if (examCode && multiModels) {
+          logger.info(`Questionnaire RunCode : file de ${multiModels.length} modèle(s) — ${multiModels.map(m => m.name).join(', ')}`);
+        }
+        if (!examCode && multiModels && multiModels.length > 1) {
+          // La grande école interactive ne boucle pas : un seul modèle par
+          // process (night-batch.js est le mode batch de la grande école).
+          console.log('  \x1b[33mMulti-sélection : le benchmark classique ne passe qu\'UN modèle par run — seul le premier sera joué.\x1b[0m');
+          console.log('  \x1b[90mPour une file : node runner.js --exam-code (RunCode) ou node night-batch.js (grande école).\x1b[0m');
+          model = multiModels[0].name;
+          modelMeta = models.find(m => m.name === model) || null;
+          multiModels = null;
+        }
       } else {
         console.log('  \x1b[33mAucun modèle détecté automatiquement.\x1b[0m');
         model = await _askFreeText('  Saisissez le nom du modèle :', { allowEmpty: false });
@@ -397,7 +572,14 @@ async function runStartupQuestionnaire(cliArgs) {
   // qu'un Q8_0, et deux runs du même modèle avec deux quantifications différentes
   // ne sont pas comparables.
   let quantization = cliArgs.quantization || null;
-  if (quantization) {
+  if (multiModels) {
+    // File d'élèves : la quantification de CHAQUE modèle vient des métadonnées
+    // de la liste (étape 2) — un prompt interactif par modèle serait une
+    // re-saisie fastidieuse et sans valeur ajoutée.
+    console.log('  \x1b[1;33m2b. Quantification\x1b[0m');
+    console.log('  \x1b[90mFile de plusieurs modèles — quantification lue automatiquement dans les métadonnées de chacun.\x1b[0m');
+    console.log('');
+  } else if (quantization) {
     console.log('  \x1b[1;33m2b. Quantification\x1b[0m');
     console.log(`  \x1b[90mQuantification passée en CLI : ${quantization}\x1b[0m`);
     console.log('');
@@ -476,24 +658,36 @@ async function runStartupQuestionnaire(cliArgs) {
   }
 
   // --- 5. Profil ---
-  _printSection('5. Profil d\'évaluation');
-  const profileKeys = Object.keys(PROFILES);
-  console.log('  Profils :');
-  profileKeys.forEach((key, i) => {
-    console.log(`    \x1b[1m${i + 1}.\x1b[0m ${key.padEnd(10)} ${PROFILES[key].label}`);
-  });
-  let profileArg = cliArgs.profileArgExplicit;
-  if (!profileArg) {
-    // Default heuristic : local provider → STANDARD, cloud → FRONTIER.
-    const defaultProfile = isLocal ? 'STANDARD' : 'FRONTIER';
-    const defaultIdx = Math.max(0, profileKeys.indexOf(defaultProfile));
-    const entries = profileKeys.map(k => ({ value: k }));
-    profileArg = await _askNumberedChoice('  Choix du profil (numéro ou nom, Entrée = défaut) :', entries, defaultIdx);
+  // profileArg conservé pour la compatibilité des habitudes ; en file il reste
+  // null (le runner déduit le parcours par modèle).
+  let profileChoice = cliArgs.profileArgExplicit || null;
+  if (multiModels) {
+    // File d'élèves : le profil (donc le parcours RunCode) est déduit du NOM de
+    // chaque modèle (12b → College-Lycee, 2.6b → Primaire). Un profil unique
+    // forcerait le même parcours à un 2B et à un 12B — faux.
+    console.log('  \x1b[1;33m5. Profil d\'évaluation\x1b[0m \x1b[90m— déduit du nom de chaque modèle de la file (2.6b → Primaire, 12b → College-Lycee...).\x1b[0m');
+    console.log('');
   } else {
-    console.log(`  \x1b[90mProfil passé en CLI : ${profileArg}\x1b[0m`);
+    _printSection('5. Profil d\'évaluation');
+    const profileKeys = Object.keys(PROFILES);
+    console.log('  Profils :');
+    profileKeys.forEach((key, i) => {
+      console.log(`    \x1b[1m${i + 1}.\x1b[0m ${key.padEnd(10)} ${PROFILES[key].label}`);
+    });
+    let profileArg = cliArgs.profileArgExplicit;
+    if (!profileArg) {
+      // Default heuristic : local provider → STANDARD, cloud → FRONTIER.
+      const defaultProfile = isLocal ? 'STANDARD' : 'FRONTIER';
+      const defaultIdx = Math.max(0, profileKeys.indexOf(defaultProfile));
+      const entries = profileKeys.map(k => ({ value: k }));
+      profileArg = await _askNumberedChoice('  Choix du profil (numéro ou nom, Entrée = défaut) :', entries, defaultIdx);
+    } else {
+      console.log(`  \x1b[90mProfil passé en CLI : ${profileArg}\x1b[0m`);
+    }
+    console.log(`  \x1b[1;35m→ Profil : ${PROFILES[profileArg] ? PROFILES[profileArg].label : profileArg}\x1b[0m`);
+    console.log('');
+    profileChoice = profileArg;
   }
-  console.log(`  \x1b[1;35m→ Profil : ${PROFILES[profileArg] ? PROFILES[profileArg].label : profileArg}\x1b[0m`);
-  console.log('');
 
   // --- 6. Contexte max ---
   _printSection('6. Contexte max (tokens)');
@@ -534,77 +728,109 @@ async function runStartupQuestionnaire(cliArgs) {
   }
   console.log('');
 
-  // --- 8. Cible (classe / tier) ---
-  // En mode interactif, on demande explicitement quelle classe cibler. Par
-  // défaut on reste sur "all" (toutes les classes obligatoires + optionnelles
-  // du profil). Si l'utilisateur tape un numéro de tier, on restreint le run à
-  // cette seule classe. Cela évite le piège d'un argument positionnel résiduel
-  // (ex: "node runner.js 0") qui silencieusement ne lance qu'une seule classe
-  // et fait croire à un 100% trompeur.
-  _printSection('8. Cible (classe / tier)');
-  console.log("  \x1b[90m« all » = toutes les classes du profil (recommandé). Sinon un numéro de tier (0, 1, 2…) pour une seule classe.\x1b[0m");
-  const tierRaw = await _askFreeText('  Cible (Entrée = all) :', { allowEmpty: true });
+  // --- 8/9 Grande école OU 8/9 RunCode ---
+  // En RunCode (--exam-code), les étapes grande école (cible tier, FLASH) sont
+  // SANS EFFET (l'examen court-circuite le benchmark) : elles cèdent la place à
+  // une véritable étape RunCode — Turbo (parcours complet) ou ÉCLAIR (scan
+  // spécialité accéléré). Demande 2026-11-11 : « le menu du RunCode ne propose
+  // rien » — désormais il propose les VRAIES options du mode.
   let tierArg = 'all';
-  if (tierRaw) {
-    const v = tierRaw.trim().toLowerCase();
-    if (v === 'all' || v === '*') {
-      tierArg = 'all';
-    } else {
-      const n = parseInt(v, 10);
-      if (Number.isInteger(n) && n >= 0) {
-        tierArg = String(n);
-      } else {
-        console.log(`  \x1b[33mValeur '${v}' non reconnue — fallback sur « all ».\x1b[0m`);
-        tierArg = 'all';
-      }
-    }
-  }
-  console.log(`  \x1b[1;35m→ Cible : ${tierArg}\x1b[0m`);
-  console.log('');
-
-  // --- 9. MODE FLASH (tâche 2026-09-16c) : examen accéléré ---
-  // Proposé quand la cible est « all » (le mode FLASH est un mode de grande
-  // école, pas un mode de classe unique). L'utilisateur à PEU DE RAM choisit
-  // FLASH : 1 exercice par classe au lieu de 10-15 → l'examen dure ~10x
-  // moins longtemps (la VRAM/RAM est sollicitée beaucoup moins longtemps).
-  // Tirage orienté par le tremplin RunCode si disponible.
   let flashMode = cliArgs.flash === true;
-  if (tierArg === 'all') {
-    _printSection('9. Mode d\'examen');
-    console.log('  \x1b[90mC = Classique : examen complet (10-15 exercices par classe) — mesure de référence.\x1b[0m');
-    console.log('  \x1b[90mF = FLASH ⚡ : examen accéléré (1 exercice par classe, tiré des compétences RunCode).\x1b[0m');
-    console.log('  \x1b[90m    Pensé pour les machines à PEU DE RAM : l\'examen dure ~10x moins longtemps.\x1b[0m');
-    console.log('  \x1b[90m    Score au carnet (école Flash-<École>) mais NON compté dans le classement.\x1b[0m');
-    const flashRaw = await _askFreeText('  Mode (Entrée = Classique, C/F) :', { allowEmpty: true });
-    const fv = (flashRaw || '').trim().toLowerCase();
-    if (fv === 'f' || fv === 'flash') {
-      flashMode = true;
-      console.log('  \x1b[1;35m⚡ → Mode FLASH activé : 1 exercice par classe.\x1b[0m');
-      logger.info('Questionnaire : mode FLASH choisi par l\'utilisateur (interactif).');
+  let eclairMode = false;
+  if (examCode) {
+    _printSection('8. Mode de RunCode');
+    console.log('  \x1b[90mT = Turbo : parcours complet de classes (2 exercices par classe, ~10-20 min).\x1b[0m');
+    console.log('  \x1b[90mE = ÉCLAIR : scan de spécialité accéléré — 1 exercice par LANGAGE, classe la plus simple (20 appels courts).\x1b[0m');
+    const modeRaw = await _askFreeText('  Mode RunCode (Entrée = Turbo, T/E) :', { allowEmpty: true });
+    const mv = (modeRaw || '').trim().toLowerCase();
+    if (mv === 'e' || mv === 'eclair') {
+      eclairMode = true;
+      console.log('  \x1b[1;35m⚡ → Mode ÉCLAIR : scan de spécialité accéléré.\x1b[0m');
+      logger.info('Questionnaire RunCode : mode ÉCLAIR choisi (interactif).');
     } else {
-      console.log('  \x1b[90m→ Mode Classique (examen complet).\x1b[0m');
+      console.log('  \x1b[90m→ Mode Turbo (parcours complet).\x1b[0m');
     }
     console.log('');
-  }
-  if (flashMode && tierArg !== 'all') {
-    // FLASH n'a de sens qu'en grande école complète (les tiers individuels
-    // restent tels quels). Cohérence CLI : on désactive silencieusement + log.
-    console.log('  \x1b[33m⚡ Mode FLASH ignoré (cible = classe unique — FLASH ne s\'applique qu\'à « all »).\x1b[0m');
-    logger.info('Questionnaire : FLASH demandé mais cible != all — désactivé.');
-    flashMode = false;
+  } else {
+    // --- 8. Cible (classe / tier) ---
+    // En mode interactif, on demande explicitement quelle classe cibler. Par
+    // défaut on reste sur "all" (toutes les classes obligatoires + optionnelles
+    // du profil). Si l'utilisateur tape un numéro de tier, on restreint le run à
+    // cette seule classe. Cela évite le piège d'un argument positionnel résiduel
+    // (ex: "node runner.js 0") qui silencieusement ne lance qu'une seule classe
+    // et fait croire à un 100% trompeur.
+    _printSection('8. Cible (classe / tier)');
+    console.log("  \x1b[90m« all » = toutes les classes du profil (recommandé). Sinon un numéro de tier (0, 1, 2…) pour une seule classe.\x1b[0m");
+    const tierRaw = await _askFreeText('  Cible (Entrée = all) :', { allowEmpty: true });
+    if (tierRaw) {
+      const v = tierRaw.trim().toLowerCase();
+      if (v === 'all' || v === '*') {
+        tierArg = 'all';
+      } else {
+        const n = parseInt(v, 10);
+        if (Number.isInteger(n) && n >= 0) {
+          tierArg = String(n);
+        } else {
+          console.log(`  \x1b[33mValeur '${v}' non reconnue — fallback sur « all ».\x1b[0m`);
+          tierArg = 'all';
+        }
+      }
+    }
+    console.log(`  \x1b[1;35m→ Cible : ${tierArg}\x1b[0m`);
+    console.log('');
+
+    // --- 9. MODE FLASH (tâche 2026-09-16c) : examen accéléré ---
+    // Proposé quand la cible est « all » (le mode FLASH est un mode de grande
+    // école, pas un mode de classe unique). L'utilisateur à PEU DE RAM choisit
+    // FLASH : 1 exercice par classe au lieu de 10-15 → l'examen dure ~10x
+    // moins longtemps (la VRAM/RAM est sollicitée beaucoup moins longtemps).
+    // Tirage orienté par le tremplin RunCode si disponible.
+    if (tierArg === 'all') {
+      _printSection('9. Mode d\'examen');
+      console.log('  \x1b[90mC = Classique : examen complet (10-15 exercices par classe) — mesure de référence.\x1b[0m');
+      console.log('  \x1b[90mF = FLASH ⚡ : examen accéléré (1 exercice par classe, tiré des compétences RunCode).\x1b[0m');
+      console.log('  \x1b[90m    Pensé pour les machines à PEU DE RAM : l\'examen dure ~10x moins longtemps.\x1b[0m');
+      console.log('  \x1b[90m    Score au carnet (école Flash-<École>) mais NON compté dans le classement.\x1b[0m');
+      const flashRaw = await _askFreeText('  Mode (Entrée = Classique, C/F) :', { allowEmpty: true });
+      const fv = (flashRaw || '').trim().toLowerCase();
+      if (fv === 'f' || fv === 'flash') {
+        flashMode = true;
+        console.log('  \x1b[1;35m⚡ → Mode FLASH activé : 1 exercice par classe.\x1b[0m');
+        logger.info('Questionnaire : mode FLASH choisi par l\'utilisateur (interactif).');
+      } else {
+        console.log('  \x1b[90m→ Mode Classique (examen complet).\x1b[0m');
+      }
+      console.log('');
+    }
+    if (flashMode && tierArg !== 'all') {
+      // FLASH n'a de sens qu'en grande école complète (les tiers individuels
+      // restent tels quels). Cohérence CLI : on désactive silencieusement + log.
+      console.log('  \x1b[33m⚡ Mode FLASH ignoré (cible = classe unique — FLASH ne s\'applique qu\'à « all »).\x1b[0m');
+      logger.info('Questionnaire : FLASH demandé mais cible != all — désactivé.');
+      flashMode = false;
+    }
   }
 
   // --- Récapitulatif ---
   console.log('  \x1b[1;36m━━━━━━━━━━━━━ RÉCAPITULATIF ━━━━━━━━━━━━━\x1b[0m');
+  if (multiModels) {
+    console.log(`  File d'élèves : ${multiModels.length} modèle(s)`);
+    multiModels.forEach((m, i) => console.log(`    \x1b[1m${i + 1}.\x1b[0m ${m.name}${m.quantization ? ` \x1b[90m(${m.quantization})\x1b[0m` : ''}`));
+    console.log('  \x1b[90mUn modèle en échec ne bloque pas la file — passage automatique au suivant.\x1b[0m');
+  }
   console.log(`  Fournisseur   : ${provider}`);
   console.log(`  Modèle        : ${model || '(non précisé)'}`);
   console.log(`  Quantification: ${quantization || '\x1b[90m— (inconnue)\x1b[0m'}`);
   console.log(`  Clé API élève : ${apiKey ? secrets.maskedForDisplay(apiKey) : '\x1b[90m—\x1b[0m'}`);
   console.log(`  Endpoint      : ${endpoint || '\x1b[90m(par défaut)\x1b[0m'}`);
-  console.log(`  Profil        : ${profileArg}`);
+  console.log(`  Profil        : ${profileChoice || '\x1b[90mauto (par modèle)\x1b[0m'}`);
   console.log(`  Contexte max  : ${contextLimitTokens} tokens`);
-  console.log(`  Cible         : ${tierArg}`);
-  console.log(`  Mode d'examen : ${flashMode ? '\x1b[1;35m⚡ FLASH (accéléré)\x1b[0m' : 'Classique (complet)'}`);
+  if (!examCode) {
+    console.log(`  Cible         : ${tierArg}`);
+    console.log(`  Mode d'examen : ${flashMode ? '\x1b[1;35m⚡ FLASH (accéléré)\x1b[0m' : 'Classique (complet)'}`);
+  } else {
+    console.log(`  Mode RunCode  : ${eclairMode ? '\x1b[1;35m⚡ ÉCLAIR (scan spécialité)\x1b[0m' : 'Turbo (parcours complet)'}`);
+  }
   console.log(`  Professeur    : ${teacherConfig.enabled ? 'OpenRouter (Free Router)' : 'auto-analyse classique'}`);
   console.log('');
 
@@ -613,18 +839,23 @@ async function runStartupQuestionnaire(cliArgs) {
     model,
     apiKey,
     endpoint,
-    profileArg,
+    profileArg: profileChoice,
     contextLimitTokens,
     teacherConfig,
     quantization,
     tierArg,
     flash: flashMode,
-    isInteractive: true
+    isInteractive: true,
+    // File d'élèves RunCode (null = run à modèle unique, historique).
+    models: multiModels ? multiModels.slice() : null,
+    eclair: eclairMode,
+    examCodeMode: examCode
   };
 }
 
 module.exports = {
   runStartupQuestionnaire,
+  _parseMultiSelection,
   LOCAL_PROVIDERS,
   CLOUD_PROVIDERS_ORDERED
 };

@@ -74,8 +74,15 @@ const HELP_TEXT = `
                           multi-langage, 1 exercice aléatoire par classe). Carton rouge si
                           mensonge expert. Verdict final : spécialité du modèle (langage
                           d'excellence) + carnet (compte pour le classement général).
+                          Interactif : menu « auto » (TOUS les modèles passables) ou
+                          multi-sélection « 1,2,3,4-6 » — file d'élèves où un modèle en
+                          échec ne bloque JAMAIS le suivant (récapitulatif final).
+  \x1b[1m--models=\x1b[0m           RunCode : file d'élèves en CLI (batch non interactif), virgules
+                          ou plages. Priorité sur --model=. Ex:
+                          node runner.js --exam-code --provider=lmstudio --models=a,b,c
+                          (les carnets RunCode de CHAQUE élève sont écrits ; récap final.)
   \x1b[1m--parcours=\x1b[0m           RunCode : parcours scolaire Primaire | College-Lycee | Universite
-                          (défaut : déduit du profil/du nom du modèle).
+                          (défaut : déduit du profil/du nom du CHAQUE modèle de la file).
                           Ex: node runner.js --provider=groq --model=llama-3.3-70b-versatile --exam-code
   \x1b[1m--eclair\x1b[0m             RunCode accéléré : scan de spécialité — 1 exercice de la CLASSE LA
                           PLUS SIMPLE par langage (20 langages au coffre, ~20 appels courts,

@@ -80,6 +80,25 @@ function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+// --- Sanité du modèle professeur (bug 2026-11-11) ---
+// Un ID OpenRouter contient TOUJOURS un slash (format publisher/model). Un
+// modèle passé sans slash avec --teacher-model=... sous le provider openrouter
+// (défaut) — ex: « llama-3.3-70b-versatile », nom GROQ — aboutit à HTTP 400
+// "not a valid model ID" sur CHAQUE appel du professeur (test de capacité :
+// la clé n'est PAS en cause — le diagnostic « professeur injoignable » masque
+// une erreur de slug). On neutralise le modèle (retour au Free Router
+// openrouter/free, appel réel validé HTTP 200) avec un diagnostic lisible +
+// le remède. Les autres providers (groq, ollama...) gardent leurs noms natifs.
+function sanitizeTeacherModel(cfg) {
+  if (!cfg || !cfg.enabled || cfg.provider !== 'openrouter') return cfg;
+  const model = cfg.model || null;
+  if (!model || model.includes('/')) return cfg;
+  console.log(`  \x1b[33m⚠ PROFESSEUR : « ${model} » n'est pas un ID OpenRouter (format attendu : editeur/modele) — slug neutralisé, retour au Free Router (openrouter/free).\x1b[0m`);
+  console.log('  \x1b[90m  Remède : ajoutez --teacher-provider=groq (avec une clé Groq), ou laissez --teacher-model vide.\x1b[0m');
+  logger.warn(`Teacher: slug « ${model} » invalide pour openrouter (pas de slash publisher/modele) — neutralisé vers openrouter/free.`);
+  return { ...cfg, model: 'openrouter/free' };
+}
+
 // Extrait le code d'un exercice depuis la réponse brute du modèle.
 // Priorité : clé JSON "id" → bloc de code après l'id → JSON global → bloc ``` → toute la réponse.
 function extractStudentCode(rawResponse, taskId) {
@@ -1383,6 +1402,12 @@ async function main() {
   let resolvedQuantization = cliQuantization || null;
   let teacherConfigResolved;
 
+  // File d'élèves RunCode (demande 2026-11-11) : le questionnaire interactif
+  // peut retourner PLUSIEURS modèles (saisie "auto" ou "1,2,3,4-6") + le mode
+  // ÉCLAIR choisi à l'étape 8. Capturés ici pour la boucle batch du bloc
+  // --exam-code (un modèle en échec ne bloque pas la file).
+  let questionnaireExamModels = null;
+  let questionnaireEclair = false;
   if (presetName) {
     // --- Mode preset : charge un preset nommé sans questionnaire ---
     const p = presets.loadPreset(presetName);
@@ -1464,7 +1489,9 @@ async function main() {
       console.log('');
     } else {
       logger.info('Aucun flag CLI détecté — lancement du questionnaire interactif.');
-      const qConfig = await runStartupQuestionnaire(cliArgs);
+      // examCode passe au questionnaire : menu modèle multi/auto + étapes
+      // RunCode (Turbo/ÉCLAIR) au lieu des étapes grande école (cible/FLASH).
+      const qConfig = await runStartupQuestionnaire(cliArgs, { examCode: process.argv.slice(2).includes('--exam-code') });
       resolvedProvider = qConfig.provider;
       resolvedCloudModel = qConfig.model;
       resolvedApiKey = qConfig.apiKey;
@@ -1472,6 +1499,10 @@ async function main() {
       resolvedProfileArgExplicit = qConfig.profileArg;
       resolvedContextLimit = qConfig.contextLimitTokens;
       if (qConfig.quantization) resolvedQuantization = qConfig.quantization;
+      if (qConfig.models && Array.isArray(qConfig.models) && qConfig.models.length > 0) {
+        questionnaireExamModels = qConfig.models;
+      }
+      if (qConfig.eclair) questionnaireEclair = true;
       // teacherConfig construit par le questionnaire (clé mémorisée dans secrets.js)
       teacherConfigResolved = qConfig.teacherConfig;
       // Cible (tier) explicite issue du questionnaire. Prioritaire sur la valeur
@@ -1639,6 +1670,10 @@ async function main() {
     if (resolvedApiKey) secrets.rememberSecret(resolvedProvider, resolvedApiKey, true);
   }
 
+  // Sanité du modèle professeur : s'applique à TOUTES les sources de config
+  // (CLI --teacher-model, preset restauré, questionnaire) après résolution.
+  teacherConfigResolved = sanitizeTeacherModel(teacherConfigResolved);
+
   const isCloudMode = Boolean(resolvedProvider);
   const providerConfig = isCloudMode ? { provider: resolvedProvider, model: resolvedCloudModel, apiKey: resolvedApiKey, endpoint: resolvedEndpoint } : null;
   const queryFn = isCloudMode ? queryLLMCloud : queryLLMLocal;
@@ -1737,48 +1772,101 @@ async function main() {
   // À la fin de l'examen, le modèle local est DÉCHARGÉ automatiquement
   // (lms unload --all pour LM Studio, ollama stop pour Ollama).
   if (process.argv.slice(2).includes('--exam-code')) {
-    const examModelName = isCloudMode ? resolvedCloudModel : (preKnownModelName || 'eleve-local');
-    // Parcours RunCode : --parcours=Primaire|College-Lycee|Universite en CLI.
-    // Défaut : déduire le parcours du profil BenchGo auto (LIGHT -> Primaire,
-    // STANDARD -> College-Lycee, EXPERT -> Universite), repli Primaire.
-    // Le parcours suit la même scolarité que le benchmark standard : un modèle
-    // 2B ne passe pas l'Université (cf. détective de taille detectProfileFromModelName).
+    // =====================================================================
+    // FILE D'ÉLÈVES RunCode (demande 2026-11-11) : plusieurs modèles passent
+    // l'examen À LA SUITE, et un modèle en échec NE BLOQUE PAS la file.
+    // Sources de la file (priorité décroissante) :
+    //   1. questionnaire interactif — "auto" ou "1,2,3,4-6" (menu RunCode) ;
+    //   2. --models=a,b,c (batch CLI, même esprit que night-batch) ;
+    //   3. --model=a,b,c pour un provider local (lmstudio/ollama/custom) ;
+    //   4. modèle unique (comportement historique).
+    // Chaque élève : examen → carnet → déchargement → SUIVANT. En fin de file
+    // : récapitulatif PASSÉ/EXPULSÉ/VIDE/ÉCHEC. Le parcours est déduit du nom
+    // de CHAQUE élève (un 2B passe Primaire, un 12B passe College-Lycee) sauf
+    // --parcours= explicite.
+    // =====================================================================
+    const parseArg = (name) => (process.argv.find(a => a.startsWith(name)) || '').split('=').slice(1).join('=') || null;
+    const cliModelsArg = parseArg('--models=');
+    const cliModelArg = parseArg('--model=');
+    // Plafonds mode file uniquement : un modèle plombé ne doit pas congeler la
+    // file entière (45 min par élève — aligné TIER_TIMEOUT_MS du mode nuit,
+    // 10 min pour UN appel — une question RunCode est courte).
+    const EXAM_BATCH_MODEL_TIMEOUT_MS = 45 * 60 * 1000;
+    const EXAM_BATCH_CALL_TIMEOUT_MS = 10 * 60 * 1000;
+    const examQueue = [];
+    const seenQueueKeys = new Set();
+    const pushExamPick = (name, quantization) => {
+      const clean = String(name || '').trim();
+      if (!clean) return;
+      const key = clean.toLowerCase();
+      if (seenQueueKeys.has(key)) return;
+      seenQueueKeys.add(key);
+      examQueue.push({ name: clean, quantization: quantization || null });
+    };
+    if (questionnaireExamModels && questionnaireExamModels.length > 0) {
+      for (const m of questionnaireExamModels) pushExamPick(m.name, m.quantization);
+      logger.info(`RunCode: file depuis questionnaire = ${examQueue.map(p => p.name).join(', ')}`);
+    } else if (cliModelsArg) {
+      for (const part of cliModelsArg.split(',')) pushExamPick(part, null);
+      logger.info(`RunCode: file depuis --models= = ${examQueue.map(p => p.name).join(', ')}`);
+    } else if (cliModelArg && cliModelArg.includes(',') && resolvedProvider && LOCAL_CLOUD_PROVIDERS.has(String(resolvedProvider).toLowerCase())) {
+      for (const part of cliModelArg.split(',')) pushExamPick(part, null);
+      logger.info(`RunCode: file depuis --model= multi (provider local) = ${examQueue.map(p => p.name).join(', ')}`);
+    } else {
+      pushExamPick(isCloudMode ? resolvedCloudModel : (preKnownModelName || 'eleve-local'), resolvedQuantization);
+    }
+    const batchMode = examQueue.length > 1;
+
     const parcoursArg = (process.argv.find(a => a.startsWith('--parcours=')) || '').split('=')[1] || null;
     const PROFILE_TO_PARCOURS = { LIGHT: 'Primaire', STANDARD: 'College-Lycee', EXPERT: 'Universite' };
-    const autoProfile = resolvedProfileArgExplicit
-      || (isCloudMode ? defaultProfileForCloud(resolvedProvider, resolvedCloudModel) : null);
-    let examParcours = null;
-    if (parcoursArg && ['Primaire', 'College-Lycee', 'Universite'].includes(parcoursArg)) examParcours = parcoursArg;
-    else if (autoProfile && PROFILE_TO_PARCOURS[autoProfile]) examParcours = PROFILE_TO_PARCOURS[autoProfile];
-    else {
-      // Détection depuis le nom du modèle local (ex: "12b" -> STANDARD).
-      const { detected } = detectProfileFromModelName(examModelName || '');
-      examParcours = (detected && PROFILE_TO_PARCOURS[detected]) || 'Primaire';
-    }
     const PARCOURS_ECOLE = { Primaire: 'RunCode-Primaire', 'College-Lycee': 'RunCode-College-Lycee', Universite: 'RunCode-Universite' };
+    // Résolution PAR ÉLÈVE : profil explicite > profil auto du provider >
+    // taille dans le nom du modèle > Primaire (défaut).
+    const resolveExamParcours = (modelName) => {
+      if (parcoursArg && ['Primaire', 'College-Lycee', 'Universite'].includes(parcoursArg)) {
+        return { parcours: parcoursArg, profile: resolvedProfileArgExplicit || null };
+      }
+      const autoProfileForModel = resolvedProfileArgExplicit
+        || (isCloudMode ? defaultProfileForCloud(resolvedProvider, modelName) : null);
+      if (autoProfileForModel && PROFILE_TO_PARCOURS[autoProfileForModel]) {
+        return { parcours: PROFILE_TO_PARCOURS[autoProfileForModel], profile: autoProfileForModel };
+      }
+      // Détection depuis le nom du modèle local (ex: "12b" -> STANDARD).
+      const { detected } = detectProfileFromModelName(modelName || '');
+      return { parcours: (detected && PROFILE_TO_PARCOURS[detected]) || 'Primaire', profile: detected || null };
+    };
     // --eclair (demande 2026-10-28) : scan de spécialité accéléré — 1 exercice
     // de la classe la plus simple PAR LANGAGE (20 appels courts) au lieu du
     // parcours complet. Même entretien, même verdict, carnet identique (mode
-    // 'eclair' dans la tentative). Le tremplin night-batch l'utilise d'office
-    // pour les modèles locaux (lents au chargement comme à la génération).
-    const eclairExam = process.argv.slice(2).includes('--eclair');
-    logger.info(`RunCode: parcours résolu = ${examParcours} (--parcours=${parcoursArg || 'aucun'}, profil auto = ${autoProfile || 'aucun'}, élève = ${examModelName}, mode = ${eclairExam ? 'eclair' : 'turbo'})`);
-    console.log('\n\x1b[1;36m━━━ 🏛️ RUNCODE — EXAMEN PUR CODE NATIF ━━━\x1b[0m');
-    console.log(`  \x1b[90mÉlève     : ${examModelName}\x1b[0m`);
-    console.log(`  \x1b[90mParcours  : ${examParcours}${eclairExam ? ' (référence carnet)' : ''} — mode : \x1b[1m${eclairExam ? '⚡ ÉCLAIR (scan spécialité accéléré)' : 'Turbo (parcours complet)'}\x1b[0m`);
-    console.log(`  \x1b[90mProfesseur : ${teacherConfigResolved && teacherConfigResolved.enabled ? `${teacherConfigResolved.provider} (${teacherConfigResolved.model || 'auto'})` : 'désactivé'}\x1b[0m`);
-    console.log("  \x1b[90mSuivi     : les questions du professeur et la réflexion de l'élève s'affichent EN DIRECT.\x1b[0m\n");
+    // 'eclair' dans la tentative). Le questionnaire RunCode propose aussi ce
+    // mode (étape 8) — le flag CLI reste prioritaire (combinaison OU).
+    const eclairExam = process.argv.slice(2).includes('--eclair') || questionnaireEclair === true;
+    if (batchMode) {
+      console.log('\n\x1b[1;36m━━━ 🏛️ RUNCODE — FILE D\'ÉLÈVES (batch) ━━━\x1b[0m');
+      console.log(`  \x1b[90m${examQueue.length} élève(s) inscrit(s) — un modèle en échec ne bloque PAS la file (passage automatique au suivant).${'\x1b[0m'}`);
+      console.log(`  \x1b[90mMode : ${eclairExam ? '⚡ ÉCLAIR (scan spécialité accéléré)' : 'Turbo (parcours complet)'} — parcours déduit du nom de chaque élève.${'\x1b[0m'}`);
+      examQueue.forEach((p, i) => console.log(`    \x1b[1m${i + 1}.\x1b[0m ${p.name}${p.quantization ? ` \x1b[90m(${p.quantization})\x1b[0m` : ''}`));
+      console.log('');
+    }
     const spinnerExam = new Spinner('Examen RunCode en cours...');
+    // Config MUTABLE de l'élève courant : l'adaptateur studentClient lit
+    // providerConfig/deadline à CHAQUE appel — la boucle les met à jour au
+    // changement de modèle. Un const unique providerConfig (capturé au
+    // démarrage, bug 2026-09-29) exigeait une resynchronisation ; ici chaque
+    // élève reçoit SA copie avec model=son nom.
+    const currentExamCfg = { providerConfig: null, deadlineMs: 0 };
     // Cumul des tokens sur TOUTES les questions de l'examen (bug 0.96 t/s,
-    // tâche 2026-09-16c) : spinnerExam.tokenCount est remis à ZÉRO à chaque
-    // nouvelle question (reset ci-dessous) — lire spinnerExam.tokenCount à la
-    // fin de l'examen ne comptait que les tokens de la DERNIÈRE question. Sur
-    // un examen de 10 questions (~40 tokens lues chacune), le carnet affichait
-    // ~40 tokens pour plusieurs minutes d'inférence → vitesse absurde (ex:
-    // granite-4.2-8b 0.96 t/s). On accumule ici après CHAQUE appel réussi.
+    // tâche 2026-09-16c), REMIS À ZÉRO à chaque nouvel élève de la file : le
+    // carnet d'un modèle ne doit compter que SES tokens. On accumule ici après
+    // CHAQUE appel réussi pour le modèle courant.
     let examTokensTotal = 0;
     const studentClient = {
       async generate(_model, prompt, opts = {}) {
+        // Garde-fou file : un élève plombé est débranché au prochain appel
+        // (plafond 45 min/élève) — jamais de hang infini qui congèle la file.
+        if (currentExamCfg.deadlineMs && Date.now() > currentExamCfg.deadlineMs) {
+          throw new Error('E510_BATCH_MODEL_TIMEOUT : plafond de temps de la file RunCode dépassé pour cet élève — passage au suivant.');
+        }
         const maxTokens = (opts && opts.max_tokens) || 256;
         const temp = (opts && opts.temperature !== undefined) ? opts.temperature : 0.0;
         const label = (opts && opts.spinnerLabel) || 'Examen RunCode en cours...';
@@ -1787,12 +1875,19 @@ async function main() {
         spinnerExam.charCount = 0;
         spinnerExam.start();
         try {
-          const resp = await queryFn(prompt, 'EASY', -1, true, spinnerExam, {
+          const callOptions = {
             contextLimitTokens,
-            providerConfig,
+            providerConfig: currentExamCfg.providerConfig,
             maxTokens,
             temperature: temp
-          });
+          };
+          if (currentExamCfg.deadlineMs) {
+            // Un APPEL SEUL est plafonné (10 min) et ne peut pas dépasser la
+            // deadline restante : le stream abandonne proprement → catch →
+            // modèle suivant au lieu d'un blocage de 25 min (API_TIMEOUT_MS).
+            callOptions.timeoutMs = Math.max(1, Math.min(currentExamCfg.deadlineMs - Date.now(), EXAM_BATCH_CALL_TIMEOUT_MS));
+          }
+          const resp = await queryFn(prompt, 'EASY', -1, true, spinnerExam, callOptions);
           spinnerExam.stop('Réponse reçue');
           // Cumul AVANT le reset suivant : tokens produits par CETTE question
           // (content + reasoning, comptés par le client LLM pendant le streaming).
@@ -1804,195 +1899,292 @@ async function main() {
         }
       }
     };
-    try {
-      const examFn = eclairExam ? runEclairScan : runAdaptiveSchoolExam;
-      const result = await examFn(examModelName, studentClient, {
-        teacherProvider: teacherConfigResolved && teacherConfigResolved.provider,
-        teacherModel: teacherConfigResolved && teacherConfigResolved.model,
-        teacherApiKey: teacherConfigResolved && teacherConfigResolved.apiKey,
-        parcoursRunCode: examParcours,
-        profileBenchgo: autoProfile
-      });
-      console.log('\n================================================================');
-      console.log(`🏆 BILAN FINAL : ${result.student}`);
-      console.log(`⚡ Mode : ${result.mode === 'eclair' ? 'ÉCLAIR (scan spécialité)' : 'TURBO (parcours complet)'}`);
-      console.log(`🎓 Diplôme : ${result.highestClassPassed} (${result.parcours})`);
-      if (result.disqualified) {
-        console.log(`🚫 STATUT : EXPULSÉ`);
-        console.log(`Raison : ${result.disqualificationReason}`);
-      } else {
-        console.log(`✅ STATUT : TERMINÉ (${result.score}/${result.max} exercices réussis)`);
+    // Résultats de la file (un par élève), pour le récapitulatif final.
+    const batchResults = [];
+    for (let qi = 0; qi < examQueue.length; qi++) {
+      const examPick = examQueue[qi];
+      const examModelName = examPick.name;
+      // Quantification PAR MODÈLE : la file du questionnaire porte celle de
+      // /api/v0/models ; sinon repli sur la quantification globale (CLI).
+      const modelQuant = examPick.quantization || resolvedQuantization || null;
+      const examParcoursInfo = resolveExamParcours(examModelName);
+      const examParcours = examParcoursInfo.parcours;
+      const autoProfile = examParcoursInfo.profile;
+      currentExamCfg.providerConfig = providerConfig ? { ...providerConfig, model: examModelName } : null;
+      currentExamCfg.deadlineMs = batchMode ? (Date.now() + EXAM_BATCH_MODEL_TIMEOUT_MS) : 0;
+      examTokensTotal = 0;
+      if (batchMode) {
+        console.log(`\n\x1b[1;36m━━━ 🏛️ RUNCODE — ÉLÈVE ${qi + 1}/${examQueue.length} : ${examModelName} ━━━\x1b[0m`);
       }
-      if (result.specialty) {
-        console.log(`🌟 SPÉCIALITÉ : ${result.specialty.language.toUpperCase()}${result.specialty.total > 0 ? ` (${result.specialty.passed}/${result.specialty.total} réussis, ${Math.round(result.specialty.rate * 100)}%)` : ''}`);
-        console.log(`   Verdict du professeur : ${result.specialty.verdict}`);
-      }
-      if (result.details && result.details.length) {
-        console.log('--- Détails par classe ---');
-        for (const d of result.details) {
-          const attemptTag = d.attempts > 1 ? ' (budget étendu)' : '';
-          console.log(`  ${d.class.padEnd(10)} ${d.language.toUpperCase().padEnd(12)} ${d.passed ? '✅' : '❌'}${attemptTag} (${d.latency} ms)`);
+      logger.info(`RunCode: parcours résolu = ${examParcours} (--parcours=${parcoursArg || 'aucun'}, profil auto = ${autoProfile || 'aucun'}, élève = ${examModelName}, mode = ${eclairExam ? 'eclair' : 'turbo'}${batchMode ? `, file ${qi + 1}/${examQueue.length}` : ''})`);
+      console.log('\n\x1b[1;36m━━━ 🏛️ RUNCODE — EXAMEN PUR CODE NATIF ━━━\x1b[0m');
+      console.log(`  \x1b[90mÉlève     : ${examModelName}\x1b[0m`);
+      console.log(`  \x1b[90mParcours  : ${examParcours}${eclairExam ? ' (référence carnet)' : ''} — mode : \x1b[1m${eclairExam ? '⚡ ÉCLAIR (scan spécialité accéléré)' : 'Turbo (parcours complet)'}\x1b[0m`);
+      console.log(`  \x1b[90mProfesseur : ${teacherConfigResolved && teacherConfigResolved.enabled ? `${teacherConfigResolved.provider} (${teacherConfigResolved.model || 'auto'})` : 'désactivé'}\x1b[0m`);
+      console.log("  \x1b[90mSuivi     : les questions du professeur et la réflexion de l'élève s'affichent EN DIRECT.\x1b[0m\n");
+      try {
+        const examFn = eclairExam ? runEclairScan : runAdaptiveSchoolExam;
+        const result = await examFn(examModelName, studentClient, {
+          teacherProvider: teacherConfigResolved && teacherConfigResolved.provider,
+          teacherModel: teacherConfigResolved && teacherConfigResolved.model,
+          teacherApiKey: teacherConfigResolved && teacherConfigResolved.apiKey,
+          parcoursRunCode: examParcours,
+          profileBenchgo: autoProfile
+        });
+        console.log('\n================================================================');
+        console.log(`🏆 BILAN FINAL : ${result.student}`);
+        console.log(`⚡ Mode : ${result.mode === 'eclair' ? 'ÉCLAIR (scan spécialité)' : 'TURBO (parcours complet)'}`);
+        console.log(`🎓 Diplôme : ${result.highestClassPassed} (${result.parcours})`);
+        if (result.disqualified) {
+          console.log(`🚫 STATUT : EXPULSÉ`);
+          console.log(`Raison : ${result.disqualificationReason}`);
+        } else {
+          console.log(`✅ STATUT : TERMINÉ (${result.score}/${result.max} exercices réussis)`);
         }
-      }
-      console.log('================================================================\n');
+        if (result.specialty) {
+          console.log(`🌟 SPÉCIALITÉ : ${result.specialty.language.toUpperCase()}${result.specialty.total > 0 ? ` (${result.specialty.passed}/${result.specialty.total} réussis, ${Math.round(result.specialty.rate * 100)}%)` : ''}`);
+          console.log(`   Verdict du professeur : ${result.specialty.verdict}`);
+        }
+        if (result.details && result.details.length) {
+          console.log('--- Détails par classe ---');
+          for (const d of result.details) {
+            const attemptTag = d.attempts > 1 ? ' (budget étendu)' : '';
+            console.log(`  ${d.class.padEnd(10)} ${d.language.toUpperCase().padEnd(12)} ${d.passed ? '✅' : '❌'}${attemptTag} (${d.latency} ms)`);
+          }
+        }
+        console.log('================================================================\n');
 
-      // --- Carnet de scores RunCode (compte pour le classement général) ---
-      // L'examen est enregistré comme une école RunCode-<parcours> dans le
-      // carnet du modèle : le leaderboard l'agrège comme les autres écoles.
-      // Pct simple (exercices réussis / exercices joués), la spécialité et le
-      // parcours sont embarqués dans la tentative pour l'affichage.
-      const examScore = result.score || 0;
-      const examMax = result.max || 0;
-      if (examMax > 0) {
-        const nowExam = new Date();
-        const padExam = n => String(n).padStart(2, '0');
-        const examDate = `${nowExam.getFullYear()}-${padExam(nowExam.getMonth() + 1)}-${padExam(nowExam.getDate())}`;
-        const examTime = `${padExam(nowExam.getHours())}-${padExam(nowExam.getMinutes())}-${padExam(nowExam.getSeconds())}`;
-        const examEcole = PARCOURS_ECOLE[result.parcours] || 'RunCode-Primaire';
-        const examElapsed = (result.details || []).reduce((s, d) => s + (d.latency || 0), 0);
-        // Tokens cumulés sur TOUTES les questions (fix 0.96 t/s) : examTokensTotal
-        // est alimenté par l'adaptateur studentClient.generate() après chaque appel.
-        // spinnerExam.tokenCount seul ne comptait que la DERNIÈRE question.
-        const examTokens = examTokensTotal;
-        const examShort = shortNameWithQuant(examModelName, resolvedQuantization || null);
-        const examResult = {
-          profile: result.parcoursProfile || 'LIGHT',
-          ecole: examEcole,
-          runCode: true,
-          // mode 'eclair' = scan spécialité accéléré, 'turbo' = parcours complet.
-          mode: result.mode || 'turbo',
-          parcours: result.parcours,
-          diplome: result.highestClassPassed,
-          specialite: result.specialty ? result.specialty.language : null,
-          specialiteVerdict: result.specialty ? result.specialty.verdict : null,
-          // Bilan par langage (tremplin 2026-09-11c) : tentatives/réussites/
-          // latence moyenne par langage. Sert aux barres par langage du
-          // leaderboard + au choix de l'ordre de passage (tremplin).
-          languageStats: (result.languageStats || []),
-          declaration: result.profile || null,
-          disqualified: result.disqualified || false,
-          score: examScore,
-          max: examMax,
-          pct: Math.round((examScore / examMax) * 100),
-          mandatoryPassed: examScore,
-          mandatoryTotal: examMax,
-          globalLifeScore: 0,
-          optionalBonus: 0,
-          helpCount: 0,
-          retriedCount: 0,
-          date: examDate,
-          time: examTime,
-          reportFile: (result.examLogFile ? String(result.examLogFile).split(path.sep).join('/') : null),
-          selfProfile: null,
-          tiers: (result.details || []).map(d => ({
-            tierNum: -1,
+        // --- Carnet de scores RunCode (compte pour le classement général) ---
+        // L'examen est enregistré comme une école RunCode-<parcours> dans le
+        // carnet du modèle : le leaderboard l'agrège comme les autres écoles.
+        // Pct simple (exercices réussis / exercices joués), la spécialité et le
+        // parcours sont embarqués dans la tentative pour l'affichage.
+        const examScore = result.score || 0;
+        const examMax = result.max || 0;
+        if (examMax > 0) {
+          const nowExam = new Date();
+          const padExam = n => String(n).padStart(2, '0');
+          const examDate = `${nowExam.getFullYear()}-${padExam(nowExam.getMonth() + 1)}-${padExam(nowExam.getDate())}`;
+          const examTime = `${padExam(nowExam.getHours())}-${padExam(nowExam.getMinutes())}-${padExam(nowExam.getSeconds())}`;
+          const examEcole = PARCOURS_ECOLE[result.parcours] || 'RunCode-Primaire';
+          const examElapsed = (result.details || []).reduce((s, d) => s + (d.latency || 0), 0);
+          // Tokens cumulés sur TOUTES les questions (fix 0.96 t/s) : examTokensTotal
+          // est alimenté par l'adaptateur studentClient.generate() après chaque appel.
+          // spinnerExam.tokenCount seul ne comptait que la DERNIÈRE question.
+          const examTokens = examTokensTotal;
+          const examShort = shortNameWithQuant(examModelName, modelQuant || null);
+          const examResult = {
+            profile: result.parcoursProfile || 'LIGHT',
+            ecole: examEcole,
             runCode: true,
-            className: d.class,
-            language: d.language,
-            exerciseId: d.exerciseId,
-            passed: d.passed,
-            attempts: d.attempts
-          })),
-          quantization: resolvedQuantization || null,
-          elapsedMs: examElapsed,
-          wallMs: examElapsed,
-          tokens: examTokens,
-          tokensPerSecond: examElapsed > 0 ? Math.round((examTokens / (examElapsed / 1000)) * 100) / 100 : 0,
-          promptTokens: 0,
-          completionTokens: examTokens
-        };
-        scoreLedger.saveResult(examShort, examModelName, examResult, resolvedQuantization || null, null, isCloudMode ? resolvedProvider : 'local');
-        logger.info(`RunCode: carnet écrit (${examShort}.json, école ${examEcole}, score ${examScore}/${examMax}, spécialité=${examResult.specialite || 'aucune'}, parcours=${result.parcours}, mode=${examResult.mode})`);
-        console.log(`  \x1b[36m📓 Carnet RunCode mis à jour : ${examShort}.json (école ${examEcole}) — compte pour le classement général.\x1b[0m`);
-        try {
-          leaderboard.generateLeaderboard({ silent: true });
-          logger.info('RunCode: classement régénéré après examen (classement.html/.md).');
-        } catch (e) {
-          logger.warn('Régénération classement RunCode échouée : ' + e.message);
-          console.log(`  \x1b[33m⚠ Classement non régénéré après l'examen : ${e.message}\x1b[0m`);
-        }
+            // mode 'eclair' = scan spécialité accéléré, 'turbo' = parcours complet.
+            mode: result.mode || 'turbo',
+            parcours: result.parcours,
+            diplome: result.highestClassPassed,
+            specialite: result.specialty ? result.specialty.language : null,
+            specialiteVerdict: result.specialty ? result.specialty.verdict : null,
+            // Bilan par langage (tremplin 2026-09-11c) : tentatives/réussites/
+            // latence moyenne par langage. Sert aux barres par langage du
+            // leaderboard + au choix de l'ordre de passage (tremplin).
+            languageStats: (result.languageStats || []),
+            declaration: result.profile || null,
+            disqualified: result.disqualified || false,
+            score: examScore,
+            max: examMax,
+            pct: Math.round((examScore / examMax) * 100),
+            mandatoryPassed: examScore,
+            mandatoryTotal: examMax,
+            globalLifeScore: 0,
+            optionalBonus: 0,
+            helpCount: 0,
+            retriedCount: 0,
+            date: examDate,
+            time: examTime,
+            reportFile: (result.examLogFile ? String(result.examLogFile).split(path.sep).join('/') : null),
+            selfProfile: null,
+            tiers: (result.details || []).map(d => ({
+              tierNum: -1,
+              runCode: true,
+              className: d.class,
+              language: d.language,
+              exerciseId: d.exerciseId,
+              passed: d.passed,
+              attempts: d.attempts
+            })),
+            quantization: modelQuant || null,
+            elapsedMs: examElapsed,
+            wallMs: examElapsed,
+            tokens: examTokens,
+            tokensPerSecond: examElapsed > 0 ? Math.round((examTokens / (examElapsed / 1000)) * 100) / 100 : 0,
+            promptTokens: 0,
+            completionTokens: examTokens
+          };
+          scoreLedger.saveResult(examShort, examModelName, examResult, modelQuant || null, null, isCloudMode ? resolvedProvider : 'local');
+          logger.info(`RunCode: carnet écrit (${examShort}.json, école ${examEcole}, score ${examScore}/${examMax}, spécialité=${examResult.specialite || 'aucune'}, parcours=${result.parcours}, mode=${examResult.mode})`);
+          console.log(`  \x1b[36m📓 Carnet RunCode mis à jour : ${examShort}.json (école ${examEcole}) — compte pour le classement général.\x1b[0m`);
+          try {
+            leaderboard.generateLeaderboard({ silent: true });
+            logger.info('RunCode: classement régénéré après examen (classement.html/.md).');
+          } catch (e) {
+            logger.warn('Régénération classement RunCode échouée : ' + e.message);
+            console.log(`  \x1b[33m⚠ Classement non régénéré après l'examen : ${e.message}\x1b[0m`);
+          }
 
-        // --- Liste d'attente de la grande école (tâche 2026-09-16) ---
-        // Le modèle peut être « mis en réserve » : il rejoint une liste
-        // persistante (.benchgo-runcode-queue.json) que night-batch.js lit au
-        // démarrage pour passer les inscrits EN PRIORITÉ (tête de file). Le
-        // flag --queue-runcode force l'inscription (batch), sinon on propose
-        // en interactif (TTY uniquement — jamais de prompt en mode nuit).
-        const examMeta = {
-          displayName: examModelName,
-          quantization: resolvedQuantization || null,
-          parcours: result.parcours,
-          pct: examResult.pct,
-          specialite: examResult.specialite,
-          diplome: examResult.diplome
-        };
-        if (queueRuncodeFlag || (!forceFlag && process.stdin.isTTY && process.stdout.isTTY)) {
-          if (queueRuncodeFlag) {
+          // --- Liste d'attente de la grande école (tâche 2026-09-16) ---
+          // Le modèle peut être « mis en réserve » : il rejoint une liste
+          // persistante (.benchgo-runcode-queue.json) que night-batch.js lit au
+          // démarrage pour passer les inscrits EN PRIORITÉ (tête de file). Le
+          // flag --queue-runcode force l'inscription (batch), sinon on propose
+          // en interactif (TTY uniquement — jamais de prompt en mode nuit).
+          // EN FILE (batch) : AUCUN prompt interactif par élève (N élèves = N
+          // blocages sinon) — seul --queue-runcode inscrit, silencieusement.
+          const examMeta = {
+            displayName: examModelName,
+            quantization: modelQuant || null,
+            parcours: result.parcours,
+            pct: examResult.pct,
+            specialite: examResult.specialite,
+            diplome: examResult.diplome
+          };
+          if (batchMode && queueRuncodeFlag) {
             runcodeQueue.enqueue(examShort, examMeta);
-            console.log(`  \x1b[35m⏳ Modèle mis en réserve dans la liste d'attente de la grande école (${runcodeQueue.QUEUE_FILE}).\x1b[0m`);
-            logger.info(`RunCode: ${examShort} ajouté à la liste d'attente grande école (--queue-runcode).`);
-          } else {
-            const wantsQueue = await askYesNo(`  Mettre ${examShort} en réserve pour la grande école (liste d'attente — il passera en priorité au prochain batch de nuit) ?`, true);
-            if (wantsQueue) {
+            console.log(`  \x1b[35m⏳ ${examShort} en réserve grande école (--queue-runcode, mode file — aucun prompt par élève).\x1b[0m`);
+            logger.info(`RunCode: ${examShort} ajouté à la liste d'attente grande école (--queue-runcode, batch).`);
+          } else if (!batchMode && (queueRuncodeFlag || (!forceFlag && process.stdin.isTTY && process.stdout.isTTY))) {
+            if (queueRuncodeFlag) {
               runcodeQueue.enqueue(examShort, examMeta);
               console.log(`  \x1b[35m⏳ Modèle mis en réserve dans la liste d'attente de la grande école (${runcodeQueue.QUEUE_FILE}).\x1b[0m`);
-              console.log(`  \x1b[90mLancez un batch de nuit (node night-batch.js) : il sera proposé en tête de file.\x1b[0m`);
-              logger.info(`RunCode: ${examShort} ajouté à la liste d'attente grande école (confirmation utilisateur).`);
+              logger.info(`RunCode: ${examShort} ajouté à la liste d'attente grande école (--queue-runcode).`);
             } else {
-              // Retrait éventuel : si le modèle était déjà en réserve et refuse
-              // de nouveau, on le retire (la liste reste fidèle aux volontés).
-              if (runcodeQueue.dequeue(examShort)) {
-                console.log(`  \x1b[90m${examShort} retiré de la liste d'attente de la grande école.\x1b[0m`);
-                logger.info(`RunCode: ${examShort} retiré de la liste d'attente grande école.`);
+              const wantsQueue = await askYesNo(`  Mettre ${examShort} en réserve pour la grande école (liste d'attente — il passera en priorité au prochain batch de nuit) ?`, true);
+              if (wantsQueue) {
+                runcodeQueue.enqueue(examShort, examMeta);
+                console.log(`  \x1b[35m⏳ Modèle mis en réserve dans la liste d'attente de la grande école (${runcodeQueue.QUEUE_FILE}).\x1b[0m`);
+                console.log(`  \x1b[90mLancez un batch de nuit (node night-batch.js) : il sera proposé en tête de file.\x1b[0m`);
+                logger.info(`RunCode: ${examShort} ajouté à la liste d'attente grande école (confirmation utilisateur).`);
+              } else {
+                // Retrait éventuel : si le modèle était déjà en réserve et refuse
+                // de nouveau, on le retire (la liste reste fidèle aux volontés).
+                if (runcodeQueue.dequeue(examShort)) {
+                  console.log(`  \x1b[90m${examShort} retiré de la liste d'attente de la grande école.\x1b[0m`);
+                  logger.info(`RunCode: ${examShort} retiré de la liste d'attente grande école.`);
+                }
               }
             }
           }
+          // Résultat de l'élève pour le récapitulatif de fin de file.
+          batchResults.push({
+            name: examModelName,
+            status: result.disqualified ? 'EXPULSÉ' : 'OK',
+            score: examScore,
+            max: examMax,
+            pct: examResult.pct,
+            diplome: result.highestClassPassed,
+            specialite: examResult.specialite,
+            error: null
+          });
+        } else {
+          logger.warn('RunCode: aucun exercice joué (max=0) — carnet NON écrit. Vérifier le coffre-fort (.teacher-vault/vault_polyglot.json).');
+          batchResults.push({
+            name: examModelName,
+            status: 'VIDE',
+            score: null,
+            max: null,
+            pct: null,
+            diplome: null,
+            specialite: null,
+            error: 'aucun exercice joué (max=0 — coffre-fort vide ?)'
+          });
         }
-      } else {
-        logger.warn('RunCode: aucun exercice joué (max=0) — carnet NON écrit. Vérifier le coffre-fort (.teacher-vault/vault_polyglot.json).');
-      }
-    } catch (err) {
-      console.error('\x1b[31m❌ Erreur lors de l\'examen :\x1b[0m', err && err.message ? err.message : err);
-      // E507 (arch GGUF inconnue du runtime llama.cpp, ex: k2-horizon) :
-      // avertissement complet « modèle non compatible » + registre des
-      // incompatibles. Le catch du RunCode n'atteint JAMAIS main().catch
-      // (l'erreur est avalée ici) — d'où la gestion dédiée (tâche 2026-09-15).
-      // EXCEPTION (demande utilisateur 2026-10-06) : erreur TEMPORAIRE de
-      // fichiers internes LM Studio (ENOENT mkdtemp '.internal\temp\...') —
-      // le même message « Failed to load model » masque un souci de dossier
-      // temp : le GGUF est SAIN (souvent déjà testé au carnet). AUCUNE
-      // inscription au registre, message dédié « relancer le run » (le re-test
-      // des modèles déjà passés est voulu — suivi des mises à jour).
-      const isTempFsErr = err && (err.code === 'E509_LM_TEMP_FS' || archWarning.isTempFsError(err.message || ''));
-      if (isTempFsErr) {
-        console.log(archWarning.tempFsWarningText(examModelName || 'modele-inconnu', { reason: err.message || '' }));
-      } else if (err && (err.code === 'E507_LM_LOAD_FAILED' || /Failed to load model/i.test(err.message || ''))) {
-        const incompatModel = examModelName || 'modele-inconnu';
-        archWarning.recordIncompatible(incompatModel, {
-          reason: err.message || 'Failed to load model',
-          quantization: resolvedQuantization || null,
-          publisher: resolvedProvider || null
+      } catch (err) {
+        console.error('\x1b[31m❌ Erreur lors de l\'examen :\x1b[0m', err && err.message ? err.message : err);
+        // E507 (arch GGUF inconnue du runtime llama.cpp, ex: k2-horizon) :
+        // avertissement complet « modèle non compatible » + registre des
+        // incompatibles. Le catch du RunCode n'atteint JAMAIS main().catch
+        // (l'erreur est avalée ici) — d'où la gestion dédiée (tâche 2026-09-15).
+        // EXCEPTION (demande utilisateur 2026-10-06) : erreur TEMPORAIRE de
+        // fichiers internes LM Studio (ENOENT mkdtemp '.internal\temp\...') —
+        // le même message « Failed to load model » masque un souci de dossier
+        // temp : le GGUF est SAIN (souvent déjà testé au carnet). AUCUNE
+        // inscription au registre, message dédié « relancer le run » (le re-test
+        // des modèles déjà passés est voulu — suivi des mises à jour).
+        // EN FILE (2026-11-11) : l'erreur est CONSIGNÉE dans le récapitulatif et
+        // la boucle passe au modèle suivant — JAMAIS d'arrêt de la file sur un
+        // élève défaillant (chargement KO, réseau, timeout, 0 exercice).
+        const failMsg = err && err.message ? err.message : String(err);
+        const isTempFsErr = err && (err.code === 'E509_LM_TEMP_FS' || archWarning.isTempFsError(failMsg));
+        if (isTempFsErr) {
+          console.log(archWarning.tempFsWarningText(examModelName || 'modele-inconnu', { reason: failMsg }));
+        } else if (err && (err.code === 'E507_LM_LOAD_FAILED' || /Failed to load model/i.test(failMsg))) {
+          const incompatModel = examModelName || 'modele-inconnu';
+          archWarning.recordIncompatible(incompatModel, {
+            reason: failMsg || 'Failed to load model',
+            quantization: modelQuant || null,
+            publisher: resolvedProvider || null
+          });
+          console.log(archWarning.incompatibleWarningText(incompatModel, { reason: failMsg }));
+        }
+        batchResults.push({
+          name: examModelName,
+          status: 'FAIL',
+          score: null,
+          max: null,
+          pct: null,
+          diplome: null,
+          specialite: null,
+          error: failMsg
         });
-        console.log(archWarning.incompatibleWarningText(incompatModel, { reason: err.message || 'Failed to load model' }));
-      }
-    } finally {
-      // --- Déchargement automatique du modèle local (VRAM/RAM libérée) ---
-      // LM Studio : lms unload --all (le daemon doit tourner — silencieux sinon).
-      // Ollama : ollama stop <modèle>. Cloud/custom : rien à décharger.
-      const prov = resolvedProvider ? String(resolvedProvider).toLowerCase() : '';
-      try {
-        if (prov === 'lmstudio') {
-          const r = spawnSync('lms', ['unload', '--all'], { encoding: 'utf8', windowsHide: true, timeout: 60000 });
-          if (r.status === 0) console.log('  \x1b[32m✔ Modèles LM Studio déchargés (lms unload --all) — VRAM/RAM libérée.\x1b[0m');
-          else console.log(`  \x1b[33m⚠ Déchargement LM Studio impossible : ${(r.stderr || r.stdout || 'daemon lms injoignable').substring(0, 120)}\x1b[0m`);
-        } else if (prov === 'ollama') {
-          const r = spawnSync('ollama', ['stop', examModelName], { encoding: 'utf8', windowsHide: true, timeout: 60000 });
-          if (r.status === 0) console.log(`  \x1b[32m✔ Modèle Ollama « ${examModelName} » déchargé (ollama stop).\x1b[0m`);
-          else console.log(`  \x1b[33m⚠ Déchargement Ollama impossible : ${(r.stderr || r.stdout || 'ollama injoignable').substring(0, 120)}\x1b[0m`);
+        if (batchMode) {
+          console.log(`  \x1b[1;33m⚠ ${examModelName} : échec (${failMsg.split('\n')[0].replace(/\s+/g, ' ').trim().substring(0, 140)}) — la file continue avec l'élève suivant.\x1b[0m`);
+          logger.info(`RunCode: batch — échec de ${examModelName} (${failMsg.split('\n')[0].substring(0, 120)}) — file continue.`);
         }
-      } catch (_) { /* le déchargement est un confort, jamais bloquant */ }
-      logger.close();
+      } finally {
+        // --- Déchargement automatique du modèle local (VRAM/RAM libérée) ---
+        // LM Studio : lms unload --all (le daemon doit tourner — silencieux sinon).
+        // Ollama : ollama stop <modèle>. Cloud/custom : rien à décharger.
+        // En file : déchargé APRÈS CHAQUE élève (VRAM fraîche pour le suivant).
+        const prov = resolvedProvider ? String(resolvedProvider).toLowerCase() : '';
+        try {
+          if (prov === 'lmstudio') {
+            const r = spawnSync('lms', ['unload', '--all'], { encoding: 'utf8', windowsHide: true, timeout: 60000 });
+            if (r.status === 0) console.log('  \x1b[32m✔ Modèles LM Studio déchargés (lms unload --all) — VRAM/RAM libérée.\x1b[0m');
+            else console.log(`  \x1b[33m⚠ Déchargement LM Studio impossible : ${(r.stderr || r.stdout || 'daemon lms injoignable').substring(0, 120)}\x1b[0m`);
+          } else if (prov === 'ollama') {
+            const r = spawnSync('ollama', ['stop', examModelName], { encoding: 'utf8', windowsHide: true, timeout: 60000 });
+            if (r.status === 0) console.log(`  \x1b[32m✔ Modèle Ollama « ${examModelName} » déchargé (ollama stop).\x1b[0m`);
+            else console.log(`  \x1b[33m⚠ Déchargement Ollama impossible : ${(r.stderr || r.stdout || 'ollama injoignable').substring(0, 120)}\x1b[0m`);
+          }
+        } catch (_) { /* le déchargement est un confort, jamais bloquant */ }
+      }
+    } // --- fin boucle file d'élèves ---
+
+    // --- Récapitulatif de fin de file (demande 2026-11-11) ---
+    if (batchMode) {
+      console.log('\n  \x1b[1;36m━━━━━━━━━━ RÉCAPITULATIF DE LA FILE RUNCODE ━━━━━━━━━━\x1b[0m');
+      for (const r of batchResults) {
+        const nameCol = String(r.name).padEnd(44).substring(0, 44);
+        const scoreCol = (r.score != null ? `${r.score}/${r.max}` : '—').padStart(7);
+        let statut;
+        if (r.status === 'OK') statut = '\x1b[32m✅ PASSÉ  \x1b[0m';
+        else if (r.status === 'EXPULSÉ') statut = '\x1b[31m🚫 EXPULSÉ\x1b[0m';
+        else if (r.status === 'VIDE') statut = '\x1b[33m⚠ VIDE    \x1b[0m';
+        else statut = '\x1b[31m✘ ÉCHEC   \x1b[0m';
+        const extra = r.specialite ? ` \x1b[90m·\x1b[0m \x1b[1;35m${String(r.specialite).toUpperCase()}\x1b[0m` : '';
+        const pctCol = (r.pct != null ? `${r.pct}%` : '').padStart(5);
+        const errTxt = r.error ? ` \x1b[90m— ${String(r.error).replace(/\s+/g, ' ').trim().substring(0, 90)}\x1b[0m` : '';
+        console.log(`  ${statut} ${nameCol} ${scoreCol} ${pctCol}${extra}${errTxt}`);
+      }
+      const nbOk = batchResults.filter(r => r.status === 'OK').length;
+      const nbExp = batchResults.filter(r => r.status === 'EXPULSÉ').length;
+      const nbVide = batchResults.filter(r => r.status === 'VIDE').length;
+      const nbFail = batchResults.filter(r => r.status === 'FAIL').length;
+      const nbCarnets = batchResults.filter(r => r.status === 'OK' || r.status === 'EXPULSÉ').length;
+      console.log(`
+  File de ${examQueue.length} élève(s) : \x1b[32m${nbOk} passé(s)\x1b[0m · \x1b[31m${nbExp} expulsé(s)\x1b[0m · \x1b[33m${nbVide} sans exercice\x1b[0m · \x1b[31m${nbFail} échec(s) technique(s)\x1b[0m — \x1b[1m${nbCarnets} carnet(s) écrit(s)\x1b[0m.`);
+      console.log('  \x1b[90mAstuce : les carnets RunCode comptent déjà pour le classement. Pour programmer la GRANDE ÉCOLE : relancez ce run et répondez « o »\x1b[0m');
+      console.log('  \x1b[90mà la mise en réserve (modèle seul), utilisez --queue-runcode, ou lancez node night-batch.js (tremplin + grande école en tête de file).');
     }
+    logger.close();
     process.exit(0);
   }
 

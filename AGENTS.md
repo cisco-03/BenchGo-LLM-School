@@ -44,6 +44,7 @@ OS : Windows, PowerShell 5.1. Projet Node.js 18+ **sans `package.json`** (module
 | Soumettre un carnet existant (sans run) | `node runner.js --submit` (dernier carnet) / `--submit --model=<nom>` (ciblé) |
 | Professeur IA avec provider custom | `node runner.js --teacher-provider=<provider> --teacher-model=<model>` |
 | RunCode code natif | `node runner.js --provider=<provider> --model=<model> --exam-code` (flag `--exam-code` = mode **RunCode**) |
+| RunCode file d'élèves (multi-modèles, continue sur échec) | `node runner.js --exam-code` puis "auto" ou "1,2,3,4-6" au menu — ou CLI : `--exam-code --provider=lmstudio --models=a,b,c` |
 | Mode FLASH (grande école accélérée) | `node runner.js all --flash --profile=STANDARD` (1 exercice/classe, petites RAM) |
 | Liste LM Studio triée par score local | `node night-batch.js --list-only` |
 | Forcer la détection (réindexer les GGUF orphelins) | `node night-batch.js --force-detect` |
@@ -1229,11 +1230,17 @@ Les modèles non-thinking (qui répondent en 1 ligne « OUI »/« Non. ») sont 
 # Interactif (questionnaire de démarrage : choisit provider + modèle) :
 node runner.js --exam-code
 
+# Interactif en FILE D'ÉLÈVES : au menu modèle, taper "auto" (tous) ou "1,2,3,4-6" :
+node runner.js --exam-code
+
 # ÉCLAIR — scan de spécialité accéléré (pour les modèles locaux lents) :
 node runner.js --exam-code --eclair
 
 # CLI direct — modèle local LM Studio :
 node runner.js --provider=lmstudio --model=<modèle> --exam-code
+
+# CLI direct — FILE d'élèves (batch non interactif, un échec ne bloque pas la file) :
+node runner.js --exam-code --provider=lmstudio --models=a,b,c
 
 # CLI direct — modèle cloud :
 node runner.js --provider=<provider> --model=<slug> --exam-code
@@ -1349,6 +1356,34 @@ node runner.js --provider=openrouter --model=<slug:free> --exam-code \
 - En classe communautaire : le badge en ligne n'apparaît qu'après soumission du carnet (`node runner.js --submit`).
 - Logs de diagnostic RunCode (journal `Export-Rapports/exam_*.log`) : `[déclaration brute]`, `[inventaire coffre]`, `[pool classe X]`, `[tirage classe X]`, `[réponse complète]`, `[verdict professeur brut/ERREUR]`, `[verdict mécanique (repli)]`, `[pool vide]` — NE JAMAIS les retirer (indispensables pour dépanner).
 
+### File d'élèves RunCode + menu RunCode dédié (tâche 2026-11-11)
+
+**Fichiers touchés :** `startup-questionnaire.js`, `runner.js`, `cli-help.js`, `tests/test-runcode-batch-menu.js` (nouveau), `Docs/CHANGELOG.md`, `AGENTS.md`, `Memories-BenchGo/Tasks.md`.
+
+**Principe :** Demande utilisateur : le RunCode Turbo (`node runner.js --exam-code`) n'avait AUCUNE interactivité de batch — la saisie multi `1,2,3,...` au choix du modèle tombait sur le PREMIER numéro via `parseInt` (le reste avalé silencieusement), un modèle défaillant ARRÊTAIT tout, et le menu ne proposait ni mode automatique ni sélection multiple, tout en posant des étapes grande école inutiles (cible tier / FLASH). Trois réponses : (1) question RunCode dans le questionnaire (`examCode` en 2e argument) — étape 8 « Mode de RunCode : T=Turbo / E=ÉCLAIR » au lieu des étapes 8/9 grande école ; (2) menu modèle local avec **"auto"** (TOUS les modèles passables) et **multi-sélection** `1,2,3,4-6` + badges ROUGE `⚠ INCOMPATIBLE (ARCH ...)`/`⚠ NON-LLM`/`⚠ ISOLÉ` (registre arch-warning, marche sans daemon) — écartés d'office en auto, avertissement en multi ; (3) boucle batch dans le bloc `--exam-code` : chaque élève a SA config (`currentExamCfg` mutable, copie providerConfig par modèle), SON parcours (détecté par nom), SA quantification, SON compteur de tokens (reset par élève) → carnet → lms unload → SUIVANT ; échec consigné dans `batchResults` et FILE CONTINUE. Récapitulatif final PASSÉ/EXPULSÉ/VIDE/ÉCHEC (score, pct, spécialité, raison). Plafonds anti-hang en file : 45 min/élève (`EXAM_BATCH_MODEL_TIMEOUT_MS`) + 10 min/appel (`EXAM_BATCH_CALL_TIMEOUT_MS` — débranché à chaque appel). CLI `--models=a,b,c` (batch non interactif). `--queue-runcode` reste actif en file sans prompt par élève.
+
+**Fonctions :**
+- `_parseMultiSelection(raw, entries, defaultIndex, opts)` (startup-questionnaire.js, PURE exportée) → `{ type: 'single'|'multi'|'auto'|'commands'|'unknown', values, indexes }`. `auto`/`all`/`tous`/`tout` → auto ; virgules + plages `a-b` (inverses OK, croissant) + noms (casse libre), dédupliqués, ordre d'apparition ; `unknown` (terme invalide en multi-partie) → re-ask par l'appelant ; partie unique inconnue → défaut historique ; `list` passe brûte via `opts.commands`.
+- `_askModelSelection(...)` (wrapper TTY) → non-TTY : défaut single (jamais de blocage batch).
+- `runStartupQuestionnaire(cliArgs, { examCode })` retourne en plus `models` (file ou null), `eclair`, `examCodeMode` ; en file : étapes 2b/5 sautées (quantification par métadonnées, profil par nom), 8/9 remplacées par le choix RunCode T/E.
+- Bloc `--exam-code` (runner.js) : `examQueue` (questionnaire > `--models=` > `--model=` local en virgules > mono), `resolveExamParcours(modelName)` (parcours explicite > profil auto > taille dans le nom > Primaire), boucle avec try/catch/finally PAR ÉLÈVE, push `batchResults`, récapitulatif, `--queue-runcode` silencieux en file.
+- Adapteur `studentClient.generate()` : deadline vérifiée à chaque appel (`E510_BATCH_MODEL_TIMEOUT`) + `timeoutMs` par appel plafonné à min(restant, 10 min).
+
+**Pour modifier :**
+1. **Changer la syntaxe de sélection** : `_parseMultiSelection()` + les 2 libellés d'invite du questionnaire (affiché 2× : initial + boucles list/unknown).
+2. **Changer les critères d'écartement en auto** : `blockedReason()` au questionnaire (incompat/non-LLM/isolé) — ajouter p.ex. blacklist night-batch.
+3. **Changer les plafonds de file** : `EXAM_BATCH_MODEL_TIMEOUT_MS` / `EXAM_BATCH_CALL_TIMEOUT_MS` (runner.js, bloc `--exam-code`).
+4. **Rendre un échec bloquant** (NON recommandé) : remplacer les push `batchResults` FAIL par un `throw` — le mono reste historique.
+5. **Changer le code E510** : l'adapter `generate()` + le récapitulatif (les FAIL affichent `err.message`).
+6. **Tester** : `node tests/run-tests.js` (13 cas parseur), `node --check` sur les 3 modules, `node runner.js --exam-code` (menu auto/multi), `node runner.js --exam-code --provider=lmstudio --models=a,b,c --force`.
+
+**Pièges :**
+- En file, `providerConfig` global (const capturée) reste model=undefined quand le questionnaire rend la file : la COPIE par élève (`currentExamCfg`) est la seule source de vérité de l'adapteur — ne jamais rebrancher l'adapteur sur `providerConfig`.
+- `--models=`/`--model=` multi sont lus sur l'argv BRUT (pas `parseCliArgs`) ; provider requis en CLI non interactive, sinon le questionnaire s'exécute et fait passer le questionnaire en tête de file.
+- Le récapitulatif n'écrit PAS de carnet pour les FAIL/VIDE : un modèle KO n'apparaît « pas testé » — voulu (carnet = preuve d'examen réel).
+- Le mode mono garde les plafonds DÉSACTIVÉS (deadlineMs=0) : comportement historique 2026-09-09/2026-09-15 intact (E509 temp-fs reste non enregistré).
+- Les prompts interactifs (mise en réserve grande école) sont SKIPPÉS par élève en file : N prompts = N blocages — seul `--queue-runcode` inscrit en file.
+
 ---
 
 ## Vérifications après modification
@@ -1376,6 +1411,8 @@ node runner.js --provider=openrouter --model=<slug:free> --exam-code \
    - **JAMAIS de tirets collés à un astérisque (demande utilisateur 2026-09-15, valable AUSSI dans les réponses du chat)** : la forme `-**` (tiret suivi immédiatement d'astérisques) n'est pas compatible Logseq. Ne JAMAIS écrire de ligne commençant par `-**` ni coller des astérisques juste après un tiret (dans `Memories-BenchGo/Tasks.md` comme dans toute réponse affichée au chat qui pourrait être copiée dans Logseq). Le tiret de puce et le gras sont toujours séparés : puce seule pour le corps (`- texte`), dièses seuls pour les titres (`### titre`), et si du gras est nécessaire dans le corps, il commence APRÈS un espace (`- **texte**`, jamais `- **texte` collé à la puce sans espace).
    - **Réponses du chat en TEXTE NORMAL compatible Logseq (demande utilisateur 2026-09-16)** : le résumé final de session s'écrit SANS markdown de structure (pas de `##`/`###` en titres, pas de tables, pas de blocs de code). Forme attendue : un texte plat — une phrase d'introduction courte, puis une puce par fait (`- ...`) avec **gras** pour les points importants et `code` pour les chemins/fonctions/commandes, une idée par puce, la dernière puce portant les vérifications passées. Exemple : « 4 corrections pour RunCode Turbo (demandes du Tasks.md) : » suivi de puces `- **Cause** : ...`. Jamais de tiret collé à du gras (`-**`), jamais de titres `#` dans le chat.
    - **Émojis professionnels dans le chat et les rapports Logseq (demande utilisateur 2026-10-28)** : TOUTES les réponses au chat et les bilans Tâches (`Memories-BenchGo/Tasks*.md`) portent des émojis PROFESSIONNELS — jamais de guignols (pas de 😀🤡🎉). Vocabulaire réservé : `📎` = lien/fichier/référence, `🖊` ou `✍` = écriture/modification, `✅` = fait/validé, `⚠` = avertissement/piège, `📝` = rapport/documentation, `🔧` = correction technique, `🧪` = tests/vérifications, `🔎` = recherche/analyse, `📌` = consigne durable, `🎨` = visuel/CSS, `🐛` = bug, `⏱` = temps/performance, `💡` = conseil. Un émoji par puce en tête (`- ✅ T1 — ...`), jamais en rafale ni décoratif. Cette demande SURCLASSE la règle générale « pas d'emojis » : elle vient de l'utilisateur sur cet usage précis (chat + rapports Logseq uniquement — le code reste sans émojis).
+
+   - **Bilan final prêt à coller dans Logseq (demande utilisateur 2026-11-11)** : à CHAQUE fin de tâche, la réponse du chat doit se terminer par un bloc Logseq PRÊT À COLLER (l'utilisateur le copie-colle tel quel dans Logseq, ce qui lui garde une mémoire consultable). Format EXACT (mêmes règles que `Memories-BenchGo/Tasks.md`) : titre de date `## 📅 Mercredi JJ mois YYYY` (2 dièses = format initial, émoji professionnel APRÈS les dièses — jamais avant, JAMAIS d'astérisque), sous-titre de tâche `### <émoji> T<N> — <titre court>` (2 tabs + dièses + émoji professionnel selon le thème : 🐛 bug, 🔧 correction, ✍ écriture, 🧪 test, 🔎 analyse, 📎 suivi — sans tiret ni astérisque), puis une puce par fait `			- <émoji> **fait** : ...` (3 tabs + tiret + émoji professionnel en tête), la DERNIÈRE puce portant les vérifications passées. GRAS uniquement dans le CORPS des puces, `code` inline pour chemin/fonction/commande, JAMAIS de tiret collé à du gras (`-**`), JAMAIS d'astérisque avant/appelé sur un dièse, JAMAIS de puce doublée. Ce bloc est la SEULE exemption à la règle « pas de titres `##`/`###` dans le chat » ci-dessus (2026-09-16) : le reste de la réponse reste en texte plat, et le bloc est écrit APRÈS le rapport `Memories-BenchGo/Tasks.md` (contenu identique ou condensé). **Émoji sur chaque structure (précision 2026-11-11b)** : CHAQUE élément de structure porte UN émoji professionnel en tête — le titre de date (`## 📅 ...`), le sous-titre de tâche (`### <émoji> T...`), chaque puce — et la même convention s'applique aux nouveaux blocs écrits dans `Memories-BenchGo/Tasks.md` (les blocs antérieurs ne sont pas réécrits).
 
 ## Outils de diagnostic (`scripts/`)
 

@@ -435,6 +435,10 @@ function aggregateLedger(ledger) {
       // langage) : alimente les barres de la modale + l'orientation grande
       // école (tâche 2026-09-11c).
       agg.runCode.languageStats = rcBest.languageStats || [];
+      // Mode du run au carnet ('eclair' | 'turbo') : alimente la colonne
+      // Méthode du classement CLI (demande 2026-11-11). Les carnets écrits
+      // avant l'Éclair (2026-10-28) n'ont pas de champ mode → repli turbo.
+      agg.runCode.mode = rcBest.mode === 'eclair' ? 'eclair' : 'turbo';
       // Dernière école RunCode : on réutilise son pct/score pour l'affichage turbo.
       agg.runCode.pct = lastRc ? lastRc.pct : null;
       agg.runCode.score = lastRc ? lastRc.score : null;
@@ -445,10 +449,29 @@ function aggregateLedger(ledger) {
   } else {
     agg.runCode = null;
   }
+  // --- Étiquette « Méthode » (demande 2026-11-11) ---
+  // Comment le score affiché a été obtenu : 🎓 écoles classiques (Primaire,
+  // College-Lycee...), ⚡ examen RunCode (ÉCLAIR = scan spécialité accéléré,
+  // TURBO = parcours complet), 🎓+⚡ mixte. Flash exclu plus haut (non
+  // comparable — voir filtre rawEntries en tête de fonction).
+  agg.method = methodLabelForEcoles(ecoles, agg.runCode);
   // Calcul du coût via pricing.js. Pour les anciens carnets sans tokens
   // détaillés, estimateModelCost gère le fallback (promptTokens ≈ 3×completion).
   agg.cost = pricing.estimateModelCost(agg) || null;
   return agg;
+}
+
+// Étiquette compacte « Méthode » d'une entrée de classement (colonne CLI).
+// 🎓 = école traditionnelle (benchmark sandbox), ⚡ = RunCode (mode au carnet,
+// repli turbo pour les anciens carnets), 🎓+⚡ = les deux.
+function methodLabelForEcoles(ecoles, runCode) {
+  const hasRc = Boolean(runCode);
+  const hasClassic = (ecoles || []).some(e => !/^RunCode-/i.test(e.ecole || ''));
+  const mode = runCode && runCode.mode === 'eclair' ? 'ÉCLAIR' : 'TURBO';
+  if (hasClassic && hasRc) return `🎓+⚡ ${mode}`;
+  if (hasClassic) return '🎓 École';
+  if (hasRc) return `⚡ ${mode}`;
+  return '—';
 }
 
 // Meilleure tentative RunCode d'une entrée d'école brute (toutes écoles RunCode-*).
@@ -5262,6 +5285,12 @@ function printCloudLeaderboard() {
     if (b.score !== a.score) return b.score - a.score;
     return b.globalLifeScore - a.globalLifeScore;
   });
+  // Tri console : réapplique le critère --tri= (copie — l'ordre pct reste
+  // la source de vérité des exports).
+  const displayedEntries = sortConsoleEntries(visibleEntries, CONSOLE_TRI);
+  if (CONSOLE_TRI !== 'pct') {
+    console.log(`  \x1b[90mTri console : ${CONSOLE_TRI} — basculez avec --tri=pct|vitesse|temps|nom\x1b[0m`);
+  }
 
   console.log('');
   console.log('  \x1b[1;36m━━━ CLASSEMENT CLOUD FRONTIÈRE · MODÈLES API ━━━\x1b[0m');
@@ -5270,12 +5299,12 @@ function printCloudLeaderboard() {
     console.log(`  \x1b[90m${hiddenCount} modèle(s) cloud sans réponse exploitable (0 point / 0 token) masqué(s) du classement.\x1b[0m`);
   }
 
-  const headers = ['Rang', 'Modèle', 'Provider', 'École(s)', 'Vitesse', 'Pct', 'Verdict'];
-  const aligns = ['left', 'left', 'left', 'left', 'right', 'right', 'left'];
+  const headers = ['Rang', 'Modèle', 'Provider', 'École(s)', 'Méthode', 'Vitesse', 'Pct', 'Verdict'];
+  const aligns = ['left', 'left', 'left', 'left', 'left', 'right', 'right', 'left'];
   const rows = [];
   const medals = [];
-  for (let i = 0; i < visibleEntries.length; i++) {
-    const e = visibleEntries[i];
+  for (let i = 0; i < displayedEntries.length; i++) {
+    const e = displayedEntries[i];
     const verdict = getVerdict(e, i + 1);
     const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : '  ';
     const vColor = verdict.rank === 0 ? '\x1b[93m' : verdict.rank === 1 ? '\x1b[32m' : verdict.rank === 2 ? '\x1b[36m' : verdict.rank === 3 ? '\x1b[33m' : verdict.rank === 99 ? '\x1b[90m' : '\x1b[31m';
@@ -5285,11 +5314,16 @@ function printCloudLeaderboard() {
     const ecoleLabel = (e.ecoles || []).map(ec => ec.ecole).join(', ') || '\x1b[90m—\x1b[0m';
     const tpsC = e.tokensPerSecond >= 50 ? '\x1b[32m' : e.tokensPerSecond >= 25 ? '\x1b[33m' : e.tokensPerSecond > 0 ? '\x1b[31m' : '\x1b[90m';
     const vit = e.tokensPerSecond > 0 ? `${tpsC}${e.tokensPerSecond + ' t/s'}\x1b[0m` : '\x1b[90m—\x1b[0m';
+    // Colonne Méthode (demande 2026-11-11) : même convention que les sections locales.
+    const method = e.method || '—';
+    const methodC = method.startsWith('🎓+⚡') ? '\x1b[36m' : method === '⚡ ÉCLAIR' ? '\x1b[95m' : method.startsWith('⚡') ? '\x1b[35m' : method.startsWith('🎓') ? '\x1b[32m' : '\x1b[90m';
+    const methodCell = method === '—' ? '\x1b[90m—\x1b[0m' : `${methodC}${method}\x1b[0m`;
     rows.push([
       (i + 1) + '.',
       e.model,
       providerLabel,
       ecoleLabel,
+      methodCell,
       vit,
       e.pct + '%',
       `${vColor}${verdict.label}\x1b[0m`,
@@ -5719,6 +5753,38 @@ function markCloudModel(shortName) {
 // cloud (OpenRouter, OpenAI...) n'ont rien à voir avec les modèles locaux : pas
 // de quantization, latence réseau, infrastructure différente. Le rang affiché
 // est local à chaque section (1..N), pas global.
+// --- Tri console du classement (demande 2026-11-11 : --tri=) ---
+// Critères : 'pct' (défaut, ordre du classement), 'vitesse' (t/s décroissant),
+// 'temps' (durée d'inférence cumulée croissante), 'nom' (alphabétique).
+// Affecte UNIQUEMENT l'ordre affiché au terminal : le HTML/MD et le snapshot
+// des positions restent triés par pourcentage (les deltas ▲/▼ et les rangs des
+// exports en dépendent — ne jamais déplacer le tri global).
+const CONSOLE_TRI_FLAGS = ['pct', 'vitesse', 'temps', 'nom'];
+const CONSOLE_TRI = (() => {
+  const a = process.argv.find(x => x.startsWith('--tri='));
+  if (!a) return 'pct';
+  const v = a.split('=')[1];
+  return CONSOLE_TRI_FLAGS.includes(v) ? v : 'pct';
+})();
+
+function sortConsoleEntries(entries, tri) {
+  if (!tri || tri === 'pct') return entries;
+  const arr = entries.slice();
+  if (tri === 'vitesse') {
+    arr.sort((a, b) => (b.tokensPerSecond || 0) - (a.tokensPerSecond || 0));
+  } else if (tri === 'temps') {
+    arr.sort((a, b) => {
+      const av = a.elapsedMs || 0, bv = b.elapsedMs || 0;
+      if (!av) return 1;
+      if (!bv) return -1;
+      return av - bv;
+    });
+  } else if (tri === 'nom') {
+    arr.sort((a, b) => String(a.displayName || a.model || a.shortName).localeCompare(String(b.displayName || b.model || b.shortName)));
+  }
+  return arr;
+}
+
 function printLeaderboardSection(title, sectionEntries) {
   console.log('');
   if (sectionEntries.length === 0) {
@@ -5728,8 +5794,8 @@ function printLeaderboardSection(title, sectionEntries) {
   }
   console.log(`  \x1b[1;36m━━━ ${title} (${sectionEntries.length}) ━━━\x1b[0m`);
 
-  const lbHeaders = ['Rang', 'Modèle', 'Provider', 'Quant', 'Temps', 'Vitesse', 'Pct', 'Mvt', 'Verdict'];
-  const lbAligns = ['left', 'left', 'left', 'left', 'right', 'right', 'right', 'center', 'left'];
+  const lbHeaders = ['Rang', 'Modèle', 'Provider', 'Quant', 'Méthode', 'Temps', 'Vitesse', 'Pct', 'Mvt', 'Verdict'];
+  const lbAligns = ['left', 'left', 'left', 'left', 'left', 'right', 'right', 'right', 'center', 'left'];
   const lbRows = [];
   const lbMedals = [];
   for (let i = 0; i < sectionEntries.length; i++) {
@@ -5738,6 +5804,11 @@ function printLeaderboardSection(title, sectionEntries) {
     const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : '  ';
     const vColor = verdict.rank === 0 ? '\x1b[93m' : verdict.rank === 1 ? '\x1b[32m' : verdict.rank === 2 ? '\x1b[36m' : verdict.rank === 3 ? '\x1b[33m' : verdict.rank === 99 ? '\x1b[90m' : '\x1b[31m';
     const quant = e.quantization ? `\x1b[35m${e.quantization}\x1b[0m` : '\x1b[90m—\x1b[0m';
+    // Colonne Méthode (demande 2026-11-11) : avec quoi le score a été obtenu —
+    // école traditionnelle (🎓), RunCode ÉCLAIR/TURBO (⚡) ou les deux (🎓+⚡).
+    const method = e.method || '—';
+    const methodC = method.startsWith('🎓+⚡') ? '\x1b[36m' : method === '⚡ ÉCLAIR' ? '\x1b[95m' : method.startsWith('⚡') ? '\x1b[35m' : method.startsWith('🎓') ? '\x1b[32m' : '\x1b[90m';
+    const methodCell = method === '—' ? '\x1b[90m—\x1b[0m' : `${methodC}${method}\x1b[0m`;
     // Colonne Provider : label coloré par provider (openrouter, openai, ollama...)
     // pour différencier les origines au lieu de tout mélanger sous "cloud".
     const provInfo = providerDisplay(e.provider, e.isCloud);
@@ -5764,6 +5835,7 @@ function printLeaderboardSection(title, sectionEntries) {
       e.displayName || e.model,
       provCell,
       quant,
+      methodCell,
       temps,
       vit,
       e.pct + '%',
@@ -5844,8 +5916,14 @@ function generateLeaderboard() {
   // modèles locaux : infrastructure différente, pas de quantization, pas de
   // limite de RAM, latence réseau... On les départage donc en deux sections
   // distinctes dans le CLI pour ne pas mélanger des oranges et des pommes.
-  const localEntries = entries.filter(e => !e.isCloud);
-  const cloudEntries = entries.filter(e => e.isCloud);
+  // Affichage console : réapplique le critère --tri= (défaut pct). La ré-trie
+  // est une COPIE — l'ordre 'pct' des `entries` reste la source de vérité du
+  // snapshot des positions (déjà sauvegardé ci-dessus) et des exports HTML/MD.
+  const localEntries = sortConsoleEntries(entries.filter(e => !e.isCloud), CONSOLE_TRI);
+  const cloudEntries = sortConsoleEntries(entries.filter(e => e.isCloud), CONSOLE_TRI);
+  if (CONSOLE_TRI !== 'pct') {
+    console.log(`  \x1b[90mTri console : ${CONSOLE_TRI} — basculez avec --tri=pct|vitesse|temps|nom\x1b[0m`);
+  }
 
   printLeaderboardSection('🏠 MODÈLES LOCAUX · LM Studio', localEntries);
   printLeaderboardSection('☁️ MODÈLES CLOUD FRONTIÈRE · API', cloudEntries);
@@ -6797,6 +6875,7 @@ function printLeaderboardHelp() {
     { cmd: 'node leaderboard.js --serve', desc: 'Serveur interactif (boutons supprimer, modale, édition liens/quantif/nom affiché/note).' },
     { cmd: 'node leaderboard.js --serve --port=3940', desc: 'Port custom (défaut 3939).' },
     { cmd: 'node leaderboard.js --cloud', desc: 'Classement des modèles frontière cloud (API) uniquement.' },
+    { cmd: 'node leaderboard.js --tri=vitesse|temps|pct|nom', desc: 'Tri de la table console (pct par défaut). Colonnes : Méthode (⚡ ÉCLAIR / ⚡ TURBO / 🎓 École), Vitesse, Temps.' },
     { cmd: 'node leaderboard.js --lmstudio', desc: 'Rapport LM Studio : modèles testés + non testés (alias --lmstudio-status).' },
     { cmd: 'node leaderboard.js --mark-cloud=<shortName>', desc: 'Marque manuellement un carnet comme cloud frontière (migration ancien carnet).' },
     { cmd: 'node leaderboard.js --help  |  help  |  -h', desc: 'Affiche cette aide.' }
