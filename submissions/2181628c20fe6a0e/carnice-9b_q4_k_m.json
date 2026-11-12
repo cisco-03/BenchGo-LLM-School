@@ -1,0 +1,906 @@
+{
+  "schemaVersion": 1,
+  "benchgoVersion": "V3",
+  "userId": "2181628c20fe6a0e",
+  "pseudo": "FlexoDiv",
+  "submittedAt": "2026-11-04T13:08:15.640Z",
+  "integrityHash": "009416a8862642cf",
+  "carnet": {
+    "model": "carnice-9b",
+    "shortName": "carnice-9b_q4_k_m",
+    "ecoles": {
+      "RunCode-Primaire": {
+        "best": {
+          "profile": "LIGHT",
+          "ecole": "RunCode-Primaire",
+          "runCode": true,
+          "mode": "eclair",
+          "parcours": "Primaire",
+          "diplome": "CM1",
+          "specialite": "c",
+          "specialiteVerdict": "Spécialité : C — réussi 1/1 exercice(s) (100%) dans ce langage au fil des classes.",
+          "languageStats": [
+            {
+              "language": "c",
+              "passed": 1,
+              "failed": 0,
+              "total": 1,
+              "rate": 100,
+              "classes": [
+                "CM2"
+              ],
+              "avgLatencyMs": 18113
+            },
+            {
+              "language": "bash",
+              "passed": 1,
+              "failed": 0,
+              "total": 1,
+              "rate": 100,
+              "classes": [
+                "CE1"
+              ],
+              "avgLatencyMs": 33039
+            },
+            {
+              "language": "python",
+              "passed": 1,
+              "failed": 0,
+              "total": 1,
+              "rate": 100,
+              "classes": [
+                "CP"
+              ],
+              "avgLatencyMs": 29413
+            },
+            {
+              "language": "go",
+              "passed": 1,
+              "failed": 0,
+              "total": 1,
+              "rate": 100,
+              "classes": [
+                "CP"
+              ],
+              "avgLatencyMs": 46105
+            },
+            {
+              "language": "java",
+              "passed": 1,
+              "failed": 0,
+              "total": 1,
+              "rate": 100,
+              "classes": [
+                "CP"
+              ],
+              "avgLatencyMs": 30629
+            },
+            {
+              "language": "php",
+              "passed": 1,
+              "failed": 0,
+              "total": 1,
+              "rate": 100,
+              "classes": [
+                "CP"
+              ],
+              "avgLatencyMs": 24684
+            },
+            {
+              "language": "css",
+              "passed": 1,
+              "failed": 0,
+              "total": 1,
+              "rate": 100,
+              "classes": [
+                "CP"
+              ],
+              "avgLatencyMs": 14932
+            },
+            {
+              "language": "csharp",
+              "passed": 1,
+              "failed": 0,
+              "total": 1,
+              "rate": 100,
+              "classes": [
+                "CP"
+              ],
+              "avgLatencyMs": 46484
+            },
+            {
+              "language": "html",
+              "passed": 1,
+              "failed": 0,
+              "total": 1,
+              "rate": 100,
+              "classes": [
+                "CE1"
+              ],
+              "avgLatencyMs": 24016
+            },
+            {
+              "language": "kotlin",
+              "passed": 1,
+              "failed": 0,
+              "total": 1,
+              "rate": 100,
+              "classes": [
+                "CE2"
+              ],
+              "avgLatencyMs": 17220
+            },
+            {
+              "language": "swift",
+              "passed": 1,
+              "failed": 0,
+              "total": 1,
+              "rate": 100,
+              "classes": [
+                "CE1"
+              ],
+              "avgLatencyMs": 20383
+            },
+            {
+              "language": "htmx",
+              "passed": 1,
+              "failed": 0,
+              "total": 1,
+              "rate": 100,
+              "classes": [
+                "CE2"
+              ],
+              "avgLatencyMs": 46427
+            },
+            {
+              "language": "ruby",
+              "passed": 1,
+              "failed": 0,
+              "total": 1,
+              "rate": 100,
+              "classes": [
+                "CP"
+              ],
+              "avgLatencyMs": 46375
+            },
+            {
+              "language": "cpp",
+              "passed": 1,
+              "failed": 0,
+              "total": 1,
+              "rate": 100,
+              "classes": [
+                "CM1"
+              ],
+              "avgLatencyMs": 20655
+            },
+            {
+              "language": "perl",
+              "passed": 1,
+              "failed": 0,
+              "total": 1,
+              "rate": 100,
+              "classes": [
+                "CE2"
+              ],
+              "avgLatencyMs": 37666
+            },
+            {
+              "language": "rust",
+              "passed": 1,
+              "failed": 0,
+              "total": 1,
+              "rate": 100,
+              "classes": [
+                "CM2"
+              ],
+              "avgLatencyMs": 45978
+            },
+            {
+              "language": "javascript",
+              "passed": 0,
+              "failed": 1,
+              "total": 1,
+              "rate": 0,
+              "classes": [
+                "CP"
+              ],
+              "avgLatencyMs": 46675
+            },
+            {
+              "language": "typescript",
+              "passed": 0,
+              "failed": 1,
+              "total": 1,
+              "rate": 0,
+              "classes": [
+                "CE1"
+              ],
+              "avgLatencyMs": 29905
+            },
+            {
+              "language": "sql",
+              "passed": 0,
+              "failed": 1,
+              "total": 1,
+              "rate": 0,
+              "classes": [
+                "CE2"
+              ],
+              "avgLatencyMs": 48453
+            },
+            {
+              "language": "react",
+              "passed": 0,
+              "failed": 1,
+              "total": 1,
+              "rate": 0,
+              "classes": [
+                "CM1"
+              ],
+              "avgLatencyMs": 46981
+            }
+          ],
+          "declaration": {
+            "majeure": "c",
+            "mineure": "bash",
+            "niveau": "expert"
+          },
+          "disqualified": false,
+          "score": 16,
+          "max": 20,
+          "pct": 80,
+          "mandatoryPassed": 16,
+          "mandatoryTotal": 20,
+          "globalLifeScore": 0,
+          "optionalBonus": 0,
+          "helpCount": 0,
+          "retriedCount": 0,
+          "date": "2026-11-03",
+          "time": "11-09-12",
+          "reportFile": "Export-Rapports/exam_carnice_9b_1793699821990.log",
+          "selfProfile": null,
+          "tiers": [
+            {
+              "tierNum": -1,
+              "runCode": true,
+              "className": "CM2",
+              "language": "c",
+              "exerciseId": "c_cm2_01_scanf_addr",
+              "passed": true,
+              "attempts": 2
+            },
+            {
+              "tierNum": -1,
+              "runCode": true,
+              "className": "CE1",
+              "language": "bash",
+              "exerciseId": "sh_ce1_01_word_splitting",
+              "passed": true,
+              "attempts": 2
+            },
+            {
+              "tierNum": -1,
+              "runCode": true,
+              "className": "CP",
+              "language": "python",
+              "exerciseId": "py_cp_01_mutable_default",
+              "passed": true,
+              "attempts": 2
+            },
+            {
+              "tierNum": -1,
+              "runCode": true,
+              "className": "CP",
+              "language": "javascript",
+              "exerciseId": "js_cp_01_isnan_strict",
+              "passed": false,
+              "attempts": 2
+            },
+            {
+              "tierNum": -1,
+              "runCode": true,
+              "className": "CE1",
+              "language": "typescript",
+              "exerciseId": "ts_ce1_01_const_assertion",
+              "passed": false,
+              "attempts": 2
+            },
+            {
+              "tierNum": -1,
+              "runCode": true,
+              "className": "CE2",
+              "language": "sql",
+              "exerciseId": "sql_ce2_01_sargable_date",
+              "passed": false,
+              "attempts": 2
+            },
+            {
+              "tierNum": -1,
+              "runCode": true,
+              "className": "CM1",
+              "language": "react",
+              "exerciseId": "react_cm1_01_functional_updater",
+              "passed": false,
+              "attempts": 2
+            },
+            {
+              "tierNum": -1,
+              "runCode": true,
+              "className": "CP",
+              "language": "go",
+              "exerciseId": "go_cp_01_short_decl",
+              "passed": true,
+              "attempts": 2
+            },
+            {
+              "tierNum": -1,
+              "runCode": true,
+              "className": "CP",
+              "language": "java",
+              "exerciseId": "java_cp_01_string_equals",
+              "passed": true,
+              "attempts": 2
+            },
+            {
+              "tierNum": -1,
+              "runCode": true,
+              "className": "CP",
+              "language": "php",
+              "exerciseId": "php_cp_01_strict_comparison",
+              "passed": true,
+              "attempts": 2
+            },
+            {
+              "tierNum": -1,
+              "runCode": true,
+              "className": "CP",
+              "language": "css",
+              "exerciseId": "css_cp_01_hex_color",
+              "passed": true,
+              "attempts": 2
+            },
+            {
+              "tierNum": -1,
+              "runCode": true,
+              "className": "CP",
+              "language": "csharp",
+              "exerciseId": "cs_cp_01_string_interpolation",
+              "passed": true,
+              "attempts": 2
+            },
+            {
+              "tierNum": -1,
+              "runCode": true,
+              "className": "CE1",
+              "language": "html",
+              "exerciseId": "html_ce1_01_alt_attr",
+              "passed": true,
+              "attempts": 2
+            },
+            {
+              "tierNum": -1,
+              "runCode": true,
+              "className": "CE2",
+              "language": "kotlin",
+              "exerciseId": "kt_ce2_01_val_var",
+              "passed": true,
+              "attempts": 2
+            },
+            {
+              "tierNum": -1,
+              "runCode": true,
+              "className": "CE1",
+              "language": "swift",
+              "exerciseId": "swift_ce1_01_let_var",
+              "passed": true,
+              "attempts": 2
+            },
+            {
+              "tierNum": -1,
+              "runCode": true,
+              "className": "CE2",
+              "language": "htmx",
+              "exerciseId": "htmx_ce2_01_swap_strategy",
+              "passed": true,
+              "attempts": 2
+            },
+            {
+              "tierNum": -1,
+              "runCode": true,
+              "className": "CP",
+              "language": "ruby",
+              "exerciseId": "rb_cp_01_attr_accessor",
+              "passed": true,
+              "attempts": 2
+            },
+            {
+              "tierNum": -1,
+              "runCode": true,
+              "className": "CM1",
+              "language": "cpp",
+              "exerciseId": "cpp_cm1_01_cout_operator",
+              "passed": true,
+              "attempts": 2
+            },
+            {
+              "tierNum": -1,
+              "runCode": true,
+              "className": "CE2",
+              "language": "perl",
+              "exerciseId": "pl_ce2_01_use_strict",
+              "passed": true,
+              "attempts": 2
+            },
+            {
+              "tierNum": -1,
+              "runCode": true,
+              "className": "CM2",
+              "language": "rust",
+              "exerciseId": "rs_cm2_01_mut_keyword",
+              "passed": true,
+              "attempts": 2
+            }
+          ],
+          "quantization": "Q4_K_M",
+          "elapsedMs": 674133,
+          "wallMs": 674133,
+          "tokens": 8163,
+          "tokensPerSecond": 12.11,
+          "promptTokens": 0,
+          "completionTokens": 8163,
+          "timestampMs": 1793700552570,
+          "timestampIso": "2026-11-03T10:09:12.570Z"
+        },
+        "attempts": [
+          {
+            "profile": "LIGHT",
+            "ecole": "RunCode-Primaire",
+            "runCode": true,
+            "mode": "eclair",
+            "parcours": "Primaire",
+            "diplome": "CM1",
+            "specialite": "c",
+            "specialiteVerdict": "Spécialité : C — réussi 1/1 exercice(s) (100%) dans ce langage au fil des classes.",
+            "languageStats": [
+              {
+                "language": "c",
+                "passed": 1,
+                "failed": 0,
+                "total": 1,
+                "rate": 100,
+                "classes": [
+                  "CM2"
+                ],
+                "avgLatencyMs": 18113
+              },
+              {
+                "language": "bash",
+                "passed": 1,
+                "failed": 0,
+                "total": 1,
+                "rate": 100,
+                "classes": [
+                  "CE1"
+                ],
+                "avgLatencyMs": 33039
+              },
+              {
+                "language": "python",
+                "passed": 1,
+                "failed": 0,
+                "total": 1,
+                "rate": 100,
+                "classes": [
+                  "CP"
+                ],
+                "avgLatencyMs": 29413
+              },
+              {
+                "language": "go",
+                "passed": 1,
+                "failed": 0,
+                "total": 1,
+                "rate": 100,
+                "classes": [
+                  "CP"
+                ],
+                "avgLatencyMs": 46105
+              },
+              {
+                "language": "java",
+                "passed": 1,
+                "failed": 0,
+                "total": 1,
+                "rate": 100,
+                "classes": [
+                  "CP"
+                ],
+                "avgLatencyMs": 30629
+              },
+              {
+                "language": "php",
+                "passed": 1,
+                "failed": 0,
+                "total": 1,
+                "rate": 100,
+                "classes": [
+                  "CP"
+                ],
+                "avgLatencyMs": 24684
+              },
+              {
+                "language": "css",
+                "passed": 1,
+                "failed": 0,
+                "total": 1,
+                "rate": 100,
+                "classes": [
+                  "CP"
+                ],
+                "avgLatencyMs": 14932
+              },
+              {
+                "language": "csharp",
+                "passed": 1,
+                "failed": 0,
+                "total": 1,
+                "rate": 100,
+                "classes": [
+                  "CP"
+                ],
+                "avgLatencyMs": 46484
+              },
+              {
+                "language": "html",
+                "passed": 1,
+                "failed": 0,
+                "total": 1,
+                "rate": 100,
+                "classes": [
+                  "CE1"
+                ],
+                "avgLatencyMs": 24016
+              },
+              {
+                "language": "kotlin",
+                "passed": 1,
+                "failed": 0,
+                "total": 1,
+                "rate": 100,
+                "classes": [
+                  "CE2"
+                ],
+                "avgLatencyMs": 17220
+              },
+              {
+                "language": "swift",
+                "passed": 1,
+                "failed": 0,
+                "total": 1,
+                "rate": 100,
+                "classes": [
+                  "CE1"
+                ],
+                "avgLatencyMs": 20383
+              },
+              {
+                "language": "htmx",
+                "passed": 1,
+                "failed": 0,
+                "total": 1,
+                "rate": 100,
+                "classes": [
+                  "CE2"
+                ],
+                "avgLatencyMs": 46427
+              },
+              {
+                "language": "ruby",
+                "passed": 1,
+                "failed": 0,
+                "total": 1,
+                "rate": 100,
+                "classes": [
+                  "CP"
+                ],
+                "avgLatencyMs": 46375
+              },
+              {
+                "language": "cpp",
+                "passed": 1,
+                "failed": 0,
+                "total": 1,
+                "rate": 100,
+                "classes": [
+                  "CM1"
+                ],
+                "avgLatencyMs": 20655
+              },
+              {
+                "language": "perl",
+                "passed": 1,
+                "failed": 0,
+                "total": 1,
+                "rate": 100,
+                "classes": [
+                  "CE2"
+                ],
+                "avgLatencyMs": 37666
+              },
+              {
+                "language": "rust",
+                "passed": 1,
+                "failed": 0,
+                "total": 1,
+                "rate": 100,
+                "classes": [
+                  "CM2"
+                ],
+                "avgLatencyMs": 45978
+              },
+              {
+                "language": "javascript",
+                "passed": 0,
+                "failed": 1,
+                "total": 1,
+                "rate": 0,
+                "classes": [
+                  "CP"
+                ],
+                "avgLatencyMs": 46675
+              },
+              {
+                "language": "typescript",
+                "passed": 0,
+                "failed": 1,
+                "total": 1,
+                "rate": 0,
+                "classes": [
+                  "CE1"
+                ],
+                "avgLatencyMs": 29905
+              },
+              {
+                "language": "sql",
+                "passed": 0,
+                "failed": 1,
+                "total": 1,
+                "rate": 0,
+                "classes": [
+                  "CE2"
+                ],
+                "avgLatencyMs": 48453
+              },
+              {
+                "language": "react",
+                "passed": 0,
+                "failed": 1,
+                "total": 1,
+                "rate": 0,
+                "classes": [
+                  "CM1"
+                ],
+                "avgLatencyMs": 46981
+              }
+            ],
+            "declaration": {
+              "majeure": "c",
+              "mineure": "bash",
+              "niveau": "expert"
+            },
+            "disqualified": false,
+            "score": 16,
+            "max": 20,
+            "pct": 80,
+            "mandatoryPassed": 16,
+            "mandatoryTotal": 20,
+            "globalLifeScore": 0,
+            "optionalBonus": 0,
+            "helpCount": 0,
+            "retriedCount": 0,
+            "date": "2026-11-03",
+            "time": "11-09-12",
+            "reportFile": "Export-Rapports/exam_carnice_9b_1793699821990.log",
+            "selfProfile": null,
+            "tiers": [
+              {
+                "tierNum": -1,
+                "runCode": true,
+                "className": "CM2",
+                "language": "c",
+                "exerciseId": "c_cm2_01_scanf_addr",
+                "passed": true,
+                "attempts": 2
+              },
+              {
+                "tierNum": -1,
+                "runCode": true,
+                "className": "CE1",
+                "language": "bash",
+                "exerciseId": "sh_ce1_01_word_splitting",
+                "passed": true,
+                "attempts": 2
+              },
+              {
+                "tierNum": -1,
+                "runCode": true,
+                "className": "CP",
+                "language": "python",
+                "exerciseId": "py_cp_01_mutable_default",
+                "passed": true,
+                "attempts": 2
+              },
+              {
+                "tierNum": -1,
+                "runCode": true,
+                "className": "CP",
+                "language": "javascript",
+                "exerciseId": "js_cp_01_isnan_strict",
+                "passed": false,
+                "attempts": 2
+              },
+              {
+                "tierNum": -1,
+                "runCode": true,
+                "className": "CE1",
+                "language": "typescript",
+                "exerciseId": "ts_ce1_01_const_assertion",
+                "passed": false,
+                "attempts": 2
+              },
+              {
+                "tierNum": -1,
+                "runCode": true,
+                "className": "CE2",
+                "language": "sql",
+                "exerciseId": "sql_ce2_01_sargable_date",
+                "passed": false,
+                "attempts": 2
+              },
+              {
+                "tierNum": -1,
+                "runCode": true,
+                "className": "CM1",
+                "language": "react",
+                "exerciseId": "react_cm1_01_functional_updater",
+                "passed": false,
+                "attempts": 2
+              },
+              {
+                "tierNum": -1,
+                "runCode": true,
+                "className": "CP",
+                "language": "go",
+                "exerciseId": "go_cp_01_short_decl",
+                "passed": true,
+                "attempts": 2
+              },
+              {
+                "tierNum": -1,
+                "runCode": true,
+                "className": "CP",
+                "language": "java",
+                "exerciseId": "java_cp_01_string_equals",
+                "passed": true,
+                "attempts": 2
+              },
+              {
+                "tierNum": -1,
+                "runCode": true,
+                "className": "CP",
+                "language": "php",
+                "exerciseId": "php_cp_01_strict_comparison",
+                "passed": true,
+                "attempts": 2
+              },
+              {
+                "tierNum": -1,
+                "runCode": true,
+                "className": "CP",
+                "language": "css",
+                "exerciseId": "css_cp_01_hex_color",
+                "passed": true,
+                "attempts": 2
+              },
+              {
+                "tierNum": -1,
+                "runCode": true,
+                "className": "CP",
+                "language": "csharp",
+                "exerciseId": "cs_cp_01_string_interpolation",
+                "passed": true,
+                "attempts": 2
+              },
+              {
+                "tierNum": -1,
+                "runCode": true,
+                "className": "CE1",
+                "language": "html",
+                "exerciseId": "html_ce1_01_alt_attr",
+                "passed": true,
+                "attempts": 2
+              },
+              {
+                "tierNum": -1,
+                "runCode": true,
+                "className": "CE2",
+                "language": "kotlin",
+                "exerciseId": "kt_ce2_01_val_var",
+                "passed": true,
+                "attempts": 2
+              },
+              {
+                "tierNum": -1,
+                "runCode": true,
+                "className": "CE1",
+                "language": "swift",
+                "exerciseId": "swift_ce1_01_let_var",
+                "passed": true,
+                "attempts": 2
+              },
+              {
+                "tierNum": -1,
+                "runCode": true,
+                "className": "CE2",
+                "language": "htmx",
+                "exerciseId": "htmx_ce2_01_swap_strategy",
+                "passed": true,
+                "attempts": 2
+              },
+              {
+                "tierNum": -1,
+                "runCode": true,
+                "className": "CP",
+                "language": "ruby",
+                "exerciseId": "rb_cp_01_attr_accessor",
+                "passed": true,
+                "attempts": 2
+              },
+              {
+                "tierNum": -1,
+                "runCode": true,
+                "className": "CM1",
+                "language": "cpp",
+                "exerciseId": "cpp_cm1_01_cout_operator",
+                "passed": true,
+                "attempts": 2
+              },
+              {
+                "tierNum": -1,
+                "runCode": true,
+                "className": "CE2",
+                "language": "perl",
+                "exerciseId": "pl_ce2_01_use_strict",
+                "passed": true,
+                "attempts": 2
+              },
+              {
+                "tierNum": -1,
+                "runCode": true,
+                "className": "CM2",
+                "language": "rust",
+                "exerciseId": "rs_cm2_01_mut_keyword",
+                "passed": true,
+                "attempts": 2
+              }
+            ],
+            "quantization": "Q4_K_M",
+            "elapsedMs": 674133,
+            "wallMs": 674133,
+            "tokens": 8163,
+            "tokensPerSecond": 12.11,
+            "promptTokens": 0,
+            "completionTokens": 8163,
+            "timestampMs": 1793700552570,
+            "timestampIso": "2026-11-03T10:09:12.570Z"
+          }
+        ]
+      }
+    },
+    "lastUpdated": "2026-11-03T10:09:12.572Z",
+    "provider": "lmstudio",
+    "isCloud": false,
+    "quantization": "Q4_K_M"
+  }
+}

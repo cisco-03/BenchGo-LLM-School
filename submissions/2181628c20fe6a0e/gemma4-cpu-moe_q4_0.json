@@ -3,8 +3,8 @@
   "benchgoVersion": "V3",
   "userId": "2181628c20fe6a0e",
   "pseudo": "FlexoDiv",
-  "submittedAt": "2026-11-03T02:18:33.350Z",
-  "integrityHash": "89298f18c482bd60",
+  "submittedAt": "2026-11-04T13:27:00.443Z",
+  "integrityHash": "93844d41943ac0ee",
   "carnet": {
     "model": "gemma4-cpu-moe@q4_0",
     "shortName": "gemma4-cpu-moe_q4_0",
@@ -13130,9 +13130,14 @@
         ]
       }
     },
-    "lastUpdated": "2026-10-21T03:00:14.749Z",
+    "lastUpdated": "2026-11-04T13:13:06.245Z",
     "provider": "lmstudio",
     "isCloud": false,
-    "quantization": "Q4_0"
+    "quantization": "Q4_0",
+    "paramSize": 26,
+    "note": "La référence gemma4-cpu-moe@q4_0 correspond au déploiement en inférence locale (généralement via llama.cpp ou des runtimes compatibles) du modèle Gemma 4 26B-A4B de Google DeepMind dans sa version Mixture-of-Experts (MoE) compressée en format Q4_0 (Quantization-Aware Training).\n\nCaractéristiques clés de ce modèle\n\n• Architecture MoE : Le modèle possède 26 milliards de paramètres au total, mais n'active que 4 milliards de paramètres par token (A4B pour Active 4 Billion) lors de la génération. Cela offre les performances d'un grand modèle tout en conservant une vitesse d'exécution élevée.\n• Format Q4_0 / QAT : Issu d'un entraînement conscient de la quantification (Quantization-Aware Training), ce format 4-bit réduit drastiquement l'empreinte mémoire.\n• Exigence mémoire : L'inférence du modèle 26B-A4B en Q4_0 requiert environ 14,4 Go de mémoire (VRAM ou RAM partagée), ce qui le rend accessible sur des configurations matérielles grand public (GPU avec 16 Go de VRAM, puces Apple Silicon ou exécution hybride CPU/GPU).\n• Mise en garde sur la qualité : Selon les analyses techniques de la communauté (comme Unsloth Documentation) et le Gemma 4 Quantization Guide, une conversion trop naïve de l'architecture MoE en Q4_0 standard peut altérer légèrement la précision par rapport à des méthodes mixtes (type UD-Q4_K_XL ou INT8 recommandé par Google pour certaines charges de production)",
+    "originManual": "local",
+    "modelUrl": "https://huggingface.co/arunprasath/gemma4-cpu-moe-gguf",
+    "displayName": "gemma4-cpu-moe@q4_0"
   }
 }
