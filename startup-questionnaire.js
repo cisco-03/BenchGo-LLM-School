@@ -37,6 +37,35 @@ const C_RESET = '\x1b[0m';
 const LOCAL_PROVIDERS = ['lmstudio', 'ollama', 'custom'];
 const CLOUD_PROVIDERS_ORDERED = ['openrouter', 'openai', 'anthropic', 'groq', 'together', 'mistral'];
 
+// Catalogue des fournisseurs du PROFESSEUR CORRECTEUR (étape 7, demande
+// utilisateur 2026-11-15 : « une petite liste interactive où l'on choisit chez
+// qui on veut aller pour le professeur »). Le professeur n'est plus limité à
+// OpenRouter : le même menu couvre le cloud (clé API), les serveurs locaux
+// (aucune clé) et l'option « aucun » (auto-analyse classique).
+// - `defaultModel` : modèle proposé par Entrée pour tout provider non-openrouter
+//   (teacher-client.js EXIGE un modèle pour un provider != openrouter — il
+//   désactive le professeur sinon). Pour lmstudio/ollama/custom, le modèle est
+//   spécifique à la MACHINE (liste numérotée des modèles installés), donc
+//   defaultModel = null : saisie libre + exemple.
+// - `local: true` → pas de clé API demandée.
+// - `none: true` → option « aucun professeur » (auto-analyse classique).
+// Partagé avec runner.js (prompt professeur du chemin CLI direct).
+const TEACHER_PROVIDERS_MENU = [
+  { value: 'openrouter', local: false, none: false, defaultModel: '',                          example: '',                                detail: 'OpenRouter (Free Router :free, rotation auto) — défaut' },
+  { value: 'groq',       local: false, none: false, defaultModel: 'llama-3.3-70b-versatile',  example: 'llama-3.3-70b-versatile',         detail: 'Groq (très rapide, clé gratuite)' },
+  { value: 'openai',     local: false, none: false, defaultModel: 'gpt-4o-mini',              example: 'gpt-4o-mini',                     detail: 'OpenAI (GPT)' },
+  { value: 'anthropic',  local: false, none: false, defaultModel: 'claude-sonnet-4-5',        example: 'claude-sonnet-4-5',               detail: 'Anthropic (Claude)' },
+  { value: 'together',   local: false, none: false, defaultModel: 'meta-llama/Llama-3.3-70B-Instruct-Turbo', example: 'meta-llama/Llama-3.3-70B-Instruct-Turbo', detail: 'Together AI (OpenAI-compat)' },
+  { value: 'mistral',    local: false, none: false, defaultModel: 'mistral-large-latest',     example: 'mistral-large-latest',            detail: 'Mistral AI (La Plateforme)' },
+  { value: 'deepseek',   local: false, none: false, defaultModel: 'deepseek-chat',            example: 'deepseek-chat',                   detail: 'DeepSeek (OpenAI-compat)' },
+  { value: 'cohere',     local: false, none: false, defaultModel: 'command-r-plus',           example: 'command-r-plus',                  detail: 'Cohere (Command R+)' },
+  { value: 'kilo',       local: false, none: false, defaultModel: 'kilo-auto/free',           example: 'kilo-auto/free',                  detail: 'Kilo Gateway (modèles :free, alternative OpenRouter)' },
+  { value: 'ollama',     local: true,  none: false, defaultModel: '',                         example: 'llama3.3:8b',                     detail: 'Ollama local (sans clé, port 11434)' },
+  { value: 'lmstudio',   local: true,  none: false, defaultModel: '',                         example: 'nom du modèle chargé',            detail: 'LM Studio local (sans clé, port 1234)' },
+  { value: 'custom',     local: true,  none: false, defaultModel: '',                         example: 'gpt-4o-mini',                     detail: 'serveur OpenAI-compat personnalisé (--teacher-endpoint)' },
+  { value: 'aucun',      local: false, none: true,  defaultModel: '',                         example: '',                                detail: 'Auto-analyse classique (pas de professeur)' }
+];
+
 function _askYesNo(question, defaultNo = true) {
   if (!process.stdin.isTTY || !process.stdout.isTTY) {
     logger.warn(`Session non-interactive : réponse non assumée.`);
@@ -345,6 +374,189 @@ function _envKeyForProvider(providerName) {
   // Alias usuels
   if (providerName === 'openrouter') return ['OPENROUTER_API_KEY', 'OPENROUTER_KEY'];
   return [];
+}
+
+/**
+ * Affiche le catalogue numéroté des fournisseurs du professeur (partagé par
+ * l'étape 7 du questionnaire ET les menus compacts des batchers).
+ */
+function _printTeacherMenu() {
+  console.log('  \x1b[90mChez qui le professeur correcteur tourne-t-il ?\x1b[0m');
+  const localIdx = TEACHER_PROVIDERS_MENU.findIndex(p => p.local);
+  const noneIdx  = TEACHER_PROVIDERS_MENU.findIndex(p => p.none);
+  TEACHER_PROVIDERS_MENU.forEach((p, i) => {
+    if (i === 0)        console.log('  \x1b[90m── Cloud (clé API requise) ──\x1b[0m');
+    if (i === localIdx) console.log('  \x1b[90m── Locaux (sans clé) ──\x1b[0m');
+    if (i === noneIdx)  console.log('  \x1b[90m── Sans professeur ──\x1b[0m');
+    const modelHint = p.defaultModel ? ` · défaut : ${p.defaultModel}` : '';
+    console.log(`    \x1b[1m${i + 1}.\x1b[0m ${p.value.padEnd(10)} — ${p.detail}${modelHint}`);
+  });
+}
+
+/**
+ * Menu COMPACT du professeur, réutilisable par les batchers (night-batch,
+ * frontier-batch) dont le runner enfant est lancé avec --force : sans flags
+ * transmis, il garderait openrouter sans jamais proposer la liste (demande
+ * utilisateur 2026-11-15 : « tous les modes CLI »).
+ * N'affiche NI clé NI endpoint : les runners enfants les résolvent depuis
+ * .api-keys.json (restoreIntoSession) et --teacher-endpoint. L'appelant
+ * traduit le choix en --teacher-provider= / --teacher-model=.
+ * Retourne { provider, model } — provider null = « aucun professeur »
+ * (auto-analyse classique), model null = Free Router (openrouter).
+ */
+async function askTeacherSelection() {
+  _printTeacherMenu();
+  const choices = TEACHER_PROVIDERS_MENU.map(p => ({ value: p.value }));
+  const provider = await _askNumberedChoice('  Choix du fournisseur (numéro ou nom, Entrée = 1) :', choices, 0);
+  if (provider === 'aucun') {
+    console.log('  \x1b[90mProfesseur : auto-analyse classique.\x1b[0m');
+    return { provider: null, model: null };
+  }
+  if (provider === 'openrouter') {
+    console.log('  \x1b[90mProfesseur openrouter : Free Router (rotation des modèles :free).\x1b[0m');
+    return { provider, model: null };
+  }
+  const spec = TEACHER_PROVIDERS_MENU.find(p => p.value === provider) || null;
+  const defaultModel = spec && spec.defaultModel ? spec.defaultModel : null;
+  const example = spec && spec.example ? spec.example : 'nom du modèle';
+  const raw = await _askFreeText(`  Modèle du professeur (ex: ${example}${defaultModel ? `, Entrée = ${defaultModel}` : ''}) :`, { allowEmpty: true });
+  const model = raw || defaultModel;
+  if (!model) {
+    console.log('  \x1b[33mAucun modèle fourni — le professeur repliera sur l\'auto-analyse.\x1b[0m');
+    return { provider, model: null };
+  }
+  console.log(`  \x1b[90mProfesseur ${provider} (${model}).\x1b[0m`);
+  return { provider, model };
+}
+
+/**
+ * Étape 7b : modèle du professeur correcteur.
+ * Pour tout provider non-openrouter, teacher-client.js EXIGE un modèle précis
+ * (sans --teacher-model le professeur se désactive à l'appel et replie sur
+ * l'auto-analyse). La question est donc posée ici :
+ * - serveurs locaux (ollama/lmstudio) : liste numérotée des modèles RÉELLEMENT
+ *   installés (le professeur doit être PLUS capable que l'élève — le menu le
+ *   rappelle) ; serveur injoignable → repli sur saisie libre ;
+ * - cloud : saisie libre avec Entrée = modèle par défaut du catalogue.
+ * Renvoie le nom du modèle, ou null (professeur à désactiver).
+ */
+async function _askTeacherModel(provider, spec) {
+  if (provider === 'ollama' || provider === 'lmstudio') {
+    try {
+      const models = provider === 'lmstudio'
+        ? await fetchAllModelsFromLMStudio()
+        : await _fetchOllamaModels();
+      if (models && models.length > 0) {
+        console.log(`  \x1b[32m${models.length} modèle(s) ${provider === 'lmstudio' ? 'LM Studio' : 'Ollama'} installé(s) :\x1b[0m`);
+        models.forEach((m, i) => {
+          const badges = [];
+          if (m.state === 'loaded') badges.push('chargé');
+          if (m.quantization) badges.push(m.quantization);
+          if (m.publisher)    badges.push(m.publisher);
+          const suffix = badges.length > 0 ? ` \x1b[90m(${badges.join(' · ')})\x1b[0m` : '';
+          console.log(`    \x1b[1m${i + 1}.\x1b[0m ${m.name}${suffix}`);
+        });
+        console.log('  \x1b[90mLe professeur doit être PLUS capable que l\'élève — prenez le modèle le plus fort.\x1b[0m');
+        const picked = await _askNumberedChoice('  Modèle du professeur (numéro ou nom, Entrée = 1) :', models.map(m => ({ value: m.name })), 0);
+        return picked || null;
+      }
+      console.log(`  \x1b[33mAucun modèle ${provider === 'lmstudio' ? 'LM Studio' : 'Ollama'} détecté — saisie libre.\x1b[0m`);
+    } catch (e) { /* serveur local injoignable : repli sur saisie libre */ }
+  }
+  const defaultModel = spec && spec.defaultModel ? spec.defaultModel : '';
+  const example = spec && spec.example ? spec.example : 'nom du modèle';
+  const raw = await _askFreeText(`  Modèle du professeur (ex: ${example}${defaultModel ? `, Entrée = ${defaultModel}` : ''}) :`, { allowEmpty: true });
+  if (raw) return raw;
+  if (defaultModel) {
+    console.log(`  \x1b[90mModèle du professeur par défaut : ${defaultModel}\x1b[0m`);
+    return defaultModel;
+  }
+  return null;
+}
+
+/**
+ * Étape 7 : configuration interactive du professeur correcteur.
+ * Menu numéroté de fournisseurs (cloud + locaux + « aucun ») — l'utilisateur
+ * choisit CHEZ QUI tourne le correcteur IA (OpenRouter Free Router n'est plus
+ * la seule option, demande utilisateur 2026-11-15). Priorités : CLI
+ * (--teacher-provider / --teacher-model / --teacher-api-key) > interactif.
+ * Retourne { enabled, provider, model, apiKey, endpoint } (enabled=false =
+ * auto-analyse classique).
+ */
+async function _configureTeacher(cliArgs) {
+  // --- Fournisseur ---
+  let provider = 'openrouter';
+  if (cliArgs.teacherProvider) {
+    const cliProv = String(cliArgs.teacherProvider).toLowerCase();
+    if (TEACHER_PROVIDERS_MENU.some(p => p.value === cliProv)) {
+      provider = cliProv;
+      console.log(`  \x1b[90mFournisseur passé en CLI : ${provider}.\x1b[0m`);
+    } else {
+      console.log(`  \x1b[33mFournisseur professeur « ${cliProv} » inconnu — repli sur openrouter (Free Router).\x1b[0m`);
+    }
+  } else {
+    _printTeacherMenu();
+    const choices = TEACHER_PROVIDERS_MENU.map(p => ({ value: p.value }));
+    provider = await _askNumberedChoice('  Choix du fournisseur (numéro ou nom, Entrée = 1) :', choices, 0);
+    if (provider === 'aucun') {
+      console.log('  \x1b[90mProfesseur : auto-analyse classique.\x1b[0m');
+      return { enabled: false };
+    }
+  }
+  const spec = TEACHER_PROVIDERS_MENU.find(p => p.value === provider) || null;
+  const isLocal = Boolean(spec && spec.local);
+  console.log(`  \x1b[1;35m→ Professeur : ${provider}${isLocal ? ' (local)' : ' (cloud)'}\x1b[0m`);
+
+  const teacherConfig = { enabled: true, provider, apiKey: null };
+
+  // --- Clé API (cloud uniquement) ---
+  if (!isLocal) {
+    let teacherApiKey = null;
+    if (cliArgs.teacherApiKey) {
+      teacherApiKey = cliArgs.teacherApiKey;
+      secrets.rememberSecret(provider, teacherApiKey);
+      console.log(`  \x1b[90mClé ${provider} (professeur) passée en CLI : ${secrets.maskedForDisplay(teacherApiKey)}\x1b[0m`);
+    } else {
+      teacherApiKey = await _ensureApiKey(provider, { label: `${provider} (professeur)`, revealMs: 3000 });
+    }
+    if (!teacherApiKey) {
+      console.log(`  \x1b[33mProfesseur désactivé (clé ${provider} manquante) — auto-analyse classique.\x1b[0m`);
+      return { enabled: false };
+    }
+    teacherConfig.apiKey = teacherApiKey;
+  }
+
+  // --- Endpoint (custom uniquement : serveur à désigner explicitement) ---
+  if (cliArgs.teacherEndpoint) {
+    teacherConfig.endpoint = cliArgs.teacherEndpoint;
+  } else if (provider === 'custom') {
+    const ep = await _askFreeText('  Endpoint du serveur OpenAI-compat (ex: http://localhost:8000/v1/chat/completions) :', { allowEmpty: true });
+    if (!ep) {
+      console.log('  \x1b[33mProfesseur désactivé (endpoint custom manquant) — auto-analyse classique.\x1b[0m');
+      return { enabled: false };
+    }
+    teacherConfig.endpoint = ep;
+  }
+
+  // --- Modèle ---
+  // openrouter : rien à demander (Free Router choisit un modèle :free, défaut
+  // 'openrouter/free'). Tous les autres : le modèle est REQUIS (cf.
+  // _askTeacherModel) — sans lui le professeur se désactiverait à l'appel.
+  let teacherModel = cliArgs.teacherModel || null;
+  if (provider === 'openrouter') {
+    if (teacherModel) console.log(`  \x1b[90mModèle professeur passé en CLI : ${teacherModel} (sinon Free Router).\x1b[0m`);
+  } else if (teacherModel) {
+    console.log(`  \x1b[90mModèle professeur passé en CLI : ${teacherModel}.\x1b[0m`);
+  } else {
+    teacherModel = await _askTeacherModel(provider, spec);
+  }
+  if (!teacherModel) {
+    console.log(`  \x1b[33mModèle du professeur requis pour ${provider} — professeur désactivé, auto-analyse classique.\x1b[0m`);
+    return { enabled: false };
+  }
+  teacherConfig.model = teacherModel;
+  console.log(`  \x1b[35mProfesseur : ${provider}${teacherModel ? ` (${teacherModel})` : ''} activé.\x1b[0m`);
+  return teacherConfig;
 }
 
 /**
@@ -706,25 +918,14 @@ async function runStartupQuestionnaire(cliArgs, opts = {}) {
   // --- 7. Professeur IA ---
   _printSection('7. Professeur correcteur (IA externe)');
   console.log("  \x1b[90mAprès chaque échec définitif, un professeur IA indépendant relit l'auto-analyse de l'élève\x1b[0m");
-  console.log("  \x1b[90met démontre la vraie cause racine. (A) OpenRouter Free Router — (B) Auto-analyse classique.\x1b[0m");
+  console.log("  \x1b[90met démontre la vraie cause racine. Menu interactif : choisissez CHEZ QUI il tourne.\x1b[0m");
 
-  const teacherConfig = { enabled: false };
-  // --no-teacher force B sans demander.
+  // --no-teacher force l'auto-analyse classique sans demander.
+  const teacherConfig = cliArgs.teacherDisabled
+    ? { enabled: false }
+    : await _configureTeacher(cliArgs);
   if (cliArgs.teacherDisabled) {
     console.log('  \x1b[90mProfesseur : auto-analyse classique (--no-teacher).\x1b[0m');
-  } else {
-    const wantsOpenRouter = await _askYesNo('  Activer le professeur OpenRouter (Free Router) ?', true);
-    if (wantsOpenRouter) {
-      const teacherApiKey = await _ensureApiKey('openrouter', { label: 'OpenRouter (professeur)', revealMs: 3000 });
-      teacherConfig.enabled = Boolean(teacherApiKey);
-      teacherConfig.apiKey = teacherApiKey || null;
-      teacherConfig.provider = 'openrouter';
-      if (cliArgs.teacherModel)    teacherConfig.model    = cliArgs.teacherModel;
-      if (cliArgs.teacherEndpoint) teacherConfig.endpoint = cliArgs.teacherEndpoint;
-      console.log(`  \x1b[35mProfesseur OpenRouter ${teacherConfig.enabled ? 'activé' : 'désactivé (clé manquante)'}.\x1b[0m`);
-    } else {
-      console.log('  \x1b[90mProfesseur : auto-analyse classique.\x1b[0m');
-    }
   }
   console.log('');
 
@@ -831,7 +1032,10 @@ async function runStartupQuestionnaire(cliArgs, opts = {}) {
   } else {
     console.log(`  Mode RunCode  : ${eclairMode ? '\x1b[1;35m⚡ ÉCLAIR (scan spécialité)\x1b[0m' : 'Turbo (parcours complet)'}`);
   }
-  console.log(`  Professeur    : ${teacherConfig.enabled ? 'OpenRouter (Free Router)' : 'auto-analyse classique'}`);
+  const profLabel = teacherConfig.enabled
+    ? `${teacherConfig.provider || 'openrouter'}${teacherConfig.model && teacherConfig.provider !== 'openrouter' ? ` (${teacherConfig.model})` : ' (Free Router)'}`
+    : 'auto-analyse classique';
+  console.log(`  Professeur    : ${profLabel}`);
   console.log('');
 
   return {
@@ -857,5 +1061,7 @@ module.exports = {
   runStartupQuestionnaire,
   _parseMultiSelection,
   LOCAL_PROVIDERS,
-  CLOUD_PROVIDERS_ORDERED
+  CLOUD_PROVIDERS_ORDERED,
+  TEACHER_PROVIDERS_MENU,
+  askTeacherSelection
 };

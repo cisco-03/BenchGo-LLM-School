@@ -44,7 +44,7 @@ const { runCapabilityCheck } = require('./capability-check');
 const leaderboard = require('./leaderboard');
 const secrets = require('./secrets');
 const cliTable = require('./cli-table');
-const { runStartupQuestionnaire } = require('./startup-questionnaire');
+const { runStartupQuestionnaire, TEACHER_PROVIDERS_MENU } = require('./startup-questionnaire');
 const { buildExternalTeacherReport } = require('./report-teacher');
 const carnetProf = require('./carnet-professeur');
 const presets = require('./presets');
@@ -284,6 +284,30 @@ async function askFreeText(question) {
     rl.question(`${question} `, answer => {
       rl.close();
       resolve((answer || '').trim());
+    });
+  });
+}
+
+// Question à choix numéroté (même mécanique que _askNumberedChoice du
+// questionnaire) : lit un NUMÉRO (Entrée = défaut) ou le nom exact en repli.
+// Toute autre saisie tombe sur le défaut (une typo ne sélectionne rien de
+// surprenant). Non-TTY → défaut (le batch ne doit jamais bloquer).
+async function askNumberedChoice(question, entries, defaultIndex = 0) {
+  if (!process.stdin.isTTY || !process.stdout.isTTY) {
+    return entries[defaultIndex] ? entries[defaultIndex].value : undefined;
+  }
+  return new Promise(resolve => {
+    const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+    rl.question(`${question} `, answer => {
+      rl.close();
+      const v = (answer || '').trim().toLowerCase();
+      if (!v) return resolve(entries[defaultIndex].value);
+      const n = parseInt(v, 10);
+      if (Number.isInteger(n) && n >= 1 && n <= entries.length) {
+        return resolve(entries[n - 1].value);
+      }
+      const found = entries.find(e => String(e.value).toLowerCase() === v);
+      resolve(found ? found.value : entries[defaultIndex].value);
     });
   });
 }
@@ -1434,7 +1458,7 @@ async function main() {
       teacherConfigResolved = { ...TEACHER_CONFIG, enabled: false };
       console.log(`  \x1b[90mProfesseur : auto-analyse classique (preset).\x1b[0m`);
     } else {
-      const teacherKey = secrets.getSecret('openrouter') || secrets.getSecret('teacher-openrouter');
+      const teacherKey = secrets.getSecret(p.teacherProvider || 'openrouter') || secrets.getSecret('openrouter') || secrets.getSecret('teacher-openrouter');
       teacherConfigResolved = { ...TEACHER_CONFIG, enabled: Boolean(teacherKey), apiKey: teacherKey || null };
       if (p.teacherModel)    teacherConfigResolved.model    = p.teacherModel;
       if (p.teacherProvider) teacherConfigResolved.provider = p.teacherProvider;
@@ -1477,9 +1501,10 @@ async function main() {
       if (p.teacherEnabled === false) {
         teacherConfigResolved = { ...TEACHER_CONFIG, enabled: false };
       } else {
-        const teacherKey = secrets.getSecret('openrouter') || secrets.getSecret('teacher-openrouter');
+        const teacherKey = secrets.getSecret(p.teacherProvider || 'openrouter') || secrets.getSecret('openrouter') || secrets.getSecret('teacher-openrouter');
         teacherConfigResolved = { ...TEACHER_CONFIG, enabled: Boolean(teacherKey), apiKey: teacherKey || null };
         if (p.teacherModel)    teacherConfigResolved.model    = p.teacherModel;
+        if (p.teacherProvider) teacherConfigResolved.provider = p.teacherProvider;
         if (p.teacherEndpoint) teacherConfigResolved.endpoint = p.teacherEndpoint;
       }
       console.log(`  \x1b[1;32m→ Preset '${chosenPreset}' chargé.\x1b[0m`);
@@ -1578,8 +1603,14 @@ async function main() {
       const localProviders = ['ollama', 'lmstudio', 'custom'];
       let isLocalTeacher = localProviders.includes(tProvider);
 
+      // Valeurs saisies interactivement (pas de --teacher-model / --teacher-endpoint CLI).
+      let interactiveTeacherModel = null;
+      let interactiveTeacherEndpoint = null;
+
       // Si le provider n'est pas imposé par --teacher-provider, on demande
-      // interactivement lequel utiliser (openrouter, openai, ollama, etc.).
+      // interactivement lequel utiliser — menu NUMÉROTÉ du catalogue
+      // TEACHER_PROVIDERS_MENU (demande utilisateur 2026-11-15 : « choisir chez
+      // qui on veut aller pour le professeur ») + option « aucun ».
       // Même si une clé est déjà mémorisée, l'utilisateur peut vouloir changer.
       //
       // IMPORTANT (mode batch / nuit) : night-batch.js lance runner.js avec
@@ -1594,13 +1625,34 @@ async function main() {
       if (!teacherProvider && !forceFlag && process.stdin.isTTY && process.stdout.isTTY) {
         console.log(`\n  \x1b[36m━━ PROFESSEUR CORRECTEUR ━━\x1b[0m`);
         console.log(`  \x1b[90mAprès chaque échec définitif, l'élève s'auto-analyse. Un professeur IA indépendant peut relire cette analyse et démontrer la vraie cause racine.\x1b[0m`);
-        console.log(`  \x1b[90mProviders disponibles :${'\x1b[0m'}`);
-        console.log(`  \x1b[90m  Locaux (sans clé)  : ollama, lmstudio, custom${'\x1b[0m'}`);
-        console.log(`  \x1b[90m  Cloud (clé requise) : openrouter, openai, anthropic, groq, together, mistral, deepseek, cohere${'\x1b[0m'}`);
-        const provInput = await askFreeText(`  Provider du professeur (défaut: ${tProvider}) :`);
-        if (provInput && provInput.trim()) {
-          tProvider = provInput.trim().toLowerCase();
-          isLocalTeacher = localProviders.includes(tProvider);
+        console.log(`  \x1b[90mChez qui le professeur correcteur tourne-t-il ?\x1b[0m`);
+        const localIdx = TEACHER_PROVIDERS_MENU.findIndex(p => p.local);
+        const noneIdx  = TEACHER_PROVIDERS_MENU.findIndex(p => p.none);
+        TEACHER_PROVIDERS_MENU.forEach((p, i) => {
+          if (i === 0)        console.log(`  \x1b[90m── Cloud (clé API requise) ──${'\x1b[0m'}`);
+          if (i === localIdx) console.log(`  \x1b[90m── Locaux (sans clé) ──${'\x1b[0m'}`);
+          if (i === noneIdx)  console.log(`  \x1b[90m── Sans professeur ──${'\x1b[0m'}`);
+          console.log(`    \x1b[1m${i + 1}.\x1b[0m ${p.value.padEnd(10)} — ${p.detail}`);
+        });
+        const teacherChoice = await askNumberedChoice(`  Choix du fournisseur (numéro ou nom, Entrée = défaut) :`, TEACHER_PROVIDERS_MENU.map(p => ({ value: p.value })), 1);
+        if (teacherChoice === 'aucun') {
+          console.log(`  \x1b[90mProfesseur : auto-analyse classique.${'\x1b[0m'}`);
+          return base;
+        }
+        tProvider = teacherChoice;
+        isLocalTeacher = localProviders.includes(tProvider);
+      }
+
+      // Modèle du professeur : REQUIS pour tout provider non-openrouter (sinon
+      // le professeur se désactive à l'appel, repli auto-analyse silencieux).
+      // Couvre les DEUX chemins interactifs : menu ci-dessus (--teacher-provider
+      // absent) ET provider imposé par la CLI sans --teacher-model.
+      if (tProvider !== 'openrouter' && !teacherModel && !interactiveTeacherModel
+          && !forceFlag && process.stdin.isTTY && process.stdout.isTTY) {
+        const spec = TEACHER_PROVIDERS_MENU.find(p => p.value === tProvider) || null;
+        interactiveTeacherModel = await askFreeText(`  Modèle du professeur (ex: ${spec && spec.example ? spec.example : 'nom du modèle'}) :`);
+        if (tProvider === 'custom' && !teacherEndpoint && !interactiveTeacherEndpoint) {
+          interactiveTeacherEndpoint = await askFreeText('  Endpoint du serveur OpenAI-compat (ex: http://localhost:8000/v1/chat/completions) :');
         }
       }
 
@@ -1611,14 +1663,16 @@ async function main() {
       const storedKey = secrets.getSecret(tProvider);
       if (isLocalTeacher || teacherApiKey || envKey || storedKey) {
         const resolved = { ...TEACHER_CONFIG, enabled: true, provider: tProvider };
-        if (teacherModel)    resolved.model    = teacherModel;
+        const effModel = teacherModel || interactiveTeacherModel;
+        const effEndpoint = teacherEndpoint || interactiveTeacherEndpoint;
+        if (effModel)          resolved.model    = effModel;
         if (teacherApiKey)      resolved.apiKey   = teacherApiKey;
         else if (envKey)        resolved.apiKey   = envKey;
         else if (storedKey)     resolved.apiKey   = storedKey;
         else if (isLocalTeacher) resolved.apiKey  = null; // pas de clé pour les providers locaux
-        if (teacherEndpoint) resolved.endpoint = teacherEndpoint;
+        if (effEndpoint) resolved.endpoint = effEndpoint;
         if (resolved.apiKey) secrets.rememberSecret(tProvider, resolved.apiKey, true);
-        const provLabel = isLocalTeacher ? `${tProvider} (local, sans clé)` : `${tProvider} (Free Router)`;
+        const provLabel = isLocalTeacher ? `${tProvider} (local, sans clé)` : `${tProvider}${tProvider === 'openrouter' ? ' (Free Router)' : ''}`;
         console.log(`  \x1b[35mProfesseur : ${provLabel} activé.\x1b[0m`);
         return resolved;
       }
@@ -1644,8 +1698,10 @@ async function main() {
       if (isLocalTeacher) {
         console.log(`  \x1b[35mProfesseur : ${tProvider} (local) activé — aucune clé requise.${'\x1b[0m'}`);
         const resolved = { ...TEACHER_CONFIG, enabled: true, provider: tProvider, apiKey: null };
-        if (teacherModel)    resolved.model    = teacherModel;
-        if (teacherEndpoint) resolved.endpoint = teacherEndpoint;
+        const effModel = teacherModel || interactiveTeacherModel;
+        const effEndpoint = teacherEndpoint || interactiveTeacherEndpoint;
+        if (effModel)      resolved.model    = effModel;
+        if (effEndpoint)   resolved.endpoint = effEndpoint;
         return resolved;
       }
       // Saisie masquée + aperçu temporaire (repli sur askFreeText si non-TTY).
@@ -1662,8 +1718,10 @@ async function main() {
       secrets.rememberSecret(tProvider, key);
       console.log(`  \x1b[35mProfesseur : ${tProvider} activé — clé mémorisée :${'\x1b[0m'} ${secrets.maskedForDisplay(key)}`);
       const resolved = { ...TEACHER_CONFIG, enabled: true, provider: tProvider, apiKey: key };
-      if (teacherModel)    resolved.model    = teacherModel;
-      if (teacherEndpoint) resolved.endpoint = teacherEndpoint;
+      const effModel = teacherModel || interactiveTeacherModel;
+      const effEndpoint = teacherEndpoint || interactiveTeacherEndpoint;
+      if (effModel)      resolved.model    = effModel;
+      if (effEndpoint)   resolved.endpoint = effEndpoint;
       return resolved;
     })();
     teacherConfigResolved = (teacherConfig && teacherConfig.then) ? await teacherConfig : teacherConfig;
@@ -1711,7 +1769,8 @@ async function main() {
     };
     _autoSaveKey(resolvedProvider, resolvedApiKey, 'API élève');
     if (teacherConfigResolved && teacherConfigResolved.enabled && teacherConfigResolved.apiKey) {
-      _autoSaveKey('openrouter', teacherConfigResolved.apiKey, 'API professeur');
+      // Sous le VRAI provider du professeur (groq, anthropic..., pas seulement openrouter).
+      _autoSaveKey(teacherConfigResolved.provider || 'openrouter', teacherConfigResolved.apiKey, 'API professeur');
     }
   }
 

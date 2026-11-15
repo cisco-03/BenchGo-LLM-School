@@ -52,7 +52,7 @@ const HELP_TEXT = `
   \x1b[1m--quantization=\x1b[0m<N>      Force la quantification (Q4_K_M, Q5_K_S...).
   \x1b[1m--force\x1b[0m                Mode batch : neutralise les askYesNo (re-test, pénalité).
   \x1b[1m--no-teacher\x1b[0m           Désactive le professeur IA (auto-analyse classique).
-  \x1b[1m--teacher-provider=\x1b[0m<N>  Provider du professeur (openrouter, openai, groq, ollama, lmstudio...).
+  \x1b[1m--teacher-provider=\x1b[0m<N>  Provider du professeur (menu interactif sinon) : openrouter, groq, openai, anthropic, together, mistral, deepseek, cohere, kilo, ollama, lmstudio, custom.
   \x1b[1m--teacher-model=\x1b[0m<N>     Override du modèle professeur (requis si provider != openrouter).
   \x1b[1m--teacher-api-key=\x1b[0m<N>    Clé API du professeur (OpenRouter par défaut, sinon le provider choisi).
   \x1b[1m--teacher-endpoint=\x1b[0m<N>   Endpoint custom du professeur (pour custom/ollama/lmstudio).

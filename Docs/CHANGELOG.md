@@ -1,5 +1,33 @@
 # CHANGELOG - Carnet de Notes BenchGo
 
+## 2026-11-15 — feat(professeur) : menu interactif multi-provider dans TOUS les modes CLI
+
+### Contexte & besoin
+Demande utilisateur : à l'étape 7 du questionnaire, le CLI ne proposait qu'un OUI/NON « Activer le professeur OpenRouter (Free Router) ? » — « pourquoi tu ne proposes pas d'autres solutions comme Ollama ou d'autres ? Tu devrais faire une petite liste interactive où l'on choisit chez qui on veut aller pour le professeur ». Bénéfice demandé étendu : ce choix doit exister dans TOUS les modes (pas que RunCode Turbo).
+
+### Cause racine
+Deux niveaux : (1) `startup-questionnaire.js` étape 7 était codée en dur sur `_askYesNo('Activer le professeur OpenRouter')` — aucun choix de provider. (2) Les batchers (`night-batch.js`, `frontier-batch.js`) lancent le runner enfant avec `--force` : le prompt professeur du runner est court-circuité → sans flags CLI explicites, le professeur tombait TOUJOURS sur openrouter sans jamais proposer autre chose (frontier-batch ne parsait même pas `--teacher-provider=`).
+
+### Corrections
+- **Catalogue unique `TEACHER_PROVIDERS_MENU`** (`startup-questionnaire.js`, exporté) : 13 entrées — cloud avec clé (openrouter, groq, openai, anthropic, together, mistral, deepseek, cohere, kilo), locaux sans clé (ollama, lmstudio, custom) et option `aucun` (auto-analyse classique). Chaque entrée porte `local`/`none`, un `defaultModel` (cloud ; ex: `llama-3.3-70b-versatile` pour groq, `gpt-4o-mini` pour openai, `kilo-auto/free` pour kilo) et un `example` (locaux : nom de modèle spécifique à la machine).
+- **Étape 7 réécrite** (`_configureTeacher` + `_askTeacherModel`) : menu numéroté → clé API via `_ensureApiKey(provider)` (mémorisée sous le VRAI nom du provider) → modèle demandé pour tout provider non-openrouter (REQUIS par `teacher-client.js` : liste numérotée des modèles réellement installés pour ollama/lmstudio — `fetchAllModelsFromLMStudio` / `_fetchOllamaModels` — avec le rappel « le professeur doit être PLUS capable que l'élève », suggestions pour le cloud) → endpoint demandé pour `custom`. Sans modèle/endpoint → professeur désactivé proprement (jamais l'échec silencieux à l'appel). Priorité CLI > interactif (`--teacher-provider/-model/-api-key/-endpoint` court-circuitent les questions). Récapitulatif affiche provider + modèle.
+- **Runner chemin CLI direct** : le prompt « Provider du professeur : » (saisie libre) devient le MÊME menu numéroté (import `TEACHER_PROVIDERS_MENU`) + `askNumberedChoice` (helper, même mécanique que `_askNumberedChoice` du questionnaire) + question du modèle pour tout provider non-openrouter (couvre aussi `--teacher-provider=groq` sans `--teacher-model`) + endpoint pour custom. Choix `aucun` → auto-analyse sans rien demander.
+- **Menu compact réutilisable `askTeacherSelection()`** (export du questionnaire) : ni clé ni endpoint (les runners enfants les retrouvent via `.api-keys.json` restauré en session) → branché dans `night-batch.js` (invite au démarrage du batch, traduite en `--teacher-provider=`/`--teacher-model=` dans `extraRunnerArgs` — donc transmise à la grande école ET au tremplin RunCode ; avertissement si la clé du provider choisi n'est pas mémorisée) et dans `frontier-batch.js` (invite au démarrage + parsing des 4 flags `--teacher-*` qui n'existaient PAS — `runModel` les transmet au runner enfant ; avertissements clé manquante / endpoint custom).
+- **Cohérence des clés mémorisées** : `_autoSaveKey` du runner sauvegarde la clé professeur sous `teacherConfigResolved.provider` (plus seulement `openrouter`) ; les 2 sites de restauration de preset cherchent d'abord `secrets.getSecret(p.teacherProvider || 'openrouter')` ; la branche preset-questionnaire réappliquait `teacherProvider` manquante (le provider du preset était perdu).
+- **Aide CLI** (`cli-help.js`, headers `night-batch`/`frontier-batch`, `printFrontierHelp`) : `--teacher-provider` documenté avec la liste complète + « menu interactif sinon ».
+- **Récapitulatif `frontier-batch`** : la ligne « Professeur » affiche le provider choisi (plus un binaire actif/désactivé).
+
+### Fichiers touchés
+`startup-questionnaire.js`, `runner.js`, `night-batch.js`, `frontier-batch.js`, `cli-help.js`, `tests/test-teacher-menu.js` (nouveau), ce CHANGELOG, `AGENTS.md`, `Memories-BenchGo/Tasks.md`.
+
+### Pièges
+- `askTeacherSelection()` est le SEUL point d'entrée pour les batchers : ne PAS recopier le catalogue dans night-batch/frontier-batch (un seul catalogue à maintenir, cf. `TEACHER_PROVIDERS_MENU`). Le cycle night-batch ⇄ startup-questionnaire est sûr (guard `require.main === module` + `require` lazy dans les batchers).
+- Pour tout provider non-openrouter, `teacher-client.js` exige un modèle (sinon le professeur se désactive à l'appel, log `Teacher: --teacher-model requis`) : ne pas réutiliser `TEACHER_CONFIG.model` (`openrouter/free`) pour un autre provider.
+- Les batchers ne demandent JAMAIS de clé professeur (le prompt `promptApiKey` de frontier-batch sort en `process.exit(1)` sur clé vide obligatoire — létal pour le batch). Ils vérifient `api-keys-store` et AFFICHENT l'avertissement ; le runner enfant fait le repli gracieux sur auto-analyse.
+- En mode nuit/non-TTY (`--yes`, pipes) : AUCUN prompt professeur (comportement historique = openrouter si clé mémorisée). Le menu n'apparaît qu'en TTY réel, jamais sur les one-shots (`--list-only`, `--isoler`, `--skip`, `--incompatible-list`) ; night-batch le saute aussi quand `--models=` + `--schools=` sont fournis (run scripté).
+- kilo comme professeur : la clé reste REQUISE côté routing (`askTeacherToCorrectStudentAnalysis` désactive tout non-local sans clé)
+- Ne pas toucher aux écoles `RunCode-*` du carnet : le menu professeur n'a aucun rapport avec le scoring.
+
 ## 2026-11-11b — feat(classement CLI : colonne Méthode + --tri) et garde-fou slug professeur
 
 ### Contexte & besoin

@@ -2609,6 +2609,7 @@ async function main() {
       { cmd: 'node night-batch.js --isoler=!4', desc: 'Isole le modèle n° 4 (marque NON APPLICABLE + exclut des batchs). Numéro = position dans --list-only.' },
       { cmd: 'node night-batch.js --isoler=!!6', desc: 'Désisole le modèle n° 6 (retire de la liste noire). Rétablit le statut réel.' },
       { cmd: 'node night-batch.js --no-teacher', desc: 'Désactive le professeur IA (correcteur externe).' },
+      { cmd: 'node night-batch.js --teacher-provider=groq --teacher-model=llama-3.3-70b-versatile', desc: 'Choisit le fournisseur du professeur (menu interactif sinon) — transmis à chaque run (grande école + tremplin).' },
       { cmd: 'node night-batch.js --force-detect', desc: 'Réindexe les GGUF orphelins (modèles sur disque absents de lms ls) puis liste.' },
       { cmd: 'node night-batch.js --class-by-class', desc: 'Mode classe-par-classe : chaque tier dans un process séparé avec timeout (robustesse anti-hang).' },
       { cmd: 'node night-batch.js --class-by-class --tiers=0', desc: 'Filtre rapide : ne teste que le 1er exercice (tier 0) de chaque école. Virer les modèles qui échouent.' },
@@ -2643,7 +2644,7 @@ async function main() {
   console.log(`${C.bold}${C.cyan}   File d'attente automatique de modeles LM Studio   ${C.reset}`);
   console.log(`${C.bold}${C.cyan}==================================================${C.reset}\n`);
 
-  const { modelsArg, schoolsArg, tiersArg, listOnly, incompatibleList, hybridFlag, forceDetect, isolateArg, classByClass: cbcFromCli, skipFlag, resumeFlag, extraRunnerArgs, tremplinFull, tpsMinArg } = parseArgs();
+  const { modelsArg, schoolsArg, tiersArg, listOnly, incompatibleList, hybridFlag, forceDetect, isolateArg, classByClass: cbcFromCli, skipFlag, resumeFlag, extraRunnerArgs, tremplinFull, tpsMinArg, noTeacher, teacherProviderArg, teacherModelArg } = parseArgs();
   // Seuil du filtre anti-plomb : --tps-min=<n> (0 = désactivé), sinon défaut 5.
   const _tpsParsed = parseFloat(tpsMinArg);
   const tpsMin = tpsMinArg
@@ -2693,6 +2694,41 @@ async function main() {
   if (incompatibleList) {
     archWarning.printIncompatibleList();
     process.exit(0);
+  }
+
+  // --- Professeur correcteur : menu interactif (demande utilisateur 2026-11-15) ---
+  // Tous les modes CLI doivent permettre de choisir CHEZ QUI tourne le
+  // professeur. Le runner enfant est lancé avec --force : sans flags transmis,
+  // il garderait openrouter sans jamais proposer la liste. Le choix est traduit
+  // en --teacher-provider= / --teacher-model= dans extraRunnerArgs (transmis à
+  // la grande école ET au tremplin RunCode, qui reçoivent les mêmes args).
+  // Aucun prompt : non-TTY, actions one-shot, script complet (--models+
+  // --schools+) ou flags prof déjà présents (comportement historique).
+  if (process.stdin.isTTY && process.stdout.isTTY
+      && !listOnly && !incompatibleList && !isolateArg && !skipFlag
+      && !noTeacher && !teacherProviderArg && !teacherModelArg
+      && !(modelsArg && schoolsArg)) {
+    try {
+      const sq = require('./startup-questionnaire');
+      const tSel = await sq.askTeacherSelection();
+      if (tSel.provider) {
+        extraRunnerArgs.push(`--teacher-provider=${tSel.provider}`);
+        if (tSel.model) extraRunnerArgs.push(`--teacher-model=${tSel.model}`);
+        if (tSel.provider !== 'openrouter') {
+          const store = require('./api-keys-store');
+          const hasKey = Boolean(store.getKey && store.getKey(tSel.provider));
+          if (!hasKey) {
+            console.log(`  ${C.yellow}⚠ Clé ${tSel.provider} non mémorisée : le professeur repliera sur l'auto-analyse.${C.reset}`);
+            console.log(`  ${C.gray}Mémorisez-la une fois (elle est sauvegardée automatiquement au 1er run) : node runner.js --provider=${tSel.provider} --model=<id>${C.reset}`);
+          }
+        }
+      } else {
+        extraRunnerArgs.push('--no-teacher');
+      }
+      console.log('');
+    } catch (e) {
+      console.log(`  ${C.gray}Menu professeur indisponible (${e.message}) — défaut openrouter conservé.${C.reset}`);
+    }
   }
 
   let serverHandle = { startedByUs: false };

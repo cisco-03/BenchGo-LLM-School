@@ -568,6 +568,35 @@ Si modèle > 3B paramètres, le runner peut enchaîner LIGHT puis STANDARD dans 
 - La clé est mémorisée dans `secrets` sous le nom du provider (`secrets.rememberSecret(tProvider, key)`), pas sous 'openrouter'.
 - `teacherProvider` est sauvegardé dans les presets (`--save-preset`).
 
+### Menu interactif du professeur — tous modes CLI (tâche 2026-11-15)
+
+**Fichiers touchés :** `startup-questionnaire.js`, `runner.js`, `night-batch.js`, `frontier-batch.js`, `cli-help.js`, `tests/test-teacher-menu.js` (nouveau), `Docs/CHANGELOG.md`, `AGENTS.md`.
+
+**Principe :** Demande utilisateur : à l'étape 7, seulement « Activer le professeur OpenRouter (Free Router) ? o/N » — « pourquoi ne proposes-tu pas d'autres solutions comme Ollama ? une petite liste interactive où l'on choisit chez qui on veut aller pour le professeur », étendue à TOUS les modes CLI. Le catalogue unique `TEACHER_PROVIDERS_MENU` (13 entrées : 9 cloud + 3 locaux + `aucun`) est proposé en menu numéroté partout : questionnaire étape 7 (grande école, FLASH, RunCode Turbo/ÉCLAIR, file d'élèves), runner CLI direct, night-batch (invite traduite en flags pour la grande école ET le tremplin), frontier-batch (flags `--teacher-*` qui n'existaient pas + invite).
+
+**Fonctions :**
+- `TEACHER_PROVIDERS_MENU` (+ `_printTeacherMenu()`, exportés de `startup-questionnaire.js`) → catalogue partagé : `{ value, local, none, defaultModel, example, detail }`. Cloud : `defaultModel` rempli (`groq → llama-3.3-70b-versatile`, `openai → gpt-4o-mini`, `anthropic → claude-sonnet-4-5`, `kilo → kilo-auto/free`...) ; locaux : `defaultModel: ''` + `example` (nom de modèle spécifique à la machine).
+- `askTeacherSelection()` (questionnaire, exportée) → menu COMPACT des batchers : `{ provider, model }` ; provider null = aucun, model null = Free Router. Ni clé ni endpoint (les runners enfants les résolvent depuis `.api-keys.json` / `--teacher-endpoint`).
+- `_configureTeacher(cliArgs)` + `_askTeacherModel(provider, spec)` (questionnaire, internes) → étape 7 complète : menu → clé via `_ensureApiKey(provider)` → modèle (liste numérotée des modèles réellement installés pour ollama/lmstudio, suggestions cloud sinon) → endpoint pour custom. Sans modèle/endpoint → `{ enabled: false }` propre.
+- `askNumberedChoice(question, entries, defaultIndex)` (runner.js) → même mécanique que `_askNumberedChoice` du questionnaire, pour le prompt professeur du chemin CLI direct (+ question modèle/endpoint dans le même bloc).
+- `frontier-batch.js` `parseCliArgs` → expose `teacherProvider/teacherModel/teacherApiKey/teacherEndpoint` ; `runModel(..., teacherArgs)` → pousse les flags vers le runner enfant.
+
+**Pour modifier :**
+1. **Ajouter un fournisseur au menu** : éditer UNIQUEMENT `TEACHER_PROVIDERS_MENU` (questionnaire) — les 4 modes le consomment (questionnaire, runner, night-batch, frontier-batch). Vérifier qu'il existe dans `CLOUD_PROVIDERS` (`cloud-client.js`) pour le routing.
+2. **Changer un modèle par défaut** : éditer `defaultModel` de l'entrée (cloud) — le prompt l'utilise comme valeur d'Entrée.
+3. **Désactiver le prompt night-batch** : retirer le bloc `askTeacherSelection()` dans `main()` (après les one-shots `--skip`/`--incompatible-list`) — les flags CLI `--teacher-*` restent fonctionnels.
+4. **Désactiver le prompt frontier-batch** : idem dans `main()` (après `promptApiKey`) — les flags CLI restent fonctionnels.
+5. **Revenir à l'ancien OUI/NON OpenRouter** : rétablir `_askYesNo('Activer le professeur OpenRouter...')` dans l'étape 7 — non recommandé (la demande utilisateur visait le multi-provider).
+6. **Tester** : `node tests/run-tests.js` (6 cas `test-teacher-menu.js`), `node --check` sur les 5 modules, session interactive `node runner.js` (étape 7 = menu numéroté).
+
+**Pièges :**
+- **Un seul catalogue** : ne JAMAIS dupliquer la liste dans night-batch/frontier-batch — les deux font `require('./startup-questionnaire')` lazy (cycle night-batch ⇄ questionnaire sans risque : `require.main === module` dans night-batch).
+- Les batchers ne demandent JAMAIS une clé professeur (`promptApiKey` de frontier-batch sort en `process.exit(1)` sur clé vide obligatoire — létal en batch) : ils affichent un avertissement si `api-keys-store` n'a pas la clé du provider choisi ; le runner enfant replie gracieusement sur l'auto-analyse.
+- Le prompt n'apparaît QU'en TTY réel, jamais en mode nuit (`--yes`, pipes) ni sur les one-shots (`--list-only`, `--isoler`, `--skip`, `--incompatible-list`) ; night-batch le saute aussi si `--models=` + `--schools=` sont fournis (run scripté) et si `--teacher-provider=`/`--teacher-model=` sont déjà passés.
+- Tout provider non-openrouter exige un modèle (`teacher-client.js` logg `Teacher: --teacher-model requis` sinon) : ne jamais injecter `openrouter/free` sous un autre provider.
+- La clé professeur est mémorisée/restaurée sous le VRAI provider (`teacherConfigResolved.provider`) : `_autoSaveKey` du runner + les 2 sites de restauration de preset (cherche d'abord `teacherProvider`) — la branche preset-questionnaire réappliquait un `provider` manquant (perds le preset).
+- Le choix `aucun` pousse `--no-teacher` chez les batchers (l'élève ne voit AUCUN prompt en `--force`).
+
 ### Sauvegarde auto des carnets + restauration (tâche 2026-08-21)
 
 **Fichiers touchés :** `score-ledger.js`, `config.js`, `runner.js`, `cli-help.js`, `Docs/CHANGELOG.md`, `AGENTS.md`.

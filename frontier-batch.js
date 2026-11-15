@@ -23,6 +23,7 @@
 //   node frontier-batch.js --models=m1,m2,m3        # modeles sans saisie
 //   node frontier-batch.js --provider=openrouter --models=m1,m2
 //   node frontier-batch.js --no-teacher             # desactive le professeur IA
+//   node frontier-batch.js --teacher-provider=groq --teacher-model=llama-3.3-70b-versatile  # professeur via Groq (menu interactif sinon)
 //   node frontier-batch.js --profile=STANDARD        # test niveau Collège/Lycée (petits modèles)
 //   node frontier-batch.js --profile=LIGHT            # test niveau Primaire (très petits modèles)
 
@@ -132,9 +133,21 @@ function nowDate() {
 // Parse les arguments CLI : --provider=, --models=, --no-teacher, --api-key=,
 // --profile= (niveau d'école : LIGHT, STANDARD, EXPERT, DOCTORAT, FRONTIER, AUTO),
 // --yes (mode non-interactif : jamais demander, garder les modèles non résolus).
+// Professeur correcteur : --teacher-provider= / --teacher-model= /
+// --teacher-api-key= / --teacher-endpoint= (choix 2026-11-15 : le professeur
+// n'est plus limité à OpenRouter — menu interactif sinon).
 function parseCliArgs() {
   const args = process.argv.slice(2);
-  const opts = { provider: null, models: null, noTeacher: false, apiKey: null, endpoint: null, profile: null, yes: false };
+  const opts = { provider: null, models: null, noTeacher: false, apiKey: null, endpoint: null, profile: null, yes: false,
+                 teacherProvider: null, teacherModel: null, teacherApiKey: null, teacherEndpoint: null };
+  const flagVal = (prefix) => {
+    const f = args.find(a => a.startsWith(prefix));
+    return f ? f.slice(prefix.length) : null;
+  };
+  opts.teacherProvider = flagVal('--teacher-provider=')?.trim().toLowerCase() || null;
+  opts.teacherModel = flagVal('--teacher-model=') || null;
+  opts.teacherApiKey = flagVal('--teacher-api-key=') || null;
+  opts.teacherEndpoint = flagVal('--teacher-endpoint=') || null;
   for (const a of args) {
     if (a.startsWith('--provider=')) opts.provider = a.slice('--provider='.length);
     else if (a.startsWith('--models=')) opts.models = a.slice('--models='.length);
@@ -166,6 +179,7 @@ function printFrontierHelp() {
     { cmd: 'node frontier-batch.js --profile=AUTO', desc: 'Profil individuel selon la taille de CHAQUE modèle (listes mélangées).' },
     { cmd: 'node frontier-batch.js --yes', desc: 'Mode non-interactif : aucun prompt (garder les slugs non résolus, batch de nuit).' },
     { cmd: 'node frontier-batch.js --no-teacher', desc: 'Désactive le professeur IA (correcteur externe).' },
+    { cmd: 'node frontier-batch.js --teacher-provider=groq --teacher-model=llama-3.3-70b-versatile', desc: 'Choisit le fournisseur du professeur (menu interactif sinon) — groq, openai, anthropic, together, mistral, deepseek, cohere, kilo, ollama, lmstudio, custom.' },
     { cmd: 'node frontier-batch.js --api-key=sk-...', desc: 'Clé API fournie (sinon .api-keys.json ou saisie).' },
     { cmd: 'node frontier-batch.js --provider=ollama --endpoint=https://...', desc: 'Endpoint custom (ollama/lmstudio/custom).' },
     { cmd: 'node frontier-batch.js --help  |  help  |  -h', desc: 'Affiche cette aide.' }
@@ -553,7 +567,9 @@ function selectProfileInteractive(cliProfile, models) {
 
 // Execute le runner pour un modele cloud frontiere.
 // Renvoie { ok, exitCode, durationMs }.
-function runModel(provider, model, apiKey, noTeacher, endpoint, profile) {
+// teacherArgs (optionnel) : --teacher-provider= / --teacher-model= /
+// --teacher-api-key= / --teacher-endpoint= / --no-teacher transmis tels quels.
+function runModel(provider, model, apiKey, noTeacher, endpoint, profile, teacherArgs) {
   const args = [
     RUNNER, 'all',
     '--force',
@@ -564,6 +580,9 @@ function runModel(provider, model, apiKey, noTeacher, endpoint, profile) {
   if (apiKey) args.push('--api-key=' + apiKey);
   if (endpoint) args.push('--endpoint=' + endpoint);
   if (noTeacher) args.push('--no-teacher');
+  if (Array.isArray(teacherArgs)) {
+    for (const a of teacherArgs) args.push(a);
+  }
 
   console.log(`\n  ${C.bold}${C.magenta}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${C.reset}`);
   console.log(`  ${C.bold}${C.magenta}  TEST FRONTIERE : ${model}${C.reset}`);
@@ -618,6 +637,46 @@ async function main() {
   const apiKey = await promptApiKey(provider, opts.apiKey);
   const models = await selectModelsInteractive(opts.models);
   const profile = await selectProfileInteractive(opts.profile, models);
+
+  // --- Professeur correcteur : menu interactif (demande utilisateur 2026-11-15) ---
+  // Tous les modes CLI doivent permettre de choisir CHEZ QUI tourne le
+  // professeur. Le runner enfant est lancé avec --force : sans flags transmis,
+  // il garderait openrouter sans jamais proposer la liste. --yes / non-TTY /
+  // flags prof déjà présents / --no-teacher → aucun prompt (mode nuit).
+  const teacherArgs = [];
+  if (!opts.noTeacher && !opts.teacherProvider && !opts.yes
+      && process.stdin.isTTY && process.stdout.isTTY) {
+    try {
+      const sq = require('./startup-questionnaire');
+      const tSel = await sq.askTeacherSelection();
+      if (tSel.provider) {
+        teacherArgs.push(`--teacher-provider=${tSel.provider}`);
+        if (tSel.model) teacherArgs.push(`--teacher-model=${tSel.model}`);
+        if (tSel.provider !== 'openrouter') {
+          if (!getStoredApiKey(tSel.provider)) {
+            console.log(`  ${C.yellow}⚠ Clé ${tSel.provider} non mémorisée : le professeur repliera sur l'auto-analyse.${C.reset}`);
+            console.log(`  ${C.gray}Mémorisez-la une fois via le runner (elle est sauvegardée au 1er run), ou passez --teacher-api-key=...${C.reset}`);
+          }
+          if (tSel.provider === 'custom' && !opts.teacherEndpoint) {
+            console.log(`  ${C.yellow}⚠ Professeur custom : passez --teacher-endpoint=<URL> sinon l'appel échouera.${C.reset}`);
+          }
+        }
+        console.log(`  ${C.green}Professeur ${tSel.provider}${tSel.model ? ` (${tSel.model})` : ' (Free Router)'} activé pour toute la file.${C.reset}`);
+      } else {
+        teacherArgs.push('--no-teacher');
+      }
+      console.log('');
+    } catch (e) {
+      console.log(`  ${C.gray}Menu professeur indisponible (${e.message}) — défaut openrouter conservé.${C.reset}`);
+    }
+  }
+  if (opts.teacherProvider) {
+    teacherArgs.push(`--teacher-provider=${opts.teacherProvider}`);
+    if (opts.teacherModel) teacherArgs.push(`--teacher-model=${opts.teacherModel}`);
+    if (opts.teacherApiKey) teacherArgs.push(`--teacher-api-key=${opts.teacherApiKey}`);
+    if (opts.teacherEndpoint) teacherArgs.push(`--teacher-endpoint=${opts.teacherEndpoint}`);
+    console.log(`  ${C.gray}Professeur fixé par CLI : ${opts.teacherProvider}${opts.teacherModel ? ` (${opts.teacherModel})` : ''}${C.reset}`);
+  }
 
   // Garde-fou endpoint vs clé (tâche 2026-09-29) : une clé mémorisée pour
   // ollama/lmstudio SANS endpoint explicite retombe sur localhost — en mode
@@ -783,7 +842,9 @@ async function main() {
     console.log(`    ${C.gray}${i + 1}.${C.reset} ${m}${profTag}`);
   });
   console.log(`  ${C.bold}Profil    :${C.reset} ${profileLabel}`);
-  console.log(`  ${C.bold}Professeur:${C.reset} ${opts.noTeacher ? 'desactive' : 'active'}`);
+  const profLabel = opts.noTeacher ? 'desactive'
+    : (teacherArgs.find(a => a.startsWith('--teacher-provider=')) || '--teacher-provider=openrouter').split('=').slice(1).join('=');
+  console.log(`  ${C.bold}Professeur:${C.reset} ${profLabel}`);
   console.log(`  ${C.bold}Heure     :${C.reset} ${nowClock()}\n`);
 
   console.log(`  ${C.gray}Lancement dans 3 secondes (Ctrl+C pour annuler)...${C.reset}`);
@@ -799,7 +860,7 @@ async function main() {
     if (isAutoProfile) {
       console.log(`  ${C.gray}Profil AUTO pour ${model} : ${runProfile}${C.reset}`);
     }
-    const res = runModel(provider, model, apiKey, opts.noTeacher, endpoint, runProfile);
+    const res = runModel(provider, model, apiKey, opts.noTeacher, endpoint, runProfile, teacherArgs);
     results.push({ model, ...res });
     console.log(`  ${C.gray}Heure de fin : ${nowClock()} — duree : ${fmtDuration(res.durationMs)}${C.reset}`);
     if (!res.ok) {
