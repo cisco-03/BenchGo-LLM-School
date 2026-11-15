@@ -2,7 +2,7 @@ const logger = require('./logger');
 const { TEACHER_CONFIG } = require('./config');
 const { BenchgoError } = require('./cli-help');
 const { withRetry, isRetryableError } = require('./http-middleware');
-const { CLOUD_PROVIDERS } = require('./cloud-client');
+const { CLOUD_PROVIDERS, assertSecretSafeUrl, redactSecret } = require('./cloud-client');
 
 // --- Professeur IA (correcteur indépendant) — Free Router ---
 // Le professeur est un modèle cloud distinct de l'élève testé. Après un échec
@@ -246,6 +246,13 @@ async function callCloudTeacher({ provider, model, apiKey, endpoint, prompt, tem
     throw new Error(`Teacher: clé API manquante pour '${provider}' (env ${provSpec.envKey})`);
   }
 
+  // SÉCURITÉ (2026-11-15b) : la clé du professeur ne part JAMAIS en clair sur
+  // un hôte distant — http:// hors localhost/127.0.0.1/[::1] refusé (E710).
+  if (resolvedKey) {
+    const transportError = assertSecretSafeUrl(url);
+    if (transportError) throw new Error('Teacher: ' + redactSecret(transportError, resolvedKey));
+  }
+
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 60000);
   try {
@@ -365,7 +372,9 @@ async function askTeacherToCorrectStudentAnalysis({ teacherConfig, task, errors,
         return { content, model: teacherConfig.model };
       }
     } catch (e) {
-      logger.warn(`Teacher: ${tProvider}/${teacherConfig.model} a échoué — ${e.message}. Repli sur auto-analyse.`);
+      // SÉCURITÉ (2026-11-15b) : le texte d'erreur (parfois echoed par le
+      // serveur) ne doit JAMAIS contenir la clé — redaction avant tout log.
+      logger.warn(`Teacher: ${tProvider}/${teacherConfig.model} a échoué — ${redactSecret(e && e.message ? e.message : String(e), teacherConfig.apiKey)}. Repli sur auto-analyse.`);
     }
     return null;
   }
@@ -428,7 +437,10 @@ async function askTeacherToCorrectStudentAnalysis({ teacherConfig, task, errors,
         return { content, model };
       }
     } catch (e) {
-      lastError = e.message;
+      // SÉCURITÉ (2026-11-15b) : erreurs redactées avant log (une erreur peut
+      // contenir du texte renvoyé par le serveur — une clé ne doit jamais y
+      // apparaître).
+      lastError = redactSecret(e && e.message ? e.message : String(e), teacherConfig.apiKey);
       const dur = Date.now() - attemptStart;
       logger.warn(`Teacher: ${model} a échoué définitivement (${dur}ms) — ${lastError}`);
       // 401/403 (clé invalide) → pas la peine de rotate, on sort immédiatement.

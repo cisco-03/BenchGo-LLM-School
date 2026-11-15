@@ -1,5 +1,33 @@
 # CHANGELOG - Carnet de Notes BenchGo
 
+## 2026-11-15b — feat(professeur) : Ollama Cloud en ABONNEMENT + sécurité durcie des clés API
+
+### Contexte & besoin
+Suite au menu professeur du 2026-11-15 : (1) Ollama existe aussi en SERVICE ABONNEMENT avec une clé API (« je paye un abonnement tous les mois ») — pouvoir entrer cette clé pour le professeur ; (2) CONFIRMER que les clés RESTENT locales et ne « quittent jamais le PC » ; (3) « je veux que ça soit blindé sécurité en béton » — durcissement effectif, pas seulement une confirmation.
+
+### Corrections — Ollama Cloud (abonnement)
+- **Provider `ollama-cloud`** (`cloud-client.js` CLOUD_PROVIDERS) : `url: https://ollama.com/v1/chat/completions`, `envKey: OLLAMA_CLOUD_API_KEY`, `openaiCompat: true`, `requiresAuth: true`. NE PAS confondre avec `ollama` (serveur LOCAL sans clé, port 11434, inchangé). `/v1/models` est public ; le POST exige la clé. Sert le PROFESSEUR (`--teacher-provider=ollama-cloud`) ET l'ÉLÈVE (`--provider=ollama-cloud`, en bonus).
+- **Menu professeur : 13 → 14 entrées** (`startup-questionnaire.js`) : `ollama-cloud — Ollama Cloud (ABONNEMENT, clé API — pas le local) · défaut : deepseek-v4.1-flash · exemple : nemotron-3-nano:30b`. La question du modèle propose la LISTE NUMÉROTÉE des modèles réellement disponibles sur ollama.com (`getOllamaModelIds()` de `model-resolver.js`, cache disque 24 h ; 30 affichés + saisie libre ; rappel du suffixe de taille `:30b`). `askTeacherSelection()` (batchers) réutilise `_askTeacherModel()` : les menus night-batch/frontier-batch ont les MÊMES listes numérotées que l'étape 7.
+- **Menu élève** : `ollama-cloud` ajouté à la section 1 (groupe cloud) — clé via `_ensureApiKey` (env `OLLAMA_CLOUD_API_KEY` OU `OLLAMA_API_KEY`).
+- **Correction du nom d'env** (`runner.js`) : la clé d'env était déduite par `tProvider.toUpperCase() + '_API_KEY'` → `'OLLAMA-CLOUD_API_KEY'` (nom FAUX, tiret) ; lue désormais depuis `CLOUD_PROVIDERS[tProvider].envKey`.
+- **`api-keys-store.js`** : `SUPPORTED_PROVIDERS` complété (`kilo`, `ollama-cloud`) — informatif.
+
+### Corrections — sécurité durcie (audit + renforcements)
+- **HTTPS strict** (`cloud-client.js` `assertSecretSafeUrl`, réutilisée par `teacher-client.js`) : une KEY ne peut plus être envoyée en CLAIR — endpoint `http://` hors localhost/127.0.0.1/::1 REFUSÉ (`E710_INSECURE_KEY_TRANSPORT`), quel que soit le mode (élève et professeur). Les serveurs LOCAUX http restent licites (la clé n'y est pas nécessaire, mais un endpoint `http://localhost:8080` custom reste possible).
+- **Redaction des clés dans les erreurs** : `redactSecret()` (cloud-client.js, exportée) retire TOUTE occurrence de la clé dans les textes d'erreur AVANT journalisation/affichage (`queryLLM`, `callCloudTeacher`, logs du professeur). Aucun diagnostic ne peut plus contenir la clé (même si un serveur/endpoint tiers l'échoit).
+- **Fichier de clés durci** (`api-keys-store.js`) : (a) REFUS du SYMLINK — si `.api-keys.json` est un lien symbolique, la clé n'est JAMAIS écrite dedans (attaque type redirection de fichier, `E711_KEY_FILE_SYMLINK`, avertissement + fichier ignoré pour la session) ; (b) permissions resserrées — POSIX `chmod 0600`, Windows `icacls` limite aux comptes de la session courante (best-effort, jamais bloquant).
+- **Invariants vérifiés (audit)** : clés = `.api-keys.json` (local, AUCUN appel réseau dans le module, écarté du dépôt par le `.gitignore` « tout ignorer sauf sources ») OU mémoire de session (`secrets.js`) ; presets SANS clés (`.presets.json` : provider/modèle/endpoint seulement) ; carnets/rappports/leaderboard SANS clés (champs scores/tokens/durations) ; soumissions communautaires SANS clés (`buildSubmissionPayload` = carnet + métadonnées) ; télémétrie = GET passif SANS payload (opt-in) ; le PAT GitHub d'un contributeur, s'il le configure, n'est envoyé qu'à `api.github.com` pour sa PR. La clé « quitte » le PC UNIQUEMENT dans le header `Authorization` HTTPS du provider choisi — c'est son usage métier ; jamais chez GitHub, jamais dans le classement en ligne, jamais dans les logs, et aucun serveur BenchGo n'existe pour la collecter.
+
+### Fichiers touchés
+`cloud-client.js`, `teacher-client.js`, `api-keys-store.js`, `startup-questionnaire.js`, `runner.js`, `night-batch.js`, `frontier-batch.js`, `cli-help.js`, `tests/test-teacher-menu.js`, `tests/test-security-keys.js` (nouveau), ce CHANGELOG, `AGENTS.md`, `Memories-BenchGo/Tasks.md`.
+
+### Pièges
+- `ollama-cloud` ≠ `ollama` : deux entrées séparées partout (menus, CLOUD_PROVIDERS, `.api-keys.json`). Un carnet testé via l'abonnement porte `provider: 'ollama-cloud'` → classé cloud partout.
+- `assertSecretSafeUrl` n'est appelé QUE quand une clé existe (providers locaux sans clé restent en `http://localhost`) ; un endpoint `http://` tier (LAN, IP publique) avec clé → REFUS clair avec remède (HTTPS ou passer la clé par env). Pour forcer (réseau local isolé test), l'utilisateur retire la clé du transport concerné.
+- `redactSecret` s'applique aux messages d'erreur uniquement — elle ne modifie JAMAIS le flux des rapports (aucune clé n'y arrive déjà).
+- Le défaut modèle professeur `deepseek-v4.1-flash` est documenté sans suffixe (2026-09-29) ; si dépublié, choix dans la liste / saisie exacte.
+- Ne pas anonymiser `ollama-cloud` (optionalAuth) : le POST sans clé échoue — le professeur replierait silencieusement.
+
 ## 2026-11-15 — feat(professeur) : menu interactif multi-provider dans TOUS les modes CLI
 
 ### Contexte & besoin

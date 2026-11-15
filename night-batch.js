@@ -2609,7 +2609,7 @@ async function main() {
       { cmd: 'node night-batch.js --isoler=!4', desc: 'Isole le modèle n° 4 (marque NON APPLICABLE + exclut des batchs). Numéro = position dans --list-only.' },
       { cmd: 'node night-batch.js --isoler=!!6', desc: 'Désisole le modèle n° 6 (retire de la liste noire). Rétablit le statut réel.' },
       { cmd: 'node night-batch.js --no-teacher', desc: 'Désactive le professeur IA (correcteur externe).' },
-      { cmd: 'node night-batch.js --teacher-provider=groq --teacher-model=llama-3.3-70b-versatile', desc: 'Choisit le fournisseur du professeur (menu interactif sinon) — transmis à chaque run (grande école + tremplin).' },
+      { cmd: 'node night-batch.js --teacher-provider=groq --teacher-model=llama-3.3-70b-versatile', desc: 'Choisit le fournisseur du professeur (menu interactif sinon) — groq, openai, anthropic, ollama-cloud (abonnement), kilo, ollama/lmstudio locaux... Transmis à chaque run (grande école + tremplin).' },
       { cmd: 'node night-batch.js --force-detect', desc: 'Réindexe les GGUF orphelins (modèles sur disque absents de lms ls) puis liste.' },
       { cmd: 'node night-batch.js --class-by-class', desc: 'Mode classe-par-classe : chaque tier dans un process séparé avec timeout (robustesse anti-hang).' },
       { cmd: 'node night-batch.js --class-by-class --tiers=0', desc: 'Filtre rapide : ne teste que le 1er exercice (tier 0) de chaque école. Virer les modèles qui échouent.' },

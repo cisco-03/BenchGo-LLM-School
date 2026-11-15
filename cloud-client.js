@@ -24,7 +24,53 @@ const CLOUD_PROVIDERS = {
   ollama:     { url: 'http://localhost:11434/v1/chat/completions',       envKey: null,                  openaiCompat: true,  requiresAuth: false },
   lmstudio:   { url: 'http://localhost:1234/v1/chat/completions',        envKey: null,                  openaiCompat: true,  requiresAuth: false },
   custom:     { url: null, /* override via --endpoint= */               envKey: null,                  openaiCompat: true,  requiresAuth: false },
+  // Ollama CLOUD (abonnement https://app.ollama.com, clé API) : NE PAS
+  // confondre avec `ollama` (serveur LOCAL sans clé). Même format
+  // OpenAI-compat, mais slugs SANS préfixe éditeur, suffixe de taille parfois
+  // requis (ex: nemotron-3-nano:30b). /v1/models est public ; le POST exige
+  // la clé. Sert l'élève (--provider=ollama-cloud) ET le professeur
+  // (--teacher-provider=ollama-cloud, demande utilisateur 2026-11-15).
+  'ollama-cloud': { url: 'https://ollama.com/v1/chat/completions',       envKey: 'OLLAMA_CLOUD_API_KEY', openaiCompat: true, requiresAuth: true },
 };
+
+// ─────────────────────────────────────────────────────────────────────────
+// SÉCURITÉ (tâche 2026-11-15b, « blindé ») : transport des clés API
+// ─────────────────────────────────────────────────────────────────────────
+// 1. assertSecretSafeUrl(url) : une clé ne part JAMAIS en clair. http:// est
+//    refusé SAUF localhost/127.0.0.1/[::1] (la requête ne quitte pas le PC).
+//    HTTPS partout ailleurs. Appelée avant CHAQUE envoi authentifié (élève
+//    queryLLM + professeur callCloudTeacher). Retourne null (OK) ou un
+//    message d'erreur E710.
+// 2. redactSecret(text, secret) : retire TOUTE occurrence de la clé dans un
+//    texte (erreurs de serveur, messages de log) AVANT affichage/journalisation.
+//    Aucun diagnostic ne peut plus contenir la clé, même si un endpoint tiers
+//    l'échoit dans sa réponse.
+const LOCAL_HOSTNAMES = ['localhost', '127.0.0.1', '[::1]', '::1'];
+
+function assertSecretSafeUrl(url) {
+  let u = null;
+  try { u = new URL(String(url || '')); } catch (_) { u = null; }
+  if (!u) return 'E710_INSECURE_KEY_TRANSPORT : URL invalide, clé non envoyée (' + String(url) + ').';
+  const isLocalHost = LOCAL_HOSTNAMES.includes(u.hostname) || /^localhost$/i.test(u.hostname);
+  if (u.protocol === 'https:') return null;
+  if (u.protocol === 'http:') {
+    if (isLocalHost) return null;
+    return 'E710_INSECURE_KEY_TRANSPORT : endpoint http:// NON local (« ' + u.hostname + ' ») — une clé API partirait EN CLAIR. Passez en https:// OU retirez la clé (endpoint sans authentification).';
+  }
+  return 'E710_INSECURE_KEY_TRANSPORT : protocole non sécurisé « ' + u.protocol + ' » — clé non envoyée.';
+}
+
+function redactSecret(text, secret) {
+  let out = (text == null) ? '' : String(text);
+  if (!secret || String(secret).length < 6) return out;
+  const s = String(secret);
+  out = out.split(s).join('(cle masquee)');
+  if (s.length > 12) {
+    // Préfixe tronqué (ce qu'aurait pu refléter un message tronqué du serveur).
+    out = out.split(s.slice(0, 12)).join('(cle masquee)');
+  }
+  return out;
+}
 
 // --- Garde-fous anti-boucle / anti-blocage du streaming cloud (2026-09-20) ---
 // Constat (logs benchgo_2026-09-20T21-49 / 22-00, deepseek-v4.1-flash via
@@ -477,6 +523,18 @@ async function queryLLM(prompt, difficulty, tierId, isMandatory, spinner, option
     }
   }
 
+  // SÉCURITÉ (2026-11-15b) : rien n'est envoyé tant que le transport n'est pas
+  // confirmé sûr pour la clé. http:// hors localhost → REFUS NET (E710),
+  // quel que soit le mode (batch inclus). Providers locaux sans clé : HTTP
+  // possible sur localhost (la requête ne quitte pas la machine).
+  if (resolvedKey) {
+    const transportError = assertSecretSafeUrl(resolvedUrl);
+    if (transportError) {
+      logger.error(redactSecret(transportError, resolvedKey));
+      throw new Error(redactSecret(transportError, resolvedKey));
+    }
+  }
+
   const systemPrompt = getSystemPrompt(difficulty);
   // Timeout dédié (auto-profilage) sinon timeout global API.
   const timeoutMs = Number.isInteger(options.timeoutMs) && options.timeoutMs > 0
@@ -726,4 +784,4 @@ async function queryLLM(prompt, difficulty, tierId, isMandatory, spinner, option
   }
 }
 
-module.exports = { queryLLM, CLOUD_PROVIDERS, normalizeCompletionsUrl };
+module.exports = { queryLLM, CLOUD_PROVIDERS, normalizeCompletionsUrl, assertSecretSafeUrl, redactSecret };

@@ -32,7 +32,7 @@ const { PROFILES, CLASSE_NAMES, tierToClasseNum, parseCliArgs, detectProfileFrom
 const { ProgressBar, Spinner, BigSpinner, letterGrade } = require('./progress-bar');
 const { extractJSON, extractCodeRegex } = require('./parsing-utils');
 const { queryLLM: queryLLMLocal } = require('./lm-studio-client');
-const { queryLLM: queryLLMCloud } = require('./cloud-client');
+const { queryLLM: queryLLMCloud, CLOUD_PROVIDERS } = require('./cloud-client');
 const { askTeacherToCorrectStudentAnalysis } = require('./teacher-client');
 const { loadTiers } = require('./tier-loader');
 const { evaluateTask } = require('./task-evaluator');
@@ -1658,8 +1658,13 @@ async function main() {
 
       // Clé fournie en CLI, en env, ou déjà mémorisée → mode activé sans redemander.
       // Pour les providers locaux, aucune clé n'est nécessaire.
-      const envKeyName = tProvider.toUpperCase() + '_API_KEY';
-      const envKey = process.env[envKeyName] || (tProvider === 'openrouter' ? (process.env.OPENROUTER_KEY) : null);
+      // Clé env : nom OFFICIEL du provider (CLOUD_PROVIDERS.envKey) — pour
+      // ollama-cloud, tProvider.toUpperCase() donnerait 'OLLAMA-CLOUD_API_KEY'
+      // (mauvais nom : tiret au lieu d'underscore). Fallback OPENROUTER_KEY
+      // historique conservé pour openrouter.
+      const teacherProvSpec = CLOUD_PROVIDERS[tProvider] || null;
+      const envKey = (teacherProvSpec && teacherProvSpec.envKey ? process.env[teacherProvSpec.envKey] : null)
+        || (tProvider === 'openrouter' ? (process.env.OPENROUTER_KEY) : null);
       const storedKey = secrets.getSecret(tProvider);
       if (isLocalTeacher || teacherApiKey || envKey || storedKey) {
         const resolved = { ...TEACHER_CONFIG, enabled: true, provider: tProvider };

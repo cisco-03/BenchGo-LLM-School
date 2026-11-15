@@ -60,6 +60,7 @@ const TEACHER_PROVIDERS_MENU = [
   { value: 'deepseek',   local: false, none: false, defaultModel: 'deepseek-chat',            example: 'deepseek-chat',                   detail: 'DeepSeek (OpenAI-compat)' },
   { value: 'cohere',     local: false, none: false, defaultModel: 'command-r-plus',           example: 'command-r-plus',                  detail: 'Cohere (Command R+)' },
   { value: 'kilo',       local: false, none: false, defaultModel: 'kilo-auto/free',           example: 'kilo-auto/free',                  detail: 'Kilo Gateway (modèles :free, alternative OpenRouter)' },
+  { value: 'ollama-cloud', local: false, none: false, defaultModel: 'deepseek-v4.1-flash',     example: 'nemotron-3-nano:30b',             detail: 'Ollama Cloud (ABONNEMENT, clé API — pas le local)' },
   { value: 'ollama',     local: true,  none: false, defaultModel: '',                         example: 'llama3.3:8b',                     detail: 'Ollama local (sans clé, port 11434)' },
   { value: 'lmstudio',   local: true,  none: false, defaultModel: '',                         example: 'nom du modèle chargé',            detail: 'LM Studio local (sans clé, port 1234)' },
   { value: 'custom',     local: true,  none: false, defaultModel: '',                         example: 'gpt-4o-mini',                     detail: 'serveur OpenAI-compat personnalisé (--teacher-endpoint)' },
@@ -373,6 +374,9 @@ function _envKeyForProvider(providerName) {
   if (spec && spec.envKey) return [spec.envKey];
   // Alias usuels
   if (providerName === 'openrouter') return ['OPENROUTER_API_KEY', 'OPENROUTER_KEY'];
+  // Ollama Cloud (abonnement) : variable dédiée ET OLLAMA_API_KEY (l'écosystème
+  // ollama utilise cette dernière pour l'accès cloud).
+  if (providerName === 'ollama-cloud') return ['OLLAMA_CLOUD_API_KEY', 'OLLAMA_API_KEY'];
   return [];
 }
 
@@ -416,11 +420,11 @@ async function askTeacherSelection() {
     console.log('  \x1b[90mProfesseur openrouter : Free Router (rotation des modèles :free).\x1b[0m');
     return { provider, model: null };
   }
+  // Modèle unique partagé avec l'étape 7 (_askTeacherModel) : liste numérotée
+  // des modèles installés pour ollama/lmstudio, liste Ollama Cloud pour
+  // ollama-cloud (abonnement), suggestion cloud pour les autres.
   const spec = TEACHER_PROVIDERS_MENU.find(p => p.value === provider) || null;
-  const defaultModel = spec && spec.defaultModel ? spec.defaultModel : null;
-  const example = spec && spec.example ? spec.example : 'nom du modèle';
-  const raw = await _askFreeText(`  Modèle du professeur (ex: ${example}${defaultModel ? `, Entrée = ${defaultModel}` : ''}) :`, { allowEmpty: true });
-  const model = raw || defaultModel;
+  const model = await _askTeacherModel(provider, spec);
   if (!model) {
     console.log('  \x1b[33mAucun modèle fourni — le professeur repliera sur l\'auto-analyse.\x1b[0m');
     return { provider, model: null };
@@ -441,6 +445,27 @@ async function askTeacherSelection() {
  * Renvoie le nom du modèle, ou null (professeur à désactiver).
  */
 async function _askTeacherModel(provider, spec) {
+  // Ollama Cloud (abonnement) : liste numérotée des modèles réellement
+  // disponibles sur ollama.com (cache 24 h de model-resolver, /v1/models
+  // public). Cap d'affichage : tapez le nom si le modèle voulu est plus bas.
+  if (provider === 'ollama-cloud') {
+    try {
+      const modelResolver = require('./model-resolver');
+      const ids = await modelResolver.getOllamaModelIds();
+      if (ids && ids.length > 0) {
+        const shown = ids.slice(0, 30);
+        console.log(`  \x1b[32m${ids.length} modèle(s) disponibles sur Ollama Cloud (affichage des 30 premiers) :\x1b[0m`);
+        shown.forEach((id, i) => console.log(`    \x1b[1m${i + 1}.\x1b[0m ${id}`));
+        if (ids.length > shown.length) {
+          console.log('  \x1b[90m(…tapez le nom exact si le modèle voulu n\'est pas listé.)\x1b[0m');
+        }
+        console.log(`  \x1b[90mCertains slugs exigent un suffixe de taille (ex: nemotron-3-nano:30b).\x1b[0m`);
+        const picked = await _askNumberedChoice('  Modèle du professeur (numéro ou nom, Entrée = 1) :', shown.map(id => ({ value: id })), 0);
+        return picked || null;
+      }
+      console.log('  \x1b[33mListe Ollama Cloud indisponible (réseau?) — saisie libre.\x1b[0m');
+    } catch (e) { /* liste indisponible : repli sur saisie libre */ }
+  }
   if (provider === 'ollama' || provider === 'lmstudio') {
     try {
       const models = provider === 'lmstudio'
@@ -581,6 +606,7 @@ async function runStartupQuestionnaire(cliArgs, opts = {}) {
     { value: 'ollama',     detail: 'Ollama (port 11434)' },
     { value: 'custom',     detail: 'serveur OpenAI-compat personnalisé (--endpoint)' },
     { value: 'openrouter', detail: 'OpenRouter (Free Router + modèles payants)' },
+    { value: 'ollama-cloud', detail: 'Ollama Cloud (abonnement, clé API — slugs ollama.com)' },
     { value: 'openai',     detail: 'OpenAI (GPT, gpt-oss...)' },
     { value: 'anthropic',  detail: 'Anthropic (Claude)' },
     { value: 'groq',       detail: 'Groq (Llama, etc.)' },

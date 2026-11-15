@@ -179,7 +179,7 @@ function printFrontierHelp() {
     { cmd: 'node frontier-batch.js --profile=AUTO', desc: 'Profil individuel selon la taille de CHAQUE modèle (listes mélangées).' },
     { cmd: 'node frontier-batch.js --yes', desc: 'Mode non-interactif : aucun prompt (garder les slugs non résolus, batch de nuit).' },
     { cmd: 'node frontier-batch.js --no-teacher', desc: 'Désactive le professeur IA (correcteur externe).' },
-    { cmd: 'node frontier-batch.js --teacher-provider=groq --teacher-model=llama-3.3-70b-versatile', desc: 'Choisit le fournisseur du professeur (menu interactif sinon) — groq, openai, anthropic, together, mistral, deepseek, cohere, kilo, ollama, lmstudio, custom.' },
+    { cmd: 'node frontier-batch.js --teacher-provider=groq --teacher-model=llama-3.3-70b-versatile', desc: 'Choisit le fournisseur du professeur (menu interactif sinon) — groq, openai, anthropic, ollama-cloud (abonnement), kilo, ollama/lmstudio locaux, custom.' },
     { cmd: 'node frontier-batch.js --api-key=sk-...', desc: 'Clé API fournie (sinon .api-keys.json ou saisie).' },
     { cmd: 'node frontier-batch.js --provider=ollama --endpoint=https://...', desc: 'Endpoint custom (ollama/lmstudio/custom).' },
     { cmd: 'node frontier-batch.js --help  |  help  |  -h', desc: 'Affiche cette aide.' }

@@ -31,13 +31,60 @@ const logger = require('./logger');
 
 const KEYS_FILE = path.join(__dirname, '.api-keys.json');
 
-// Tous les providers gérés + le professeur OpenRouter (clé séparée).
+// ─────────────────────────────────────────────────────────────────────────
+// SÉCURITÉ DU FICHIER DE CLÉS (tâche 2026-11-15b, « sécurité en béton »)
+// ─────────────────────────────────────────────────────────────────────────
+// 1. auditKeysFile() : REFUSE un fichier qui n'est PAS un fichier normal
+//    (symlink = attaque de redirection : une clé écrite partirait dans un
+//    fichier choisi par un attaquant local ; FIFO/socket = idem). En cas de
+//    fichier suspect : lecture vide + écriture refusée (jamais de crash).
+// 2. hardenKeysFile() : permissions resserrées après CHAQUE écriture —
+//    POSIX chmod 0600 ; Windows : icacls désactive l'héritage et limite aux
+//    comptes de la session courante. Best-effort : un échec n'est JAMAIS
+//    bloquant (une écriture de clé ne crashe pas un benchmark).
+function auditKeysFile() {
+  try {
+    const st = fs.lstatSync(KEYS_FILE);
+    if (st.isSymbolicLink()) return { safe: false, reason: 'symlink' };
+    if (!st.isFile()) return { safe: false, reason: 'pas un fichier régulier' };
+    return { safe: true, reason: null };
+  } catch (_) {
+    // Fichier absent : cas normal (création sûre par écriture directe).
+    return { safe: true, reason: null };
+  }
+}
+
+function hardenKeysFile() {
+  if (process.platform === 'win32') {
+    try {
+      const { execFileSync } = require('child_process');
+      const user = process.env.USERNAME || process.env.USER || '';
+      if (!user) return;
+      execFileSync('icacls', [KEYS_FILE, '/inheritance:r', '/grant:r', `${user}:F`], { stdio: 'ignore' });
+    } catch (_) { /* best-effort : jamais bloquant */ }
+  } else {
+    try { fs.chmodSync(KEYS_FILE, 0o600); } catch (_) { /* best-effort */ }
+  }
+}
+
+// Tous les providers gérés (élève + professeur). Informatif : saveKey accepte
+// tout nom de provider (une clé cloud est stockée sous le nom du provider qui
+// l'utilise, ex: 'ollama-cloud' pour l'abonnement, 'kilo' pour la Gateway).
 const SUPPORTED_PROVIDERS = [
   'openrouter', 'openai', 'anthropic', 'groq', 'together', 'mistral',
-  'deepseek', 'cohere', 'lmstudio', 'ollama', 'custom', 'teacher-openrouter'
+  'deepseek', 'cohere', 'kilo', 'lmstudio', 'ollama', 'ollama-cloud', 'custom',
+  'teacher-openrouter'
 ];
 
 function _loadFile() {
+  // Sécurité : fichier suspect (symlink, non-régulier) → traité comme ABSENT.
+  // On ne lit JAMAIS une cible contrôlée par un tiers, et on ignore le contenu
+  // suspect pour la session (un avertissement explicite guide l'utilisateur).
+  const audit = auditKeysFile();
+  if (!audit.safe) {
+    logger.warn(`api-keys-store : fichier suspect (${audit.reason}) — clés ignorées pour cette session. Supprimez ${KEYS_FILE} et resaisissez vos clés.`);
+    return { keys: {}, savedAt: null };
+  }
   try {
     if (fs.existsSync(KEYS_FILE)) {
       const data = JSON.parse(fs.readFileSync(KEYS_FILE, 'utf8'));
@@ -50,9 +97,17 @@ function _loadFile() {
 }
 
 function _saveFile(data) {
+  // Sécurité : jamais d'écriture dans un fichier suspect (symlink de
+  // redirection = une clé partirait dans un fichier tiers contrôlé).
+  const audit = auditKeysFile();
+  if (!audit.safe) {
+    logger.error(`api-keys-store : écriture REFUSÉE (fichier suspect : ${audit.reason}). Clé non persistée.`);
+    return;
+  }
   try {
     data.savedAt = new Date().toISOString();
     fs.writeFileSync(KEYS_FILE, JSON.stringify(data, null, 2) + '\n', 'utf8');
+    hardenKeysFile();
   } catch (e) {
     logger.error(`api-keys-store : impossible d'écrire le fichier : ${e.message}`);
   }
@@ -121,5 +176,7 @@ module.exports = {
   getKey,
   saveKey,
   forgetKey,
-  restoreIntoSession
+  restoreIntoSession,
+  auditKeysFile,
+  hardenKeysFile
 };

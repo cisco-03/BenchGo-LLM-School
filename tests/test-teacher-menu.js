@@ -9,18 +9,19 @@ const assert = require('assert');
 const { TEACHER_PROVIDERS_MENU, askTeacherSelection } = require('../startup-questionnaire');
 
 const cases = [
-  { name: 'menu professeur : 13 entrées, openrouter premier, aucun dernier' },
+  { name: 'menu professeur : 14 entrées, openrouter premier, aucun dernier' },
   { name: 'menu professeur : locaux et kilo présents (demande « Ollama ou d_autres »)' },
   { name: 'menu professeur : non-openrouter doté d_un modèle par défaut + example' },
   { name: 'menu professeur : option aucun (none) → pas de modèle par défaut' },
+  { name: 'ollama-cloud (abonnement) distinct du local : clé requise, pas local' },
   { name: 'askTeacherSelection exportée et async (menus night-batch/frontier-batch)' },
   { name: 'module questionnaire se charge sans side-effect (require OK)' },
 ];
 
 function run(c) {
   switch (c.name) {
-    case 'menu professeur : 13 entrées, openrouter premier, aucun dernier': {
-      assert.strictEqual(TEACHER_PROVIDERS_MENU.length, 13);
+    case 'menu professeur : 14 entrées, openrouter premier, aucun dernier': {
+      assert.strictEqual(TEACHER_PROVIDERS_MENU.length, 14);
       assert.strictEqual(TEACHER_PROVIDERS_MENU[0].value, 'openrouter');
       assert.strictEqual(TEACHER_PROVIDERS_MENU[0].none, false);
       const last = TEACHER_PROVIDERS_MENU[TEACHER_PROVIDERS_MENU.length - 1];
@@ -30,7 +31,7 @@ function run(c) {
     }
     case 'menu professeur : locaux et kilo présents (demande « Ollama ou d_autres »)': {
       const values = TEACHER_PROVIDERS_MENU.map(p => p.value);
-      for (const v of ['groq', 'openai', 'anthropic', 'together', 'mistral', 'deepseek', 'cohere', 'kilo', 'ollama', 'lmstudio', 'custom', 'aucun']) {
+      for (const v of ['groq', 'openai', 'anthropic', 'together', 'mistral', 'deepseek', 'cohere', 'kilo', 'ollama-cloud', 'ollama', 'lmstudio', 'custom', 'aucun']) {
         assert.ok(values.includes(v), `fournisseur manquant au menu : ${v}`);
       }
       for (const local of ['ollama', 'lmstudio', 'custom']) {
@@ -61,6 +62,23 @@ function run(c) {
       assert.strictEqual(none.value, 'aucun');
       assert.strictEqual(none.defaultModel, '');
       assert.strictEqual(none.local, false);
+      break;
+    }
+    case 'ollama-cloud (abonnement) distinct du local : clé requise, pas local': {
+      // Demande utilisateur 2026-11-15 : « Ollama en abonnement avec une clé
+      // API, ça existe » — le menu distingue ollama (LOCAL, sans clé) et
+      // ollama-cloud (ABONNEMENT, clé API), et cloud-client route le POST
+      // vers https://ollama.com (pas localhost:11434).
+      const oc = TEACHER_PROVIDERS_MENU.find(p => p.value === 'ollama-cloud');
+      assert.ok(oc, 'ollama-cloud doit exister au menu');
+      assert.strictEqual(oc.local, false);
+      const { CLOUD_PROVIDERS } = require('../cloud-client');
+      const spec = CLOUD_PROVIDERS['ollama-cloud'];
+      assert.ok(spec, 'ollama-cloud doit exister dans CLOUD_PROVIDERS (routing professeur + élève)');
+      assert.strictEqual(spec.requiresAuth, true);
+      assert.strictEqual(spec.openaiCompat, true);
+      assert.ok(spec.url.startsWith('https://ollama.com'), spec.url);
+      assert.notStrictEqual(spec.url, CLOUD_PROVIDERS.ollama.url);
       break;
     }
     case 'askTeacherSelection exportée et async (menus night-batch/frontier-batch)': {

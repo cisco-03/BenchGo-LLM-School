@@ -65,6 +65,19 @@ function detectSandboxEscape(code) {
     { re: /\bprocess\b\s*[\[.\s]*\s*env/i, msg: 'tentative d\'accès à process.env' },
     { re: /\bprocess\b\s*[\[.\s]*\s*binding/i, msg: 'tentative d\'accès à process.binding' },
     { re: /\bprocess\b/i, msg: 'tentative d\'accès à process' },
+    // Exfiltration réseau (aucun réseau n'existe dans la sandbox : défense en
+    // profondeur contre une évaporation future du moteur — tâche 2026-11-15b).
+    { re: /\bfetch\s*\(/i, msg: 'tentative d\'appel réseau (fetch) interdite dans la sandbox' },
+    { re: /\bXMLHttpRequest\b/i, msg: 'tentative d\'appel réseau (XHR) interdite dans la sandbox' },
+    { re: /\bWebSocket\b/i, msg: 'tentative d\'appel réseau (WebSocket) interdite dans la sandbox' },
+    { re: /\bnew\s+Worker\s*\(/i, msg: 'Workers interdits dans la sandbox' },
+    { re: /\bBuffer\b/i, msg: 'accès à Buffer interdit dans la sandbox' },
+    // Globals de l'hôte / Node jamais exposés.
+    { re: /\bchild_process\b/i, msg: 'tentative d\'accès à child_process' },
+    { re: /\bmodule\b\s*[\[.\s]*\s*exports/i, msg: 'accès à module.exports interdit dans la sandbox' },
+    { re: /\bglobal\s*\./i, msg: 'accès au global de l\'hôte interdit dans la sandbox' },
+    { re: /\bwindow\b/i, msg: 'accès au global navigateur (window) interdit dans la sandbox' },
+    { re: /\bdocument\b/i, msg: 'accès au DOM (document) interdit dans la sandbox' },
     // require de modules dangereux
     { re: /\brequire\s*\(\s*['"]child_process['"]\s*\)/i, msg: 'tentative d\'import de child_process' },
     { re: /\brequire\s*\(\s*['"]fs['"]\s*\)/i, msg: 'tentative d\'import de fs' },

@@ -597,6 +597,32 @@ Si modèle > 3B paramètres, le runner peut enchaîner LIGHT puis STANDARD dans 
 - La clé professeur est mémorisée/restaurée sous le VRAI provider (`teacherConfigResolved.provider`) : `_autoSaveKey` du runner + les 2 sites de restauration de preset (cherche d'abord `teacherProvider`) — la branche preset-questionnaire réappliquait un `provider` manquant (perds le preset).
 - Le choix `aucun` pousse `--no-teacher` chez les batchers (l'élève ne voit AUCUN prompt en `--force`).
 
+### Ollama Cloud abonnement + sécurité durcie des clés API (tâche 2026-11-15b)
+
+**Fichiers touchés :** `cloud-client.js`, `teacher-client.js`, `api-keys-store.js`, `startup-questionnaire.js`, `runner.js`, `night-batch.js`, `frontier-batch.js`, `cli-help.js`, `tests/test-security-keys.js` (nouveau), `Docs/CHANGELOG.md`, `AGENTS.md`, `Memories-BenchGo/Tasks.md`.
+
+**Principe :** Demande utilisateur : (1) Ollama existe aussi en ABONNEMENT avec clé API (« je paye tous les mois ») — pouvoir entrer cette clé pour le professeur ; (2) confirmer que les clés restent LOCALES et ne sont JAMAIS propagées ; (3) « je veux que ça soit blindé sécurité en béton ». La clé « quitte » le PC UNIQUEMENT dans l'en-tête `Authorization` HTTPS du provider choisi (usage métier d'une clé) — jamais vers GitHub, jamais dans le classement en ligne, jamais dans les logs, aucun serveur BenchGo n'existe.
+
+**Fonctions :**
+- `ollama-cloud` (cloud-client.js CLOUD_PROVIDERS) : `https://ollama.com/v1/chat/completions`, `envKey: OLLAMA_CLOUD_API_KEY` (lisible aussi via `OLLAMA_API_KEY` dans `_envKeyForProvider` du questionnaire), `requiresAuth: true`. Sert le professeur (`--teacher-provider=ollama-cloud`) ET l'élève (`--provider=ollama-cloud`).
+- `assertSecretSafeUrl(url)` (cloud-client.js, exportée) → null ou message `E710_INSECURE_KEY_TRANSPORT`. http:// refusé SAUF `localhost`/`127.0.0.1`/`[::1]`. Appelée AVANT chaque envoi authentifié : `queryLLM` (élève) et `callCloudTeacher` (professeur), dès qu'une clé est résolue.
+- `redactSecret(text, secret)` (cloud-client.js, exportée) → retire la clé (et son préfixe 12 chars) de tout texte de log/erreur ; appliquée aux logs du professeur (`askTeacherToCorrectStudentAnalysis`) et au throw E710.
+- `auditKeysFile()` / `hardenKeysFile()` (api-keys-store.js, exportées) → refuse un `.api-keys.json` symlink/non-régulier (lecture vide + écriture refusée + avertissement `supprimez le fichier`) et resserre les permissions après chaque écriture (POSIX `chmod 0600`, Windows `icacls /inheritance:r`).
+- Menu professeur 14 entrées + question modèle via `getOllamaModelIds()` pour ollama-cloud (30 affichés + saisie libre) ; le menu compact des batchers passe par le même `_askTeacherModel()`.
+
+**Pour modifier :**
+1. **Assouplir le HTTPS strict** (déconseillé) : `LOCAL_HOSTNAMES`/`assertSecretSafeUrl` dans cloud-client.js — un seul point de contrôle pour élève ET professeur.
+2. **Désactiver l'anti-symlink** : retirer `auditKeysFile()` de `_loadFile`/`_saveFile` (api-keys-store.js).
+3. **Désactiver la redaction** : retirer `redactSecret` des logs teacher-client.js (non recommandé).
+4. **Ajouter des patterns sandbox** : tableau `patterns` de `detectSandboxEscape` (vm-sandbox.js) — VÉRIFIER les solutions canoniques avec `node verify_tiers.js` après chaque ajout (risque de faux positif sur strings légitimes ; `process` est déjà un catch-all historique).
+5. **Tester** : `node tests/run-tests.js` (8 cas test-security-keys.js), `node verify_tiers.js` (486 exec OK / 0 problème).
+
+**Pièges :**
+- `assertSecretSafeUrl` n'est appelé QUE si une clé existe : un endpoint `http://` distant SANS clé reste licite (providers locaux sans auth, custom LAN) — on ne bloque pas le transport, on bloque le SECRET en clair.
+- `ollama-cloud` ≠ `ollama` (local) : deux entrées partout ; `.api-keys.json` stocke la clé sous `ollama-cloud`.
+- Les patterns VM matchent AUCH les strings (précédent `/\bprocess\b/`) : ne JAMAIS bloquer des mots plausibles dans du code d'exercice sans passer par `verify_tiers.js`.
+- Le ping télémétrie est un GET passif SANS payload ; le PAT GitHub d'un contributeur (`.benchgo-profile.json`) ne va qu'à `api.github.com` et reste local.
+
 ### Sauvegarde auto des carnets + restauration (tâche 2026-08-21)
 
 **Fichiers touchés :** `score-ledger.js`, `config.js`, `runner.js`, `cli-help.js`, `Docs/CHANGELOG.md`, `AGENTS.md`.
