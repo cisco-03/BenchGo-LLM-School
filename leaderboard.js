@@ -38,7 +38,7 @@ const logger = require('./logger');
 const { letterGrade } = require('./progress-bar');
 const { shortenModelName } = require('./report-generator');
 const { detectProfileFromModelName } = require('./config');
-const { formatDuration } = require('./score-ledger');
+const { formatDuration, isValidShortName, safeForScript } = require('./score-ledger');
 const cliTable = require('./cli-table');
 const { printEntryHelp, wantsHelp } = require('./cli-help');
 const communitySync = require('./community-sync');
@@ -2154,9 +2154,9 @@ function buildLeaderboardHTML(entries) {
 <div id="toast" class="toast"></div>
 
 <script>
-var MODELS = ${JSON.stringify(modelsData)};
-var LOCAL_SHA = ${JSON.stringify(localSha)};
-var REMOTE_REPO = ${JSON.stringify(updateChecker.COMMUNITY_REPO)};
+var MODELS = ${safeForScript(JSON.stringify(modelsData))};
+var LOCAL_SHA = ${safeForScript(JSON.stringify(localSha))};
+var REMOTE_REPO = ${safeForScript(JSON.stringify(updateChecker.COMMUNITY_REPO))};
 
 // --- Agent NotebookLM (badge → modale + bulle d'info périodique) ---
 var NB_SEEN_KEY = 'benchgo_nb_seen';
@@ -5099,7 +5099,10 @@ function buildModelReportMarkdown(e) {
 }
 
 // Charge un carnet par shortName (recherche directe du fichier .json).
+// SEC-FILE-01 : validation centralisée + confinement — un shortName hostile
+// ne produit plus de résolution de chemin.
 function loadLedgerByName(shortName) {
+  if (!isValidShortName(shortName)) return null;
   const file = path.join(LEDGER_DIR, shortName + '.json');
   try {
     if (fs.existsSync(file)) {
@@ -5710,6 +5713,11 @@ function markCloudModel(shortName) {
   }
   // Normalise : retire l extension .json si presente.
   const cleanShort = shortName.replace(/\.json$/i, '');
+  // SEC-FILE-01 : validation centralisée (pas de traversée via --mark-cloud).
+  if (!isValidShortName(cleanShort)) {
+    console.log('\x1b[31mshortName invalide : ' + String(shortName).substring(0, 60) + '\x1b[0m');
+    return false;
+  }
   const ledgerPath = path.join(LEDGER_DIR, cleanShort + '.json');
   if (!fs.existsSync(ledgerPath)) {
     console.log(`\x1b[31mCarnet introuvable : ${cleanShort}.json (dans ${LEDGER_DIR})\x1b[0m`);
@@ -5988,17 +5996,14 @@ function adjustSnapshotForDeletion(deletedShortName, entries) {
 
 // Supprime un carnet de scores par shortName, puis régénère le classement.
 function deleteLedger(shortName) {
-  // Sécurité : valider le shortName pour empêcher le path traversal.
-  // Un shortName ne contient que des caractères alphanumériques, tirets, underscores et points.
-  // On rejette tout ce qui contient des séparateurs de chemin (/, \, ..) pour
-  // empêcher la suppression de fichiers hors du dossier .carnet (ex: .api-keys.json).
-  if (!shortName || typeof shortName !== 'string') {
+  // Sécurité (SEC-FILE-01) : validation centralisée partagée avec score-ledger.js.
+  // La même règle protège le carnet sur TOUTES les opérations (load/save/backup/
+  // delete) — plus aucune variante de traversée (../, ..\, %2f, ADS, NUL, nom
+  // réservé Windows...) ne passe.
+  if (!isValidShortName(shortName)) {
     return { ok: false, error: 'shortName manquant ou invalide' };
   }
-  if (/[\/\\]/.test(shortName) || shortName === '..' || shortName.includes('..')) {
-    return { ok: false, error: 'shortName invalide (caractères interdits)' };
-  }
-  const safeName = shortName.replace(/[^a-zA-Z0-9._-]/g, '_');
+  const safeName = shortName;
   const file = path.join(LEDGER_DIR, safeName + '.json');
   // Vérification finale : le chemin résolu doit bien être dans LEDGER_DIR
   const resolvedFile = path.resolve(file);
@@ -6161,6 +6166,18 @@ function startServer(port) {
       res.writeHead(403, securityHeaders);
       res.end(JSON.stringify({ ok: false, error: 'Origine non autorisée' }));
       return;
+    }
+
+    // SEC-FILE-01 : garde uniforme — TOUTE route /api/ portant un paramètre
+    // shortName le valide d'abord (traversée de répertoires refusée en 400,
+    // sans accéder au disque ni divulguer de chemin physique).
+    if (url.pathname.indexOf('/api/') === 0 && url.searchParams.has('shortName')) {
+      const probe = url.searchParams.get('shortName');
+      if (!isValidShortName(probe)) {
+        res.writeHead(400, securityHeaders);
+        res.end(JSON.stringify({ ok: false, error: 'shortName invalide' }));
+        return;
+      }
     }
 
     // API : suppression d'un modèle

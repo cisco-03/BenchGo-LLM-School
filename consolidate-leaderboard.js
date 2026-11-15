@@ -56,7 +56,17 @@ function loadAllSubmissions() {
     const files = fs.readdirSync(userPath).filter(f => f.endsWith('.json'));
     for (const file of files) {
       try {
-        const data = JSON.parse(fs.readFileSync(path.join(userPath, file), 'utf8'));
+        const filePath = path.join(userPath, file);
+        // SEC-DATA-01 : une soumission GÉANTE est écartée avant parsing (pas de
+        // déni de service de la consolidation via un JSON de centaines de Mo).
+        try {
+          const st = fs.statSync(filePath);
+          if (st.size > 5 * 1024 * 1024) {
+            console.log(`⚠ Soumission écartée (trop volumineuse : ${Math.round(st.size / 1024)} Ko > 5120 Ko) : ${userDir}/${file}`);
+            continue;
+          }
+        } catch (_) { /* stat impossible : la lecture ci-dessous la jugera */ }
+        const data = JSON.parse(fs.readFileSync(filePath, 'utf8'));
         if (data && data.carnet && data.carnet.ecoles) {
           submissions.push({
             userId: data.userId || userDir,
@@ -280,6 +290,23 @@ function refreshAdminOverrides() {
   return adminOverridesCache;
 }
 
+// SEC-DATA-01 (protocole Admin/Tasks.md) : borne chaque champ numérique à un
+// nombre FINI (une chaîne hostile '<img ...>' ou '999999' ne doit ni produire
+// de NaN, ni devenir une concaténation, ni un pourcentage exorbitant).
+function finNombre(v, maxAbs) {
+  if (typeof v !== 'number' || !isFinite(v)) return 0;
+  if (maxAbs != null && Math.abs(v) > maxAbs) return maxAbs;
+  return v;
+}
+// Chaîne hostile obligatoire = chaîne bornée (longueur plafonnée, jamais de
+// tableau/récurrence folle). Les caractères sont ultérieurement neutralisés par
+// safeForScript (sérialisation) et esc()/textContent (rendu HTML).
+function borneTexte(v, maxLen) {
+  if (v == null) return null;
+  const s = String(v);
+  return s.length > maxLen ? s.substring(0, maxLen) : s;
+}
+
 // Agrège un carnet en une entrée de classement (meilleure tentative par école).
 // MODE FLASH (tâche 2026-09-16c) : les écoles Flash-* (examen accéléré,
 // 1 exercice/classe) sont EXCLUES du classement communautaire — un score
@@ -287,8 +314,14 @@ function refreshAdminOverrides() {
 // tête de boucle (continu) : score, tokens, écoleCount n'en tiennent pas
 // compte. Un carnet UNIQUEMENT Flash produit ecoleCount=0 → null (hors classement).
 function aggregateCarnet(carnet) {
-  if (!carnet || !carnet.ecoles) return null;
+  // SEC-DATA-01 : schéma minimal tolérant — carnet objet, carnet.ecoles objet
+  // NON tableau/non chaîne. Un soumission hostile (model: 123, tiers: 'x',
+  // attempts: 'x') doit être écartée proprement (rejet isolé), jamais lever un
+  // TypeError qui tue toute la consolidation.
+  if (!carnet || typeof carnet !== 'object' || Array.isArray(carnet)) return null;
+  if (!carnet.ecoles || typeof carnet.ecoles !== 'object' || Array.isArray(carnet.ecoles)) return null;
   const ecoleEntries = Object.entries(carnet.ecoles);
+  if (ecoleEntries.length > 50) ecoleEntries.length = 50;
   let score = 0, max = 0, globalLifeScore = 0, optionalBonus = 0;
   let totalTokens = 0, totalElapsedMs = 0, totalWallMs = 0;
   let mandatoryPassed = 0, mandatoryTotal = 0;
@@ -297,69 +330,73 @@ function aggregateCarnet(carnet) {
   const ecoles = [];
 
   for (const [ecoleName, raw] of ecoleEntries) {
+    if (raw == null || typeof raw !== 'object' || Array.isArray(raw)) continue;
     let best = null;
-    if (raw && raw.best) {
+    if (raw.best && typeof raw.best === 'object' && !Array.isArray(raw.best)) {
       best = raw.best;
-    } else if (raw && raw.attempts && raw.attempts.length > 0) {
-      best = raw.attempts.reduce((b, a) => ((a.pct || 0) >= (b.pct || 0)) ? a : b);
-    } else if (raw && raw.score != null) {
+    } else if (Array.isArray(raw.attempts) && raw.attempts.length > 0) {
+      best = raw.attempts.reduce((b, a) => ((a && typeof a === 'object' ? (a.pct || 0) : 0) >= (b && typeof b === 'object' ? (b.pct || 0) : 0)) ? a : b);
+      if (!best || typeof best !== 'object' || Array.isArray(best)) best = null;
+    } else if (raw.score != null && typeof raw === 'object') {
       best = raw;
     }
     if (!best) continue;
     // MODE FLASH : école accélérée → jamais comptée dans le classement.
     if (best.flash === true || /^Flash-/i.test(best.ecole || ecoleName)) continue;
     ecoleCount++;
-    score += best.score || 0;
-    max += best.max || 0;
-    globalLifeScore += best.globalLifeScore || 0;
-    optionalBonus += best.optionalBonus || 0;
-    totalTokens += best.tokens || 0;
-    totalElapsedMs += best.elapsedMs || 0;
-    totalWallMs += best.wallMs || 0;
-    mandatoryPassed += best.mandatoryPassed || 0;
-    mandatoryTotal += best.mandatoryTotal || 0;
-    helpCount += best.helpCount || 0;
-    retriedCount += best.retriedCount || 0;
+    score += finNombre(best.score, 100000);
+    max += finNombre(best.max, 100000);
+    globalLifeScore += finNombre(best.globalLifeScore, 100000);
+    optionalBonus += finNombre(best.optionalBonus, 100000);
+    totalTokens += finNombre(best.tokens, 100000000);
+    totalElapsedMs += finNombre(best.elapsedMs, 100000000);
+    totalWallMs += finNombre(best.wallMs, 100000000);
+    mandatoryPassed += finNombre(best.mandatoryPassed, 100000);
+    mandatoryTotal += finNombre(best.mandatoryTotal, 100000);
+    helpCount += finNombre(best.helpCount, 100000);
+    retriedCount += finNombre(best.retriedCount, 100000);
 
-    const ePct = best.max > 0 ? Math.round((best.score / best.max) * 100) : 0;
+    const finBest = finNombre(best.score, 100000);
+    const finBestMax = finNombre(best.max, 100000);
+    const ePct = finBestMax > 0 ? Math.max(0, Math.min(100, Math.round((finBest / finBestMax) * 100))) : 0;
     ecoles.push({
-      ecole: best.ecole || ecoleName,
-      score: best.score || 0,
-      max: best.max || 0,
+      ecole: borneTexte(best.ecole || ecoleName, 80),
+      score: finBest,
+      max: finBestMax,
       pct: ePct,
-      optionalBonus: best.optionalBonus || 0,
-      globalLifeScore: best.globalLifeScore || 0,
-      helpCount: best.helpCount || 0,
-      retriedCount: best.retriedCount || 0,
-      date: best.date || '—',
-      elapsedMs: best.elapsedMs || 0,
-      tokens: best.tokens || 0,
-      tokensPerSecond: best.tokensPerSecond || 0,
+      optionalBonus: finNombre(best.optionalBonus, 100000),
+      globalLifeScore: finNombre(best.globalLifeScore, 100000),
+      helpCount: finNombre(best.helpCount, 100000),
+      retriedCount: finNombre(best.retriedCount, 100000),
+      date: borneTexte(best.date, 40) || '—',
+      elapsedMs: finNombre(best.elapsedMs, 100000000),
+      tokens: finNombre(best.tokens, 100000000),
+      tokensPerSecond: finNombre(best.tokensPerSecond, 100000),
       // --- Estimation tokens pour le tarif cloud (tâche 2026-08-04) ---
-      promptTokens: best.promptTokens || 0,
-      completionTokens: best.completionTokens || best.tokens || 0,
-      tiers: (best.tiers || []).map(t => ({
-        tierNum: t.tierNum,
-        runCode: !!t.runCode,
-        language: t.language || null,
-        exerciseId: t.exerciseId || null,
-        passed: t.passed != null ? !!t.passed : null,
-        attempts: t.attempts || null,
-        tierTitle: t.tierTitle || '',
-        className: t.className || '',
-        isMandatory: !!t.isMandatory,
-        rawResponse: t.rawResponse || null,
-        evalResults: (t.evalResults || []).map(r => ({
-          id: r.id,
-          taskType: r.taskType || null,
-          status: r.status,
-          points: r.points || 0,
-          maxPoints: r.maxPoints || 0,
-          helpUsed: !!r.helpUsed,
-          retried: !!r.retried,
-          code: r.code || null,
-          failureExplanation: r.failureExplanation || null,
-          teacherCorrection: r.teacherCorrection || null
+      promptTokens: finNombre(best.promptTokens, 100000000),
+      completionTokens: finNombre(best.completionTokens, 100000000) || finNombre(best.tokens, 100000000),
+      tiers: (Array.isArray(best.tiers) ? best.tiers : []).slice(0, 20).map(t => ({
+        tierNum: t && t.tierNum,
+        runCode: !!(t && t.runCode),
+        language: t ? borneTexte(t.language, 40) : null,
+        exerciseId: t ? borneTexte(t.exerciseId, 120) : null,
+        passed: t && t.passed != null ? !!t.passed : null,
+        attempts: t && t.attempts != null ? finNombre(t.attempts, 1000) : null,
+        tierTitle: t ? (borneTexte(t.tierTitle, 120) || '') : '',
+        className: t ? (borneTexte(t.className, 60) || '') : '',
+        isMandatory: !!(t && t.isMandatory),
+        rawResponse: t ? borneTexte(t.rawResponse, 20000) : null,
+        evalResults: (t && Array.isArray(t.evalResults) ? t.evalResults : []).slice(0, 60).map(r => ({
+          id: r && r.id,
+          taskType: r ? borneTexte(r.taskType, 40) : null,
+          status: r ? r.status : null,
+          points: r ? finNombre(r.points, 100000) : 0,
+          maxPoints: r ? finNombre(r.maxPoints, 100000) : 0,
+          helpUsed: !!(r && r.helpUsed),
+          retried: !!(r && r.retried),
+          code: r ? borneTexte(r.code, 20000) : null,
+          failureExplanation: r ? borneTexte(r.failureExplanation, 20000) : null,
+          teacherCorrection: r ? borneTexte(r.teacherCorrection, 20000) : null
         }))
       })),
       selfProfile: best.selfProfile || null
@@ -368,11 +405,13 @@ function aggregateCarnet(carnet) {
 
   if (ecoleCount === 0 || max === 0) return null;
 
-  const pct = Math.round((score / max) * 100);
+  // SEC-DATA-01 : pct RECALCULÉ depuis les valeurs bornées (un pct soumis n'est
+  // jamais accepté tel quel) et borné à [0, 100].
+  const pct = Math.max(0, Math.min(100, Math.round((score / max) * 100)));
   const tokensPerSecond = totalElapsedMs > 0
     ? Math.round((totalTokens / (totalElapsedMs / 1000)) * 100) / 100
     : 0;
-  const mandatoryPct = mandatoryTotal > 0 ? Math.round((mandatoryPassed / mandatoryTotal) * 100) : 0;
+  const mandatoryPct = mandatoryTotal > 0 ? Math.max(0, Math.min(100, Math.round((mandatoryPassed / mandatoryTotal) * 100))) : 0;
 
   // --- RunCode (mode turbo : examen pur code natif) ---
   // Détecte les écoles RunCode-* et expose la spécialité/diplôme pour le badge ⚡.
@@ -382,10 +421,18 @@ function aggregateCarnet(carnet) {
   let rcAgg = null;
   if (rcEcoles.length > 0) {
     const rcRaw = Object.values(carnet.ecoles || {}).find(v => {
-      const b = (v && v.best) || (v && v.attempts && v.attempts.length > 0 ? v.attempts.reduce((x, y) => ((y.pct || 0) >= (x.pct || 0)) ? y : x, v.attempts[0]) : null);
-      return b && b.runCode;
+      if (!v || typeof v !== 'object' || Array.isArray(v)) return false;
+      if (v.best && typeof v.best === 'object' && !Array.isArray(v.best)) return v.best.runCode;
+      if (Array.isArray(v.attempts)) {
+        const b = v.attempts.reduce((x, y) => ((y && typeof y === 'object' ? (y.pct || 0) : 0) >= (x && typeof x === 'object' ? (x.pct || 0) : 0)) ? y : x);
+        return b && typeof b === 'object' && b.runCode;
+      }
+      return false;
     });
-    const rcBest = rcRaw ? ((rcRaw.best && rcRaw.best.runCode) ? rcRaw.best : (rcRaw.attempts || []).filter(a => a && a.runCode).sort((a, b) => (b.timestampMs || 0) - (a.timestampMs || 0))[0]) : null;
+    const pickRcBest = (list) => list.filter(a => a && typeof a === 'object' && a.runCode).sort((a, b) => (finNombre(b.timestampMs) - finNombre(a.timestampMs)))[0] || null;
+    const rcBest = rcRaw
+      ? ((rcRaw.best && typeof rcRaw.best === 'object' && !Array.isArray(rcRaw.best) && rcRaw.best.runCode) ? rcRaw.best : (Array.isArray(rcRaw.attempts) ? pickRcBest(rcRaw.attempts) : null))
+      : null;
     if (rcBest) {
       rcAgg = {
         ecoles: rcEcoles.map(e => e.ecole),
@@ -413,22 +460,28 @@ function aggregateCarnet(carnet) {
   // le classement communautaire (ex: kimi-k2.7-code, glm-5.1).
   const origin = resolveCarnetOrigin(carnet, adminOverridesCache);
 
+  // SEC-DATA-01 : tout champ textuel est borné (longueur), tout champ numérique
+  // est recalculé depuis les valeurs finies. `model: 123` est coerce en chaîne
+  // (jamais de TypeError en aval) et la chaîne reste neutre pour safeForScript.
+  const modelField = borneTexte(carnet.model, 200)
+    || borneTexte(carnet.shortName, 200)
+    || 'Inconnu';
   const result = {
-    model: carnet.model || carnet.shortName || 'Inconnu',
+    model: modelField,
     // Nom d affichage personnalise (corrige par l utilisateur dans le
     // leaderboard local via /api/model-displayname, puis soumis avec le
     // carnet). Permet de distinguer deux modeles au meme nom mais
     // quantifications/parametres differents.
-    displayName: carnet.displayName || null,
-    shortName: carnet.shortName || (carnet.model || 'inconnu').toLowerCase().replace(/[^a-z0-9]/g, '-'),
-    quantization: carnet.quantization || null,
-    modelUrl: carnet.modelUrl || guessModelUrl(carnet.model, carnet.publisher) || null,
-    note: carnet.note || null,
-    publisher: carnet.publisher || null,
-    provider: carnet.provider || null,
+    displayName: borneTexte(carnet.displayName, 200) || null,
+    shortName: borneTexte(carnet.shortName, 200) || String(modelField).toLowerCase().replace(/[^a-z0-9]/g, '-'),
+    quantization: borneTexte(carnet.quantization, 60) || null,
+    modelUrl: borneTexte(carnet.modelUrl, 500) || guessModelUrl(carnet.model, carnet.publisher) || null,
+    note: borneTexte(carnet.note, 2000) || null,
+    publisher: borneTexte(carnet.publisher, 200) || null,
+    provider: borneTexte(carnet.provider, 60) || null,
     isCloud: origin.isCloud,
     originAdmin: origin.originAdmin,
-    originManual: carnet.originManual || null,
+    originManual: borneTexte(carnet.originManual, 60) || null,
     score, max, pct, globalLifeScore, optionalBonus,
     mandatoryPassed, mandatoryTotal, mandatoryPct,
     helpCount, retriedCount,
@@ -2770,16 +2823,26 @@ function main() {
 
   console.log(`${submissions.length} soumission(s) trouvée(s).`);
 
-  // Agrège chaque soumission
+  // Agrège chaque soumission — SEC-DATA-01 : une soumission hostile est
+  // ÉCARTÉE de façon isolée (warning au journal) sans arrêter la consolidation.
   const entries = [];
+  let rejectedSubmissions = 0;
   for (const sub of submissions) {
-    const agg = aggregateCarnet(sub.carnet);
+    let agg = null;
+    try {
+      agg = aggregateCarnet(sub.carnet);
+    } catch (e) {
+      rejectedSubmissions++;
+      console.log(`⚠ Soumission écartée (agrégation impossible : ${e && e.message ? e.message : e}) : ${sub.file || '(fichier inconnu)'}`);
+      continue;
+    }
     if (agg) {
       agg.pseudo = sub.pseudo;
       agg.submittedAt = sub.submittedAt;
       entries.push(agg);
     }
   }
+  if (rejectedSubmissions > 0) console.log(`⚠ ${rejectedSubmissions} soumission(s) hostile(s) ou illisible(s) écartée(s).`);
 
   // Dédoublonne et fusionne
   let merged = deduplicateAndMerge(entries);
@@ -2869,7 +2932,12 @@ function auditOrigins() {
   }
   const entries = [];
   for (const sub of submissions) {
-    const agg = aggregateCarnet(sub.carnet);
+    let agg = null;
+    try {
+      agg = aggregateCarnet(sub.carnet);
+    } catch (e) {
+      continue;
+    }
     if (agg) { agg.__carnetBrut = sub.carnet; entries.push(agg); }
   }
   const merged = deduplicateAndMerge(entries);

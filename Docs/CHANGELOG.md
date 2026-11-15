@@ -1,5 +1,102 @@
 # CHANGELOG - Carnet de Notes BenchGo
 
+## 2026-11-15d — feat(sécurité) : P0 du protocole implémenté — sandbox par processus jetable, traversée fermée, XSS neutralisée, professeur routé exactement
+
+### Contexte & besoin
+Feu vert explicite de l'utilisateur : « Vas-y champion, tu exécutes à la lettre » — implémentation du plan P0 (bloquants) de `Admin/Tasks.md` (audit du 2026-11-15c), qui était resté « non exécuté » : (1) remplacer la confiance en `node:vm` par une isolation processus adaptée, sans secrets, avec limites de ressources, couvrant aussi la sérialisation du résultat ; (2) centraliser la validation de `shortName` pour toutes les lectures/écritures de carnets ; (3) neutraliser les JSON injectés dans les blocs `<script>` du classement local ; (4) empêcher tout routage du professeur vers un provider non choisi et faire respecter `--no-teacher` jusqu'à RunCode ; (5) tests de non-régression pour les 5 preuves majeures ; (6) vérifier les autres contextes XSS (champs numériques communautaires, soumissions hostiles).
+
+### SEC-VM-01/VM-02 — sandbox par processus JETABLE (critique, CORRIGÉ)
+- **`vm-sandbox-child.js` (NOUVEAU)** : chaque évaluation `exec` tourne dans un ENFANT Node qui vit le temps d'une seule évaluation. Le processus principal (runner, clés, carnets, secrets en session) ne JAMAIS évaluer du code produit par un modèle.
+- **Durcissement de l'enfant** : environnement sur LISTE BLANCHE (aucune clé API, PAT, HOME, `NODE_OPTIONS` exclu — anti-injection), dossier de travail vide dans le tempdir, mémoire plafonnée (256 Mo), globals réseau neutralisés (`fetch`, `WebSocket`, `XMLHttpRequest`, `Worker`, `localStorage`), chemins vers les modules natifs fermés (`process.getBuiltinModule`, `mainModule`, `binding`, `dlopen`, `_linkedBinding`) — un code qui réussirait à fuir du contexte VM n'a plus de route vers `fs`/`net`/`child_process`.
+- **Canal de résultat dédié (fd 3)** + nonce aléatoire : un code qui polluerait stdout ne peut pas forger un verdict ; verdict plafonné à 64 Ko.
+- **Purification du realm (barrière 2)** : un `constructor` PROPRE au sandbox, NÉ DANS LE REALM VM, coupe la chaîne `this.constructor.constructor` — la Function délivrée est celle du REALM (où `process` n'existe pas) et non plus la Fonction hôte. Sondé empiriquement (Node 26) : l'évasion dynamique par concaténation échoue désormais (`(intermediate value)[k][k] is not a function` / `process is not defined`). Le stub `console` est recréé DANS le realm (l'ancien était une fonction hôte, donc une porte vers la Function hôte).
+- **Deadline GLOBAL du parent (SEC-VM-02)** : `spawnSync` avec timeout = timeout VM + 2 500 ms couvre TOUTES les phases (définition + exécution + SÉRIALISation + inspection). Un `toJSON` bouclant — l'ex-preuve de blocage hors timeout — est tué par le parent : échec borné (~4 s), le runner/le batch ne bloque JAMAIS plus. Un code échappé qui tuerait l'enfant (`process.exit`) devient un simple échec d'évaluation.
+- **Sérialisation DANS le realm** : `JSON.stringify(this.__result__)` s'exécute DANS le contexte VM sous protection du timeout V8 (au lieu de `JSON.stringify` hôte hors frontière). Un résultat non transportable = verdict d'ÉCHEC (jamais une réussite non prouée). `execCodeInVMInProcess` (chemin historique conservé en repli) bénéficie du même traitement.
+- **Repli contrôlé** : le chemin in-process n'est utilisé QUE si l'enfant ne peut pas DÉMARRER (ENOENT/EACCES) — le repli ne re-exécute JAMAIS un code jugé toxique (ETIMEDOUT/SIGTERM → échec borné). `BENCHGO_VM=in-process` force le chemin historique pour le débogage.
+- **Évaluateurs custom alignés** : `custom-evaluators.js` (GeoJSON, hooks React, flood fill…) utilise désormais `createPurifiedContext()` (même purification + prototype rebranché) pour ses propres contextes.
+- **Rétro-compat** : `execResult` garde exactement `{ passed, result, error, executionTimeMs }` — `task-evaluator.js` et `verify_tiers.js` inchangés.
+
+### SEC-FILE-01 — traversée de répertoires fermée (haute, CORRIGÉ)
+- **`score-ledger.js`** : `isValidShortName()` centralisée (identifiant strict `[A-Za-z0-9._-]`, max 120, refus des séparateurs, `..`, `%2f`/`%5c`, ADS NTFS, disques, NUL/contrôles, noms réservés Windows CON/PRN/NUL/COM1-9/LPT1-9, point/espace final, unicode, chemins absolus) + `ledgerPath()` confiné (résolution finale obligatoirement dans `.carnet/`, sinon NULL et NO opération disque).
+- **Toutes les opérations carnet passent par la même règle** : `loadLedger` (retourne struct vide + `invalidShortName: true` — la preuve de l'audit `../../submissions/admin-overrides` ne lit PLUS le fichier), `saveLedger` (refus sec, jamais d'écriture hors `.carnet`), `backupLedger`, `restoreLedgersFromBackup` (noms de backup hostiles refusés).
+- **Anti-symlink sur les carnets** : lecture comme écriture refusent un fichier qui n'est pas un fichier RÉGULIER (symlink/jonction posés dans `.carnet` pour rediriger un accès).
+- **Écriture ATOMIQUE** : `saveLedger` écrit dans un `.tmp` puis renomme — un carnet interrompu ne peut plus laisser un fichier tronqué.
+- **`leaderboard.js`** : `deleteLedger`/`markCloudModel`/`loadLedgerByName` consomment la validation partagée (plus de remplacement silencieux par `_` — un identifiant invalide est REFUSÉ) ; garde uniforme dans `startServer` : Toute route `/api/` portant un `shortName` est validée d'abord → `400` sans accès disque ni chemin divulgué.
+
+### SEC-XSS-01 — sérialisation sûre du classement local (haute, CORRIGÉ)
+- **`score-ledger.js` exporte `safeForScript()`** (même principe que le communautaire) : `<`, `>`, `&`, backticks, `${`, U+2028/U+2029 neutralisés en Unicode (une donnée contenant `</script>` ne peut plus fermer le bloc script).
+- **`leaderboard.js`** : `var MODELS = ${safeForScript(JSON.stringify(modelsData))}` (la ligne de l'ex-preuve), et désormais AUSSI `LOCAL_SHA` et `REMOTE_REPO` — tous les blocs `<script>` d'injection du classement local sont protégés. Le communautaire conserve sa protection existante (`safeForScript` interne).
+- **Rond-fiable testé** : la donnée neutralisée reprend EXACTEMENT sa valeur après parsing (aucune corruption des noms/notes du classement).
+
+### SEC-TEACH-01/02 — professeur routé exactement (haute, CORRIGÉ)
+- **`teacher-client.js`** : table `TEACHER_BASE_URLS` unique dérivée de `CLOUD_PROVIDERS` (la MÊME source que le client élève) — chaque provider du menu professeur (groq, openai, anthropic, mistral, together, deepseek, cohere, kilo, openrouter, ollama, ollama-cloud, lmstudio, custom) pointe vers SON URL exacte. **AUCUN repli vers Groq** : provider inconnu = erreur fermée AVANT tout `fetch`. Ex-preuve : `deepseek`/`together`/`cohere`/`kilo`/`ollama-cloud`/`lmstudio`/`custom` tombaient TOUS sur `api.groq.com` — une clé pouvait partir chez le mauvais service.
+- **`lm-studio`** (alias historique divergent) recanalisé vers `lmstudio`. **`custom` exige `--teacher-endpoint`** (propagé), sinon erreur fermée.
+- **Clés env par nom OFFICIEL** : lecture via `CLOUD_PROVIDERS.envKey` (l'ancien hack `${provider.toUpperCase()}_API_KEY` donnait `'OLLAMA-CLOUD_API_KEY'`, nom faux). Redaction `redactSecret()` appliquée aux erreurs du client (un serveur ne peut plus refléter la clé dans un message).
+- **`--no-teacher` propagé jusqu'à RunCode (SEC-TEACH-02)** : "runner" passe `teacherEnabled` + `teacherEndpoint` à `runAdaptiveSchoolExam`/`runEclairScan` ; `buildExamTeacher({teacherEnabled:false})` → NULL (zéro client, zéro clé d'env, zéro appel réseau) ; le verdict de spécialité passe au repli MÉCANIQUE dans les deux examens (le défaut implicite Groq + `GROQ_API_KEY` est impossible). Affichage honnête : `[LE PROFESSEUR (DÉSACTIVÉ --no-teacher)]`.
+
+### SEC-DATA-01/XSS-02 — soumissions communautaires bornées (haute, CORRIGÉ)
+- **`consolidate-leaderboard.js`** : `finNombre()` (nombre fini + borne) et `borneTexte()` (longueur plafonnée) sur chaque champ agrégé ; `pct` RECALCULÉ depuis les valeurs bornées et borné à [0, 100] (le `999999/1 → 99999900 %` est mort) ; `model: 123` / `tiers: 'x'` / `attempts: 'x'` n'élèvent plus de `TypeError` (rejet isolé).
+- **Consolidation résiliente** : une soumission hostile est ÉCARTÉE individuellement (warning au journal, compteur affiché) sans arrêter les autres ; taille maximale avant parsing (5 Mo) — un JSON géant ne peut plus bloquer la consolidation.
+
+### P0.5 — Tests de non-régression (4 nouveaux fichiers, 33 cas)
+- **`tests/test-vm-sandbox-isolation.js`** (11 cas) : évasion directe bloquée, concat depuis global fermée, concat depuis console fermée, `typeof process` inaccessible dans le realm, boucle infinie tuée < 8 s ; toJSON poison interrompu < 8 s (ex-preuve SEC-VM-02), résultat géant plafonné, fallback in-process = mêmes garanties.
+- **`tests/test-path-traversal.js`** (9 cas) : formats réels des 54 carnets acceptés ; `../`, `..\`, encodés, ADS, NUL, réservés Windows, unicode refusés ; preuve historique replay (`loadLedger('../../submissions/admin-overrides')` ne lit plus le fichier) ; `saveLedger` ne crée AUCUN fichier hors `.carnet` (sonde non destructive §2.2).
+- **`tests/test-xss-serialization.js`** (6 cas) : neutralisation `</script>`/backticks/`${`/U+2028, rond-fiable via vm, intégre `buildLeaderboardHTML` avec carnet de sonde jetable (la balise `<script>globalThis.__BENCHGO_XSS__=true` ne peut plus émerger).
+- **`tests/test-teacher-routing.js`** (8 cas) : URL exacte pour chaque provider, alias lm-studio, erreur fermée inconnu/custom, clé env officielle, `callCloudTeacher` URL exacte via fetch factice (chaque provider de CLOUD_PROVIDERS), `teacherEnabled=false` → zéro fetch, `determineSpecialty(null)` → verdict mécanique zéro fetch.
+- Les vérifications async tournent dans un processus fils jetable (harnais synchrone).
+
+### Limites assumées (suite P1/P2 — non dissimulées)
+- L'isolation OS réelle (compte Windows restreint / ACL / Job Object) reste la suite P1 : l'enfant jetable supprime secrets/env/argv du code élève et borne temps/mémoire/sortie, mais il s'exécute toujours avec les droits de l'utilisateur courant (lecture du dépôt théoriquement possible en cas de fuite complète hors VM).
+- Les évaluateurs custom (flux async, fonctions VM appelées hôte) restent IN-PROCESS par nature (mocks/promises à cheval sur l'hôte) — seule leur PURIFICATION du realm est appliquée ; isolation complète = continuation P1.
+- Le reste du plan P1 (CSP/headers HTML, contrôle `Host`/`Origin` avant OPTIONS, redirections, PAT minimisé, ANSI/OSC, CSV/Markdown, télémétrie, dashboard, CI) reste À FAIRE (protocole `Admin/Tasks.md` §6).
+
+### Vérifications
+- `node tests/run-tests.js` → **160 passés / 0 échoués** (34 nouveaux cas dont 33 sur les 5 preuves P0).
+- `node verify_tiers.js` → **486 exec OK / 506 testés / 20 skips / 0 problème** — ZERO faux positif de la nouvelle sandbox (purifique + enfant jetable) sur les solutions canoniques.
+- `node scripts/check-inline-js.js` → JS inline valide dans les deux classements (local + communautaire, régénérés).
+- `node leaderboard.js` → 54 modèles classés, HTML/MD régénérés sans erreur ; `node consolidate-leaderboard.js` → 107 soumissions agrégées, 100 modèles uniques.
+- `node --check` OK sur les 14 fichiers modifiés/créés.
+- Serveurs : aucun processus de test laissé actif ; sonde carnet supprimée ; tmpdirs de test nettoyés.
+
+### Fichiers touchés
+`vm-sandbox.js`, `vm-sandbox-child.js` (NOUVEAU), `score-ledger.js`, `custom-evaluators.js`, `leaderboard.js`, `consolidate-leaderboard.js`, `teacher-client.js`, `adaptive-exam.js`, `runner.js`, `tests/test-vm-sandbox-isolation.js` (NOUVEAU), `tests/test-path-traversal.js` (NOUVEAU), `tests/test-xss-serialization.js` (NOUVEAU), `tests/test-teacher-routing.js` (NOUVEAU), ce CHANGELOG, `AGENTS.md`, `Admin/Tasks.md`, `Memories-BenchGo/Tasks.md`.
+
+### Pièges
+- Le rejet `childModeEnabled()` lit `BENCHGO_VM` à CHAQUE appel : pour déboguer avec le chemin in-process, exporter `BENCHGO_VM=in-process` — mais le chemin in-process reste PLUS exposé (documenté).
+- `execCodeInVMInProcess` est le MÊME code que la variante enfant : NE JAMAIS réintroduire un `JSON.stringify` hôte sur un résultat realm (le toJSON poison reviendrait). Toute sérialisation passe par `serializeVmResult` ou la stringify-en-realm.
+- `isValidShortName` est STRICT par design : si un futur format de shortName légitime contient un autre caractère, l'ajouter DANS la fonction (pas dans les appelants) — et rejouer `tests/test-path-traversal.js`.
+- Les 54 carnets réels utilisent `[a-z0-9._-]` : aucune migration nécessaire ; un carnet hors domaine sera lu comme « carnet introuvable » et JAMAIS écrasé.
+- `safeForScript` (score-ledger) ≠ `esc()` : le premier neutralise pour un BLOC SCRIPT, le second pour du HTML affiché — ne jamais mélanger.
+- Tests non destructifs : `test-path-traversal.js` ne supprime RIEN de réel (preuve via `security-probe-inexistant`), `test-xss-serialization.js` crée/supprime un carnet de sonde unique jamais déjà présent.
+
+## 2026-11-15c — docs(sécurité) : protocole offensif défensif et audit local sans implémentation
+
+### Contexte & besoin
+Demande utilisateur : rédiger dans `Admin/Tasks.md` le protocole de sécurité de l’application, tester les failles exploitables contre les agents/entrées hostiles, puis attendre une demande explicite avant toute implémentation. Audit limité à la copie locale et à des sondes non destructives, sans attaque de service externe ni utilisation de vrais secrets.
+
+### Audit et preuves
+- **Critique — sandbox VM** : construction dynamique de `constructor` non détectée ; accès à `process.pid` et `process.getBuiltinModule` prouvé depuis le global et `console.log`, sans lecture de fichier ni commande système. Un `toJSON` bouclant bloque aussi APRÈS `runInContext` : enfant jetable terminé par le harnais (`ETIMEDOUT`), preuve que le timeout VM ne couvre pas l’inspection du résultat.
+- **Haute — traversée de répertoires** : `loadLedger('../../submissions/admin-overrides')` lit le fichier JSON neutre hors `.carnet` ; écriture non exécutée, chemin `saveLedger` documenté statiquement.
+- **Haute — XSS locale** : `buildLeaderboardHTML()` sérialise `MODELS` sans neutralisation de `</script>` ; balise `<script>` de démonstration présente dans le HTML en mémoire, sans carnet modifié ni exécution navigateur.
+- **Haute — professeur RunCode** : les constructeurs `deepseek`, `together`, `cohere`, `kilo`, `ollama-cloud`, `lmstudio` et `custom` résolvent tous vers `https://api.groq.com/openai/v1` ; aucun réseau. Le défaut non configuré charge aussi Groq/`GROQ_API_KEY`, chaîne `--no-teacher` à corriger.
+- **Haute — consolidation** : champs numériques hostiles conservés, trois `TypeError` reproductibles (`model` nombre, `tiers`/`attempts` chaîne), score `999999/1` → `99999900 %` ; sinks `innerHTML` et absence de schéma documentés.
+- **Serveur local** : origine hostile bloquée (`403`), corps 70 Kio interrompu sans arrêt du serveur ; mais `Host` arbitraire et absence d’`Origin` acceptés, HTML sans CSP/XFO/nosniff, connexion incomplète maintenue avec les timeouts désactivés.
+- **Autres constats statiques intégrés** : XSS dashboard/champs communautaires, PAT et secrets en argv, ANSI/OSC, URLs `javascript:`, Markdown/CSV, télémétrie non interactive, minimisation des soumissions, CI/actions, `postMessage` et écritures non atomiques.
+- **Masquage des logs** : la forme URL-encodée d’une clé factice avec caractères spéciaux n’est pas masquée ; forme brute et préfixe correctement masqués.
+
+### Contenu du protocole
+`Admin/Tasks.md` contient désormais : actifs/frontières de confiance, règles d’exploitation locale non destructive, preuves séparées des hypothèses, matrices VM/HTTP/XSS/fichiers/réseau/IA/CI/processus, priorités P0/P1/P2, critères de sortie et réponse à incident. **Aucun correctif applicatif n’est implémenté.**
+
+### Vérifications
+- `node tests/run-tests.js` → **126 passés / 0 échoué**.
+- `node verify_tiers.js` → **486 exec OK / 506 testés / 20 skips / 0 problème**.
+- `node scripts/check-inline-js.js` → JS inline valide dans les deux classements actuels (la syntaxe seule ne détecte pas les XSS).
+- `git check-ignore` + `git ls-files` → clés, profil PAT, coffre, carnets et `Admin/Tasks.md` non versionnés.
+- Serveur de test `127.0.0.1:39457` arrêté ; aucun processus de test laissé actif.
+
+### Fichiers touchés
+`Admin/Tasks.md`, ce CHANGELOG, `Memories-BenchGo/Tasks.md`. Aucun fichier JavaScript ou de configuration d’exécution modifié.
+
 ## 2026-11-15b — feat(professeur) : Ollama Cloud en ABONNEMENT + sécurité durcie des clés API
 
 ### Contexte & besoin
@@ -8325,4 +8422,3 @@ après avoir répondu "oui" à la proposition de mémorisation.
 - Les runs suivants (même fenêtre, nouvelle fenêtre, night-batch) retrouvent
   la clé sans aucune re-saisie.
 - `--no-save-keys` continue de désactiver la persistance (machine partagée).
-

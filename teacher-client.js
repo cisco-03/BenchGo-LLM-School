@@ -461,28 +461,59 @@ async function askTeacherToCorrectStudentAnalysis({ teacherConfig, task, errors,
 // --- Professeur Maître Absolu (Examen Polyglotte — Code Natif) ---
 // Client distinct utilisé par adaptive-exam.js pour l'examen de débugging code
 // natif. Contrairement au correcteur Free Router ci-dessus, celui-ci cible UN
-// provider/modèle choisi (défaut groq/llama-3.3-70b-versatile) et fait ses
-// propres appels fetch directement (pas via queryFn) : le professeur doit être
-// cognitivement supérieur à l'élève. Supporte OpenAI-compat + Anthropic natif.
+// provider/modèle choisi et fait ses propres appels fetch directement (pas via
+// queryFn) : le professeur doit être cognitivement supérieur à l'élève.
+// Supporte OpenAI-compat + Anthropic natif.
+//
+// SEC-TEACH-01 (protocole Admin/Tasks.md) : la table de routage est UNIQUE et
+// exacte — chaque provider du menu professeur pointe vers SON url officiel
+// (dérivé de CLOUD_PROVIDERS, la même table que le client élève). AUCUN repli
+// vers Groq pour un provider inconnu : erreur fermée AVANT tout fetch, pour que
+// la clé d'un provider ne quitte jamais vers le mauvais service. `custom`
+// exige un endpoint explicite (propagé par --teacher-endpoint).
+const TEACHER_BASE_URLS = {};
+(function seedBaseUrlsFromCloudProviders() {
+  for (const [name, spec] of Object.entries(CLOUD_PROVIDERS)) {
+    if (!spec || !spec.url) continue;
+    // CLOUD_PROVIDERS stocke l'URL FINALE (/chat/completions ou /messages) — le
+    // client n'a besoin que de la BASE à laquelle il ajoute le chemin.
+    TEACHER_BASE_URLS[name] = spec.url.replace(/\/(chat\/completions|messages)$/, '');
+  }
+})();
+
 class TeacherClient {
   constructor(config = {}) {
-    this.provider = config.provider || process.env.TEACHER_PROVIDER || 'groq';
-    this.model = config.model || process.env.TEACHER_MODEL || 'llama-3.3-70b-versatile';
-    this.apiKey = config.apiKey || process.env[`${this.provider.toUpperCase()}_API_KEY`];
-    this.baseUrl = this.resolveDefaultBaseUrl();
-  }
-
-  resolveDefaultBaseUrl() {
-    const urls = {
-      groq: 'https://api.groq.com/openai/v1',
-      openai: 'https://api.openai.com/v1',
-      openrouter: 'https://openrouter.ai/api/v1',
-      anthropic: 'https://api.anthropic.com/v1',
-      mistral: 'https://api.mistral.ai/v1',
-      ollama: 'http://localhost:11434/v1',
-      'lm-studio': 'http://localhost:1234/v1'
-    };
-    return urls[this.provider] || urls.groq;
+    const provider = String(config.provider || '').trim().toLowerCase();
+    // SEULE exception à l'identifiant officiel : l'alias historique
+    // 'lm-studio' (divergence de nommage repérée à l'audit) est recanalisé
+    // vers 'lmstudio' pour ne jamais divager hors table.
+    if (provider === 'lm-studio') {
+      this.provider = 'lmstudio';
+    } else {
+      this.provider = provider;
+    }
+    // SEC-TEACH-01 : pas de repli Groq — un provider inconnu est une ERREUR
+    // FERMÉE (avant tout fetch). Pas de valeur implicite tirée de l'env.
+    if (this.provider !== 'custom' && !TEACHER_BASE_URLS[this.provider]) {
+      throw new Error("LE PROFESSEUR : provider inconnu '" + (provider || '(vide)') + "' — aucune URL officielle. Providers valides : " + Object.keys(TEACHER_BASE_URLS).join(', '));
+    }
+    this.model = config.model || 'llama-3.3-70b-versatile';
+    // Clé : config explicite SEULEMENT, puis la variable d'env OFFICIELLE du
+    // provider (CLOUD_PROVIDERS.envKey — l'ancien hack
+    // provider.toUpperCase()+'_API_KEY' donnait 'OLLAMA-CLOUD_API_KEY', nom faux).
+    const envKey = this.provider === 'custom' ? null : (CLOUD_PROVIDERS[this.provider] && CLOUD_PROVIDERS[this.provider].envKey ? process.env[CLOUD_PROVIDERS[this.provider].envKey] : null);
+    this.apiKey = config.apiKey || envKey || null;
+    // URL : le endpoint explicite (custom / ollama / lmstudio...) prime, sinon
+    // la table exacte. On refuse de deviner.
+    this.baseUrl = config.endpoint || (this.provider === 'custom' ? null : TEACHER_BASE_URLS[this.provider]);
+    if (!this.baseUrl) {
+      throw new Error("LE PROFESSEUR : provider 'custom' exige --teacher-endpoint=<url> (aucun fallback implicite).");
+    }
+    // SEC : la clé ne quitte JAMAIS en clair sur un transport non sûr (E710).
+    if (this.apiKey) {
+      const transportError = assertSecretSafeUrl(this.baseUrl);
+      if (transportError) throw new Error('LE PROFESSEUR : ' + redactSecret(transportError, this.apiKey));
+    }
   }
 
   async ask(prompt, systemInstruction = 'Tu es Le Professeur Maître Absolu de BenchGo-LLM-School. Tu juges avec une rigueur chirurgicale sur le code natif.', options = {}) {
@@ -515,7 +546,9 @@ class TeacherClient {
     });
 
     if (!response.ok) {
-      throw new Error(`[LE PROFESSEUR - ERREUR ${this.provider}] HTTP ${response.status}: ${await response.text()}`);
+      // SEC : le corps d'erreur du serveur est redacté (il peut refléter la clé).
+      const errText = redactSecret(await response.text().catch(() => ''), this.apiKey);
+      throw new Error(`[LE PROFESSEUR - ERREUR ${this.provider}] HTTP ${response.status}: ${errText}`);
     }
 
     const data = await response.json();
@@ -546,7 +579,8 @@ class TeacherClient {
     });
 
     if (!response.ok) {
-      throw new Error(`[LE PROFESSEUR - ERREUR anthropic] HTTP ${response.status}: ${await response.text()}`);
+      const errText = redactSecret(await response.text().catch(() => ''), this.apiKey);
+      throw new Error(`[LE PROFESSEUR - ERREUR anthropic] HTTP ${response.status}: ${errText}`);
     }
 
     const data = await response.json();

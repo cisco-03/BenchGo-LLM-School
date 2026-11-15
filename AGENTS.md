@@ -61,7 +61,7 @@ Options fréquentes : `--profile=`, `--provider=`, `--model=`, `--quantization=`
 
 ## Tests
 
-Tous dans `tests/test-*.js`. Framework maison : chaque fichier exporte `run(c)` + `cases[]`. Lanceur : `node tests/run-tests.js` (code de sortie 0 = tout OK). 5 fichiers de test (parsing, scoring-utils, sentinelles, lru-cache).
+Tous dans `tests/test-*.js`. Framework maison : chaque fichier exporte `run(c)` + `cases[]`. Lanceur : `node tests/run-tests.js` (code de sortie 0 = tout OK). 17 fichiers de test (parsing, scoring-utils, sentinelles, lru-cache, résolution de slugs, tracker GGUF, menu professeur + routage, clés/sécurité, sandbox VM, traversées, XSS, consolidé-origines, client cloud/endpoint, auto-arch, menu batch RunCode, eclair).
 
 ---
 
@@ -1438,6 +1438,39 @@ node runner.js --provider=openrouter --model=<slug:free> --exam-code \
 - Le récapitulatif n'écrit PAS de carnet pour les FAIL/VIDE : un modèle KO n'apparaît « pas testé » — voulu (carnet = preuve d'examen réel).
 - Le mode mono garde les plafonds DÉSACTIVÉS (deadlineMs=0) : comportement historique 2026-09-09/2026-09-15 intact (E509 temp-fs reste non enregistré).
 - Les prompts interactifs (mise en réserve grande école) sont SKIPPÉS par élève en file : N prompts = N blocages — seul `--queue-runcode` inscrit en file.
+
+### P0 sécurité implémenté — sandbox jetable, traversée, XSS, professeur (tâche 2026-11-15d)
+
+**Fichiers touchés :** `vm-sandbox.js`, `vm-sandbox-child.js` (nouveau), `score-ledger.js`, `custom-evaluators.js`, `leaderboard.js`, `consolidate-leaderboard.js`, `teacher-client.js`, `adaptive-exam.js`, `runner.js`, `tests/test-vm-sandbox-isolation.js` (nouveau), `tests/test-path-traversal.js` (nouveau), `tests/test-xss-serialization.js` (nouveau), `tests/test-teacher-routing.js` (nouveau), `Docs/CHANGELOG.md`, `Admin/Tasks.md`, `AGENTS.md`, `Memories-BenchGo/Tasks.md`.
+
+**Principe :** feu vert utilisateur pour le plan P0 de `Admin/Tasks.md` (audit 2026-11-15c). Les 5 preuves majeures sont corrigées + testées : (1) SEC-VM-01/02 — le code élève ne s'exécute plus dans le processus principal (enfant jetable env-nettoyé, deadline global couvrant sérialisation, purification du realm qui coupe la chaîne `constructor` dynamique, sérialisation DANS le realm sous timeout V8) ; (2) SEC-FILE-01 — validation centralisée `isValidShortName()` + chemins confinés pour TOUTES les opérations carnet (load/save/backup/restore/delete/routes HTTP en 400) ; (3) SEC-XSS-01 — `safeForScript()` appliquée à tous les blocs `<script>` d'injection du classement local (`MODELS`, `LOCAL_SHA`, `REMOTE_REPO`) ; (4) SEC-TEACH-01/02 — table URLs professeur exacte dérivée de `CLOUD_PROVIDERS`, AUCUN repli Groq, `--no-teacher` propagé jusqu'à RunCode (zéro client, zéro appel) ; (5) SEC-DATA-01 — champs numériques/textuels bornés dans `aggregateCarnet`, pct recalculé [0,100], soumission hostile écartée individuellement.
+
+**Fonctions :**
+- `execCodeInVM()` (vm-sandbox.js) → spawn d'un enfant `vm-sandbox-child.js` via `spawnSync` (stdin JSON + nonce, résultat sur fd 3) ; `execCodeInVMInProcess()` = chemin historique en repli (purifié lui aussi) ; `createPurifiedContext()` = prototype global rebranché + stub console realm-native + `constructor` propre né dans le realm ; `serializeVmResult()` = sérialisation plafonnée (fonctions/[Function], cycles/[Circular], 64 Ko) ; `childModeEnabled()` lit `BENCHGO_VM`.
+- `isValidShortName()` / `ledgerPath()` / `safeForScript()` (score-ledger.js, exportées) → règle stricte `[A-Za-z0-9._-]` (max 120), résolution confinée à `LEDGER_DIR` (null refusé = aucune opération disque), neutralisation `<>/&/backtick/${/U+2028/2029`.
+- `TEACHER_BASE_URLS` (teacher-client.js, dérivée de `CLOUD_PROVIDERS`) + `TeacherClient.config.endpoint` pour custom ; `ask()` sans repli — erreur fermée avant tout fetch sur provider inconnu/vide.
+- `buildExamTeacher({ teacherEnabled: false })` (adaptive-exam.js) → null ; `determineSpecialty(null, ...)` → verdict mécanique sans appel (exportée pour tests) ; `teacherLabel(teacher)` pour l'affichage.
+- Route server `startServer` (leaderboard.js) : garde uniforme `isValidShortName` sur toute route `/api/` avec `shortName` → 400 sans disque.
+
+**Pour modifier :**
+1. **Resserrer/élargir la règle shortName** : éditer `isValidShortName()` seule (score-ledger.js) — tous les appelants la consomment ; rejouer `tests/test-path-traversal.js`.
+2. **Forcer le chemin in-process** (débogage) : env `BENCHGO_VM=in-process` — moins isolé, à ne faire que ponctuellement.
+3. **Changer le délai de grâce enfant** : `CHILD_GRACE_MS` (vm-sandbox.js, défaut 2500) ; le plafond mémoire enfant via `--max-old-space-size` est dans `vm-sandbox-child.js` (256 Mo).
+4. **Changer l'URL d'un provider professeur** : éditer `CLOUD_PROVIDERS` (cloud-client.js) — `TEACHER_BASE_URLS` est DÉRIVÉE, jamais doublée.
+5. **Neutraliser un nouveau contexte d'injection HTML** : réutiliser `safeForScript()` (score-ledger.js) sur la ligne `${JSON.stringify(...)}` concernée ; jouer `test-xss-serialization.js`.
+6. **Revenir au routage historique du professeur** (déconseillé — clé pouvant partir chez Groq) : restaurer `resolveDefaultBaseUrl()` avec repli Groq dans teacher-client.js ; les tests `test-teacher-routing.js` devront être corrigés en même temps.
+7. **Revenir aux JSON.stringify hôtess du classement local** (déconseillé — XSS) : remplacer `${safeForScript(JSON.stringify(modelsData))}` par `${JSON.stringify(modelsData)}` dans leaderboard.js.
+8. **Tester** : `node tests/run-tests.js` (160 cas, dont 34 nouveaux) ; `node verify_tiers.js` (486 exec OK — aucune régression canonique) ; `node leaderboard.js` + `node consolidate-leaderboard.js` + `node scripts/check-inline-js.js`.
+
+**Pièges :**
+- Le chemin in-process est un REPLI UNIQUEMENT quand l'enfant ne démarre pas (ENOENT/EACCES) : un `ETIMEDOUT`/SIGTERM = code toxique pour la sérialisation — JAMAIS de re-exécution dans le parent (le hang SEC-VM-02 reviendrait).
+- Toute sérialisation d'un résultat realm passe par la stringify DANS le contexte (`JSON.stringify(this.__result__)` sous timeout V8) ou `serializeVmResult` — ne JAMAIS réintroduire un `JSON.stringify` hôte sur des objets realm.
+- `buildSandbox()` est vide par design (les intrinsics du realm suffisent) : réinjecter des fonctions hôtes (`console`, `parseInt`...) réouvre la porte Function hôte.
+- `isValidShortName` est STRICT : 54 carnets réels en `[a-z0-9._-]` passent ; un nom légitime refusé → ajouter le caractère DANS la fonction + tests.
+- `test-path-traversal.js` ne supprime RIEN de réel (sonde `security-probe-inexistant`) ; `test-xss-serialization.js` crée/supprime `security-probe-xss.json` (jamais un carnet existant).
+- Les vérifications async des tests tournent dans des processus fils (harnais synchrone) — ne pas les remettre en IIFE non attendue (faux verts).
+- L'isolation OS réelle (Job Object/ACL, compte restreint) reste la suite P1 : l'enfant supprime secrets/env/argv et borne mémoire/temps/sortie, mais tourne avec les droits de l'utilisateur courant.
+- P1/P2 restants (CSP/headers, Host/Origin avant OPTIONS, redirections, PAT argv, ANSI/OSC, CSV/Markdown, télémétrie, dashboard, CI) : suivre `Admin/Tasks.md` §6.
 
 ---
 

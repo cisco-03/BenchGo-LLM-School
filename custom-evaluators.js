@@ -1,7 +1,7 @@
 
 const vm = require('vm');
 const { EVAL_TIMEOUT_MS } = require('./config');
-const { buildSandbox } = require('./vm-sandbox');
+const { buildSandbox, createPurifiedContext } = require('./vm-sandbox');
 const { stripTS } = require('./parsing-utils');
 const logger = require('./logger');
 
@@ -39,7 +39,7 @@ function evaluateGeoJSONRFC7946(code) {
 
   try {
     const sandbox = buildSandbox();
-    const ctx = vm.createContext(sandbox);
+    const ctx = createPurifiedContext(sandbox);
     vm.runInContext(`
       ${stripped}
       this.__geoResult__ = extrairePointsInteret(${JSON.stringify(rfc7946Data)});
@@ -143,7 +143,7 @@ function evaluateReactHook(code) {
         ChartRender: MockChartRender,
         containerRef: { current: {} }
       };
-      const ctx = vm.createContext(sandbox);
+      const ctx = createPurifiedContext(sandbox);
 
       const hookNameMatch = stripped.match(/function\s+(\w+)/);
       const hookName = hookNameMatch ? hookNameMatch[1] : 'useChartCanvas';
@@ -184,7 +184,7 @@ function evaluateFloodFill(code) {
   // obtenue par l'un ou l'autre chemin.
   function runFloodFill(matrix, x, y, newVal) {
     const sandbox = buildSandbox();
-    const ctx = vm.createContext(sandbox);
+    const ctx = createPurifiedContext(sandbox);
     sandbox.__mat__ = matrix;
     vm.runInContext(`
       ${stripped}
@@ -450,7 +450,7 @@ function exposerFonctionVM(code, nomParDefaut, extraGlobals) {
   const sandbox = buildSandbox();
   sandbox.setTimeout = creerSetTimeoutSur();
   if (extraGlobals) Object.assign(sandbox, extraGlobals);
-  const ctx = vm.createContext(sandbox);
+  const ctx = createPurifiedContext(sandbox);
 
   logger.exercise('custom', {
     stage: 'exposerFonctionVM',
@@ -753,7 +753,7 @@ async function evaluateCodeTracing(code) {
     const snip = snippets[s];
     try {
       const sandbox = buildSandbox();
-      const ctx = vm.createContext(sandbox);
+      const ctx = createPurifiedContext(sandbox);
       vm.runInContext(snip.snippet, ctx, { timeout: 1000 });
       expected.push(ctx[snip.extract]);
     } catch (e) {

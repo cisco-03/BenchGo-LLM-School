@@ -127,11 +127,24 @@ const ECLAIR_STOP_WEAK_PLAYED = 10;
 const ECLAIR_STOP_WEAK_FAILS = 8;
 
 async function buildExamTeacher(options = {}) {
+  // SEC-TEACH-02 (protocole Admin/Tasks.md) : --no-teacher est respecté
+  // ENTIÈREMENT — aucun client, aucun chargement d'environnement, AUCUN appel
+  // réseau. La verdict de spécialité passe au repli mécanique.
+  if (options.teacherEnabled === false) {
+    return null;
+  }
   return new TeacherClient({
-    provider: options.teacherProvider || 'groq',
-    model: options.teacherModel || 'llama-3.3-70b-versatile',
-    apiKey: options.teacherApiKey
+    provider: options.teacherProvider,
+    model: options.teacherModel,
+    apiKey: options.teacherApiKey,
+    endpoint: options.teacherEndpoint
   });
+}
+
+// Affiche le libellé du professeur (provider ou « désactivé ») sans planter
+// quand le professeur est null (option --no-teacher).
+function teacherLabel(teacher) {
+  return teacher && teacher.provider ? String(teacher.provider).toUpperCase() : 'DÉSACTIVÉ (--no-teacher)';
 }
 
 // Journal détaillé : tout ce qui s'affiche à l'écran est aussi tracé dans
@@ -335,6 +348,9 @@ async function determineSpecialty(teacher, modelName, specialtyStats, reportCard
   ).join('\n');
 
   let verdictText = null;
+  // SEC-TEACH-02 : professeur désactivé (--no-teacher) → AUCUN appel, repli
+  // mécanique direct (le verdict est calculé sur les chiffres ci-dessous).
+  if (teacher) {
   // Spinner interactif (demande utilisateur 2026-09-16) : l'appel au professeur
   // cloud prend 5-30s — sans rotation, l'écran semble figé après le bilan par
   // langage et l'utilisateur croit à un plantage (le « ressenti du professeur »
@@ -377,6 +393,9 @@ Pas de tableau, pas de code, pas de préambule. 3 phrases maximum.`;
     if (logFileOnly) logFileOnly(`[verdict professeur] ERREUR : ${e && e.message ? e.message : e} — repli mécanique.`);
     verdictText = null;
   }
+  } else {
+    if (logFileOnly) logFileOnly('[verdict professeur] désactivé (--no-teacher) — repli mécanique.');
+  }
 
   // Repli mécanique : jamais de verdict vide.
   if (!verdictText) {
@@ -418,7 +437,7 @@ async function runAdaptiveSchoolExam(studentModelName, studentClient, options = 
 
   log('');
   log('================================================================');
-  log(`👨‍🏫 [LE PROFESSEUR (${String(teacher.provider).toUpperCase()})] Examen officiel de : "${studentModelName}"`);
+  log(`👨‍🏫 [LE PROFESSEUR (${teacherLabel(teacher)})] Examen officiel de : "${studentModelName}"`);
   log(`⚖️  RÈGLE D'OR : INTÉGRITÉ TOTALE (ZÉRO MENSONGE / CODE NATIF EXCLUSIF)`);
   log(`🏫 PARCOURS : ${parcoursLabel.toUpperCase()} (${classesToRun.length} classes)`);
   log('================================================================');
@@ -426,7 +445,7 @@ async function runAdaptiveSchoolExam(studentModelName, studentClient, options = 
 
   const reportCard = {
     student: studentModelName,
-    teacherProvider: teacher.provider,
+    teacherProvider: teacher ? teacher.provider : null,
     parcours: parcoursLabel,
     parcoursProfile: PARCOURS_PROFILE[parcoursLabel] || null,
     classes: classesToRun.slice(),
@@ -553,13 +572,16 @@ async function runAdaptiveSchoolExam(studentModelName, studentClient, options = 
       const ratePct = Math.round(s.rate * 100);
       log(`   ${s.language.toUpperCase().padEnd(12)} ${s.passed}/${s.total} (${ratePct}%) — classes : ${s.classes.join(', ')}`);
     }
-    if (specialtyStats.specialty) {
+    if (teacher && specialtyStats.specialty) {
       // Le verdict est affiché EN DIRECT par determineSpecialty (spinner + log
       // « 🎓 [VERDICT DU PROFESSEUR] » dès la réception) — demandes 2026-09-16.
       // `log` est passé explicitement : determineSpecialty est définie au niveau
       // module et ne peut pas fermer sur la const locale de runAdaptiveSchoolExam.
       const sp = await determineSpecialty(teacher, studentModelName, specialtyStats, reportCard, logFileOnly, log);
       if (!sp) log('   ℹ️ Aucun verdict de spécialité possible (professeur indisponible).');
+    } else if (!teacher && specialtyStats.specialty) {
+      // SEC-TEACH-02 : --no-teacher → verdict mécanique, aucun appel réseau.
+      await determineSpecialty(null, studentModelName, specialtyStats, reportCard, logFileOnly, log);
     } else {
       log('   ℹ️ Pas encore assez d\'exercices par langage pour déclarer une spécialité fiable.');
     }
@@ -623,7 +645,7 @@ async function runEclairScan(studentModelName, studentClient, options = {}) {
 
   log('');
   log('================================================================');
-  log(`👨‍🏫 [LE PROFESSEUR (${String(teacher.provider).toUpperCase()})] SCAN ÉCLAIR de : "${studentModelName}"`);
+  log(`👨‍🏫 [LE PROFESSEUR (${teacherLabel(teacher)})] SCAN ÉCLAIR de : "${studentModelName}"`);
   log(`⚡ MODE ÉCLAIR : 1 exercice de la classe la plus simple PAR LANGAGE (20 langages) — mesure de spécialité, pas de parcours complet.`);
   log(`🏫 PARCOURS DE RÉFÉRENCE : ${parcoursLabel.toUpperCase()} (${classesToRun.length} classes — label du carnet uniquement)`);
   log('================================================================');
@@ -631,7 +653,7 @@ async function runEclairScan(studentModelName, studentClient, options = {}) {
 
   const reportCard = {
     student: studentModelName,
-    teacherProvider: teacher.provider,
+    teacherProvider: teacher ? teacher.provider : null,
     mode: 'eclair',
     parcours: parcoursLabel,
     parcoursProfile: PARCOURS_PROFILE[parcoursLabel] || null,
@@ -743,9 +765,12 @@ async function runEclairScan(studentModelName, studentClient, options = {}) {
         const ratePct = Math.round(s.rate * 100);
         log(`   ${s.language.toUpperCase().padEnd(12)} ${s.passed}/${s.total} (${ratePct}%) — classes : ${s.classes.join(', ')}`);
       }
-      if (specialtyStats.specialty) {
+      if (teacher && specialtyStats.specialty) {
         const sp = await determineSpecialty(teacher, studentModelName, specialtyStats, reportCard, logFileOnly, log);
         if (!sp) log('   ℹ️ Aucun verdict de spécialité possible (professeur indisponible).');
+      } else if (!teacher && specialtyStats.specialty) {
+        // SEC-TEACH-02 : --no-teacher → verdict mécanique, aucun appel réseau.
+        await determineSpecialty(null, studentModelName, specialtyStats, reportCard, logFileOnly, log);
       } else {
         log('   ℹ️ Pas encore assez d\'exercices par langage pour déclarer une spécialité fiable.');
       }
@@ -768,5 +793,7 @@ module.exports = {
   ECLAIR_CLASS_ORDER,
   ECLAIR_LANG_ORDER,
   ECLAIR_STOP_WEAK_PLAYED,
-  ECLAIR_STOP_WEAK_FAILS
+  ECLAIR_STOP_WEAK_FAILS,
+  buildExamTeacher,
+  determineSpecialty
 };

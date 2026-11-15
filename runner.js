@@ -1992,6 +1992,10 @@ async function main() {
           teacherProvider: teacherConfigResolved && teacherConfigResolved.provider,
           teacherModel: teacherConfigResolved && teacherConfigResolved.model,
           teacherApiKey: teacherConfigResolved && teacherConfigResolved.apiKey,
+          // SEC-TEACH-02 : l'état désactivé (--no-teacher / preset) est propagé
+          // JUSQU'À RunCode — zéro client, zéro clé d'env, zéro appel réseau.
+          teacherEnabled: Boolean(teacherConfigResolved && teacherConfigResolved.enabled),
+          teacherEndpoint: (teacherConfigResolved && teacherConfigResolved.endpoint) || null,
           parcoursRunCode: examParcours,
           profileBenchgo: autoProfile
         });

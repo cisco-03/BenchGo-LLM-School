@@ -16,8 +16,54 @@ const CSV_EXPORT_FILE = path.join(__dirname, 'Export-Rapports', 'runs_export.csv
 // cloud-client.js dont requiresAuth:false.
 const LOCAL_PROVIDERS = new Set(['local', 'lmstudio', 'ollama', 'custom']);
 
+// --- SEC-FILE-01 (protocole Admin/Tasks.md §4.3) : validation centralisée du
+// shortName pour TOUTES les opérations carnet (lecture, écriture, backup,
+// restauration, suppression, export). Un shortName = nom de fichier strict :
+// lettres, chiffres, point, tiret, underscore. Tout ce qui ressemble à un
+// chemin (/, \, .., NUL, :, disque, nom réservé Windows, point/espace final)
+// est refusé — la traversée de répertoires n'a plus de route (lecture OU
+// écriture). Fonction pure, exportée : les routes HTTP la consomment et
+// répondent 400 sans divulguer de chemin physique.
+const SHORTNAME_MAX_LENGTH = 120;
+const RESERVED_WINDOWS_NAMES = new Set([
+  'CON', 'PRN', 'AUX', 'NUL',
+  'COM1', 'COM2', 'COM3', 'COM4', 'COM5', 'COM6', 'COM7', 'COM8', 'COM9',
+  'LPT1', 'LPT2', 'LPT3', 'LPT4', 'LPT5', 'LPT6', 'LPT7', 'LPT8', 'LPT9'
+]);
+function isValidShortName(shortName) {
+  if (typeof shortName !== 'string' || shortName.length === 0 || shortName.length > SHORTNAME_MAX_LENGTH) return false;
+  // Séparateurs, points doublés, séquences de contrôle, NUL, deux-points
+  // (ADS NTFS), disques (C:), encodages percent ou slashs Unicode interdits.
+  if (/[\\/]/.test(shortName)) return false;
+  if (shortName.includes('..')) return false;
+  if (/[\u0000-\u001f\u007f]/.test(shortName)) return false;
+  if (/[:<>"|?*]/.test(shortName)) return false;
+  if (/%(?:2f|5c|2e|2F|5C|2E)/.test(shortName)) return false;
+  // Caractères autorisés : strictement ASCII [A-Za-z0-9._-].
+  if (!/^[A-Za-z0-9._-]+$/.test(shortName)) return false;
+  // Chemin absolu / disque alternatif (ex: 'd:\x' impossible ici, mais 'C:' seul
+  // aussi) : tout ':' est déjà refusé ci-dessus.
+  // Point ou espace final (Windows l'ignore à la création).
+  if (/[. ]$/.test(shortName)) return false;
+  // Noms réservés Windows (toute extension).
+  const base = shortName.split('.')[0].toUpperCase();
+  if (RESERVED_WINDOWS_NAMES.has(base)) return false;
+  return true;
+}
+
 function ledgerPath(shortName) {
-  return path.join(LEDGER_DIR, shortName + '.json');
+  // Confinement : un shortName invalide n'aboutit JAMAIS à un chemin. Les
+  // appelants (loadLedger/saveLedger/backupLedger) traitent null comme
+  // « opération refusée » sans accès disque.
+  if (!isValidShortName(shortName)) {
+    logger.warn('SEC-FILE-01 : shortName refusé (' + String(shortName).substring(0, 60) + ') — opération carnet annulée.');
+    return null;
+  }
+  const file = path.join(LEDGER_DIR, shortName + '.json');
+  // Ceinture de suspension : la résolution finale DOIT rester dans .carnet/.
+  const resolvedDir = path.resolve(LEDGER_DIR) + path.sep;
+  if (!path.resolve(file).startsWith(resolvedDir)) return null;
+  return file;
 }
 
 // Sauvegarde de sécurité : copie le carnet vers .carnet-backup/ à chaque
@@ -29,6 +75,7 @@ function ledgerPath(shortName) {
 function backupLedger(shortName) {
   try {
     const src = ledgerPath(shortName);
+    if (!src) return;
     if (!fs.existsSync(src)) return;
     if (!fs.existsSync(LEDGER_BACKUP_DIR)) {
       fs.mkdirSync(LEDGER_BACKUP_DIR, { recursive: true });
@@ -64,7 +111,21 @@ function formatDuration(ms) {
 
 function loadLedger(shortName) {
   const file = ledgerPath(shortName);
+  // shortName invalide (traversée) : AUCUN accès disque, struct vide retourné
+  // (l'appelant voit « carnet introuvable » — jamais le contenu hors .carnet).
+  if (!file) {
+    return { model: null, shortName: shortName, ecoles: {}, lastUpdated: null, invalidShortName: true };
+  }
   try {
+    // Refus d'un carnet qui ne serait pas un fichier RÉGulier (symlink/jonction
+    // posés dans .carnet pour rediriger une lecture vers l'extérieur).
+    try {
+      const st = fs.lstatSync(file);
+      if (!st.isFile()) {
+        logger.warn('Carnet refusé (pas un fichier régulier) : ' + shortName);
+        return { model: null, shortName: shortName, ecoles: {}, lastUpdated: null };
+      }
+    } catch (_) { /* lstat en échec = fichier absent : le existsSync suivant le gère */ }
     if (fs.existsSync(file)) {
       const data = JSON.parse(fs.readFileSync(file, 'utf8'));
       if (!data.ecoles) data.ecoles = {};
@@ -77,10 +138,30 @@ function loadLedger(shortName) {
 }
 
 function saveLedger(ledger) {
+  const shortName = ledger && ledger.shortName;
+  const file = ledgerPath(shortName);
+  if (!file) {
+    logger.error('Impossible de sauvegarder le carnet : shortName invalide ou manquant ( SEC-FILE-01).');
+    return;
+  }
   try {
     fs.mkdirSync(LEDGER_DIR, { recursive: true });
+    // Refus d'écrire À TRAVERS un lien symbolique/jonction posé sur le carnet.
+    try {
+      if (fs.existsSync(file)) {
+        const st = fs.lstatSync(file);
+        if (!st.isFile()) {
+          logger.error('Impossible de sauvegarder le carnet : le chemin n\'est pas un fichier régulier (symlink/jonction refusé).');
+          return;
+        }
+      }
+    } catch (_) { /* absent : première écriture */ }
     ledger.lastUpdated = new Date().toISOString();
-    fs.writeFileSync(ledgerPath(ledger.shortName), JSON.stringify(ledger, null, 2) + '\n', 'utf8');
+    // Écriture ATOMIQUE : tmp + renommage — un carnet interrompu ne peut plus
+    // laisser un fichier tronqué à la place du carnet valide.
+    const tmp = file + '.tmp';
+    fs.writeFileSync(tmp, JSON.stringify(ledger, null, 2) + '\n', 'utf8');
+    fs.renameSync(tmp, file);
     // Sauvegarde de sécurité : copie vers .carnet-backup/ (anti-perte).
     backupLedger(ledger.shortName);
   } catch (e) {
@@ -281,7 +362,8 @@ function printBilanGlobal(shortName, modelName) {
   if (totalBonus > 0) {
     console.log('  \x1b[35m+ Bonus optionnel cumulé : ' + totalBonus + ' points\x1b[0m');
   }
-  console.log('  \x1b[90mCarnet : ' + path.relative(process.cwd(), ledgerPath(shortName)) + '\x1b[0m');
+  const ledgerDisplayPath = ledgerPath(shortName);
+  if (ledgerDisplayPath) console.log('  \x1b[90mCarnet : ' + path.relative(process.cwd(), ledgerDisplayPath) + '\x1b[0m');
   console.log('');
 }
 
@@ -492,6 +574,25 @@ function detectUnstableModels() {
   return unstable;
 }
 
+// --- SEC-XSS-01 (protocole Admin/Tasks.md §4.4) : sérialisation sûre pour un
+// bloc <script> HTML. JSON.stringify n'échappe PAS <, >, & — une donnée qui
+// contient `</script>` ferme le bloc du point de vue du parseur HTML et permet
+// une injection de code dans la page du classement. On neutralise ces caractères
+// (plus backticks/`${`, qui casseraient un template literal consommateur) et
+// les séparateurs de ligne U+2028/U+2029. Forme exportée et testée :
+// tests/test-xss-serialization.js. Partagée par leaderboard.js (classement
+// local) — même principe que safeForScript de consolidate-leaderboard.js.
+function safeForScript(json) {
+  return String(json)
+    .replace(/</g, '\\u003c')
+    .replace(/>/g, '\\u003e')
+    .replace(/&/g, '\\u0026')
+    .replace(/`/g, '\\u0060')
+    .replace(/\$\{/g, '\\u0024\\u007b')
+    .replace(/\u2028/g, '\\u2028')
+    .replace(/\u2029/g, '\\u2029');
+}
+
 module.exports = {
   loadLedger,
   saveLedger,
@@ -511,6 +612,9 @@ module.exports = {
   detectUnstableModels,
   backupLedger,
   restoreLedgersFromBackup,
+  isValidShortName,
+  safeForScript,
+  ledgerPath,
   LEDGER_DIR,
   LEDGER_BACKUP_DIR,
   CSV_EXPORT_FILE
@@ -538,6 +642,12 @@ function restoreLedgersFromBackup() {
     return report;
   }
   for (const f of backupFiles) {
+    // SEC-FILE-01 : un nom de fichier de backup hostile (traversée) est refusé.
+    const baseName = f.replace(/\.json$/, '');
+    if (!isValidShortName(baseName)) {
+      report.errors.push(f + ': nom de fichier de backup refusé (SEC-FILE-01)');
+      continue;
+    }
     const dst = path.join(LEDGER_DIR, f);
     if (fs.existsSync(dst)) {
       report.skipped++;
