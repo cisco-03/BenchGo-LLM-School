@@ -3,7 +3,7 @@
 ## 2026-11-15d — feat(sécurité) : P0 du protocole implémenté — sandbox par processus jetable, traversée fermée, XSS neutralisée, professeur routé exactement
 
 ### Contexte & besoin
-— implémentation du plan P0 (bloquants) de `Admin/Tasks.md` (audit du 2026-11-15c), qui était resté « non exécuté » : (1) remplacer la confiance en `node:vm` par une isolation processus adaptée, sans secrets, avec limites de ressources, couvrant aussi la sérialisation du résultat ; (2) centraliser la validation de `shortName` pour toutes les lectures/écritures de carnets ; (3) neutraliser les JSON injectés dans les blocs `<script>` du classement local ; (4) empêcher tout routage du professeur vers un provider non choisi et faire respecter `--no-teacher` jusqu'à RunCode ; (5) tests de non-régression pour les 5 preuves majeures ; (6) vérifier les autres contextes XSS (champs numériques communautaires, soumissions hostiles).
+— implémentation du plan P0 (bloquants) (audit du 2026-11-15c), qui était resté « non exécuté » : (1) remplacer la confiance en `node:vm` par une isolation processus adaptée, sans secrets, avec limites de ressources, couvrant aussi la sérialisation du résultat ; (2) centraliser la validation de `shortName` pour toutes les lectures/écritures de carnets ; (3) neutraliser les JSON injectés dans les blocs `<script>` du classement local ; (4) empêcher tout routage du professeur vers un provider non choisi et faire respecter `--no-teacher` jusqu'à RunCode ; (5) tests de non-régression pour les 5 preuves majeures ; (6) vérifier les autres contextes XSS (champs numériques communautaires, soumissions hostiles).
 
 ### SEC-VM-01/VM-02 — sandbox par processus JETABLE (critique, CORRIGÉ)
 - **`vm-sandbox-child.js` (NOUVEAU)** : chaque évaluation `exec` tourne dans un ENFANT Node qui vit le temps d'une seule évaluation. Le processus principal (runner, clés, carnets, secrets en session) ne JAMAIS évaluer du code produit par un modèle.
@@ -72,7 +72,7 @@
 ## 2026-11-15c — docs(sécurité) : protocole offensif défensif et audit local sans implémentation
 
 ### Contexte & besoin
-Demande utilisateur : rédiger dans `Admin/Tasks.md` le protocole de sécurité de l’application, tester les failles exploitables contre les agents/entrées hostiles, puis attendre une demande explicite avant toute implémentation. Audit limité à la copie locale et à des sondes non destructives, sans attaque de service externe ni utilisation de vrais secrets.
+le protocole de sécurité de l’application, tester les failles exploitables contre les agents/entrées hostiles, puis attendre une demande explicite avant toute implémentation. Audit limité à la copie locale et à des sondes non destructives, sans attaque de service externe ni utilisation de vrais secrets.
 
 ### Audit et preuves
 - **Critique — sandbox VM** : construction dynamique de `constructor` non détectée ; accès à `process.pid` et `process.getBuiltinModule` prouvé depuis le global et `console.log`, sans lecture de fichier ni commande système. Un `toJSON` bouclant bloque aussi APRÈS `runInContext` : enfant jetable terminé par le harnais (`ETIMEDOUT`), preuve que le timeout VM ne couvre pas l’inspection du résultat.
@@ -100,7 +100,7 @@ Demande utilisateur : rédiger dans `Admin/Tasks.md` le protocole de sécurité 
 ## 2026-11-15b — feat(professeur) : Ollama Cloud en ABONNEMENT + sécurité durcie des clés API
 
 ### Contexte & besoin
-Suite au menu professeur du 2026-11-15 : (1) Ollama existe aussi en SERVICE ABONNEMENT avec une clé API (« je paye un abonnement tous les mois ») — pouvoir entrer cette clé pour le professeur ; (2) CONFIRMER que les clés RESTENT locales et ne « quittent jamais le PC » ; (3) « je veux que ça soit blindé sécurité en béton » — durcissement effectif, pas seulement une confirmation.
+Suite au menu professeur du 2026-11-15 : (1) Ollama existe aussi en SERVICE ABONNEMENT avec une clé API — pouvoir entrer cette clé pour le professeur ; (2) CONFIRMER que les clés RESTENT locales et ne « quittent jamais le PC » ; (3) — durcissement effectif, pas seulement une confirmation.
 
 ### Corrections — Ollama Cloud (abonnement)
 - **Provider `ollama-cloud`** (`cloud-client.js` CLOUD_PROVIDERS) : `url: https://ollama.com/v1/chat/completions`, `envKey: OLLAMA_CLOUD_API_KEY`, `openaiCompat: true`, `requiresAuth: true`. NE PAS confondre avec `ollama` (serveur LOCAL sans clé, port 11434, inchangé). `/v1/models` est public ; le POST exige la clé. Sert le PROFESSEUR (`--teacher-provider=ollama-cloud`) ET l'ÉLÈVE (`--provider=ollama-cloud`, en bonus).
@@ -128,7 +128,7 @@ Suite au menu professeur du 2026-11-15 : (1) Ollama existe aussi en SERVICE ABON
 ## 2026-11-15 — feat(professeur) : menu interactif multi-provider dans TOUS les modes CLI
 
 ### Contexte & besoin
-Demande utilisateur : à l'étape 7 du questionnaire, le CLI ne proposait qu'un OUI/NON « Activer le professeur OpenRouter (Free Router) ? » — « pourquoi tu ne proposes pas d'autres solutions comme Ollama ou d'autres ? Tu devrais faire une petite liste interactive où l'on choisit chez qui on veut aller pour le professeur ». Bénéfice demandé étendu : ce choix doit exister dans TOUS les modes (pas que RunCode Turbo).
+Demande utilisateur : à l'étape 7 du questionnaire, le CLI ne proposait qu'un OUI/NON « Activer le professeur OpenRouter (Free Router) ? ». Bénéfice demandé étendu : ce choix doit exister dans TOUS les modes (pas que RunCode Turbo).
 
 ### Cause racine
 Deux niveaux : (1) `startup-questionnaire.js` étape 7 était codée en dur sur `_askYesNo('Activer le professeur OpenRouter')` — aucun choix de provider. (2) Les batchers (`night-batch.js`, `frontier-batch.js`) lancent le runner enfant avec `--force` : le prompt professeur du runner est court-circuité → sans flags CLI explicites, le professeur tombait TOUJOURS sur openrouter sans jamais proposer autre chose (frontier-batch ne parsait même pas `--teacher-provider=`).
@@ -205,9 +205,6 @@ Le questionnaire ne connaissait PAS le mode RunCode (`--exam-code` n'y était ja
 - En mono-modèle, tout le comportement 2026-09-15/2026-09-09 (avertissements incompatibles, E509 temp-fs, déchargement auto) est conservé à l'identique : le catch ne réenregistre pas E509 dans le registre (le modèle reste testable).
 
 ## 2026-11-03 — fix(origines classement communautaire) : sélecteur Local/Cloud étanche + corrections ADMIN versionnées
-
-### Contexte & besoin
-Demande utilisateur : dans le **classement communautaire** (consolidate-leaderboard.js, GitHub Pages), le sélecteur « Local / Cloud » était **tout mélangé** — en choisissant Local, des modèles FRONTIER (testés en Post-Doctorat via Ollama distant) s'affichaient avec le badge local. Demandes : (1) une grosse vérification + correction + tests pour que ça ne se reproduise plus, (2) un moyen pour l'ADMIN du dépôt de corriger manuellement l'origine d'un modèle du classement communautaire.
 
 ### Cause racine
 `aggregateCarnet()` calculait `cloudByName = detectIsCloudFromCarnet(carnet) && /-(cloud|free)$/i.test(nom)` puis la chaîne `cloudByName || (provider ? !LOCAL_PROVIDERS : ...)`. Deux défauts : (a) le signal FRONTIER (école Post-Doctorat / tentatives `profile === 'FRONTIER'`) était **avalé derrière le test provider** — un modèle testé via Ollama distant (`provider: 'ollama'` ∈ LOCAL_PROVIDERS) tombait en local, alors que leaderboard.js applique ce signal en TÊTE de sa chaîne (tâche 2026-08-31e) ; (b) le regex `-(cloud|free)$` ne matchait pas la vraie famille des suffixes (`:free$`, `:cloud$`) — l'« hybride » cloudByName exigeait DEUX signaux au lieu d'en lister un seul. Audit réel : **12 modèles sur 98 soumissions** mal classés (kimi-k2.7-code, glm-5.1/5.2/5.3/5.3-flash, kimi-k2.6, kimi-k3, deepseek-v4-pro, minimax-m2.7, nemotron-3-super/ultra, qwen3.5 — tous provider `ollama` + Post-Doctorat).
@@ -315,7 +312,7 @@ LM Studio renvoie `HTTP_400 {"message": "Failed to load model \"ornith-1.5-9b@q6
 ## 2026-10-06 — fix(leaderboard) : recherche non-filtrante — liste intégrale, surlignage et rang réel conservés
 
 ### Contexte & besoin
-Demande utilisateur (`Admin/Tasks.md`) : dans le classement web local, dès qu'on tapait une recherche, la liste se réduisait aux seuls modèles correspondants — le modèle cherché se retrouvait TOUJOURS affiché « premier » (rang 1 + médaille 🥇), ce qui masquait sa vraie position au classement général et rendait la lecture des scores/contexte impossible. Comportement voulu : « la liste bouge et va chercher le modèle sans l'isoler » — classement intégral conservé, correspondance surlignée d'une couleur spéciale bien visible, rang exact affiché.
+dans le classement web local, dès qu'on tapait une recherche, la liste se réduisait aux seuls modèles correspondants — le modèle cherché se retrouvait TOUJOURS affiché « premier » (rang 1 + médaille 🥇), ce qui masquait sa vraie position au classement général et rendait la lecture des scores/contexte impossible. Comportement voulu : « la liste bouge et va chercher le modèle sans l'isoler » — classement intégral conservé, correspondance surlignée d'une couleur spéciale bien visible, rang exact affiché.
 
 ### Cause racine
 La requête `q` du champ `#search` était appliquée comme un FILTRE à 3 endroits du `renderCards()` (premier passage `_preFiltered`, contexte `_originCtx`, compteurs `_originCounts`) dans les deux classements web. Une correspondance unique rendait donc une vue d'1 carte = rang « 1 » artificiel + médaille d'or fantôme.
@@ -345,7 +342,7 @@ La requête `q` du champ `#search` était appliquée comme un FILTRE à 3 endroi
 ## 2026-10-06 — docs(logseq) : rédaction complète de l'architecture fonctionnelle BenchGo V3 + mémoire format Logseq outline
 
 ### Contexte & besoin
-Documentation exhaustive des fonctionnalités de BenchGo V3 sous Logseq (`Logseq-BenchGo/pages/Architecture BenchGo V3.md`) selon une stratégie de diagnostic direct : l'utilisateur étant les « yeux et oreilles » de l'agent, chaque surface visible à l'écran (CLI, bannière, table, modale localhost, site GitHub Pages, RunCode Turbo, Night Batch) est reliée aux fichiers sources responsables afin de localiser immédiatement les modifications nécessaires en cas de bug.
+Documentation exhaustive des fonctionnalités de BenchGo V3 sous Logseq (`Logseq-BenchGo/pages/Architecture BenchGo V3.md`) selon une stratégie de diagnostic direct : chaque surface visible à l'écran (CLI, bannière, table, modale localhost, site GitHub Pages, RunCode Turbo, Night Batch) est reliée aux fichiers sources responsables afin de localiser immédiatement les modifications nécessaires en cas de bug.
 
 ### Réalisations
 - **`Logseq-BenchGo/pages/Architecture BenchGo V3.md`** :
@@ -488,7 +485,7 @@ Demande utilisateur (`Memories-BenchGo/Tasks.md`, 2026-09-20) : « dans la grand
 ## 2026-09-18b — fix(classement) : modèle soumis invisible dans le classement communautaire local, clouds 0/0 masqués du consolidé
 
 ### Contexte & problème rencontré
-Signalement : « je viens de tester un modèle cloud frontière (`nex-agi_nex-n2.5-pro_free`), il n'apparaît pas normalement dans le classement en localhost ni dans le classement communautaire, je le trouve nulle part. Si je clique sur le bouton Récents, là oui il apparaît, mais si je re-clique sur Récents il disparaît. Contrôle et corrige. »
+Signalement : « je viens de tester un modèle cloud frontière (`nex-agi_nex-n2.5-pro_free`), il n'apparaît pas normalement dans le classement en localhost ni dans le classement communautaire
 
 ### Diagnostic (3 constats)
 1. **Classement local (`classement.html`) : PAS de bug.** Le modèle est bien présent (carte 26/42, `isCloud=true`, 92%, `globalRank=26`). Le comportement décrit est le fonctionnement NORMAL du toggle « 🕒 Récents » : tri par date ↔ retour à l'ordre par score. `nex-agi` est le modèle le plus récemment testé → 1re carte en mode Récents, retour à la carte 26 en mode score. Simulation vm complète validée (ordre par défaut → Récents → retour : carte 26 → 1 → 26).
